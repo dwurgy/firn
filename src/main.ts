@@ -38,6 +38,9 @@ const PEEK_LINGER_MS = 450;
 // How far to the right of the peeking sidebar the mouse can stray and still
 // count as "on it". Anywhere to its left (even off the window) also counts.
 const PEEK_RIGHT_SLACK = 24;
+// A UI panel that hasn't reported it started within this long is reloaded.
+const UI_START_TIMEOUT_MS = 5000;
+
 // How often the cursor's position is checked for the edge reveals.
 const EDGE_CHECK_MS = 50;
 // How generous the left-edge zone that brings out the peeking sidebar is:
@@ -99,7 +102,10 @@ function loadUi(web: WebContents, view?: LayerView) {
       view ? { query: { view } } : undefined,
     );
   }
-  // Firn's own UI must never navigate away from itself.
+}
+
+// Firn's own UI must never navigate away from itself.
+function lockUi(web: WebContents) {
   web.on('will-navigate', (event) => event.preventDefault());
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
@@ -132,11 +138,50 @@ const createWindow = () => {
   // Web pages are drawn on top of the sidebar's layer, so anything that has
   // to float over a page lives in its own transparent layer above it.
 
+  // --- Starting Firn's UI panels -------------------------------------------
+  // Panels are loaded one at a time: the sidebar first, then each layer once
+  // the one before it has reported that it started ('ui:ready'). A panel
+  // that hasn't started within UI_START_TIMEOUT_MS is reloaded. (Loading
+  // them all at once could leave one blank in development mode.)
+  const readyUi = new Set<WebContents>();
+  const startTimers = new Map<WebContents, ReturnType<typeof setTimeout>>();
+
+  const startUi = (web: WebContents) => {
+    if (web.isDestroyed()) return;
+    readyUi.delete(web);
+    loadUi(web, layerViews.get(web));
+    clearTimeout(startTimers.get(web));
+    startTimers.set(
+      web,
+      setTimeout(() => {
+        if (web.isDestroyed() || readyUi.has(web)) return;
+        console.error(
+          `[Firn] The ${uiNames.get(web) ?? 'UI'} panel didn't start; reloading it.`,
+        );
+        startUi(web);
+      }, UI_START_TIMEOUT_MS),
+    );
+  };
+
+  let layersToStart: WebContents[] = [];
+  const onUiReady = (web: WebContents) => {
+    readyUi.add(web);
+    clearTimeout(startTimers.get(web));
+    debug(`${uiNames.get(web)} started`);
+    // Start the next layer once the previous one is up.
+    if (layersToStart[0] === web) layersToStart.shift();
+    if (web === win.webContents || !layersToStart.includes(web)) {
+      const next = layersToStart[0];
+      if (next && !startTimers.has(next)) startUi(next);
+    }
+  };
+
   // Every show and hide goes through showLayer / hideLayer. A hidden layer
   // is also shrunk to nothing, so even if the system ever ignored "hidden",
   // an invisible layer could never sit over the window catching clicks.
   const NO_BOUNDS = { x: 0, y: 0, width: 0, height: 0 };
   const shownLayers = new Set<WebContentsView>();
+  const layerViews = new Map<WebContents, LayerView>();
 
   const makeLayer = (view: LayerView) => {
     const layer = new WebContentsView({ webPreferences: UI_WEB_PREFERENCES });
@@ -144,7 +189,7 @@ const createWindow = () => {
     layer.setBounds(NO_BOUNDS);
     layer.setVisible(false);
     win.contentView.addChildView(layer);
-    loadUi(layer.webContents, view);
+    layerViews.set(layer.webContents, view);
     // Loading can make a view visible again; put it back if it should be
     // hidden.
     layer.webContents.on('did-finish-load', () => {
@@ -175,7 +220,13 @@ const createWindow = () => {
       console.error(
         `[Firn] The ${name} panel stopped (${details.reason}); reloading it.`,
       );
-      if (!win.isDestroyed()) setTimeout(() => web.reload(), 300);
+      if (!win.isDestroyed()) setTimeout(() => startUi(web), 300);
+    });
+    // While a panel (re)loads it hasn't started: take it off screen.
+    web.on('did-start-loading', () => {
+      readyUi.delete(web);
+      for (const layer of shownLayers)
+        if (layer.webContents === web) hideLayer(layer);
     });
     // Only reported: a hidden panel can look "unresponsive" to Windows
     // while it's simply asleep, and reloading it then would break it.
@@ -229,12 +280,19 @@ const createWindow = () => {
       if (layer && shownLayers.has(layer)) win.contentView.addChildView(layer);
   };
 
+  // Returns false (and shows nothing) if the panel hasn't started yet, so a
+  // blank, see-through panel can never sit over the window.
   const showLayer = (layer: WebContentsView) => {
+    if (!readyUi.has(layer.webContents)) {
+      debug(`not showing ${uiNames.get(layer.webContents)}: not started yet`);
+      return false;
+    }
     debug(`show ${uiNames.get(layer.webContents)}`);
     shownLayers.add(layer);
     layer.setBounds(boundsFor(layer));
     layer.setVisible(true);
     raiseLayers();
+    return true;
   };
 
   const hideLayer = (layer: WebContentsView) => {
@@ -248,10 +306,12 @@ const createWindow = () => {
   let commandOpenId = 0;
 
   const showOverlay = (state: OverlayState) => {
+    if (!readyUi.has(floating.webContents)) return false;
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
     if (state.mode !== 'hidden') floating.webContents.focus();
+    return true;
   };
   const hideOverlay = () => {
     if (overlay.mode === 'hidden') return;
@@ -302,7 +362,7 @@ const createWindow = () => {
   const revealTopBar = (reveal: boolean) => {
     if (!topBar) return;
     if (reveal && !win.isFullScreen()) {
-      if (topBarShown) return;
+      if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;
       clearTimeout(topBarHideTimer);
       showLayer(topBar);
@@ -428,6 +488,7 @@ const createWindow = () => {
 
   const showPeek = () => {
     if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
+    if (!readyUi.has(peek.webContents)) return;
     peeking = true;
     clearTimeout(peekHideTimer);
     showLayer(peek);
@@ -521,6 +582,12 @@ const createWindow = () => {
     if (!switcher) {
       const tabIds = tabs.recentIds();
       if (tabIds.length < 2) return;
+      // Without the floating layer (still starting), just flip to the last
+      // tab; the switcher needs that layer to hear Ctrl being let go.
+      if (!readyUi.has(floating.webContents)) {
+        tabs.activate(tabIds[1]);
+        return;
+      }
       switcher = {
         tabIds,
         index: 0,
@@ -601,6 +668,7 @@ const createWindow = () => {
       else if (command === 'close') win.close();
     },
     'ui:ready': (sender) => {
+      onUiReady(sender);
       sender.send('tabs:state', tabs.state());
       sender.send('nav:state', tabs.navState());
       sender.send('window:maximized', win.isMaximized());
@@ -757,7 +825,11 @@ const createWindow = () => {
 
   // --- Load Firn's UI, then the first tab ---------------------------------
 
-  loadUi(win.webContents);
+  for (const web of uiContents) lockUi(web);
+  layersToStart = [peek, floating, topBar]
+    .filter((layer) => layer !== null)
+    .map((layer) => layer.webContents);
+  startUi(win.webContents);
   tabs.create(HOME_URL);
 };
 

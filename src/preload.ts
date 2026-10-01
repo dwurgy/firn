@@ -22,6 +22,7 @@ const bridge: FirnBridge = {
   revealTopBar: (reveal) => ipcRenderer.send('top-bar:reveal', reveal),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
+  moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => listen('nav:state', listener),

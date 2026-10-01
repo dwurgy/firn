@@ -83,6 +83,7 @@ export interface FirnBridge {
   revealTopBar(reveal: boolean): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
+  moveTab(id: string, toIndex: number): void;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;

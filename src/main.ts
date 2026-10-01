@@ -334,6 +334,10 @@ const createWindow = () => {
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
     },
+    'tabs:move': (_sender, id, toIndex) => {
+      if (typeof id === 'string' && Number.isInteger(toIndex))
+        tabs.move(id, toIndex as number);
+    },
     'tabs:activate': (_sender, id) => {
       if (typeof id !== 'string') return;
       if (switcher) endSwitcher(false);

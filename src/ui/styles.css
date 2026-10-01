@@ -22,6 +22,8 @@
   --press: rgba(70, 55, 40, 0.13);
   --tab-active: rgba(255, 255, 255, 0.78);
   --tab-active-shadow: 0 1px 2px rgba(60, 40, 20, 0.08);
+  --tab-dragged-shadow:
+    0 2px 6px rgba(60, 40, 20, 0.12), 0 8px 20px rgba(60, 40, 20, 0.12);
   --page-shadow:
     0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
@@ -49,6 +51,8 @@
     --press: rgba(255, 250, 245, 0.13);
     --tab-active: rgba(255, 250, 245, 0.14);
     --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --tab-dragged-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
     --frost: rgba(160, 196, 214, 0.45);
     --frost-strong: rgba(176, 208, 224, 0.8);
     --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
@@ -317,8 +321,41 @@ button {
   color: var(--text);
 }
 
+.tab {
+  position: relative;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    color var(--motion),
+    transform var(--motion);
+}
+
 .tab:hover {
   background: var(--hover);
+}
+
+/* While dragging: the picked-up tab follows the pointer, lifted a little;
+   the others glide out of its way. */
+.tab.is-dragged {
+  z-index: 1;
+  box-shadow: var(--tab-dragged-shadow);
+  transition:
+    background var(--motion),
+    box-shadow var(--motion);
+}
+
+.tab-list.is-dragging .tab:not(.is-dragged) .tab-close {
+  opacity: 0;
+}
+
+/* Just after a drop, only the moved tab glides; the rest are already in
+   place. */
+.tab-list.is-settling .tab:not(.is-settling-row) {
+  transition: none;
+}
+
+.tab.is-settling-row {
+  z-index: 1;
 }
 
 .tab:active:not(.is-active) {

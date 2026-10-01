@@ -186,6 +186,18 @@ export class TabManager {
     if (url) this.create(url);
   }
 
+  // Moves a tab to a new position in the list (drag to reorder).
+  move(id: string, toIndex: number) {
+    const from = this.order.indexOf(id);
+    if (from < 0) return;
+    const to = Math.max(0, Math.min(toIndex, this.order.length - 1));
+    if (from === to) return;
+    this.order.splice(from, 1);
+    this.order.splice(to, 0, id);
+    this.renumber();
+    this.emitTabs();
+  }
+
   reopenClosed() {
     const url = this.recentlyClosed.pop();
     if (url) this.create(url);

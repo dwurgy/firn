@@ -37,29 +37,34 @@ export function TopBar() {
       // A short pause, so brushing past the edge doesn't make it flicker.
       onMouseLeave={() => hideSoon(250)}
     >
-      <div className="button-row">
-        <button
-          className="icon-button"
-          title="Minimize"
-          onClick={() => window.firn.windowCommand('minimize')}
-        >
-          <MinimizeIcon />
-        </button>
-        <button
-          className="icon-button"
-          title={maximized ? 'Restore' : 'Maximize'}
-          onClick={() => window.firn.windowCommand('toggle-maximize')}
-        >
-          {maximized ? <RestoreIcon /> : <MaximizeIcon />}
-        </button>
-        <button
-          className="icon-button close-button"
-          title="Close"
-          onClick={() => window.firn.windowCommand('close')}
-        >
-          <CloseIcon />
-        </button>
+      <div className="top-bar-band">
+        <div className="button-row">
+          <button
+            className="icon-button"
+            title="Minimize"
+            onClick={() => window.firn.windowCommand('minimize')}
+          >
+            <MinimizeIcon />
+          </button>
+          <button
+            className="icon-button"
+            title={maximized ? 'Restore' : 'Maximize'}
+            onClick={() => window.firn.windowCommand('toggle-maximize')}
+          >
+            {maximized ? <RestoreIcon /> : <MaximizeIcon />}
+          </button>
+          <button
+            className="icon-button close-button"
+            title="Close"
+            onClick={() => window.firn.windowCommand('close')}
+          >
+            <CloseIcon />
+          </button>
+        </div>
       </div>
+      <span className="top-bar-corner is-left" />
+      <span className="top-bar-corner is-right" />
+      <span className="top-bar-edge" />
     </div>
   );
 }

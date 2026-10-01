@@ -462,25 +462,80 @@ button {
 }
 
 /* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
-   src/main.ts) and slides down over the page's top edge. */
+   src/main.ts). It's a band of frame colour with two rounded cut-outs at its
+   bottom corners. At rest those cut-outs sit exactly on the page's own
+   rounded corners, so the bar can't be seen; on hover the whole shape glides
+   down, and the page's rounded top edge appears to lower with it. */
 .top-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  height: calc(var(--top-bar-height) + var(--page-radius));
+  transform: translateY(calc(var(--page-inset) - var(--top-bar-height)));
+  transition: transform var(--motion);
+}
+
+.top-bar.is-shown {
+  transform: none;
+}
+
+.top-bar-band {
   height: var(--top-bar-height);
   display: flex;
   justify-content: flex-end;
   align-items: center;
   padding-right: var(--page-inset);
   background: var(--frame);
-  box-shadow: 0 4px 14px rgba(30, 20, 10, 0.14);
-  transform: translateY(-100%);
-  transition: transform var(--motion);
 }
 
-.top-bar.is-shown {
-  transform: none;
+.top-bar .button-row {
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.top-bar.is-shown .button-row {
+  opacity: 1;
+}
+
+/* An empty outline of the page's top edge, casting the same soft shadow the
+   real page casts, so the bar's edge looks exactly like the page's. */
+.top-bar-edge {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: var(--page-inset);
+  /* Taller than the layer, so only its top edge's shadow is ever seen. */
+  height: 200px;
+  border-radius: var(--page-radius);
+  box-shadow: var(--page-shadow);
+}
+
+/* Frame-coloured squares with a quarter circle cut out, matching the page's
+   corner radius. */
+.top-bar-corner {
+  position: absolute;
+  top: var(--top-bar-height);
+  width: var(--page-radius);
+  height: var(--page-radius);
+}
+
+.top-bar-corner.is-left {
+  left: 0;
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent calc(var(--page-radius) - 0.5px),
+    var(--frame) var(--page-radius)
+  );
+}
+
+.top-bar-corner.is-right {
+  right: var(--page-inset);
+  background: radial-gradient(
+    circle at 0 100%,
+    transparent calc(var(--page-radius) - 0.5px),
+    var(--frame) var(--page-radius)
+  );
 }
 
 /* --- Floating panels: command bar and tab switcher ------------------------- */

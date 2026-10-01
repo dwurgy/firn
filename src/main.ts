@@ -121,12 +121,27 @@ const createWindow = () => {
   // Web pages are drawn on top of the sidebar's layer, so anything that has
   // to float over a page lives in its own transparent layer above it.
 
+  // Every show and hide goes through showLayer / hideLayer. A hidden layer
+  // is also shrunk to nothing, so even if the system ever ignored "hidden",
+  // an invisible layer could never sit over the window catching clicks.
+  const NO_BOUNDS = { x: 0, y: 0, width: 0, height: 0 };
+  const shownLayers = new Set<WebContentsView>();
+
   const makeLayer = (view: LayerView) => {
     const layer = new WebContentsView({ webPreferences: UI_WEB_PREFERENCES });
     layer.setBackgroundColor('#00000000');
+    layer.setBounds(NO_BOUNDS);
     layer.setVisible(false);
     win.contentView.addChildView(layer);
     loadUi(layer.webContents, view);
+    // Loading can make a view visible again; put it back if it should be
+    // hidden.
+    layer.webContents.on('did-finish-load', () => {
+      if (!shownLayers.has(layer)) {
+        layer.setVisible(false);
+        layer.setBounds(NO_BOUNDS);
+      }
+    });
     return layer;
   };
   const peek = makeLayer('peek');
@@ -134,6 +149,34 @@ const createWindow = () => {
   const topBar = OWN_WINDOW_BUTTONS ? makeLayer('topbar') : null;
   const uiContents = [win.webContents, floating.webContents, peek.webContents];
   if (topBar) uiContents.push(topBar.webContents);
+
+  // If one of Firn's own panels crashes or freezes, say so in the terminal
+  // and reload it, so the window never stays stuck. Its errors are printed
+  // in the terminal too, to help track problems down.
+  const uiNames = new Map<WebContents, string>([
+    [win.webContents, 'sidebar'],
+    [floating.webContents, 'command bar'],
+    [peek.webContents, 'peek'],
+  ]);
+  if (topBar) uiNames.set(topBar.webContents, 'top bar');
+  for (const [web, name] of uiNames) {
+    web.on('render-process-gone', (_event, details) => {
+      console.error(
+        `[Firn] The ${name} panel stopped (${details.reason}); reloading it.`,
+      );
+      if (!win.isDestroyed()) setTimeout(() => web.reload(), 300);
+    });
+    web.on('unresponsive', () => {
+      console.error(
+        `[Firn] The ${name} panel is not responding; reloading it.`,
+      );
+      web.forcefullyCrashRenderer();
+    });
+    web.on('console-message', (details) => {
+      if (details.level === 'error')
+        console.error(`[Firn] ${name} error: ${details.message}`);
+    });
+  }
 
   // Where the page starts: the sidebar's width, or just the inset when the
   // sidebar is collapsed. It glides between the two.
@@ -145,28 +188,48 @@ const createWindow = () => {
       if (!web.isDestroyed()) web.send(channel, ...args);
   };
 
-  const layoutLayers = () => {
+  const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
-    floating.setBounds({ x: 0, y: 0, width, height });
-    topBar?.setBounds({
-      x: pageLeft,
-      y: 0,
-      width: Math.max(0, width - pageLeft),
-      height: TOP_BAR_LAYER_HEIGHT,
-    });
-    // A little wider than the sidebar, so its soft shadow has room.
-    peek.setBounds({
-      x: 0,
-      y: 0,
-      width: Math.min(width, windowState.sidebarWidth + 32),
-      height,
-    });
+    if (layer === topBar) {
+      return {
+        x: pageLeft,
+        y: 0,
+        width: Math.max(0, width - pageLeft),
+        height: TOP_BAR_LAYER_HEIGHT,
+      };
+    }
+    if (layer === peek) {
+      // A little wider than the sidebar, so its soft shadow has room.
+      const peekWidth = Math.min(width, windowState.sidebarWidth + 32);
+      return { x: 0, y: 0, width: peekWidth, height };
+    }
+    return { x: 0, y: 0, width, height };
   };
 
-  // New tabs are added on top, so lift any visible layer back above them.
+  const layoutLayers = () => {
+    for (const layer of shownLayers) layer.setBounds(boundsFor(layer));
+  };
+
+  // Stacking order, bottom to top.
+  const layerOrder = [peek, topBar, floating];
+
+  // New tabs are added on top, so lift any shown layer back above them.
   const raiseLayers = () => {
-    for (const layer of [peek, topBar, floating])
-      if (layer?.getVisible()) win.contentView.addChildView(layer);
+    for (const layer of layerOrder)
+      if (layer && shownLayers.has(layer)) win.contentView.addChildView(layer);
+  };
+
+  const showLayer = (layer: WebContentsView) => {
+    shownLayers.add(layer);
+    layer.setBounds(boundsFor(layer));
+    layer.setVisible(true);
+    raiseLayers();
+  };
+
+  const hideLayer = (layer: WebContentsView) => {
+    shownLayers.delete(layer);
+    layer.setVisible(false);
+    layer.setBounds(NO_BOUNDS);
   };
 
   let overlay: OverlayState = { mode: 'hidden' };
@@ -175,16 +238,14 @@ const createWindow = () => {
   const showOverlay = (state: OverlayState) => {
     overlay = state;
     send('overlay:state', state);
-    layoutLayers();
-    win.contentView.addChildView(floating);
-    floating.setVisible(true);
+    showLayer(floating);
     if (state.mode !== 'hidden') floating.webContents.focus();
   };
   const hideOverlay = () => {
     if (overlay.mode === 'hidden') return;
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
-    floating.setVisible(false);
+    hideLayer(floating);
     tabs.focusActive();
   };
 
@@ -232,9 +293,7 @@ const createWindow = () => {
       if (topBarShown) return;
       topBarShown = true;
       clearTimeout(topBarHideTimer);
-      layoutLayers();
-      win.contentView.addChildView(topBar);
-      topBar.setVisible(true);
+      showLayer(topBar);
       send('top-bar:state', true);
       mouseLastOverBar = Date.now();
       topBarWatch = setInterval(() => {
@@ -248,7 +307,7 @@ const createWindow = () => {
       clearInterval(topBarWatch);
       send('top-bar:state', false);
       // Let the slide back up finish before the bar's layer goes away.
-      topBarHideTimer = setTimeout(() => topBar.setVisible(false), 260);
+      topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
     }
   };
 
@@ -359,10 +418,7 @@ const createWindow = () => {
     if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
     peeking = true;
     clearTimeout(peekHideTimer);
-    layoutLayers();
-    win.contentView.addChildView(peek);
-    raiseLayers();
-    peek.setVisible(true);
+    showLayer(peek);
     sendSidebar();
     let lastOver = Date.now();
     peekWatch = setInterval(() => {
@@ -381,7 +437,7 @@ const createWindow = () => {
     sendSidebar();
     // Let it slide away before the layer goes.
     peekHideTimer = setTimeout(() => {
-      if (!peeking) peek.setVisible(false);
+      if (!peeking) hideLayer(peek);
     }, GLIDE_MS + 60);
   };
 

@@ -512,15 +512,6 @@ button {
 
 /* --- Top bar with the window buttons (Windows / Linux) ------------------- */
 
-/* The thin frame edge above the page. Reaching it brings down the top bar. */
-.top-strip {
-  position: fixed;
-  top: 0;
-  left: var(--page-left);
-  right: 0;
-  height: var(--page-inset);
-}
-
 /* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
    src/main.ts). It slides down by the same amount, at the same speed, as
    .page-area below, so the page's rounded top edge and its shadow appear to
@@ -789,15 +780,6 @@ button {
 .is-resizing,
 .is-resizing * {
   cursor: col-resize !important;
-}
-
-/* With the sidebar collapsed: the strip of frame at the left edge. */
-.left-strip {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: var(--page-inset);
 }
 
 /* The sidebar peeking over the page while collapsed: a floating panel that

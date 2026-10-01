@@ -27,8 +27,13 @@ const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 360;
 const GLIDE_MS = 200; // matches --motion in styles.css
 // Once the mouse leaves the peeking sidebar, wait this long before it tucks
-// away, so a small overshoot doesn't make it vanish.
-const PEEK_LINGER_MS = 300;
+// away, so an overshoot doesn't make it vanish.
+const PEEK_LINGER_MS = 450;
+// How far to the right of the peeking sidebar the mouse can stray and still
+// count as "on it". Anywhere to its left (even off the window) also counts.
+const PEEK_RIGHT_SLACK = 24;
+// How often the cursor's position is checked for the edge reveals.
+const EDGE_CHECK_MS = 50;
 const PAGE_INSET = 8;
 // Matches macOS's window corners.
 const PAGE_RADIUS = 12;
@@ -198,14 +203,23 @@ const createWindow = () => {
   let topBarWatch: ReturnType<typeof setInterval> | undefined;
   let mouseLastOverBar = 0;
 
-  const mouseIsOverBar = () => {
+  // The cursor's position relative to the window's content area.
+  const cursorInWindow = () => {
     const cursor = screen.getCursorScreenPoint();
     const content = win.getContentBounds();
-    const x = cursor.x - content.x;
-    const y = cursor.y - content.y;
+    return {
+      x: cursor.x - content.x,
+      y: cursor.y - content.y,
+      width: content.width,
+      height: content.height,
+    };
+  };
+
+  const mouseIsOverBar = () => {
+    const { x, y, width } = cursorInWindow();
     return (
       x >= pageLeft &&
-      x <= content.width &&
+      x <= width &&
       y <= TOP_BAR_HEIGHT &&
       // A little slack above, for a maximized window's very top edge.
       y >= -4
@@ -333,15 +347,11 @@ const createWindow = () => {
   // page. It tucks away once the mouse has left it (checked by cursor
   // position, like the top bar, since its top row moves the window).
   const mouseIsOverPeek = () => {
-    const cursor = screen.getCursorScreenPoint();
-    const content = win.getContentBounds();
-    const x = cursor.x - content.x;
-    const y = cursor.y - content.y;
+    const { x, y, height } = cursorInWindow();
     return (
-      x >= -4 &&
-      x <= windowState.sidebarWidth + 8 &&
-      y >= -4 &&
-      y <= content.height + 4
+      x <= windowState.sidebarWidth + PEEK_RIGHT_SLACK &&
+      y >= -40 &&
+      y <= height + 40
     );
   };
 
@@ -374,6 +384,22 @@ const createWindow = () => {
       if (!peeking) peek.setVisible(false);
     }, GLIDE_MS + 60);
   };
+
+  // Reaching the window's edges reveals things: the left edge brings the
+  // collapsed sidebar out to peek, the top edge above the page brings down
+  // the window buttons. This checks the cursor's position directly rather
+  // than waiting for hover events, which never fire again while the pointer
+  // stays pressed against the screen's edge (e.g. a maximized window).
+  const edgeWatch = setInterval(() => {
+    if (win.isDestroyed() || !win.isVisible() || win.isMinimized()) return;
+    if (win.isFullScreen()) return;
+    const { x, y, width, height } = cursorInWindow();
+    const alongLeftEdge = x >= -2 && x < PAGE_INSET && y >= 0 && y <= height;
+    const alongTopEdge =
+      y >= -2 && y < PAGE_INSET && x >= pageLeft && x <= width + 2;
+    if (alongLeftEdge && windowState.sidebarCollapsed) showPeek();
+    if (alongTopEdge) revealTopBar(true);
+  }, EDGE_CHECK_MS);
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
@@ -473,14 +499,11 @@ const createWindow = () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
     },
-    'top-bar:reveal': (_sender, reveal) => revealTopBar(reveal === true),
     'sidebar:toggle': () => setSidebarCollapsed(!windowState.sidebarCollapsed),
     'sidebar:width': (_sender, width) => {
       if (typeof width === 'number' && Number.isFinite(width))
         setSidebarWidth(width);
     },
-    'sidebar:peek': (_sender, show) =>
-      show === true ? showPeek() : hidePeek(),
     'window:command': (_sender, command) => {
       if (command === 'minimize') win.minimize();
       else if (command === 'toggle-maximize')
@@ -596,6 +619,7 @@ const createWindow = () => {
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
     clearInterval(peekWatch);
+    clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);
     clearInterval(glide);
     for (const layer of [floating, topBar, peek])

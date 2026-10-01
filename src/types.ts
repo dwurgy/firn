@@ -89,10 +89,8 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
-  revealTopBar(reveal: boolean): void;
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
-  peekSidebar(show: boolean): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;

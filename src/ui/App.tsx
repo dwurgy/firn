@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sidebar, useSidebarData } from './Sidebar';
 
-// macOS draws its own traffic lights; elsewhere Firn's window buttons are on
-// a bar that slides down over the page when the mouse reaches the top edge.
-const OWN_WINDOW_BUTTONS = window.firn.platform !== 'darwin';
-
 const PAGE_INSET = 8; // matches --page-inset in styles.css
 const DEFAULT_WIDTH = 260;
 
@@ -84,15 +80,6 @@ export function App() {
         />
       )}
 
-      {/* With the sidebar collapsed, the strip of frame at the left edge
-          brings the sidebar back to peek over the page. */}
-      {sidebar.collapsed && (
-        <div
-          className="left-strip"
-          onMouseEnter={() => window.firn.peekSidebar(true)}
-        />
-      )}
-
       {/* Sits right behind the web page so the page looks lifted off the
           frame. With no tabs open, this calm page shows instead. */}
       <main className={`page-area ${noTabs ? 'is-empty' : ''}`}>
@@ -103,15 +90,6 @@ export function App() {
           </div>
         )}
       </main>
-
-      {/* The strip of frame above the page. Reaching it brings down the bar
-          with the window buttons (see TopBar.tsx). */}
-      {OWN_WINDOW_BUTTONS && (
-        <div
-          className="top-strip"
-          onMouseEnter={() => window.firn.revealTopBar(true)}
-        />
-      )}
     </div>
   );
 }

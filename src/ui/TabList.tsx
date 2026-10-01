@@ -54,10 +54,16 @@ export function TabList({
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   // Right after a drop, the moved tab glides from where it was let go into
-  // its new slot.
-  const [settle, setSettle] = useState<{ id: string; offset: number } | null>(
-    null,
-  );
+  // its new slot. First it's drawn at the drop spot with animation off
+  // (`gliding` false), then animation is switched on and it glides home.
+  // Doing it in two steps keeps the start point exact whichever way the tab
+  // moved.
+  const [settle, setSettle] = useState<{
+    id: string;
+    offset: number;
+    gliding: boolean;
+  } | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   // The new order, shown straight away while the main process catches up.
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -65,15 +71,25 @@ export function TabList({
   useEffect(() => setLocalOrder(null), [tabs]);
 
   useLayoutEffect(() => {
-    if (!settle || settle.offset === 0) return;
-    const frame = requestAnimationFrame(() =>
-      setSettle((s) => s && { ...s, offset: 0 }),
-    );
-    const done = setTimeout(() => setSettle(null), SETTLE_MS + 50);
+    if (!settle || settle.gliding) return;
+    // Make the browser take in the drop spot before animation is switched on.
+    listRef.current?.getBoundingClientRect();
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() =>
+        setSettle((s) => s && { ...s, offset: 0, gliding: true }),
+      );
+    });
     return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(done);
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
     };
+  }, [settle]);
+
+  useEffect(() => {
+    if (!settle?.gliding) return;
+    const done = setTimeout(() => setSettle(null), SETTLE_MS + 50);
+    return () => clearTimeout(done);
   }, [settle]);
 
   const byId = new Map(tabs.map((t) => [t.id, t]));
@@ -92,7 +108,7 @@ export function TabList({
     if (!d || !d.active || !commit) return;
     const to = targetIndex(d, ordered.length);
     if (to === d.from) {
-      setSettle({ id: d.id, offset: d.dy });
+      setSettle({ id: d.id, offset: d.dy, gliding: false });
       return;
     }
     const ids = ordered.map((t) => t.id);
@@ -100,7 +116,11 @@ export function TabList({
     ids.splice(to, 0, d.id);
     setLocalOrder(ids);
     // Keep it exactly where it was dropped, then let it glide into place.
-    setSettle({ id: d.id, offset: d.dy - (to - d.from) * d.pitch });
+    setSettle({
+      id: d.id,
+      offset: d.dy - (to - d.from) * d.pitch,
+      gliding: false,
+    });
     window.firn.moveTab(d.id, to);
   };
 
@@ -115,6 +135,7 @@ export function TabList({
 
   return (
     <ul
+      ref={listRef}
       className={`tab-list ${drag?.active ? 'is-dragging' : ''} ${
         settle ? 'is-settling' : ''
       }`}
@@ -135,6 +156,7 @@ export function TabList({
               tab.id === activeTabId && 'is-active',
               isDragged && 'is-dragged',
               isSettling && 'is-settling-row',
+              isSettling && settle.gliding && 'is-gliding',
             ]
               .filter(Boolean)
               .join(' ')}

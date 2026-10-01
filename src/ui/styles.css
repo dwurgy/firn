@@ -356,6 +356,14 @@ button {
 
 .tab.is-settling-row {
   z-index: 1;
+  transition: none;
+}
+
+.tab.is-settling-row.is-gliding {
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    transform var(--motion);
 }
 
 .tab:active:not(.is-active) {

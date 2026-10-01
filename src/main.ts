@@ -298,7 +298,7 @@ const createWindow = () => {
       mouseLastOverBar = Date.now();
       topBarWatch = setInterval(() => {
         if (win.isDestroyed()) return;
-        if (mouseIsOverBar()) mouseLastOverBar = Date.now();
+        if (mouseIsOverBar() || windowDrag) mouseLastOverBar = Date.now();
         else if (Date.now() - mouseLastOverBar > TOP_BAR_LINGER_MS)
           revealTopBar(false);
       }, 50);
@@ -308,6 +308,57 @@ const createWindow = () => {
       send('top-bar:state', false);
       // Let the slide back up finish before the bar's layer goes away.
       topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
+    }
+  };
+
+  // Dragging the top bar's empty space moves the window. Firn moves it
+  // itself (a Windows title-bar area misbehaves inside this layer). A press
+  // only becomes a drag after a few pixels, so a click on a maximized
+  // window doesn't un-maximize it.
+  let windowDrag: {
+    startX: number;
+    startY: number;
+    offsetX: number;
+    offsetY: number;
+    moving: boolean;
+  } | null = null;
+
+  const dragWindow = (phase: unknown) => {
+    const cursor = screen.getCursorScreenPoint();
+    if (phase === 'start') {
+      const b = win.getBounds();
+      windowDrag = {
+        startX: cursor.x,
+        startY: cursor.y,
+        offsetX: cursor.x - b.x,
+        offsetY: cursor.y - b.y,
+        moving: false,
+      };
+    } else if (phase === 'move' && windowDrag) {
+      if (!windowDrag.moving) {
+        const moved = Math.hypot(
+          cursor.x - windowDrag.startX,
+          cursor.y - windowDrag.startY,
+        );
+        if (moved < 4) return;
+        windowDrag.moving = true;
+        if (win.isMaximized()) {
+          // Come out of maximized under the cursor, keeping the same spot
+          // of the bar under it.
+          const max = win.getBounds();
+          const ratio = (windowDrag.startX - max.x) / max.width;
+          win.unmaximize();
+          const normal = win.getBounds();
+          windowDrag.offsetX = Math.round(normal.width * ratio);
+          windowDrag.offsetY = windowDrag.startY - max.y;
+        }
+      }
+      win.setPosition(
+        Math.round(cursor.x - windowDrag.offsetX),
+        Math.round(cursor.y - windowDrag.offsetY),
+      );
+    } else if (phase === 'end') {
+      windowDrag = null;
     }
   };
 
@@ -560,6 +611,7 @@ const createWindow = () => {
       if (typeof width === 'number' && Number.isFinite(width))
         setSidebarWidth(width);
     },
+    'window:drag': (_sender, phase) => dragWindow(phase),
     'window:command': (_sender, command) => {
       if (command === 'minimize') win.minimize();
       else if (command === 'toggle-maximize')

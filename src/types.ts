@@ -95,6 +95,7 @@ export interface FirnBridge {
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
   windowCommand(command: WindowCommand): void;
+  dragWindow(phase: 'start' | 'move' | 'end'): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
   onTabsState(listener: (state: TabsState) => void): () => void;

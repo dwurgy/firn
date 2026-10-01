@@ -80,8 +80,6 @@ export function App() {
         />
       )}
 
-      {topBarShown && <div className="top-bar-drag-zone" />}
-
       {/* Sits right behind the web page so the page looks lifted off the
           frame. With no tabs open, this calm page shows instead. */}
       <main className={`page-area ${noTabs ? 'is-empty' : ''}`}>

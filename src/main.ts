@@ -163,15 +163,21 @@ const createWindow = () => {
   // Reaching the frame edge above the page shows a bar that slides down over
   // the top of the page; the page itself stays where it is.
 
+  // Both the bar and the sidebar layer's outline of the page slide together,
+  // so every edge and shadow moves as one.
+  let topBarHideTimer: ReturnType<typeof setTimeout> | undefined;
   const revealTopBar = (reveal: boolean) => {
     if (!topBar) return;
+    clearTimeout(topBarHideTimer);
     if (reveal && !win.isFullScreen()) {
       layoutLayers();
       win.contentView.addChildView(topBar);
       topBar.setVisible(true);
-      send('top-bar:shown');
+      send('top-bar:state', true);
     } else {
-      topBar.setVisible(false);
+      send('top-bar:state', false);
+      // Let the slide back up finish before the bar's layer goes away.
+      topBarHideTimer = setTimeout(() => topBar.setVisible(false), 260);
     }
   };
 
@@ -405,6 +411,7 @@ const createWindow = () => {
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();
+    clearTimeout(topBarHideTimer);
     for (const layer of [floating, topBar])
       if (layer && !layer.webContents.isDestroyed()) layer.webContents.close();
   });

@@ -29,7 +29,7 @@ const bridge: FirnBridge = {
   onFocusAddress: (listener) => listen('ui:focus-address', listener),
   onMaximizedChange: (listener) => listen('window:maximized', listener),
   onOverlayState: (listener) => listen('overlay:state', listener),
-  onTopBarShown: (listener) => listen('top-bar:shown', () => listener()),
+  onTopBarState: (listener) => listen('top-bar:state', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

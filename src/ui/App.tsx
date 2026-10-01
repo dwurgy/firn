@@ -19,11 +19,14 @@ const EMPTY_NAV: NavState = {
 export function App() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
   const [tabs, setTabs] = useState<TabsState>({ tabs: [], activeTabId: null });
+  // The top bar is down: the outline of the page slides down with it.
+  const [topBarShown, setTopBarShown] = useState(false);
 
   useEffect(() => {
     const offs = [
       window.firn.onNavState(setNav),
       window.firn.onTabsState(setTabs),
+      window.firn.onTopBarState(setTopBarShown),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
@@ -32,7 +35,7 @@ export function App() {
   const noTabs = tabs.tabs.length === 0;
 
   return (
-    <div className="app">
+    <div className={`app ${topBarShown ? 'top-bar-shown' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
           <nav className="button-row">

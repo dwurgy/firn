@@ -418,7 +418,14 @@ button {
   box-shadow: var(--page-shadow);
   display: grid;
   place-items: center;
-  transition: background var(--motion);
+  transition:
+    top var(--motion),
+    background var(--motion);
+}
+
+/* The top bar is down: the page's outline (and its shadow) lowers with it. */
+.top-bar-shown .page-area {
+  top: var(--top-bar-height);
 }
 
 /* With no tabs open, Firn shows its own calm page here. */
@@ -462,10 +469,9 @@ button {
 }
 
 /* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
-   src/main.ts). It's a band of frame colour with two rounded cut-outs at its
-   bottom corners. At rest those cut-outs sit exactly on the page's own
-   rounded corners, so the bar can't be seen; on hover the whole shape glides
-   down, and the page's rounded top edge appears to lower with it. */
+   src/main.ts). It slides down by the same amount, at the same speed, as
+   .page-area below, so the page's rounded top edge and its shadow appear to
+   lower as one piece over the content. */
 .top-bar {
   position: fixed;
   top: 0;
@@ -480,39 +486,25 @@ button {
   transform: none;
 }
 
-.top-bar-band {
+/* Covers only the page (not the frame beside it): frame colour down to the
+   page's new top edge, rounded cut-outs at the corners, and the same soft
+   shadow the page casts upward. */
+.top-bar-cover {
+  position: absolute;
+  inset: 0 var(--page-inset) 0 0;
+  overflow: hidden;
+}
+
+.top-bar-cover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   height: var(--top-bar-height);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding-right: var(--page-inset);
   background: var(--frame);
 }
 
-.top-bar .button-row {
-  opacity: 0;
-  transition: opacity var(--motion);
-}
-
-.top-bar.is-shown .button-row {
-  opacity: 1;
-}
-
-/* An empty outline of the page's top edge, casting the same soft shadow the
-   real page casts, so the bar's edge looks exactly like the page's. */
-.top-bar-edge {
-  position: absolute;
-  top: var(--top-bar-height);
-  left: 0;
-  right: var(--page-inset);
-  /* Taller than the layer, so only its top edge's shadow is ever seen. */
-  height: 200px;
-  border-radius: var(--page-radius);
-  box-shadow: var(--page-shadow);
-}
-
-/* Frame-coloured squares with a quarter circle cut out, matching the page's
-   corner radius. */
 .top-bar-corner {
   position: absolute;
   top: var(--top-bar-height);
@@ -530,12 +522,36 @@ button {
 }
 
 .top-bar-corner.is-right {
-  right: var(--page-inset);
+  right: 0;
   background: radial-gradient(
     circle at 0 100%,
     transparent calc(var(--page-radius) - 0.5px),
     var(--frame) var(--page-radius)
   );
+}
+
+/* An empty outline of the page's top edge casting the page's shadow. Taller
+   than the layer, so only the shadow above the edge is ever seen. */
+.top-bar-edge {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: 0;
+  height: 200px;
+  border-radius: var(--page-radius);
+  box-shadow: var(--page-shadow);
+}
+
+.top-bar .button-row {
+  position: absolute;
+  top: calc((var(--top-bar-height) - 32px) / 2);
+  right: var(--page-inset);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.top-bar.is-shown .button-row {
+  opacity: 1;
 }
 
 /* --- Floating panels: command bar and tab switcher ------------------------- */

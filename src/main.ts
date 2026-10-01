@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   ipcMain,
   nativeTheme,
+  screen,
   WebContentsView,
   type IpcMainEvent,
   type Input,
@@ -30,6 +31,10 @@ const PAGE_RADIUS = 12;
 // top of the page (Windows / Linux). The layer is a little taller than the
 // bar so the bar's soft shadow has room.
 const TOP_BAR_LAYER_HEIGHT = 60;
+const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
+// Once the mouse leaves the bar, wait this long before sliding it away, so
+// brushing past the edge doesn't make it flicker.
+const TOP_BAR_LINGER_MS = 250;
 
 // Ctrl+Tab: a quick tap just flips tabs; holding Ctrl this long shows the list.
 const SWITCHER_DELAY_MS = 180;
@@ -165,16 +170,49 @@ const createWindow = () => {
 
   // Both the bar and the sidebar layer's outline of the page slide together,
   // so every edge and shadow moves as one.
+  //
+  // The bar's empty space moves the window like a title bar. Windows takes
+  // over the mouse there, so the bar itself can't tell when the mouse
+  // leaves; instead we check where the cursor is a few times a second.
+  let topBarShown = false;
   let topBarHideTimer: ReturnType<typeof setTimeout> | undefined;
+  let topBarWatch: ReturnType<typeof setInterval> | undefined;
+  let mouseLastOverBar = 0;
+
+  const mouseIsOverBar = () => {
+    const cursor = screen.getCursorScreenPoint();
+    const content = win.getContentBounds();
+    const x = cursor.x - content.x;
+    const y = cursor.y - content.y;
+    return (
+      x >= windowState.sidebarWidth &&
+      x <= content.width &&
+      y <= TOP_BAR_HEIGHT &&
+      // A little slack above, for a maximized window's very top edge.
+      y >= -4
+    );
+  };
+
   const revealTopBar = (reveal: boolean) => {
     if (!topBar) return;
-    clearTimeout(topBarHideTimer);
     if (reveal && !win.isFullScreen()) {
+      if (topBarShown) return;
+      topBarShown = true;
+      clearTimeout(topBarHideTimer);
       layoutLayers();
       win.contentView.addChildView(topBar);
       topBar.setVisible(true);
       send('top-bar:state', true);
-    } else {
+      mouseLastOverBar = Date.now();
+      topBarWatch = setInterval(() => {
+        if (win.isDestroyed()) return;
+        if (mouseIsOverBar()) mouseLastOverBar = Date.now();
+        else if (Date.now() - mouseLastOverBar > TOP_BAR_LINGER_MS)
+          revealTopBar(false);
+      }, 50);
+    } else if (topBarShown) {
+      topBarShown = false;
+      clearInterval(topBarWatch);
       send('top-bar:state', false);
       // Let the slide back up finish before the bar's layer goes away.
       topBarHideTimer = setTimeout(() => topBar.setVisible(false), 260);
@@ -412,6 +450,7 @@ const createWindow = () => {
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();
     clearTimeout(topBarHideTimer);
+    clearInterval(topBarWatch);
     for (const layer of [floating, topBar])
       if (layer && !layer.webContents.isDestroyed()) layer.webContents.close();
   });

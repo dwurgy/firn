@@ -542,6 +542,15 @@ button {
   box-shadow: var(--page-shadow);
 }
 
+.top-bar-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
+  -webkit-app-region: drag;
+}
+
 .top-bar .button-row {
   position: absolute;
   top: calc((var(--top-bar-height) - 32px) / 2);

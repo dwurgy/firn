@@ -12,6 +12,14 @@ npm install      # first time only, and whenever package.json changes
 npm start        # opens Firn
 ```
 
+**Windows: if PowerShell says "running scripts is disabled on this system"**, run this once and answer `Y`:
+
+```
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+(Or use `npm.cmd install` / `npm.cmd start` instead.)
+
 `npm start` runs Firn in development mode: if you change a file in `src/ui/`, the window updates by itself. For changes to `src/main.ts` or `src/preload.ts`, type `rs` in the terminal and press Enter to restart.
 
 ### Shortcuts (so far)

@@ -32,6 +32,31 @@ interface TabManagerOptions {
   onEmpty: () => void;
 }
 
+// Calm, Zen-like scrollbars for web pages: a thin rounded thumb with no
+// visible track at rest; hovering the scrollbar darkens the thumb, widens it
+// a little and shows a faint track. Added as "user" styles, so a site that
+// styles its own scrollbars keeps its design.
+const SCROLLBAR_CSS = `
+::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-track:hover { background: rgba(128, 128, 128, 0.12); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb {
+  background-color: rgba(128, 128, 128, 0.45);
+  border: 3.5px solid transparent;
+  border-radius: 12px;
+  background-clip: padding-box;
+  min-height: 40px;
+  min-width: 40px;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(110, 110, 110, 0.7);
+  border-width: 2px;
+}
+`;
+
 // Popup windows (e.g. "Sign in with Google") keep the same safe settings.
 const SAFE_WEB_PREFERENCES = {
   contextIsolation: true,
@@ -301,6 +326,9 @@ export class TabManager {
 
   // Keeps a tab's record in step with its page, and reports changes.
   private watch(id: string, web: WebContents) {
+    web.on('dom-ready', () => {
+      web.insertCSS(SCROLLBAR_CSS, { cssOrigin: 'user' }).catch(() => {});
+    });
     const update = () => {
       const entry = this.entries.get(id);
       if (!entry || web.isDestroyed()) return;

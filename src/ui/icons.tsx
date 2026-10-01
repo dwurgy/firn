@@ -31,12 +31,6 @@ export const ReloadIcon = () => (
   </svg>
 );
 
-export const StopIcon = () => (
-  <svg {...base}>
-    <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-  </svg>
-);
-
 // Window buttons (Windows and Linux), drawn with the same stroke as above.
 
 export const MinimizeIcon = () => (
@@ -98,3 +92,6 @@ export const SidebarIcon = () => (
     <path d="M6.5 3.5v9" />
   </svg>
 );
+
+// Stopping a page load uses the very same mark as closing the window.
+export const StopIcon = CloseIcon;

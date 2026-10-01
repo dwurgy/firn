@@ -624,6 +624,8 @@ const createWindow = () => {
       if (source === floating.webContents) handled = false;
     } else if (switcher && key === 'escape') {
       endSwitcher(false);
+    } else if (mod && input.shift && key === 'd') {
+      printDiagnostics();
     } else if (mod && key === 's') {
       setSidebarCollapsed(!windowState.sidebarCollapsed);
     } else if (mod && key === 'l') {
@@ -655,6 +657,35 @@ const createWindow = () => {
     }
     if (handled) event.preventDefault();
   };
+  // Ctrl+Shift+D: print what every layer is doing to the terminal, to help
+  // track down a stuck or unresponsive window.
+  const printDiagnostics = () => {
+    const name = (web: WebContents) =>
+      uiNames.get(web) ?? `page ${web.getURL().slice(0, 60)}`;
+    const focused = win.webContents.isFocused()
+      ? 'sidebar'
+      : ([
+          ...uiNames.keys(),
+          ...win.contentView.children.map(
+            (v) => (v as WebContentsView).webContents,
+          ),
+        ]
+          .filter((w) => w && !w.isDestroyed() && w.isFocused())
+          .map(name)[0] ?? 'nothing');
+    console.log('\n[Firn] --- diagnostics ---');
+    console.log(
+      `[Firn] overlay=${overlay.mode} switcher=${Boolean(switcher)} topBar=${topBarShown} ` +
+        `collapsed=${windowState.sidebarCollapsed} peeking=${peeking} pageLeft=${pageLeft} focused=${focused}`,
+    );
+    for (const child of win.contentView.children) {
+      const view = child as WebContentsView;
+      const b = view.getBounds();
+      console.log(
+        `[Firn]   ${view.getVisible() ? 'shown ' : 'hidden'} ${b.x},${b.y} ${b.width}x${b.height}  ${name(view.webContents)}`,
+      );
+    }
+  };
+
   const watchShortcuts = (web: WebContents) =>
     web.on('before-input-event', (event, input) =>
       handleShortcut(event, input, web),

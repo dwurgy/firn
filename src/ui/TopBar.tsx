@@ -26,9 +26,6 @@ export function TopBar() {
         <span className="top-bar-corner is-right" />
         <span className="top-bar-edge" />
       </div>
-      {/* Empty bar space works like a title bar: drag to move the window,
-          double-click to maximize. */}
-      <div className="top-bar-drag" />
       <div className="button-row">
         <button
           className="icon-button"

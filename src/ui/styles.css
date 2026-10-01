@@ -8,6 +8,8 @@
   --page-left: var(--sidebar-width);
   --page-inset: 8px;
   --top-bar-height: 40px;
+  /* Room kept clear for the window buttons at the bar's right end. */
+  --top-bar-buttons-width: 128px;
   --page-radius: 12px;
   --motion: 200ms ease-out;
 
@@ -73,6 +75,13 @@ body,
 #root {
   margin: 0;
   height: 100%;
+}
+
+/* Only the main window may have "drag to move the window" areas. On
+   Windows, drag areas inside the extra layers can make the whole window
+   stop responding to clicks, so they're switched off there entirely. */
+:root:not([data-view='main']) * {
+  -webkit-app-region: no-drag !important;
 }
 
 /* The layers above the page are see-through. */
@@ -586,15 +595,6 @@ button {
   box-shadow: var(--page-shadow);
 }
 
-.top-bar-drag {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--top-bar-height);
-  -webkit-app-region: drag;
-}
-
 .top-bar .button-row {
   position: absolute;
   top: calc((var(--top-bar-height) - 32px) / 2);
@@ -802,4 +802,17 @@ button {
 
 .peek.is-shown .sidebar {
   transform: none;
+}
+
+/* While the top bar is down, its empty space moves the window like a title
+   bar. This lives in the main window (not the top bar's own layer); Windows
+   still treats it as a title bar even though the bar is drawn on top. The
+   window buttons on the right are left out so they stay clickable. */
+.top-bar-drag-zone {
+  position: fixed;
+  top: 0;
+  left: var(--page-left);
+  right: var(--top-bar-buttons-width);
+  height: var(--top-bar-height);
+  -webkit-app-region: drag;
 }

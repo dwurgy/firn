@@ -3,6 +3,9 @@
 :root {
   /* Layout (keep in sync with SIDEBAR_WIDTH / PAGE_INSET in src/main.ts) */
   --sidebar-width: 260px;
+  /* Where the page starts; set live by the UI as the sidebar resizes or
+     collapses. */
+  --page-left: var(--sidebar-width);
   --page-inset: 8px;
   --top-bar-height: 40px;
   --page-radius: 12px;
@@ -74,7 +77,8 @@ body,
 
 /* The layers above the page are see-through. */
 :root[data-view='floating'] body,
-:root[data-view='topbar'] body {
+:root[data-view='topbar'] body,
+:root[data-view='peek'] body {
   background: transparent;
 }
 
@@ -118,14 +122,18 @@ button {
   padding: 8px var(--page-inset) 8px var(--page-inset);
 }
 
-/* Top row: back/forward/reload, and the window buttons on Windows/Linux.
-   Its empty space moves the window, like a title bar. */
+/* While collapsing, the sidebar glides out with the page's left edge. */
+.sidebar.is-tucking {
+  pointer-events: none;
+}
+
+/* Top row: the sidebar toggle on the left (room for a menu button later),
+   back/forward/reload on the right. Its empty space moves the window, like
+   a title bar. */
 .sidebar-top {
   display: flex;
   align-items: center;
-  /* Back/forward/reload sit on the right, leaving room on the left for the
-     menu and compact-mode buttons to come. */
-  justify-content: flex-end;
+  justify-content: space-between;
   height: 36px;
   -webkit-app-region: drag;
 }
@@ -455,7 +463,7 @@ button {
 .page-area {
   position: fixed;
   top: var(--page-inset);
-  left: var(--sidebar-width);
+  left: var(--page-left);
   right: var(--page-inset);
   bottom: var(--page-inset);
   border-radius: var(--page-radius);
@@ -508,7 +516,7 @@ button {
 .top-strip {
   position: fixed;
   top: 0;
-  left: var(--sidebar-width);
+  left: var(--page-left);
   right: 0;
   height: var(--page-inset);
 }
@@ -744,4 +752,72 @@ button {
     opacity: 0;
     transform: translateY(6px) scale(0.98);
   }
+}
+
+/* --- Sidebar resize and collapse ------------------------------------------- */
+
+/* The gap between the sidebar and the page. */
+.sidebar-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-width) - var(--page-inset));
+  width: var(--page-inset);
+  cursor: col-resize;
+}
+
+/* A soft line in the gap while hovering or dragging. */
+.sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 48px;
+  margin-top: -24px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.sidebar-resizer:hover::after,
+.is-resizing .sidebar-resizer::after {
+  opacity: 0.8;
+}
+
+.is-resizing,
+.is-resizing * {
+  cursor: col-resize !important;
+}
+
+/* With the sidebar collapsed: the strip of frame at the left edge. */
+.left-strip {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--page-inset);
+}
+
+/* The sidebar peeking over the page while collapsed: a floating panel that
+   slides in from the left. */
+.peek .sidebar {
+  top: var(--page-inset);
+  left: var(--page-inset);
+  bottom: var(--page-inset);
+  width: calc(var(--sidebar-width) - var(--page-inset));
+  padding: 8px;
+  border-radius: var(--page-radius);
+  background: var(--frame);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 16px 40px rgba(30, 20, 10, 0.18);
+  transform: translateX(calc(-100% - 2 * var(--page-inset)));
+  transition: transform var(--motion);
+}
+
+.peek.is-shown .sidebar {
+  transform: none;
 }

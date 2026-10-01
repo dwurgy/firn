@@ -20,6 +20,9 @@ const bridge: FirnBridge = {
   openUrl: (input) => ipcRenderer.send('tabs:open-url', input),
   closeOverlay: () => ipcRenderer.send('overlay:close'),
   revealTopBar: (reveal) => ipcRenderer.send('top-bar:reveal', reveal),
+  toggleSidebar: () => ipcRenderer.send('sidebar:toggle'),
+  setSidebarWidth: (width) => ipcRenderer.send('sidebar:width', width),
+  peekSidebar: (show) => ipcRenderer.send('sidebar:peek', show),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
@@ -31,6 +34,7 @@ const bridge: FirnBridge = {
   onMaximizedChange: (listener) => listen('window:maximized', listener),
   onOverlayState: (listener) => listen('overlay:state', listener),
   onTopBarState: (listener) => listen('top-bar:state', listener),
+  onSidebarState: (listener) => listen('sidebar:state', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

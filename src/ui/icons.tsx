@@ -90,3 +90,11 @@ export const ArrowIcon = () => (
     <path d="M3.5 8h9M9 4.5 12.5 8 9 11.5" />
   </svg>
 );
+
+// Show / hide the sidebar.
+export const SidebarIcon = () => (
+  <svg {...base}>
+    <rect x="2.5" y="3.5" width="11" height="9" rx="2" />
+    <path d="M6.5 3.5v9" />
+  </svg>
+);

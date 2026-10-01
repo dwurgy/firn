@@ -59,6 +59,15 @@ export interface NavState {
   isLoading: boolean;
 }
 
+// The sidebar's size and whether it's tucked away. `pageLeft` is where the
+// page currently starts (it glides while collapsing or expanding).
+export interface SidebarState {
+  width: number;
+  collapsed: boolean;
+  pageLeft: number;
+  peeking: boolean;
+}
+
 export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
@@ -81,6 +90,9 @@ export interface FirnBridge {
   openUrl(input: string): void;
   closeOverlay(): void;
   revealTopBar(reveal: boolean): void;
+  toggleSidebar(): void;
+  setSidebarWidth(width: number): void;
+  peekSidebar(show: boolean): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
@@ -92,4 +104,5 @@ export interface FirnBridge {
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
   onOverlayState(listener: (state: OverlayState) => void): () => void;
   onTopBarState(listener: (shown: boolean) => void): () => void;
+  onSidebarState(listener: (state: SidebarState) => void): () => void;
 }

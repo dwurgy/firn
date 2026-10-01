@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { Floating } from './Floating';
+import { Peek } from './Peek';
 import { TopBar } from './TopBar';
 import './styles.css';
 
@@ -10,7 +11,12 @@ const view = new URLSearchParams(location.search).get('view') ?? 'main';
 document.documentElement.dataset.platform = window.firn.platform;
 document.documentElement.dataset.view = view;
 
-const Root = view === 'floating' ? Floating : view === 'topbar' ? TopBar : App;
+const LAYERS: Record<string, () => React.JSX.Element | null> = {
+  floating: Floating,
+  topbar: TopBar,
+  peek: Peek,
+};
+const Root = LAYERS[view] ?? App;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

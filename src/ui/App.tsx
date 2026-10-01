@@ -1,85 +1,97 @@
-import { useEffect, useState } from 'react';
-import type { NavState, TabsState } from '../types';
-import { AddressBar } from './AddressBar';
-import { TabList } from './TabList';
-import { BackIcon, ForwardIcon, PlusIcon, ReloadIcon, StopIcon } from './icons';
+import { useEffect, useRef, useState } from 'react';
+import { Sidebar, useSidebarData } from './Sidebar';
 
 // macOS draws its own traffic lights; elsewhere Firn's window buttons are on
 // a bar that slides down over the page when the mouse reaches the top edge.
 const OWN_WINDOW_BUTTONS = window.firn.platform !== 'darwin';
 
-const EMPTY_NAV: NavState = {
-  url: '',
-  title: '',
-  canGoBack: false,
-  canGoForward: false,
-  isLoading: false,
-};
+const PAGE_INSET = 8; // matches --page-inset in styles.css
+const DEFAULT_WIDTH = 260;
 
 export function App() {
-  const [nav, setNav] = useState<NavState>(EMPTY_NAV);
-  const [tabs, setTabs] = useState<TabsState>({ tabs: [], activeTabId: null });
+  const { nav, tabs, sidebar } = useSidebarData();
   // The top bar is down: the outline of the page slides down with it.
   const [topBarShown, setTopBarShown] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const resize = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  useEffect(() => {
-    const offs = [
-      window.firn.onNavState(setNav),
-      window.firn.onTabsState(setTabs),
-      window.firn.onTopBarState(setTopBarShown),
-    ];
-    window.firn.ready();
-    return () => offs.forEach((off) => off());
-  }, []);
+  useEffect(() => window.firn.onTopBarState(setTopBarShown), []);
 
+  // How far the sidebar has tucked away (0 = fully out, 1 = fully away),
+  // following the page's left edge as it glides.
+  const away = Math.min(
+    1,
+    Math.max(
+      0,
+      (sidebar.width - sidebar.pageLeft) / (sidebar.width - PAGE_INSET),
+    ),
+  );
   const noTabs = tabs.tabs.length === 0;
 
   return (
-    <div className={`app ${topBarShown ? 'top-bar-shown' : ''}`}>
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <nav className="button-row">
-            <button
-              className="icon-button"
-              title="Back"
-              disabled={!nav.canGoBack}
-              onClick={() => window.firn.command('back')}
-            >
-              <BackIcon />
-            </button>
-            <button
-              className="icon-button"
-              title="Forward"
-              disabled={!nav.canGoForward}
-              onClick={() => window.firn.command('forward')}
-            >
-              <ForwardIcon />
-            </button>
-            <button
-              className="icon-button"
-              title={nav.isLoading ? 'Stop' : 'Reload'}
-              disabled={!nav.url}
-              onClick={() =>
-                window.firn.command(nav.isLoading ? 'stop' : 'reload')
+    <div
+      className={[
+        'app',
+        topBarShown && 'top-bar-shown',
+        resizing && 'is-resizing',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={
+        {
+          '--sidebar-width': `${sidebar.width}px`,
+          '--page-left': `${sidebar.pageLeft}px`,
+        } as React.CSSProperties
+      }
+    >
+      <Sidebar
+        nav={nav}
+        tabs={tabs}
+        collapsed={sidebar.collapsed}
+        className={away > 0 ? 'is-tucking' : ''}
+        style={
+          away > 0
+            ? {
+                transform: `translateX(${-away * sidebar.width}px)`,
+                opacity: 1 - away,
               }
-            >
-              {nav.isLoading ? <StopIcon /> : <ReloadIcon />}
-            </button>
-          </nav>
-        </div>
+            : undefined
+        }
+      />
 
-        <AddressBar nav={nav} />
+      {/* The gap between sidebar and page: drag it to resize the sidebar,
+          double-click to reset. */}
+      {!sidebar.collapsed && (
+        <div
+          className="sidebar-resizer"
+          title="Drag to resize · Double-click to reset"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            resize.current = { startX: e.clientX, startWidth: sidebar.width };
+            setResizing(true);
+          }}
+          onPointerMove={(e) => {
+            const r = resize.current;
+            if (r)
+              window.firn.setSidebarWidth(r.startWidth + e.clientX - r.startX);
+          }}
+          onPointerUp={() => {
+            resize.current = null;
+            setResizing(false);
+          }}
+          onDoubleClick={() => window.firn.setSidebarWidth(DEFAULT_WIDTH)}
+        />
+      )}
 
-        <section className="tabs-section">
-          <button className="new-tab" onClick={() => window.firn.newTab()}>
-            <span className="tab-icon">
-              <PlusIcon />
-            </span>
-            New tab
-          </button>
-          <TabList tabs={tabs.tabs} activeTabId={tabs.activeTabId} />
-        </section>
-      </aside>
+      {/* With the sidebar collapsed, the strip of frame at the left edge
+          brings the sidebar back to peek over the page. */}
+      {sidebar.collapsed && (
+        <div
+          className="left-strip"
+          onMouseEnter={() => window.firn.peekSidebar(true)}
+        />
+      )}
 
       {/* Sits right behind the web page so the page looks lifted off the
           frame. With no tabs open, this calm page shows instead. */}

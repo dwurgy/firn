@@ -23,6 +23,12 @@ const HOME_URL = 'https://duckduckgo.com';
 
 // Layout of the window frame (keep in sync with the CSS in src/ui/styles.css).
 const SIDEBAR_WIDTH = 260;
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 360;
+const GLIDE_MS = 200; // matches --motion in styles.css
+// Once the mouse leaves the peeking sidebar, wait this long before it tucks
+// away, so a small overshoot doesn't make it vanish.
+const PEEK_LINGER_MS = 300;
 const PAGE_INSET = 8;
 // Matches macOS's window corners.
 const PAGE_RADIUS = 12;
@@ -62,8 +68,9 @@ const UI_WEB_PREFERENCES = {
 };
 
 // Loads Firn's UI. `view` picks which part: the sidebar (default), the
-// floating layer (command bar, tab switcher) or the top bar.
-type LayerView = 'floating' | 'topbar';
+// floating layer (command bar, tab switcher), the top bar, or the sidebar
+// peeking over the page while collapsed.
+type LayerView = 'floating' | 'topbar' | 'peek';
 
 function loadUi(web: WebContents, view?: LayerView) {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -117,10 +124,15 @@ const createWindow = () => {
     loadUi(layer.webContents, view);
     return layer;
   };
+  const peek = makeLayer('peek');
   const floating = makeLayer('floating');
   const topBar = OWN_WINDOW_BUTTONS ? makeLayer('topbar') : null;
-  const uiContents = [win.webContents, floating.webContents];
+  const uiContents = [win.webContents, floating.webContents, peek.webContents];
   if (topBar) uiContents.push(topBar.webContents);
+
+  // Where the page starts: the sidebar's width, or just the inset when the
+  // sidebar is collapsed. It glides between the two.
+  let pageLeft = SIDEBAR_WIDTH;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -132,16 +144,23 @@ const createWindow = () => {
     const [width, height] = win.getContentSize();
     floating.setBounds({ x: 0, y: 0, width, height });
     topBar?.setBounds({
-      x: windowState.sidebarWidth,
+      x: pageLeft,
       y: 0,
-      width: Math.max(0, width - windowState.sidebarWidth),
+      width: Math.max(0, width - pageLeft),
       height: TOP_BAR_LAYER_HEIGHT,
+    });
+    // A little wider than the sidebar, so its soft shadow has room.
+    peek.setBounds({
+      x: 0,
+      y: 0,
+      width: Math.min(width, windowState.sidebarWidth + 32),
+      height,
     });
   };
 
   // New tabs are added on top, so lift any visible layer back above them.
   const raiseLayers = () => {
-    for (const layer of [topBar, floating])
+    for (const layer of [peek, topBar, floating])
       if (layer?.getVisible()) win.contentView.addChildView(layer);
   };
 
@@ -185,7 +204,7 @@ const createWindow = () => {
     const x = cursor.x - content.x;
     const y = cursor.y - content.y;
     return (
-      x >= windowState.sidebarWidth &&
+      x >= pageLeft &&
       x <= content.width &&
       y <= TOP_BAR_HEIGHT &&
       // A little slack above, for a maximized window's very top edge.
@@ -228,9 +247,9 @@ const createWindow = () => {
     pageBounds: () => {
       const [width, height] = win.getContentSize();
       return {
-        x: windowState.sidebarWidth,
+        x: pageLeft,
         y: PAGE_INSET,
-        width: Math.max(0, width - windowState.sidebarWidth - PAGE_INSET),
+        width: Math.max(0, width - pageLeft - PAGE_INSET),
         height: Math.max(0, height - PAGE_INSET * 2),
       };
     },
@@ -250,10 +269,111 @@ const createWindow = () => {
     onEmpty: () => openCommandBar(),
   });
 
-  win.on('resize', () => {
+  const relayout = () => {
     tabs.layout();
     layoutLayers();
-  });
+  };
+  win.on('resize', relayout);
+
+  // --- Sidebar: resize, collapse, peek -------------------------------------
+
+  let peeking = false;
+  let peekWatch: ReturnType<typeof setInterval> | undefined;
+  let peekHideTimer: ReturnType<typeof setTimeout> | undefined;
+  let glide: ReturnType<typeof setInterval> | undefined;
+
+  const sendSidebar = () =>
+    send('sidebar:state', {
+      width: windowState.sidebarWidth,
+      collapsed: windowState.sidebarCollapsed,
+      pageLeft,
+      peeking,
+    });
+
+  // Slides the page's left edge (and the sidebar with it) to a new spot.
+  // Each step is sent to the UI too, so the sidebar moves in step with the
+  // page.
+  const glidePageLeft = (to: number) => {
+    const from = pageLeft;
+    const start = Date.now();
+    clearInterval(glide);
+    glide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(glide);
+      const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out
+      pageLeft = Math.round(from + (to - from) * eased);
+      relayout();
+      sendSidebar();
+      if (t === 1) clearInterval(glide);
+    }, 16);
+  };
+
+  const setSidebarCollapsed = (collapsed: boolean) => {
+    if (windowState.sidebarCollapsed === collapsed) return;
+    windowState.sidebarCollapsed = collapsed;
+    hidePeek();
+    glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
+  };
+
+  const setSidebarWidth = (requested: number) => {
+    const width = Math.round(
+      Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, requested)),
+    );
+    if (width === windowState.sidebarWidth) return;
+    windowState.sidebarWidth = width;
+    if (!windowState.sidebarCollapsed) {
+      clearInterval(glide);
+      pageLeft = width;
+    }
+    relayout();
+    sendSidebar();
+  };
+
+  // While collapsed, reaching the left edge slides the sidebar in over the
+  // page. It tucks away once the mouse has left it (checked by cursor
+  // position, like the top bar, since its top row moves the window).
+  const mouseIsOverPeek = () => {
+    const cursor = screen.getCursorScreenPoint();
+    const content = win.getContentBounds();
+    const x = cursor.x - content.x;
+    const y = cursor.y - content.y;
+    return (
+      x >= -4 &&
+      x <= windowState.sidebarWidth + 8 &&
+      y >= -4 &&
+      y <= content.height + 4
+    );
+  };
+
+  const showPeek = () => {
+    if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
+    peeking = true;
+    clearTimeout(peekHideTimer);
+    layoutLayers();
+    win.contentView.addChildView(peek);
+    raiseLayers();
+    peek.setVisible(true);
+    sendSidebar();
+    let lastOver = Date.now();
+    peekWatch = setInterval(() => {
+      if (win.isDestroyed()) return;
+      // Stay while the mouse is over it, or while typing in it.
+      if (mouseIsOverPeek() || peek.webContents.isFocused())
+        lastOver = Date.now();
+      else if (Date.now() - lastOver > PEEK_LINGER_MS) hidePeek();
+    }, 50);
+  };
+
+  const hidePeek = () => {
+    if (!peeking) return;
+    peeking = false;
+    clearInterval(peekWatch);
+    sendSidebar();
+    // Let it slide away before the layer goes.
+    peekHideTimer = setTimeout(() => {
+      if (!peeking) peek.setVisible(false);
+    }, GLIDE_MS + 60);
+  };
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
@@ -262,9 +382,14 @@ const createWindow = () => {
 
   const focusAddress = () => {
     hideOverlay();
-    win.webContents.focus();
+    // With the sidebar collapsed, its address bar is in the peek layer.
+    if (windowState.sidebarCollapsed) showPeek();
+    const target = windowState.sidebarCollapsed
+      ? peek.webContents
+      : win.webContents;
+    target.focus();
     // Include the active tab's address, so the bar never shows a stale one.
-    send('ui:focus-address', tabs.navState().url);
+    target.send('ui:focus-address', tabs.navState().url);
   };
 
   // --- Ctrl+Tab: switch by most recent use, like Alt+Tab ------------------
@@ -349,6 +474,13 @@ const createWindow = () => {
       hideOverlay();
     },
     'top-bar:reveal': (_sender, reveal) => revealTopBar(reveal === true),
+    'sidebar:toggle': () => setSidebarCollapsed(!windowState.sidebarCollapsed),
+    'sidebar:width': (_sender, width) => {
+      if (typeof width === 'number' && Number.isFinite(width))
+        setSidebarWidth(width);
+    },
+    'sidebar:peek': (_sender, show) =>
+      show === true ? showPeek() : hidePeek(),
     'window:command': (_sender, command) => {
       if (command === 'minimize') win.minimize();
       else if (command === 'toggle-maximize')
@@ -360,6 +492,12 @@ const createWindow = () => {
       sender.send('nav:state', tabs.navState());
       sender.send('window:maximized', win.isMaximized());
       sender.send('overlay:state', overlay);
+      sender.send('sidebar:state', {
+        width: windowState.sidebarWidth,
+        collapsed: windowState.sidebarCollapsed,
+        pageLeft,
+        peeking,
+      });
     },
   };
   // Only accept messages that come from this window's own UI.
@@ -407,6 +545,8 @@ const createWindow = () => {
       if (source === floating.webContents) handled = false;
     } else if (switcher && key === 'escape') {
       endSwitcher(false);
+    } else if (mod && key === 's') {
+      setSidebarCollapsed(!windowState.sidebarCollapsed);
     } else if (mod && key === 'l') {
       focusAddress();
     } else if (mod && input.shift && key === 't') {
@@ -455,7 +595,10 @@ const createWindow = () => {
     tabs.destroy();
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
-    for (const layer of [floating, topBar])
+    clearInterval(peekWatch);
+    clearTimeout(peekHideTimer);
+    clearInterval(glide);
+    for (const layer of [floating, topBar, peek])
       if (layer && !layer.webContents.isDestroyed()) layer.webContents.close();
   });
 

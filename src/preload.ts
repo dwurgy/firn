@@ -25,7 +25,6 @@ const bridge: FirnBridge = {
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
-  dragWindow: (phase) => ipcRenderer.send('window:drag', phase),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => listen('nav:state', listener),
   onTabsState: (listener) => listen('tabs:state', listener),

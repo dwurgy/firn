@@ -21,6 +21,12 @@ if (started) {
 
 const HOME_URL = 'https://duckduckgo.com';
 
+// Start with FIRN_DEBUG=1 to log what the window's layers are doing.
+const DEBUG = Boolean(process.env.FIRN_DEBUG);
+const debug = (message: string) => {
+  if (DEBUG) console.log(`[Firn debug] ${message}`);
+};
+
 // Layout of the window frame (keep in sync with the CSS in src/ui/styles.css).
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_MIN = 200;
@@ -150,8 +156,8 @@ const createWindow = () => {
   const uiContents = [win.webContents, floating.webContents, peek.webContents];
   if (topBar) uiContents.push(topBar.webContents);
 
-  // If one of Firn's own panels crashes or freezes, say so in the terminal
-  // and reload it, so the window never stays stuck. Its errors are printed
+  // If one of Firn's own panels crashes, say so in the terminal and reload
+  // it, so the window never stays stuck. Its errors are printed
   // in the terminal too, to help track problems down.
   const uiNames = new Map<WebContents, string>([
     [win.webContents, 'sidebar'],
@@ -166,12 +172,11 @@ const createWindow = () => {
       );
       if (!win.isDestroyed()) setTimeout(() => web.reload(), 300);
     });
-    web.on('unresponsive', () => {
-      console.error(
-        `[Firn] The ${name} panel is not responding; reloading it.`,
-      );
-      web.forcefullyCrashRenderer();
-    });
+    // Only reported: a hidden panel can look "unresponsive" to Windows
+    // while it's simply asleep, and reloading it then would break it.
+    web.on('unresponsive', () =>
+      console.error(`[Firn] The ${name} panel is not responding.`),
+    );
     web.on('console-message', (details) => {
       if (details.level === 'error')
         console.error(`[Firn] ${name} error: ${details.message}`);
@@ -220,6 +225,7 @@ const createWindow = () => {
   };
 
   const showLayer = (layer: WebContentsView) => {
+    debug(`show ${uiNames.get(layer.webContents)}`);
     shownLayers.add(layer);
     layer.setBounds(boundsFor(layer));
     layer.setVisible(true);
@@ -227,6 +233,7 @@ const createWindow = () => {
   };
 
   const hideLayer = (layer: WebContentsView) => {
+    debug(`hide ${uiNames.get(layer.webContents)}`);
     shownLayers.delete(layer);
     layer.setVisible(false);
     layer.setBounds(NO_BOUNDS);
@@ -298,7 +305,7 @@ const createWindow = () => {
       mouseLastOverBar = Date.now();
       topBarWatch = setInterval(() => {
         if (win.isDestroyed()) return;
-        if (mouseIsOverBar() || windowDrag) mouseLastOverBar = Date.now();
+        if (mouseIsOverBar()) mouseLastOverBar = Date.now();
         else if (Date.now() - mouseLastOverBar > TOP_BAR_LINGER_MS)
           revealTopBar(false);
       }, 50);
@@ -308,57 +315,6 @@ const createWindow = () => {
       send('top-bar:state', false);
       // Let the slide back up finish before the bar's layer goes away.
       topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
-    }
-  };
-
-  // Dragging the top bar's empty space moves the window. Firn moves it
-  // itself (a Windows title-bar area misbehaves inside this layer). A press
-  // only becomes a drag after a few pixels, so a click on a maximized
-  // window doesn't un-maximize it.
-  let windowDrag: {
-    startX: number;
-    startY: number;
-    offsetX: number;
-    offsetY: number;
-    moving: boolean;
-  } | null = null;
-
-  const dragWindow = (phase: unknown) => {
-    const cursor = screen.getCursorScreenPoint();
-    if (phase === 'start') {
-      const b = win.getBounds();
-      windowDrag = {
-        startX: cursor.x,
-        startY: cursor.y,
-        offsetX: cursor.x - b.x,
-        offsetY: cursor.y - b.y,
-        moving: false,
-      };
-    } else if (phase === 'move' && windowDrag) {
-      if (!windowDrag.moving) {
-        const moved = Math.hypot(
-          cursor.x - windowDrag.startX,
-          cursor.y - windowDrag.startY,
-        );
-        if (moved < 4) return;
-        windowDrag.moving = true;
-        if (win.isMaximized()) {
-          // Come out of maximized under the cursor, keeping the same spot
-          // of the bar under it.
-          const max = win.getBounds();
-          const ratio = (windowDrag.startX - max.x) / max.width;
-          win.unmaximize();
-          const normal = win.getBounds();
-          windowDrag.offsetX = Math.round(normal.width * ratio);
-          windowDrag.offsetY = windowDrag.startY - max.y;
-        }
-      }
-      win.setPosition(
-        Math.round(cursor.x - windowDrag.offsetX),
-        Math.round(cursor.y - windowDrag.offsetY),
-      );
-    } else if (phase === 'end') {
-      windowDrag = null;
     }
   };
 
@@ -500,12 +456,34 @@ const createWindow = () => {
   const edgeWatch = setInterval(() => {
     if (win.isDestroyed() || !win.isVisible() || win.isMinimized()) return;
     if (win.isFullScreen()) return;
-    const { x, y, width, height } = cursorInWindow();
-    const alongLeftEdge = x >= -2 && x < PAGE_INSET && y >= 0 && y <= height;
+    const cursor = screen.getCursorScreenPoint();
+    const content = win.getContentBounds();
+    // Measure from the part of the window that's actually on screen: a
+    // maximized window on Windows reaches a few pixels past the screen's
+    // edges, where the mouse can't go.
+    const display = screen.getDisplayMatching(content).bounds;
+    const left = Math.max(content.x, display.x);
+    const top = Math.max(content.y, display.y);
+    const right = content.x + content.width;
+    const bottom = content.y + content.height;
+    const alongLeftEdge =
+      cursor.x >= left - 2 &&
+      cursor.x < left + PAGE_INSET &&
+      cursor.y >= top &&
+      cursor.y <= bottom;
     const alongTopEdge =
-      y >= -2 && y < PAGE_INSET && x >= pageLeft && x <= width + 2;
-    if (alongLeftEdge && windowState.sidebarCollapsed) showPeek();
-    if (alongTopEdge) revealTopBar(true);
+      cursor.y >= top - 2 &&
+      cursor.y < top + PAGE_INSET &&
+      cursor.x >= content.x + pageLeft &&
+      cursor.x <= right + 2;
+    if (alongLeftEdge && windowState.sidebarCollapsed && !peeking) {
+      debug('left edge reached: peek');
+      showPeek();
+    }
+    if (alongTopEdge && !topBarShown) {
+      debug('top edge reached: top bar');
+      revealTopBar(true);
+    }
   }, EDGE_CHECK_MS);
 
   // New tab: a floating bar to search or type an address. Nothing is added
@@ -611,7 +589,6 @@ const createWindow = () => {
       if (typeof width === 'number' && Number.isFinite(width))
         setSidebarWidth(width);
     },
-    'window:drag': (_sender, phase) => dragWindow(phase),
     'window:command': (_sender, command) => {
       if (command === 'minimize') win.minimize();
       else if (command === 'toggle-maximize')
@@ -728,6 +705,14 @@ const createWindow = () => {
     console.log(
       `[Firn] overlay=${overlay.mode} switcher=${Boolean(switcher)} topBar=${topBarShown} ` +
         `collapsed=${windowState.sidebarCollapsed} peeking=${peeking} pageLeft=${pageLeft} focused=${focused}`,
+    );
+    const cursor = screen.getCursorScreenPoint();
+    const content = win.getContentBounds();
+    const display = screen.getDisplayMatching(content).bounds;
+    console.log(
+      `[Firn] cursor=${cursor.x},${cursor.y} window=${content.x},${content.y} ` +
+        `${content.width}x${content.height} screen=${display.x},${display.y} ` +
+        `${display.width}x${display.height} maximized=${win.isMaximized()}`,
     );
     for (const child of win.contentView.children) {
       const view = child as WebContentsView;

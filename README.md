@@ -46,3 +46,8 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.
+
+### If something misbehaves
+
+- **Ctrl+Shift+D** prints a snapshot of the window's layers, the cursor and the screen to the terminal.
+- To log what the layers do as you use Firn, start it with debug logging. In PowerShell: `$env:FIRN_DEBUG=1; npm start` (close and reopen PowerShell to turn it off again).

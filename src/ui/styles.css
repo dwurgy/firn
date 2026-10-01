@@ -75,16 +75,22 @@ body,
   height: 100%;
 }
 
-/* "Drag to move the window" areas (-webkit-app-region) are only ever set
-   in the main window. On Windows, any drag setting inside the extra layers
-   above the page (even "no-drag") can make the window ignore clicks, so the
-   layers declare none at all. The top bar moves the window its own way
-   (see TopBar.tsx). */
-:root[data-view='main'] .sidebar-top {
+/* "Drag to move the window" areas (-webkit-app-region).
+   On Windows, Electron asks every *visible* layer whether a spot is title
+   bar, in the order the layers were created (not the order they're
+   stacked), and a layer's drag areas count even outside its own edges. So
+   drag areas are kept to exactly two places:
+   - the main window's sidebar top row, and
+   - the top bar layer's empty band, which only counts while the bar is
+     showing (hidden layers are skipped).
+   No other layer declares any drag setting at all. */
+:root[data-view='main'] .sidebar-top,
+:root[data-view='topbar'] .top-bar-drag {
   -webkit-app-region: drag;
 }
 
-:root[data-view='main'] .icon-button {
+:root[data-view='main'] .sidebar-top .icon-button,
+:root[data-view='topbar'] .top-bar .icon-button {
   -webkit-app-region: no-drag;
 }
 
@@ -597,8 +603,7 @@ button {
   box-shadow: var(--page-shadow);
 }
 
-/* The bar's empty space: drag to move the window, double-click to
-   maximize. */
+/* The bar's empty space: a real title bar while the bar is showing. */
 .top-bar-drag {
   position: absolute;
   top: 0;

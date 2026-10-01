@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from './icons';
 
 // The bar that slides down over the top of the page when the mouse reaches
@@ -9,12 +9,6 @@ import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from './icons';
 export function TopBar() {
   const [maximized, setMaximized] = useState(false);
   const [shown, setShown] = useState(false);
-  const dragging = useRef(false);
-  const endDrag = () => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    window.firn.dragWindow('end');
-  };
 
   useEffect(() => {
     const offs = [
@@ -32,25 +26,9 @@ export function TopBar() {
         <span className="top-bar-corner is-right" />
         <span className="top-bar-edge" />
       </div>
-      {/* Empty bar space moves the window. Firn does the moving itself
-          rather than using a Windows title-bar area, which misbehaves in
-          this layer. */}
-      <div
-        className="top-bar-drag"
-        onPointerDown={(e) => {
-          if (e.button !== 0 || e.detail > 1) return;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          dragging.current = true;
-          window.firn.dragWindow('start');
-        }}
-        onPointerMove={() => {
-          if (dragging.current) window.firn.dragWindow('move');
-        }}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onLostPointerCapture={endDrag}
-        onDoubleClick={() => window.firn.windowCommand('toggle-maximize')}
-      />
+      {/* Empty bar space is a real title bar (drag, snap to screen edges,
+          double-click to maximize). See the drag rules in styles.css. */}
+      <div className="top-bar-drag" />
       <div className="button-row">
         <button
           className="icon-button"

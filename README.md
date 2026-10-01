@@ -27,6 +27,11 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
 | Focus address bar | Ctrl+L | Cmd+L |
+| New tab | Ctrl+T | Cmd+T |
+| Close tab | Ctrl+W (or middle-click a tab) | Cmd+W |
+| Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
+| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Jump to tab 1–8 / last tab | Ctrl+1…8 / Ctrl+9 | Cmd+1…8 / Cmd+9 |
 | Back / Forward | Alt+← / Alt+→ | Cmd+[ / Cmd+] |
 | Reload | F5 or Ctrl+R | Cmd+R |
 | Hard reload | Ctrl+Shift+R | Cmd+Shift+R |
@@ -34,7 +39,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ### Where things live
 
-- `src/main.ts` — the main process: creates the window and the web page view, handles shortcuts.
+- `src/main.ts` — the main process: creates the window, handles shortcuts and messages from the UI.
+- `src/tabs.ts` — the tab manager: the list of tabs and the web page behind each one.
+- `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the toolbar and its styles.
+- `src/ui/` — Firn's own interface (React): the sidebar, tabs and their styles.
 - `src/url.ts` — decides whether what you typed is an address or a search.

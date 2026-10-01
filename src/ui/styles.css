@@ -1,22 +1,25 @@
 /* Firn — calm, warm, a little frost. */
 
 :root {
-  /* Layout (keep in sync with TOOLBAR_HEIGHT / PAGE_INSET in src/main.ts) */
-  --toolbar-height: 52px;
+  /* Layout (keep in sync with SIDEBAR_WIDTH / PAGE_INSET in src/main.ts) */
+  --sidebar-width: 260px;
   --page-inset: 8px;
   --motion: 200ms ease-out;
 
   /* Light: warm sand neutrals with a soft glacier accent */
   --frame: #e9e3da;
   --frame-glow: rgba(196, 214, 222, 0.55);
+  --page: #fbfaf8;
   --text: #2a2622;
   --text-muted: #6f675f;
   --text-faint: #b3aaa0;
   --field: rgba(255, 255, 255, 0.55);
   --field-hover: rgba(255, 255, 255, 0.75);
   --field-focus: #fbfaf8;
-  --hover: rgba(70, 55, 40, 0.09);
-  --press: rgba(70, 55, 40, 0.15);
+  --hover: rgba(70, 55, 40, 0.07);
+  --press: rgba(70, 55, 40, 0.13);
+  --tab-active: rgba(255, 255, 255, 0.78);
+  --tab-active-shadow: 0 1px 2px rgba(60, 40, 20, 0.08);
   --page-shadow:
     0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
@@ -31,14 +34,17 @@
     /* Warm mid-grey, not black, so dark pages still read as lifted. */
     --frame: #3a3734;
     --frame-glow: rgba(150, 178, 192, 0.1);
+    --page: #2b2826;
     --text: #f0ebe5;
     --text-muted: #c4bcb3;
     --text-faint: #7d766f;
     --field: rgba(255, 250, 245, 0.08);
     --field-hover: rgba(255, 250, 245, 0.12);
     --field-focus: rgba(255, 250, 245, 0.15);
-    --hover: rgba(255, 250, 245, 0.09);
-    --press: rgba(255, 250, 245, 0.15);
+    --hover: rgba(255, 250, 245, 0.07);
+    --press: rgba(255, 250, 245, 0.13);
+    --tab-active: rgba(255, 250, 245, 0.14);
+    --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
     --frost: rgba(160, 196, 214, 0.45);
     --frost-strong: rgba(176, 208, 224, 0.8);
     --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
@@ -57,8 +63,7 @@ body,
 }
 
 body {
-  /* A faint glacier glow low on the frame; the top stays the plain frame
-     color so it matches the native window buttons. */
+  /* A faint glacier glow low on the frame. */
   background:
     radial-gradient(120% 70% at 0% 100%, var(--frame-glow), transparent 70%),
     var(--frame);
@@ -74,29 +79,46 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- Toolbar ------------------------------------------------------------ */
+button {
+  font: inherit;
+  color: inherit;
+}
 
-.toolbar {
-  height: var(--toolbar-height);
+/* --- Sidebar -------------------------------------------------------------- */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Left inset matches the page's; the page's own inset is the gap on the
+     right. */
+  padding: 8px var(--page-inset) 8px var(--page-inset);
+}
+
+/* Top row: back/forward/reload, and the window buttons on Windows/Linux.
+   Its empty space moves the window, like a title bar. */
+.sidebar-top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px 0 calc(var(--page-inset) + 4px);
-  /* The empty parts of the toolbar move the window, like a title bar. */
+  justify-content: space-between;
+  height: 36px;
   -webkit-app-region: drag;
 }
 
 /* Leave room for the macOS traffic lights. */
-:root[data-platform='darwin'] .toolbar {
-  padding-left: 84px;
+:root[data-platform='darwin'] .sidebar-top {
+  padding-left: 68px;
 }
 
-.nav-buttons,
-.window-buttons {
+.button-row {
   display: flex;
   gap: 2px;
 }
-
 
 .icon-button {
   -webkit-app-region: no-drag;
@@ -134,31 +156,29 @@ body {
   opacity: 0.35;
 }
 
-.icon-button:focus-visible {
+.icon-button:focus-visible,
+.new-tab:focus-visible,
+.tab-close:focus-visible {
   outline: 2px solid var(--frost);
   outline-offset: 1px;
 }
 
-/* --- Address bar --------------------------------------------------------- */
+/* --- Address bar ----------------------------------------------------------- */
 
 .address {
-  -webkit-app-region: no-drag;
   position: relative;
-  flex: 1;
-  max-width: 720px;
-  margin: 0 auto;
 }
 
 .address-input {
   width: 100%;
-  height: 34px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: var(--field);
   color: var(--text);
   font: inherit;
-  text-align: center;
+  text-overflow: ellipsis;
   outline: none;
   transition:
     background var(--motion),
@@ -178,7 +198,6 @@ body {
   background: var(--field-focus);
   border-color: var(--frost);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--frost) 35%, transparent);
-  text-align: left;
   user-select: text;
 }
 
@@ -229,18 +248,188 @@ body {
   }
 }
 
-/* --- The page's lift ------------------------------------------------------ */
+/* --- Tabs ------------------------------------------------------------------ */
 
-/* Matches the web page's position (see layoutPage in src/main.ts). The page
+.tabs-section {
+  /* Section spacing from the address bar. */
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  flex: 1;
+}
+
+.tab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  /* Room so the active tab's soft shadow isn't clipped. */
+  padding-bottom: 4px;
+}
+
+.tab,
+.new-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    color var(--motion);
+}
+
+.new-tab {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: default;
+}
+
+.new-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tab:hover {
+  background: var(--hover);
+}
+
+.tab:active:not(.is-active) {
+  background: var(--press);
+}
+
+.tab.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.tab-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.tab-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.6px solid var(--frost);
+  border-top-color: var(--frost-strong);
+  border-right-color: var(--frost-strong);
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.tab.is-active .tab-title {
+  color: var(--text);
+}
+
+/* The close button only appears on hover. */
+.tab-close {
+  width: 22px;
+  height: 22px;
+  margin-right: -5px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: default;
+  transition:
+    opacity var(--motion),
+    background var(--motion),
+    color var(--motion);
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* --- The page's place ------------------------------------------------------ */
+
+/* Matches the web page's position (see pageBounds in src/main.ts). The page
    covers this box; only its soft shadow shows in the frame around it. */
-.page-shadow {
+.page-area {
   position: fixed;
-  top: var(--toolbar-height);
-  left: var(--page-inset);
+  top: var(--page-inset);
+  left: var(--sidebar-width);
   right: var(--page-inset);
   bottom: var(--page-inset);
   border-radius: 12px;
   background: var(--frame);
   box-shadow: var(--page-shadow);
-  pointer-events: none;
+  display: grid;
+  place-items: center;
+  transition: background var(--motion);
+}
+
+/* A fresh new tab: Firn shows its own calm page until an address is typed. */
+.page-area.is-empty {
+  background: var(--page);
+}
+
+.empty-page {
+  text-align: center;
+  animation: settle 250ms ease-out;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }

@@ -1,31 +1,30 @@
 // The only bridge between Firn's UI and the main process. Keep it narrow:
-// the UI can ask for navigation and listen for page state, nothing more.
+// the UI can ask for navigation and tab changes, and listen for state.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { FirnBridge, NavState } from './types';
+import type { FirnBridge } from './types';
+
+// Subscribes to a channel and returns a function that unsubscribes.
+function listen<T>(channel: string, listener: (value: T) => void) {
+  const handler = (_event: IpcRendererEvent, value: T) => listener(value);
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
+}
 
 const bridge: FirnBridge = {
   platform: process.platform,
   navigate: (input) => ipcRenderer.send('nav:navigate', input),
   command: (command) => ipcRenderer.send('nav:command', command),
+  newTab: () => ipcRenderer.send('tabs:new'),
+  closeTab: (id) => ipcRenderer.send('tabs:close', id),
+  activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),
-  onNavState: (listener) => {
-    const handler = (_event: IpcRendererEvent, state: NavState) =>
-      listener(state);
-    ipcRenderer.on('nav:state', handler);
-    return () => ipcRenderer.removeListener('nav:state', handler);
-  },
-  onFocusAddress: (listener) => {
-    const handler = () => listener();
-    ipcRenderer.on('ui:focus-address', handler);
-    return () => ipcRenderer.removeListener('ui:focus-address', handler);
-  },
-  onMaximizedChange: (listener) => {
-    const handler = (_event: IpcRendererEvent, maximized: boolean) =>
-      listener(maximized);
-    ipcRenderer.on('window:maximized', handler);
-    return () => ipcRenderer.removeListener('window:maximized', handler);
-  },
+  onNavState: (listener) => listen('nav:state', listener),
+  onTabsState: (listener) => listen('tabs:state', listener),
+  onFocusAddress: (listener) => listen('ui:focus-address', listener),
+  onMaximizedChange: (listener) => listen('window:maximized', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

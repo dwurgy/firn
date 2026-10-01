@@ -63,3 +63,24 @@ export const CloseIcon = () => (
     <path d="M4 4l8 8M12 4l-8 8" />
   </svg>
 );
+
+export const PlusIcon = () => (
+  <svg {...base}>
+    <path d="M8 3.5v9M3.5 8h9" />
+  </svg>
+);
+
+// Shown for pages that have no icon of their own.
+export const GlobeIcon = () => (
+  <svg {...base} strokeWidth={1.4}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M2.5 8h11M8 2.5c1.6 1.6 2.3 3.4 2.3 5.5S9.6 11.9 8 13.5M8 2.5C6.4 4.1 5.7 5.9 5.7 8s.7 3.9 2.3 5.5" />
+  </svg>
+);
+
+// A smaller close mark for tab rows.
+export const SmallCloseIcon = () => (
+  <svg {...base} width={12} height={12}>
+    <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+  </svg>
+);

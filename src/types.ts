@@ -1,5 +1,55 @@
 // Shapes shared between the main process, the preload bridge and the UI.
 
+// --- Core data model (see CLAUDE.md) ----------------------------------------
+// These are the records that will be saved to disk (Phase 3) and could later
+// sync between devices, so they hold plain data only.
+
+export interface Space {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  order: number;
+}
+
+export interface Tab {
+  id: string;
+  spaceId: string;
+  url: string;
+  title: string;
+  favicon: string;
+  pinned: boolean;
+  homeUrl?: string;
+  order: number;
+  lastActiveAt: number;
+  splitGroupId?: string;
+}
+
+export interface WindowState {
+  id: string;
+  activeSpaceId: string;
+  activeTabId: string | null;
+  sidebarWidth: number;
+  sidebarCollapsed: boolean;
+}
+
+// --- What the UI is told ----------------------------------------------------
+
+// A tab as the sidebar shows it: the saved record plus live status.
+export interface TabView {
+  id: string;
+  url: string;
+  title: string;
+  favicon: string;
+  isLoading: boolean;
+}
+
+export interface TabsState {
+  tabs: TabView[]; // in sidebar order, top to bottom
+  activeTabId: string | null;
+}
+
+// Navigation status of the active tab, for the back/forward/reload buttons.
 export interface NavState {
   url: string;
   title: string;
@@ -17,9 +67,13 @@ export interface FirnBridge {
   platform: string;
   navigate(input: string): void;
   command(command: NavCommand): void;
+  newTab(): void;
+  closeTab(id: string): void;
+  activateTab(id: string): void;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
-  onFocusAddress(listener: () => void): () => void;
+  onTabsState(listener: (state: TabsState) => void): () => void;
+  onFocusAddress(listener: (url: string) => void): () => void;
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
 }

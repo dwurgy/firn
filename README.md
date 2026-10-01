@@ -43,5 +43,5 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/tabs.ts` — the tab manager: the list of tabs and the web page behind each one.
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the sidebar and tabs (`App.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the window buttons (`WindowControls.tsx`).
+- `src/ui/` — Firn's own interface (React): the sidebar and tabs (`App.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.

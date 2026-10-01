@@ -23,11 +23,13 @@ const HOME_URL = 'https://duckduckgo.com';
 // Layout of the window frame (keep in sync with the CSS in src/ui/styles.css).
 const SIDEBAR_WIDTH = 260;
 const PAGE_INSET = 8;
-const PAGE_RADIUS = 12;
+// Matches Windows 11's own window corners, so the curves run parallel.
+const PAGE_RADIUS = 8;
 
-// The hidden window buttons' area in the top-right corner.
-const CONTROLS_WIDTH = 168;
-const CONTROLS_HEIGHT = 76;
+// Hovering the top edge slides the page down this far, revealing a strip
+// with the window buttons (Windows / Linux).
+const TOP_BAR_HEIGHT = 40;
+const SLIDE_MS = 180;
 
 // Ctrl+Tab: a quick tap just flips tabs; holding Ctrl this long shows the list.
 const SWITCHER_DELAY_MS = 180;
@@ -54,9 +56,9 @@ const UI_WEB_PREFERENCES = {
   nodeIntegration: false,
 };
 
-// Loads Firn's UI. `view` picks which part: the sidebar (default), the
-// floating layer (command bar, tab switcher) or the window buttons.
-function loadUi(web: WebContents, view?: 'floating' | 'controls') {
+// Loads Firn's UI. `view` picks which part: the sidebar (default) or the
+// floating layer (command bar, tab switcher).
+function loadUi(web: WebContents, view?: 'floating') {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     const url = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     if (view) url.searchParams.set('view', view);
@@ -100,7 +102,7 @@ const createWindow = () => {
   // Web pages are drawn on top of the sidebar's layer, so anything that has
   // to float over a page lives in its own transparent layer above it.
 
-  const makeLayer = (view: 'floating' | 'controls') => {
+  const makeLayer = (view: 'floating') => {
     const layer = new WebContentsView({ webPreferences: UI_WEB_PREFERENCES });
     layer.setBackgroundColor('#00000000');
     layer.setVisible(false);
@@ -109,9 +111,7 @@ const createWindow = () => {
     return layer;
   };
   const floating = makeLayer('floating');
-  const controls = OWN_WINDOW_BUTTONS ? makeLayer('controls') : null;
   const uiContents = [win.webContents, floating.webContents];
-  if (controls) uiContents.push(controls.webContents);
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -122,19 +122,11 @@ const createWindow = () => {
   const layoutLayers = () => {
     const [width, height] = win.getContentSize();
     floating.setBounds({ x: 0, y: 0, width, height });
-    controls?.setBounds({
-      x: width - CONTROLS_WIDTH,
-      y: 0,
-      width: CONTROLS_WIDTH,
-      height: CONTROLS_HEIGHT,
-    });
   };
 
-  // New tabs are added on top, so lift any visible layer back above them.
+  // New tabs are added on top, so lift the floating layer back above them.
   const raiseLayers = () => {
-    for (const layer of [floating, controls]) {
-      if (layer?.getVisible()) win.contentView.addChildView(layer);
-    }
+    if (floating.getVisible()) win.contentView.addChildView(floating);
   };
 
   let overlay: OverlayState = { mode: 'hidden' };
@@ -156,14 +148,26 @@ const createWindow = () => {
     tabs.focusActive();
   };
 
-  const showControls = () => {
-    if (!controls || win.isFullScreen()) return;
-    layoutLayers();
-    win.contentView.addChildView(controls);
-    controls.setVisible(true);
-    send('controls:shown');
+  // --- The top strip with the window buttons ------------------------------
+  // The page's top edge glides between its resting inset and TOP_BAR_HEIGHT.
+
+  let pageTop = PAGE_INSET;
+  let slide: ReturnType<typeof setInterval> | undefined;
+
+  const revealTopBar = (reveal: boolean) => {
+    if (!OWN_WINDOW_BUTTONS || (reveal && win.isFullScreen())) return;
+    const from = pageTop;
+    const to = reveal ? TOP_BAR_HEIGHT : PAGE_INSET;
+    const start = Date.now();
+    clearInterval(slide);
+    slide = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / SLIDE_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out
+      pageTop = Math.round(from + (to - from) * eased);
+      tabs.layout();
+      if (t === 1) clearInterval(slide);
+    }, 16);
   };
-  const hideControls = () => controls?.setVisible(false);
 
   // --- Tabs ---------------------------------------------------------------
 
@@ -175,9 +179,9 @@ const createWindow = () => {
       const [width, height] = win.getContentSize();
       return {
         x: windowState.sidebarWidth,
-        y: PAGE_INSET,
+        y: pageTop,
         width: Math.max(0, width - windowState.sidebarWidth - PAGE_INSET),
-        height: Math.max(0, height - PAGE_INSET * 2),
+        height: Math.max(0, height - pageTop - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {
@@ -290,8 +294,7 @@ const createWindow = () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
     },
-    'controls:show': () => showControls(),
-    'controls:hide': () => hideControls(),
+    'top-bar:reveal': (_sender, reveal) => revealTopBar(reveal === true),
     'window:command': (_sender, command) => {
       if (command === 'minimize') win.minimize();
       else if (command === 'toggle-maximize')
@@ -321,7 +324,7 @@ const createWindow = () => {
 
   // If the window loses focus mid-switch, Ctrl's release never arrives.
   win.on('blur', () => endSwitcher(true));
-  win.on('enter-full-screen', hideControls);
+  win.on('enter-full-screen', () => revealTopBar(false));
 
   // --- Keyboard shortcuts (work wherever focus is) -------------------------
 
@@ -396,8 +399,8 @@ const createWindow = () => {
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();
-    for (const layer of [floating, controls])
-      if (layer && !layer.webContents.isDestroyed()) layer.webContents.close();
+    clearInterval(slide);
+    if (!floating.webContents.isDestroyed()) floating.webContents.close();
   });
 
   // --- Load Firn's UI, then the first tab ---------------------------------

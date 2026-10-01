@@ -80,8 +80,7 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
-  showWindowControls(): void;
-  hideWindowControls(): void;
+  revealTopBar(reveal: boolean): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
   windowCommand(command: WindowCommand): void;
@@ -91,5 +90,4 @@ export interface FirnBridge {
   onFocusAddress(listener: (url: string) => void): () => void;
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
   onOverlayState(listener: (state: OverlayState) => void): () => void;
-  onWindowControlsShown(listener: () => void): () => void;
 }

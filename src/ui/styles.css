@@ -4,6 +4,8 @@
   /* Layout (keep in sync with SIDEBAR_WIDTH / PAGE_INSET in src/main.ts) */
   --sidebar-width: 260px;
   --page-inset: 8px;
+  --top-bar-height: 40px;
+  --page-radius: 8px;
   --motion: 200ms ease-out;
 
   /* Light: warm sand neutrals with a soft glacier accent */
@@ -66,9 +68,8 @@ body,
   height: 100%;
 }
 
-/* The floating layers above the page are see-through. */
-:root[data-view='floating'] body,
-:root[data-view='controls'] body {
+/* The floating layer above the page is see-through. */
+:root[data-view='floating'] body {
   background: transparent;
 }
 
@@ -90,6 +91,8 @@ body {
 }
 
 button {
+  /* Windows adds its own padding to buttons, which pushes icons off-centre. */
+  padding: 0;
   font: inherit;
   color: inherit;
 }
@@ -115,7 +118,9 @@ button {
 .sidebar-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* Back/forward/reload sit on the right, leaving room on the left for the
+     menu and compact-mode buttons to come. */
+  justify-content: flex-end;
   height: 36px;
   -webkit-app-region: drag;
 }
@@ -407,15 +412,21 @@ button {
   left: var(--sidebar-width);
   right: var(--page-inset);
   bottom: var(--page-inset);
-  border-radius: 12px;
+  border-radius: var(--page-radius);
   background: var(--frame);
   box-shadow: var(--page-shadow);
   display: grid;
   place-items: center;
-  transition: background var(--motion);
+  transition:
+    top 180ms ease-out,
+    background var(--motion);
 }
 
-/* A fresh new tab: Firn shows its own calm page until an address is typed. */
+.top-revealed .page-area {
+  top: var(--top-bar-height);
+}
+
+/* With no tabs open, Firn shows its own calm page here. */
 .page-area.is-empty {
   background: var(--page);
 }
@@ -444,40 +455,34 @@ button {
   }
 }
 
-/* --- Hidden window buttons (Windows / Linux) ------------------------------- */
+/* --- Top strip with the window buttons (Windows / Linux) ----------------- */
 
-/* The frame strip above the page's top-right corner. Matches the
-   window-buttons layer in src/main.ts. */
-.corner-hotspot {
+/* Sits above the page. At rest it's just the thin frame edge; when the mouse
+   reaches it, it grows and the page glides down to make room (the page's
+   movement is done in src/main.ts, TOP_BAR_HEIGHT). */
+.top-strip {
   position: fixed;
   top: 0;
+  left: var(--sidebar-width);
   right: 0;
-  width: 168px;
   height: var(--page-inset);
-}
-
-.window-controls {
-  position: fixed;
-  top: 10px;
-  right: 14px;
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 12px;
-  background: var(--frame);
-  box-shadow:
-    0 1px 3px rgba(30, 20, 10, 0.16),
-    0 6px 18px rgba(30, 20, 10, 0.16);
-  opacity: 0;
-  transform: translateY(-6px);
-  transition:
-    opacity var(--motion),
-    transform var(--motion);
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: var(--page-inset);
 }
 
-.window-controls.is-shown {
+.top-revealed .top-strip {
+  height: var(--top-bar-height);
+}
+
+.window-buttons {
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.top-revealed .window-buttons {
   opacity: 1;
-  transform: none;
 }
 
 /* --- Floating panels: command bar and tab switcher ------------------------- */

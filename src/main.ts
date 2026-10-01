@@ -28,7 +28,7 @@ const PAGE_RADIUS = 12;
 // Windows/Linux title bar controls.
 const FRAME = {
   light: { background: '#e9e3da', symbols: '#5f574f' },
-  dark: { background: '#161412', symbols: '#bdb5ac' },
+  dark: { background: '#3a3734', symbols: '#d6cfc7' },
 };
 
 const frameColors = () =>

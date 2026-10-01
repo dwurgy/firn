@@ -1,0 +1,206 @@
+/* Firn — calm, warm, a little frost. */
+
+:root {
+  /* Layout (keep in sync with TOOLBAR_HEIGHT / PAGE_INSET in src/main.ts) */
+  --toolbar-height: 52px;
+  --page-inset: 8px;
+  --motion: 200ms ease-out;
+
+  /* Light: warm sand neutrals with a soft glacier accent */
+  --frame: #f2efea;
+  --text: #2e2a26;
+  --text-muted: #8a827a;
+  --text-faint: #bdb5ac;
+  --field: rgba(255, 255, 255, 0.62);
+  --field-hover: rgba(255, 255, 255, 0.8);
+  --field-focus: #fbfaf8;
+  --hover: rgba(70, 55, 40, 0.07);
+  --press: rgba(70, 55, 40, 0.12);
+  --frost: rgba(130, 168, 190, 0.45);
+  --frost-strong: rgba(110, 152, 178, 0.75);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --frame: #1e1c1a;
+    --text: #ece7e1;
+    --text-muted: #a09890;
+    --text-faint: #5e5852;
+    --field: rgba(255, 245, 235, 0.06);
+    --field-hover: rgba(255, 245, 235, 0.09);
+    --field-focus: rgba(255, 245, 235, 0.11);
+    --hover: rgba(255, 245, 235, 0.07);
+    --press: rgba(255, 245, 235, 0.12);
+    --frost: rgba(150, 188, 208, 0.35);
+    --frost-strong: rgba(160, 196, 214, 0.7);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--frame);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Toolbar ------------------------------------------------------------ */
+
+.toolbar {
+  height: var(--toolbar-height);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 calc(var(--page-inset) + 4px);
+  /* The empty parts of the toolbar move the window, like a title bar. */
+  -webkit-app-region: drag;
+}
+
+/* Leave room for the native window controls. */
+:root[data-platform='darwin'] .toolbar {
+  padding-left: 84px;
+}
+:root:not([data-platform='darwin']) .toolbar {
+  padding-right: 150px;
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+.icon-button {
+  -webkit-app-region: no-drag;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion),
+    opacity var(--motion);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--press);
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+/* --- Address bar --------------------------------------------------------- */
+
+.address {
+  -webkit-app-region: no-drag;
+  position: relative;
+  flex: 1;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.address-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  outline: none;
+  transition:
+    background var(--motion),
+    border-color var(--motion),
+    box-shadow var(--motion);
+}
+
+.address-input::placeholder {
+  color: var(--text-muted);
+}
+
+.address-input:hover {
+  background: var(--field-hover);
+}
+
+.address-input:focus {
+  background: var(--field-focus);
+  border-color: var(--frost);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--frost) 35%, transparent);
+  text-align: left;
+  user-select: text;
+}
+
+.address-input::selection {
+  background: var(--frost);
+}
+
+/* A soft, slow shimmer under the address bar while a page loads. */
+.loading-line {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--frost-strong),
+    transparent
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity var(--motion);
+  pointer-events: none;
+}
+
+.loading-line.is-loading {
+  opacity: 1;
+  animation: drift 1.4s ease-in-out infinite;
+}
+
+@keyframes drift {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}

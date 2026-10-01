@@ -7,15 +7,18 @@
   --motion: 200ms ease-out;
 
   /* Light: warm sand neutrals with a soft glacier accent */
-  --frame: #f2efea;
-  --text: #2e2a26;
-  --text-muted: #8a827a;
-  --text-faint: #bdb5ac;
-  --field: rgba(255, 255, 255, 0.62);
-  --field-hover: rgba(255, 255, 255, 0.8);
+  --frame: #e9e3da;
+  --frame-glow: rgba(196, 214, 222, 0.55);
+  --text: #2a2622;
+  --text-muted: #6f675f;
+  --text-faint: #b3aaa0;
+  --field: rgba(255, 255, 255, 0.55);
+  --field-hover: rgba(255, 255, 255, 0.75);
   --field-focus: #fbfaf8;
-  --hover: rgba(70, 55, 40, 0.07);
-  --press: rgba(70, 55, 40, 0.12);
+  --hover: rgba(70, 55, 40, 0.09);
+  --press: rgba(70, 55, 40, 0.15);
+  --page-shadow:
+    0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
   --frost-strong: rgba(110, 152, 178, 0.75);
 
@@ -24,9 +27,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --frame: #1e1c1a;
+    --frame: #161412;
+    --frame-glow: rgba(120, 150, 165, 0.12);
     --text: #ece7e1;
-    --text-muted: #a09890;
+    --text-muted: #aaa29a;
     --text-faint: #5e5852;
     --field: rgba(255, 245, 235, 0.06);
     --field-hover: rgba(255, 245, 235, 0.09);
@@ -35,6 +39,7 @@
     --press: rgba(255, 245, 235, 0.12);
     --frost: rgba(150, 188, 208, 0.35);
     --frost-strong: rgba(160, 196, 214, 0.7);
+    --page-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 18px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -50,7 +55,11 @@ body,
 }
 
 body {
-  background: var(--frame);
+  /* A faint glacier glow low on the frame; the top stays the plain frame
+     color so it matches the native window buttons. */
+  background:
+    radial-gradient(120% 70% at 0% 100%, var(--frame-glow), transparent 70%),
+    var(--frame);
   color: var(--text);
   font-family:
     system-ui,
@@ -170,21 +179,29 @@ body {
   background: var(--frost);
 }
 
-/* A soft, slow shimmer under the address bar while a page loads. */
+/* A soft, slow shimmer along the bottom of the address bar while a page
+   loads. The track clips it to the bar's rounded shape. */
+.loading-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .loading-line {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 3px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 2px;
-  border-radius: 2px;
   background: linear-gradient(
     90deg,
     transparent,
     var(--frost-strong),
     transparent
   );
-  background-size: 40% 100%;
+  background-size: 35% 100%;
   background-repeat: no-repeat;
   opacity: 0;
   transition: opacity var(--motion);
@@ -198,9 +215,25 @@ body {
 
 @keyframes drift {
   from {
-    background-position: -40% 0;
+    background-position: -60% 0;
   }
   to {
-    background-position: 140% 0;
+    background-position: 160% 0;
   }
+}
+
+/* --- The page's lift ------------------------------------------------------ */
+
+/* Matches the web page's position (see layoutPage in src/main.ts). The page
+   covers this box; only its soft shadow shows in the frame around it. */
+.page-shadow {
+  position: fixed;
+  top: var(--toolbar-height);
+  left: var(--page-inset);
+  right: var(--page-inset);
+  bottom: var(--page-inset);
+  border-radius: 12px;
+  background: var(--frame);
+  box-shadow: var(--page-shadow);
+  pointer-events: none;
 }

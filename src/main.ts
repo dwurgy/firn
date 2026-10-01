@@ -27,8 +27,8 @@ const PAGE_RADIUS = 12;
 // Warm neutral frame colors, used before the UI has painted and for the
 // Windows/Linux title bar controls.
 const FRAME = {
-  light: { background: '#f2efea', symbols: '#6f6860' },
-  dark: { background: '#1e1c1a', symbols: '#b5aea6' },
+  light: { background: '#e9e3da', symbols: '#5f574f' },
+  dark: { background: '#161412', symbols: '#bdb5ac' },
 };
 
 const frameColors = () =>
@@ -72,12 +72,21 @@ const createWindow = () => {
       nodeIntegration: false,
     },
   });
-  page.setBorderRadius(PAGE_RADIUS);
   page.setBackgroundColor('#ffffff');
   win.contentView.addChildView(page);
 
+  // When a video (or any page) goes fullscreen, the page fills the whole
+  // window edge to edge; otherwise it floats inside the frame.
+  let pageFullscreen = false;
+
   const layoutPage = () => {
     const [width, height] = win.getContentSize();
+    if (pageFullscreen) {
+      page.setBorderRadius(0);
+      page.setBounds({ x: 0, y: 0, width, height });
+      return;
+    }
+    page.setBorderRadius(PAGE_RADIUS);
     page.setBounds({
       x: PAGE_INSET,
       y: TOOLBAR_HEIGHT,
@@ -87,6 +96,21 @@ const createWindow = () => {
   };
   layoutPage();
   win.on('resize', layoutPage);
+
+  // Remember whether the window was already fullscreen before the page asked,
+  // so leaving video fullscreen puts things back exactly as they were.
+  let wasWindowFullscreen = false;
+  page.webContents.on('enter-html-full-screen', () => {
+    pageFullscreen = true;
+    wasWindowFullscreen = win.isFullScreen();
+    if (!wasWindowFullscreen) win.setFullScreen(true);
+    layoutPage();
+  });
+  page.webContents.on('leave-html-full-screen', () => {
+    pageFullscreen = false;
+    if (!wasWindowFullscreen) win.setFullScreen(false);
+    layoutPage();
+  });
 
   // --- Tell the UI what the page is doing ---------------------------------
 

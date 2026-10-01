@@ -5,7 +5,7 @@
   --sidebar-width: 260px;
   --page-inset: 8px;
   --top-bar-height: 40px;
-  --page-radius: 8px;
+  --page-radius: 12px;
   --motion: 200ms ease-out;
 
   /* Light: warm sand neutrals with a soft glacier accent */
@@ -68,8 +68,9 @@ body,
   height: 100%;
 }
 
-/* The floating layer above the page is see-through. */
-:root[data-view='floating'] body {
+/* The layers above the page are see-through. */
+:root[data-view='floating'] body,
+:root[data-view='topbar'] body {
   background: transparent;
 }
 
@@ -417,13 +418,7 @@ button {
   box-shadow: var(--page-shadow);
   display: grid;
   place-items: center;
-  transition:
-    top 180ms ease-out,
-    background var(--motion);
-}
-
-.top-revealed .page-area {
-  top: var(--top-bar-height);
+  transition: background var(--motion);
 }
 
 /* With no tabs open, Firn shows its own calm page here. */
@@ -455,34 +450,37 @@ button {
   }
 }
 
-/* --- Top strip with the window buttons (Windows / Linux) ----------------- */
+/* --- Top bar with the window buttons (Windows / Linux) ------------------- */
 
-/* Sits above the page. At rest it's just the thin frame edge; when the mouse
-   reaches it, it grows and the page glides down to make room (the page's
-   movement is done in src/main.ts, TOP_BAR_HEIGHT). */
+/* The thin frame edge above the page. Reaching it brings down the top bar. */
 .top-strip {
   position: fixed;
   top: 0;
   left: var(--sidebar-width);
   right: 0;
   height: var(--page-inset);
+}
+
+/* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
+   src/main.ts) and slides down over the page's top edge. */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
   display: flex;
   justify-content: flex-end;
   align-items: center;
   padding-right: var(--page-inset);
+  background: var(--frame);
+  box-shadow: 0 4px 14px rgba(30, 20, 10, 0.14);
+  transform: translateY(-100%);
+  transition: transform var(--motion);
 }
 
-.top-revealed .top-strip {
-  height: var(--top-bar-height);
-}
-
-.window-buttons {
-  opacity: 0;
-  transition: opacity var(--motion);
-}
-
-.top-revealed .window-buttons {
-  opacity: 1;
+.top-bar.is-shown {
+  transform: none;
 }
 
 /* --- Floating panels: command bar and tab switcher ------------------------- */

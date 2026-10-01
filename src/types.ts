@@ -90,4 +90,5 @@ export interface FirnBridge {
   onFocusAddress(listener: (url: string) => void): () => void;
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
   onOverlayState(listener: (state: OverlayState) => void): () => void;
+  onTopBarShown(listener: () => void): () => void;
 }

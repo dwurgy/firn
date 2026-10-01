@@ -1,22 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { NavState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
 import { TabList } from './TabList';
-import {
-  BackIcon,
-  CloseIcon,
-  ForwardIcon,
-  MaximizeIcon,
-  MinimizeIcon,
-  PlusIcon,
-  ReloadIcon,
-  RestoreIcon,
-  StopIcon,
-} from './icons';
+import { BackIcon, ForwardIcon, PlusIcon, ReloadIcon, StopIcon } from './icons';
 
-// macOS draws its own traffic lights; elsewhere Firn's window buttons wait
-// above the page, which slides down to reveal them when the mouse reaches
-// the top edge.
+// macOS draws its own traffic lights; elsewhere Firn's window buttons are on
+// a bar that slides down over the page when the mouse reaches the top edge.
 const OWN_WINDOW_BUTTONS = window.firn.platform !== 'darwin';
 
 const EMPTY_NAV: NavState = {
@@ -30,29 +19,11 @@ const EMPTY_NAV: NavState = {
 export function App() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
   const [tabs, setTabs] = useState<TabsState>({ tabs: [], activeTabId: null });
-  const [maximized, setMaximized] = useState(false);
-  const [topRevealed, setTopRevealed] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const revealTop = (reveal: boolean) => {
-    clearTimeout(hideTimer.current);
-    if (reveal) {
-      setTopRevealed(true);
-      window.firn.revealTopBar(true);
-    } else {
-      // A short pause, so brushing past the edge doesn't make it flicker.
-      hideTimer.current = setTimeout(() => {
-        setTopRevealed(false);
-        window.firn.revealTopBar(false);
-      }, 250);
-    }
-  };
 
   useEffect(() => {
     const offs = [
       window.firn.onNavState(setNav),
       window.firn.onTabsState(setTabs),
-      window.firn.onMaximizedChange(setMaximized),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
@@ -61,7 +32,7 @@ export function App() {
   const noTabs = tabs.tabs.length === 0;
 
   return (
-    <div className={`app ${topRevealed ? 'top-revealed' : ''}`}>
+    <div className="app">
       <aside className="sidebar">
         <div className="sidebar-top">
           <nav className="button-row">
@@ -118,38 +89,13 @@ export function App() {
         )}
       </main>
 
-      {/* The strip of frame above the page. Reaching it slides the page
-          down to reveal the window buttons. */}
+      {/* The strip of frame above the page. Reaching it brings down the bar
+          with the window buttons (see TopBar.tsx). */}
       {OWN_WINDOW_BUTTONS && (
         <div
           className="top-strip"
-          onMouseEnter={() => revealTop(true)}
-          onMouseLeave={() => revealTop(false)}
-        >
-          <div className="button-row window-buttons">
-            <button
-              className="icon-button"
-              title="Minimize"
-              onClick={() => window.firn.windowCommand('minimize')}
-            >
-              <MinimizeIcon />
-            </button>
-            <button
-              className="icon-button"
-              title={maximized ? 'Restore' : 'Maximize'}
-              onClick={() => window.firn.windowCommand('toggle-maximize')}
-            >
-              {maximized ? <RestoreIcon /> : <MaximizeIcon />}
-            </button>
-            <button
-              className="icon-button close-button"
-              title="Close"
-              onClick={() => window.firn.windowCommand('close')}
-            >
-              <CloseIcon />
-            </button>
-          </div>
-        </div>
+          onMouseEnter={() => window.firn.revealTopBar(true)}
+        />
       )}
     </div>
   );

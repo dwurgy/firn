@@ -78,9 +78,15 @@ export const GlobeIcon = () => (
   </svg>
 );
 
-// A smaller close mark for tab rows.
-export const SmallCloseIcon = () => (
-  <svg {...base} width={12} height={12}>
-    <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+export const SearchIcon = () => (
+  <svg {...base}>
+    <circle cx="7" cy="7" r="4.5" />
+    <path d="m10.5 10.5 3 3" />
+  </svg>
+);
+
+export const ArrowIcon = () => (
+  <svg {...base} width={14} height={14}>
+    <path d="M3.5 8h9M9 4.5 12.5 8 9 11.5" />
   </svg>
 );

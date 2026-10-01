@@ -17,6 +17,10 @@ const bridge: FirnBridge = {
   navigate: (input) => ipcRenderer.send('nav:navigate', input),
   command: (command) => ipcRenderer.send('nav:command', command),
   newTab: () => ipcRenderer.send('tabs:new'),
+  openUrl: (input) => ipcRenderer.send('tabs:open-url', input),
+  closeOverlay: () => ipcRenderer.send('overlay:close'),
+  showWindowControls: () => ipcRenderer.send('controls:show'),
+  hideWindowControls: () => ipcRenderer.send('controls:hide'),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
@@ -25,6 +29,9 @@ const bridge: FirnBridge = {
   onTabsState: (listener) => listen('tabs:state', listener),
   onFocusAddress: (listener) => listen('ui:focus-address', listener),
   onMaximizedChange: (listener) => listen('window:maximized', listener),
+  onOverlayState: (listener) => listen('overlay:state', listener),
+  onWindowControlsShown: (listener) =>
+    listen('controls:shown', () => listener()),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

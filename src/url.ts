@@ -4,6 +4,11 @@ const SEARCH_URL = 'https://duckduckgo.com/?q=';
 
 const ALLOWED_SCHEMES = /^(https?|file|about|view-source):/i;
 
+// Whether typed text will run a search or open an address.
+export function isSearch(url: string): boolean {
+  return url.startsWith(SEARCH_URL);
+}
+
 export function toNavigableUrl(input: string): string | null {
   const text = input.trim();
   if (!text) return null;

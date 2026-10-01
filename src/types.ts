@@ -42,6 +42,7 @@ export interface TabView {
   title: string;
   favicon: string;
   isLoading: boolean;
+  lastActiveAt: number;
 }
 
 export interface TabsState {
@@ -62,12 +63,25 @@ export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
 
+// What the floating layer above the page is showing.
+export type OverlayState =
+  | { mode: 'hidden' }
+  // `openId` changes each time it opens, so it always starts fresh.
+  | { mode: 'command'; openId: number }
+  // Ctrl+Tab: tabs by most recent use, and which one is picked.
+  // `revealed` turns false-to-true once Ctrl has been held a moment.
+  | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean };
+
 // The narrow API the preload script exposes to Firn's UI as `window.firn`.
 export interface FirnBridge {
   platform: string;
   navigate(input: string): void;
   command(command: NavCommand): void;
   newTab(): void;
+  openUrl(input: string): void;
+  closeOverlay(): void;
+  showWindowControls(): void;
+  hideWindowControls(): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
   windowCommand(command: WindowCommand): void;
@@ -76,4 +90,6 @@ export interface FirnBridge {
   onTabsState(listener: (state: TabsState) => void): () => void;
   onFocusAddress(listener: (url: string) => void): () => void;
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
+  onOverlayState(listener: (state: OverlayState) => void): () => void;
+  onWindowControlsShown(listener: () => void): () => void;
 }

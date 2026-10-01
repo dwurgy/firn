@@ -2,19 +2,10 @@ import { useEffect, useState } from 'react';
 import type { NavState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
 import { TabList } from './TabList';
-import {
-  BackIcon,
-  CloseIcon,
-  ForwardIcon,
-  MaximizeIcon,
-  MinimizeIcon,
-  PlusIcon,
-  ReloadIcon,
-  RestoreIcon,
-  StopIcon,
-} from './icons';
+import { BackIcon, ForwardIcon, PlusIcon, ReloadIcon, StopIcon } from './icons';
 
-// macOS draws its own traffic lights; elsewhere Firn draws the window buttons.
+// macOS draws its own traffic lights; elsewhere Firn's window buttons hide in
+// the top-right corner and appear when the mouse reaches it.
 const OWN_WINDOW_BUTTONS = window.firn.platform !== 'darwin';
 
 const EMPTY_NAV: NavState = {
@@ -28,20 +19,17 @@ const EMPTY_NAV: NavState = {
 export function App() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
   const [tabs, setTabs] = useState<TabsState>({ tabs: [], activeTabId: null });
-  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     const offs = [
       window.firn.onNavState(setNav),
       window.firn.onTabsState(setTabs),
-      window.firn.onMaximizedChange(setMaximized),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
   }, []);
 
-  const activeTab = tabs.tabs.find((t) => t.id === tabs.activeTabId);
-  const showEmptyPage = Boolean(activeTab && !activeTab.url);
+  const noTabs = tabs.tabs.length === 0;
 
   return (
     <div className="app">
@@ -75,32 +63,6 @@ export function App() {
               {nav.isLoading ? <StopIcon /> : <ReloadIcon />}
             </button>
           </nav>
-
-          {OWN_WINDOW_BUTTONS && (
-            <div className="button-row">
-              <button
-                className="icon-button"
-                title="Minimize"
-                onClick={() => window.firn.windowCommand('minimize')}
-              >
-                <MinimizeIcon />
-              </button>
-              <button
-                className="icon-button"
-                title={maximized ? 'Restore' : 'Maximize'}
-                onClick={() => window.firn.windowCommand('toggle-maximize')}
-              >
-                {maximized ? <RestoreIcon /> : <MaximizeIcon />}
-              </button>
-              <button
-                className="icon-button close-button"
-                title="Close"
-                onClick={() => window.firn.windowCommand('close')}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-          )}
         </div>
 
         <AddressBar nav={nav} />
@@ -117,17 +79,24 @@ export function App() {
       </aside>
 
       {/* Sits right behind the web page so the page looks lifted off the
-          frame. A fresh new tab has no page yet, so this shows instead. */}
-      <main className={`page-area ${showEmptyPage ? 'is-empty' : ''}`}>
-        {showEmptyPage && (
+          frame. With no tabs open, this calm page shows instead. */}
+      <main className={`page-area ${noTabs ? 'is-empty' : ''}`}>
+        {noTabs && (
           <div className="empty-page">
-            <p className="empty-title">A fresh page</p>
-            <p className="empty-hint">
-              Type an address or a search in the sidebar.
-            </p>
+            <p className="empty-title">No open tabs</p>
+            <p className="empty-hint">Press Ctrl+T to open one.</p>
           </div>
         )}
       </main>
+
+      {/* The strip of frame along the top-right corner: reaching it reveals
+          the window buttons. */}
+      {OWN_WINDOW_BUTTONS && (
+        <div
+          className="corner-hotspot"
+          onMouseEnter={() => window.firn.showWindowControls()}
+        />
+      )}
     </div>
   );
 }

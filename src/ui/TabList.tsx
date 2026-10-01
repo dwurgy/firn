@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { TabView } from '../types';
-import { GlobeIcon, SmallCloseIcon } from './icons';
+import { CloseIcon, GlobeIcon } from './icons';
 
-function TabIcon({ tab }: { tab: TabView }) {
+export function TabIcon({ tab }: { tab: TabView }) {
   const [broken, setBroken] = useState<string | null>(null);
   if (tab.isLoading) return <span className="tab-spinner" />;
   if (!tab.favicon || broken === tab.favicon) return <GlobeIcon />;
@@ -17,7 +17,7 @@ function TabIcon({ tab }: { tab: TabView }) {
   );
 }
 
-function tabTitle(tab: TabView) {
+export function tabTitle(tab: TabView) {
   if (tab.title) return tab.title;
   if (!tab.url) return 'New tab';
   return tab.url.replace(/^https?:\/\/(www\.)?/i, '');
@@ -55,7 +55,7 @@ export function TabList({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => window.firn.closeTab(tab.id)}
           >
-            <SmallCloseIcon />
+            <CloseIcon />
           </button>
         </li>
       ))}

@@ -25,6 +25,8 @@
   --frost: rgba(130, 168, 190, 0.45);
   --frost-strong: rgba(110, 152, 178, 0.75);
   --close-hover: #c8564a;
+  --backdrop: rgba(60, 45, 30, 0.08);
+  --panel-edge: rgba(60, 40, 20, 0.08);
 
   color-scheme: light dark;
 }
@@ -48,6 +50,8 @@
     --frost: rgba(160, 196, 214, 0.45);
     --frost-strong: rgba(176, 208, 224, 0.8);
     --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
+    --backdrop: rgba(0, 0, 0, 0.18);
+    --panel-edge: rgba(255, 250, 245, 0.08);
   }
 }
 
@@ -60,6 +64,12 @@ body,
 #root {
   margin: 0;
   height: 100%;
+}
+
+/* The floating layers above the page are see-through. */
+:root[data-view='floating'] body,
+:root[data-view='controls'] body {
+  background: transparent;
 }
 
 body {
@@ -360,14 +370,14 @@ button {
 
 /* The close button only appears on hover. */
 .tab-close {
-  width: 22px;
-  height: 22px;
-  margin-right: -5px;
+  width: 26px;
+  height: 26px;
+  margin-right: -7px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
   opacity: 0;
@@ -431,5 +441,179 @@ button {
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+/* --- Hidden window buttons (Windows / Linux) ------------------------------- */
+
+/* The frame strip above the page's top-right corner. Matches the
+   window-buttons layer in src/main.ts. */
+.corner-hotspot {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 168px;
+  height: var(--page-inset);
+}
+
+.window-controls {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--frame);
+  box-shadow:
+    0 1px 3px rgba(30, 20, 10, 0.16),
+    0 6px 18px rgba(30, 20, 10, 0.16);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity var(--motion),
+    transform var(--motion);
+}
+
+.window-controls.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- Floating panels: command bar and tab switcher ------------------------- */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 18vh;
+  background: var(--backdrop);
+  animation: fade-in 180ms ease-out;
+}
+
+.backdrop.is-switcher {
+  align-items: center;
+  padding-top: 0;
+}
+
+.panel {
+  border-radius: 14px;
+  background: var(--page);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 24px 60px rgba(30, 20, 10, 0.22);
+  overflow: hidden;
+  animation: rise 200ms ease-out;
+}
+
+.command-bar {
+  width: min(640px, calc(100vw - 64px));
+}
+
+.switcher {
+  width: min(440px, calc(100vw - 64px));
+  padding: 4px 0;
+}
+
+.command-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+}
+
+.command-search-icon {
+  display: grid;
+  color: var(--text-muted);
+}
+
+.command-input {
+  flex: 1;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+
+.command-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-input::selection {
+  background: var(--frost);
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.command-bar .results {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  transition: background 120ms ease-out;
+}
+
+.result.is-selected {
+  background: var(--hover);
+}
+
+.result-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.result-detail {
+  color: var(--text-muted);
+}
+
+.result-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.result.is-selected .result-action {
+  opacity: 1;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
   }
 }

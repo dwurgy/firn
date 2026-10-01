@@ -27,10 +27,10 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
 | Focus address bar | Ctrl+L | Cmd+L |
-| New tab | Ctrl+T | Cmd+T |
+| New tab (opens the command bar) | Ctrl+T | Cmd+T |
 | Close tab | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
-| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Last-used tab (hold Ctrl and keep tapping Tab for the switcher) | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
 | Jump to tab 1–8 / last tab | Ctrl+1…8 / Ctrl+9 | Cmd+1…8 / Cmd+9 |
 | Back / Forward | Alt+← / Alt+→ | Cmd+[ / Cmd+] |
 | Reload | F5 or Ctrl+R | Cmd+R |
@@ -43,5 +43,5 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/tabs.ts` — the tab manager: the list of tabs and the web page behind each one.
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the sidebar, tabs and their styles.
+- `src/ui/` — Firn's own interface (React): the sidebar and tabs (`App.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the window buttons (`WindowControls.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.

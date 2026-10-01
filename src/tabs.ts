@@ -28,6 +28,8 @@ interface TabManagerOptions {
   onNavChanged: (state: NavState) => void;
   // Lets the window attach keyboard shortcuts to every page.
   onPageCreated: (web: WebContents) => void;
+  // The last tab was closed.
+  onEmpty: () => void;
 }
 
 // Popup windows (e.g. "Sign in with Google") keep the same safe settings.
@@ -70,6 +72,7 @@ export class TabManager {
           title: tab.title,
           favicon: tab.favicon,
           isLoading: view.webContents.isLoading(),
+          lastActiveAt: tab.lastActiveAt,
         };
       }),
     };
@@ -98,10 +101,9 @@ export class TabManager {
 
   // --- Changing tabs --------------------------------------------------------
 
-  // Opens a tab. With no URL it's a "new tab" waiting for an address.
-  // `after` places it right below another tab (e.g. links opened from a page);
-  // otherwise it goes to the top of the list.
-  create(url = '', opts: { activate?: boolean; after?: string } = {}) {
+  // Opens a tab. `after` places it right below another tab (e.g. links
+  // opened from a page); otherwise it goes to the top of the list.
+  create(url: string, opts: { activate?: boolean; after?: string } = {}) {
     const { activate = true, after } = opts;
     const id = randomUUID();
     const tab: Tab = {
@@ -129,7 +131,7 @@ export class TabManager {
 
     this.watch(id, view.webContents);
     this.options.onPageCreated(view.webContents);
-    if (url) view.webContents.loadURL(url);
+    view.webContents.loadURL(url);
 
     if (activate || !this.activeId) this.activate(id);
     else this.emitTabs();
@@ -144,10 +146,8 @@ export class TabManager {
     entry.tab.lastActiveAt = Date.now();
     if (previous && previous !== entry) previous.view.setVisible(false);
     this.layout();
-    // Only show the page once it has an address; a fresh new tab shows
-    // Firn's own calm empty state underneath instead.
-    entry.view.setVisible(Boolean(entry.tab.url));
-    if (entry.tab.url) entry.view.webContents.focus();
+    entry.view.setVisible(true);
+    entry.view.webContents.focus();
     this.emitTabs();
     this.emitNav();
   }
@@ -167,7 +167,9 @@ export class TabManager {
 
     if (this.order.length === 0) {
       this.activeId = null;
-      this.create();
+      this.emitTabs();
+      this.emitNav();
+      this.options.onEmpty();
       return;
     }
     if (this.activeId === id) {
@@ -176,6 +178,12 @@ export class TabManager {
     } else {
       this.emitTabs();
     }
+  }
+
+  // Opens whatever was typed (an address or a search) in a new tab.
+  openTyped(input: string) {
+    const url = toNavigableUrl(input);
+    if (url) this.create(url);
   }
 
   reopenClosed() {
@@ -191,6 +199,17 @@ export class TabManager {
     this.activate(this.order[next]);
   }
 
+  // Tab ids from most to least recently used, for Ctrl+Tab.
+  recentIds(): string[] {
+    return [...this.entries.values()]
+      .sort((a, b) => b.tab.lastActiveAt - a.tab.lastActiveAt)
+      .map((e) => e.tab.id);
+  }
+
+  focusActive() {
+    this.active?.view.webContents.focus();
+  }
+
   activateIndex(index: number) {
     const id = index < 0 ? this.order.at(-1) : this.order[index];
     if (id) this.activate(id);
@@ -200,8 +219,12 @@ export class TabManager {
 
   navigate(input: string) {
     const url = toNavigableUrl(input);
+    if (!url) return;
     const entry = this.active;
-    if (!url || !entry) return;
+    if (!entry) {
+      this.create(url);
+      return;
+    }
     entry.tab.url = url;
     entry.view.setVisible(true);
     entry.view.webContents.loadURL(url);

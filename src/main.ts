@@ -40,6 +40,11 @@ const PEEK_LINGER_MS = 450;
 const PEEK_RIGHT_SLACK = 24;
 // How often the cursor's position is checked for the edge reveals.
 const EDGE_CHECK_MS = 50;
+// How generous the left-edge zone that brings out the peeking sidebar is:
+// a little past the window's edge, and a little way into the page. (Just
+// the thin frame strip proved far too easy to miss.)
+const PEEK_ZONE_OUTSIDE = 8;
+const PEEK_ZONE_INSIDE = 20;
 const PAGE_INSET = 8;
 // Matches macOS's window corners.
 const PAGE_RADIUS = 12;
@@ -467,8 +472,8 @@ const createWindow = () => {
     const right = content.x + content.width;
     const bottom = content.y + content.height;
     const alongLeftEdge =
-      cursor.x >= left - 2 &&
-      cursor.x < left + PAGE_INSET &&
+      cursor.x >= left - PEEK_ZONE_OUTSIDE &&
+      cursor.x < left + PEEK_ZONE_INSIDE &&
       cursor.y >= top &&
       cursor.y <= bottom;
     const alongTopEdge =

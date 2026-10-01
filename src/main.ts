@@ -24,19 +24,13 @@ const TOOLBAR_HEIGHT = 52;
 const PAGE_INSET = 8;
 const PAGE_RADIUS = 12;
 
-// Warm neutral frame colors, used before the UI has painted and for the
-// Windows/Linux title bar controls.
-const FRAME = {
-  light: { background: '#e9e3da', symbols: '#5f574f' },
-  dark: { background: '#3a3734', symbols: '#d6cfc7' },
-};
+// Warm neutral frame colors, used before the UI has painted.
+const FRAME = { light: '#e9e3da', dark: '#3a3734' };
 
-const frameColors = () =>
+const frameColor = () =>
   nativeTheme.shouldUseDarkColors ? FRAME.dark : FRAME.light;
 
 const createWindow = () => {
-  const colors = frameColors();
-
   // The window itself hosts Firn's own UI (the toolbar).
   const win = new BrowserWindow({
     width: 1280,
@@ -44,17 +38,10 @@ const createWindow = () => {
     minWidth: 520,
     minHeight: 360,
     title: 'Firn',
-    backgroundColor: colors.background,
-    // Hide the OS title bar so the toolbar can sit in it. Windows and Linux
-    // keep their native minimize/maximize/close buttons as an overlay.
+    backgroundColor: frameColor(),
+    // Hide the OS title bar so the toolbar can sit in it. macOS keeps its
+    // traffic lights; on Windows and Linux Firn draws its own window buttons.
     titleBarStyle: 'hidden',
-    ...(process.platform !== 'darwin' && {
-      titleBarOverlay: {
-        color: colors.background,
-        symbolColor: colors.symbols,
-        height: TOOLBAR_HEIGHT,
-      },
-    }),
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -158,8 +145,25 @@ const createWindow = () => {
     runCommand(command);
   };
   const onReady = (event: IpcMainEvent) => {
-    if (fromOurUi(event)) sendNavState();
+    if (!fromOurUi(event)) return;
+    sendNavState();
+    sendMaximized();
   };
+  const onWindowCommand = (event: IpcMainEvent, command: unknown) => {
+    if (!fromOurUi(event)) return;
+    if (command === 'minimize') win.minimize();
+    else if (command === 'toggle-maximize')
+      win.isMaximized() ? win.unmaximize() : win.maximize();
+    else if (command === 'close') win.close();
+  };
+
+  // Lets the UI swap the maximize icon for a restore icon.
+  const sendMaximized = () => {
+    if (!win.isDestroyed())
+      win.webContents.send('window:maximized', win.isMaximized());
+  };
+  win.on('maximize', sendMaximized);
+  win.on('unmaximize', sendMaximized);
 
   const runCommand = (command: unknown) => {
     switch (command) {
@@ -182,6 +186,7 @@ const createWindow = () => {
   ipcMain.on('nav:navigate', onNavigate);
   ipcMain.on('nav:command', onCommand);
   ipcMain.on('ui:ready', onReady);
+  ipcMain.on('window:command', onWindowCommand);
 
   // --- Keyboard shortcuts (work whether the page or the toolbar has focus) --
 
@@ -217,23 +222,14 @@ const createWindow = () => {
 
   // --- Follow the OS light/dark setting ------------------------------------
 
-  const onThemeChange = () => {
-    const c = frameColors();
-    win.setBackgroundColor(c.background);
-    if (process.platform !== 'darwin') {
-      win.setTitleBarOverlay({
-        color: c.background,
-        symbolColor: c.symbols,
-        height: TOOLBAR_HEIGHT,
-      });
-    }
-  };
+  const onThemeChange = () => win.setBackgroundColor(frameColor());
   nativeTheme.on('updated', onThemeChange);
 
   win.on('closed', () => {
     ipcMain.removeListener('nav:navigate', onNavigate);
     ipcMain.removeListener('nav:command', onCommand);
     ipcMain.removeListener('ui:ready', onReady);
+    ipcMain.removeListener('window:command', onWindowCommand);
     nativeTheme.removeListener('updated', onThemeChange);
     if (!web.isDestroyed()) web.close();
   });

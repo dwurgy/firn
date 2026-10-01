@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { NavState } from '../types';
-import { BackIcon, ForwardIcon, ReloadIcon, StopIcon } from './icons';
+import {
+  BackIcon,
+  CloseIcon,
+  ForwardIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  ReloadIcon,
+  RestoreIcon,
+  StopIcon,
+} from './icons';
+
+// macOS draws its own traffic lights; elsewhere Firn draws the window buttons.
+const OWN_WINDOW_BUTTONS = window.firn.platform !== 'darwin';
 
 const EMPTY: NavState = {
   url: '',
@@ -19,6 +31,7 @@ export function App() {
   const [nav, setNav] = useState<NavState>(EMPTY);
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
+  const [maximized, setMaximized] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -27,10 +40,12 @@ export function App() {
       inputRef.current?.focus();
       inputRef.current?.select();
     });
+    const offMax = window.firn.onMaximizedChange(setMaximized);
     window.firn.ready();
     return () => {
       offState();
       offFocus();
+      offMax();
     };
   }, []);
 
@@ -97,6 +112,32 @@ export function App() {
             />
           </span>
         </form>
+
+        {OWN_WINDOW_BUTTONS && (
+          <div className="window-buttons">
+            <button
+              className="icon-button"
+              title="Minimize"
+              onClick={() => window.firn.windowCommand('minimize')}
+            >
+              <MinimizeIcon />
+            </button>
+            <button
+              className="icon-button"
+              title={maximized ? 'Restore' : 'Maximize'}
+              onClick={() => window.firn.windowCommand('toggle-maximize')}
+            >
+              {maximized ? <RestoreIcon /> : <MaximizeIcon />}
+            </button>
+            <button
+              className="icon-button close-button"
+              title="Close"
+              onClick={() => window.firn.windowCommand('close')}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+        )}
       </header>
       {/* Sits right behind the web page so the page looks lifted off the frame. */}
       <div className="page-shadow" />

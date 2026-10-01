@@ -36,3 +36,30 @@ export const StopIcon = () => (
     <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
   </svg>
 );
+
+// Window buttons (Windows and Linux), drawn with the same stroke as above.
+
+export const MinimizeIcon = () => (
+  <svg {...base}>
+    <path d="M3.5 8h9" />
+  </svg>
+);
+
+export const MaximizeIcon = () => (
+  <svg {...base}>
+    <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+  </svg>
+);
+
+export const RestoreIcon = () => (
+  <svg {...base}>
+    <rect x="3.5" y="5.5" width="7" height="7" rx="1.5" />
+    <path d="M5.5 3.5h5.5a1.5 1.5 0 0 1 1.5 1.5v5.5" />
+  </svg>
+);
+
+export const CloseIcon = () => (
+  <svg {...base}>
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </svg>
+);

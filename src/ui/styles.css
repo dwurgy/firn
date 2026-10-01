@@ -21,6 +21,7 @@
     0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
   --frost-strong: rgba(110, 152, 178, 0.75);
+  --close-hover: #c8564a;
 
   color-scheme: light dark;
 }
@@ -85,18 +86,17 @@ body {
   -webkit-app-region: drag;
 }
 
-/* Leave room for the native window controls. */
+/* Leave room for the macOS traffic lights. */
 :root[data-platform='darwin'] .toolbar {
   padding-left: 84px;
 }
-:root:not([data-platform='darwin']) .toolbar {
-  padding-right: 150px;
-}
 
-.nav-buttons {
+.nav-buttons,
+.window-buttons {
   display: flex;
   gap: 2px;
 }
+
 
 .icon-button {
   -webkit-app-region: no-drag;
@@ -122,6 +122,12 @@ body {
 
 .icon-button:active:not(:disabled) {
   background: var(--press);
+}
+
+/* A soft warm red, rather than the usual harsh one. */
+.close-button:hover:not(:disabled) {
+  background: var(--close-hover);
+  color: #fff;
 }
 
 .icon-button:disabled {

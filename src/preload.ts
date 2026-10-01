@@ -7,6 +7,7 @@ const bridge: FirnBridge = {
   platform: process.platform,
   navigate: (input) => ipcRenderer.send('nav:navigate', input),
   command: (command) => ipcRenderer.send('nav:command', command),
+  windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => {
     const handler = (_event: IpcRendererEvent, state: NavState) =>
@@ -18,6 +19,12 @@ const bridge: FirnBridge = {
     const handler = () => listener();
     ipcRenderer.on('ui:focus-address', handler);
     return () => ipcRenderer.removeListener('ui:focus-address', handler);
+  },
+  onMaximizedChange: (listener) => {
+    const handler = (_event: IpcRendererEvent, maximized: boolean) =>
+      listener(maximized);
+    ipcRenderer.on('window:maximized', handler);
+    return () => ipcRenderer.removeListener('window:maximized', handler);
   },
 };
 

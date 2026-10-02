@@ -143,7 +143,9 @@ export interface FirnBridge {
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
-  moveTab(id: string, toIndex: number): void;
+  // Moves a tab within its group, or (with `pinned`) into the pinned or
+  // everyday tabs at that spot.
+  moveTab(id: string, toIndex: number, pinned?: boolean): void;
   showTabMenu(id: string): void;
   switchSpace(id: string): void;
   newSpace(): void;

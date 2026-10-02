@@ -23,7 +23,8 @@ const bridge: FirnBridge = {
   setSidebarWidth: (width) => ipcRenderer.send('sidebar:width', width),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
-  moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
+  moveTab: (id, toIndex, pinned) =>
+    ipcRenderer.send('tabs:move', id, toIndex, pinned),
   showTabMenu: (id) => ipcRenderer.send('tabs:menu', id),
   switchSpace: (id) => ipcRenderer.send('spaces:switch', id),
   newSpace: () => ipcRenderer.send('spaces:new'),

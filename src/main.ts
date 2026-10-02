@@ -1022,9 +1022,11 @@ const createWindow = () => {
     'tabs:menu': (_sender, id) => {
       if (typeof id === 'string') showTabMenu(id);
     },
-    'tabs:move': (_sender, id, toIndex) => {
-      if (typeof id === 'string' && Number.isInteger(toIndex))
-        tabs.move(id, toIndex as number);
+    'tabs:move': (_sender, id, toIndex, pinned) => {
+      if (typeof id !== 'string' || !Number.isInteger(toIndex)) return;
+      if (typeof pinned === 'boolean')
+        tabs.place(id, pinned, toIndex as number);
+      else tabs.move(id, toIndex as number);
     },
     'tabs:activate': (_sender, id) => {
       if (typeof id !== 'string') return;

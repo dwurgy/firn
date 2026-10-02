@@ -451,7 +451,14 @@ button {
 }
 
 .space-pins-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-height: 0;
+}
+
+/* Clipped only while folded, so a pinned tab can be dragged out freely. */
+.space-pins.is-folded .space-pins-inner {
   overflow: hidden;
 }
 
@@ -636,21 +643,14 @@ button {
 
 /* --- Tabs ------------------------------------------------------------------ */
 
-.tabs-section {
+/* A space's pinned tabs, divider, "New tab" and everyday tabs: one list
+   that scrolls together (see SpaceTabs.tsx). */
+.space-tabs {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-height: 0;
   flex: 1;
-}
-
-.tab-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   overflow-y: auto;
   /* Room so the active tab's soft shadow isn't clipped. */
   padding-bottom: 4px;
@@ -690,8 +690,7 @@ button {
   transition:
     background var(--motion),
     box-shadow var(--motion),
-    color var(--motion),
-    transform var(--motion);
+    color var(--motion);
 }
 
 .tab:hover {
@@ -708,26 +707,18 @@ button {
     box-shadow var(--motion);
 }
 
-.tab-list.is-dragging .tab:not(.is-dragged) .tab-close {
-  opacity: 0;
-}
-
-/* Just after a drop, only the moved tab glides; the rest are already in
-   place. */
-.tab-list.is-settling .tab:not(.is-settling-row) {
-  transition: none;
-}
-
-.tab.is-settling-row {
-  z-index: 1;
-  transition: none;
-}
-
-.tab.is-settling-row.is-gliding {
+/* The others glide out of the dragged tab's way (the divider and "New tab"
+   too); a tab dropped back where it started glides home. */
+.space-tabs.is-dragging [data-item]:not(.is-dragged),
+.tab.is-returning {
   transition:
     background var(--motion),
     box-shadow var(--motion),
     transform var(--motion);
+}
+
+.space-tabs.is-dragging .tab:not(.is-dragged) .tab-close {
+  opacity: 0;
 }
 
 .tab:active:not(.is-active) {

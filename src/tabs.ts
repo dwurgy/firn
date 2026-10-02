@@ -561,6 +561,26 @@ export class TabManager {
     this.emitTabs();
   }
 
+  // Drops a tab into the pinned tabs or the everyday tabs at `toIndex`
+  // (dragging it across the divider pins or unpins it).
+  place(id: string, pinned: boolean, toIndex: number) {
+    const tab = this.entries.get(id)?.tab;
+    if (!tab || tab.basecamp) return;
+    if (tab.pinned !== pinned) {
+      tab.pinned = pinned;
+      tab.homeUrl = pinned ? tab.url : undefined;
+      this.order.splice(this.order.indexOf(id), 1);
+      this.order.splice(
+        pinned ? this.groupEnd(PINNED) : this.groupStart(EVERYDAY),
+        0,
+        id,
+      );
+      this.renumber();
+    }
+    this.move(id, toIndex);
+    this.emitTabs();
+  }
+
   reopenClosed() {
     const url = this.recentlyClosed.pop();
     if (url) this.create(url);
@@ -660,12 +680,28 @@ export class TabManager {
     this.order.forEach((id, i) => (this.entries.get(id)!.tab.order = i));
   }
 
+  // Pages report many small changes at once while loading (title, icon,
+  // address, loading...). They're gathered into one update for the UI.
+  private tabsPending = false;
+
   private emitTabs() {
-    this.options.onTabsChanged(this.state());
+    if (this.tabsPending) return;
+    this.tabsPending = true;
+    setImmediate(() => {
+      this.tabsPending = false;
+      if (!this.win.isDestroyed()) this.options.onTabsChanged(this.state());
+    });
   }
 
+  private navPending = false;
+
   private emitNav() {
-    this.options.onNavChanged(this.navState());
+    if (this.navPending) return;
+    this.navPending = true;
+    setImmediate(() => {
+      this.navPending = false;
+      if (!this.win.isDestroyed()) this.options.onNavChanged(this.navState());
+    });
   }
 
   // Keeps a tab's record in step with its page, and reports changes.

@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { NavState, SidebarState, SpacesState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
 import { Basecamp } from './Basecamp';
-import { SpaceDivider, SpaceHeader, SpacePins, SpaceSwitcher } from './Spaces';
-import { TabList } from './TabList';
+import { SpaceHeader, SpaceSwitcher } from './Spaces';
+import { SpaceTabs } from './SpaceTabs';
 import {
   BackIcon,
   ForwardIcon,
-  PlusIcon,
   ReloadIcon,
   SidebarIcon,
   StopIcon,
@@ -70,7 +69,6 @@ export function Sidebar({
   style?: React.CSSProperties;
 }) {
   const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
-  const everyday = tabs.tabs.filter((t) => !t.pinned && !t.basecamp);
   // Which space's name is being edited (only shown while it's the active
   // space).
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -146,23 +144,11 @@ export function Sidebar({
           onDoneRenaming={() => setRenamingId(null)}
         />
 
-        <SpacePins
-          tabs={tabs.tabs.filter((t) => t.pinned)}
+        <SpaceTabs
+          tabs={tabs.tabs.filter((t) => !t.basecamp)}
           activeTabId={tabs.activeTabId}
           folded={!!space?.pinsFolded}
         />
-
-        <SpaceDivider canClear={everyday.length > 0} />
-
-        <section className="tabs-section">
-          <button className="new-tab" onClick={() => window.firn.newTab()}>
-            <span className="tab-icon">
-              <PlusIcon />
-            </span>
-            New tab
-          </button>
-          <TabList tabs={everyday} activeTabId={tabs.activeTabId} />
-        </section>
       </div>
 
       <SpaceSwitcher {...spaces} />

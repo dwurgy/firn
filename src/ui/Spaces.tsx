@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Space, SpacesState, TabView } from '../types';
+import type { Space, SpacesState } from '../types';
 import { ChevronIcon, MoreIcon, PlusIcon } from './icons';
-import { TabList } from './TabList';
 
 // The active space's name above its pinned tabs. Click it to fold the
 // pins away (or bring them back); the ... button (or right-click) has
@@ -52,51 +51,6 @@ export function SpaceHeader({
       >
         <MoreIcon />
       </button>
-    </div>
-  );
-}
-
-// The space's pinned tabs, as ordinary rows under its name. Folded away,
-// only the pinned tab you're on (if any) stays in view.
-export function SpacePins({
-  tabs,
-  activeTabId,
-  folded,
-}: {
-  tabs: TabView[];
-  activeTabId: string | null;
-  folded: boolean;
-}) {
-  const activePin = folded && tabs.find((t) => t.id === activeTabId);
-  return (
-    <>
-      <div className={`space-pins ${folded ? 'is-folded' : ''}`}>
-        <div className="space-pins-inner">
-          <TabList tabs={tabs} activeTabId={activeTabId} kind="pinned" />
-        </div>
-      </div>
-      {activePin && (
-        <TabList tabs={[activePin]} activeTabId={activeTabId} kind="pinned" />
-      )}
-    </>
-  );
-}
-
-// The soft line between pinned and everyday tabs, with "Clear" to close the
-// everyday ones.
-export function SpaceDivider({ canClear }: { canClear: boolean }) {
-  return (
-    <div className="space-divider">
-      <span className="space-divider-line" />
-      {canClear && (
-        <button
-          className="space-clear"
-          title="Close this space's unpinned tabs"
-          onClick={() => window.firn.clearTabs()}
-        >
-          Clear
-        </button>
-      )}
     </div>
   );
 }

@@ -1,0 +1,363 @@
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
+import type { TabView } from '../types';
+import { CloseIcon, PlusIcon, UnloadIcon } from './icons';
+import { TabIcon, tabTitle } from './TabList';
+
+// A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
+// "New tab", then its everyday tabs.
+//
+// Any tab can be dragged up or down, including across the divider: above
+// it, the tab is pinned; below it, unpinned. Whenever tabs change places
+// (dragging, pinning from the menu, closing, opening), the rows glide to
+// their new spots instead of jumping.
+
+// How far the pointer must move before a press becomes a drag (so ordinary
+// clicks never turn into accidental drags).
+const DRAG_THRESHOLD = 4;
+const ROW_GAP = 4; // matches the gap between rows in styles.css
+const GLIDE = { duration: 200, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' };
+
+// One thing in the list, as measured when a drag starts.
+interface Item {
+  key: string; // a tab id, or 'divider' / 'new-tab'
+  top: number;
+  height: number;
+}
+
+interface Drag {
+  id: string;
+  startY: number;
+  dy: number;
+  active: boolean;
+  items: Item[]; // measured once the drag starts
+}
+
+// Where a dragged tab would land.
+interface Drop {
+  pinned: boolean;
+  index: number; // within the pinned or everyday tabs
+  slot: number; // position among the other items in the list
+}
+
+export function SpaceTabs({
+  tabs,
+  activeTabId,
+  folded,
+}: {
+  tabs: TabView[]; // the space's own tabs (not Basecamp), in order
+  activeTabId: string | null;
+  folded: boolean;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<Drag | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  // After a drop, rows stay where they were dropped until the new order
+  // arrives; then they glide from there into place.
+  const [pending, setPending] = useState<{
+    signature: string;
+    offsets: Map<string, number>;
+  } | null>(null);
+  const [returning, setReturning] = useState<string | null>(null);
+
+  const pins = tabs.filter((t) => t.pinned);
+  const everyday = tabs.filter((t) => !t.pinned);
+  const activePin = folded && pins.find((t) => t.id === activeTabId);
+  const signature = tabs.map((t) => `${t.id}:${t.pinned ? 1 : 0}`).join(',');
+
+  // --- Gliding into new places ----------------------------------------------
+  // When the order changes, note where every row was just before the update
+  // (still on screen at this point), then glide each one from there.
+  const lastSignature = useRef(signature);
+  const before = useRef<Map<string, number> | null>(null);
+  if (lastSignature.current !== signature) {
+    lastSignature.current = signature;
+    before.current = measure(listRef.current);
+  }
+  useLayoutEffect(() => {
+    const was = before.current;
+    before.current = null;
+    if (!was || !listRef.current) return;
+    for (const el of itemElements(listRef.current)) {
+      const key = el.dataset.item!;
+      const from = was.get(key);
+      const now = topOf(el, listRef.current);
+      if (from === undefined) {
+        el.animate([{ opacity: 0 }, { opacity: 1 }], GLIDE);
+      } else if (Math.abs(from - now) > 0.5) {
+        el.animate(
+          [{ translate: `0 ${from - now}px` }, { translate: '0 0' }],
+          GLIDE,
+        );
+      }
+    }
+  });
+
+  // --- Dragging ---------------------------------------------------------------
+
+  const update = (next: Drag | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  const dropFor = (d: Drag): Drop | null => {
+    const self = d.items.find((i) => i.key === d.id);
+    if (!self) return null;
+    const others = d.items.filter((i) => i !== self);
+    const center = self.top + self.height / 2 + d.dy;
+    // The divider counts as passed only once the tab is fully below it, so
+    // anywhere above its bottom edge pins (even with no pins yet).
+    let slot = others.filter((o) =>
+      o.key === 'divider'
+        ? o.top + o.height < center
+        : o.top + o.height / 2 < center,
+    ).length;
+    const divider = others.findIndex((o) => o.key === 'divider');
+    const newTab = others.findIndex((o) => o.key === 'new-tab');
+    // Between the divider and "New tab" means the top of the everyday tabs.
+    if (slot > divider && slot <= newTab) slot = newTab + 1;
+    const pinned = slot <= divider;
+    return { pinned, index: pinned ? slot : slot - newTab - 1, slot };
+  };
+
+  // How far each item is nudged to make room for the dragged tab.
+  const offsetsFor = (d: Drag) => {
+    const offsets = new Map<string, number>();
+    const drop = dropFor(d);
+    const selfIndex = d.items.findIndex((i) => i.key === d.id);
+    if (!drop || selfIndex < 0) return offsets;
+    const pitch = d.items[selfIndex].height + ROW_GAP;
+    d.items
+      .filter((i) => i.key !== d.id)
+      .forEach((item, j) => {
+        if (j >= selfIndex && j < drop.slot) offsets.set(item.key, -pitch);
+        if (j < selfIndex && j >= drop.slot) offsets.set(item.key, pitch);
+      });
+    offsets.set(d.id, d.dy);
+    return offsets;
+  };
+
+  const onPointerDown = (e: ReactPointerEvent, tab: TabView) => {
+    if (e.button !== 0) return;
+    window.firn.activateTab(tab.id);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    update({ id: tab.id, startY: e.clientY, dy: 0, active: false, items: [] });
+  };
+
+  const onPointerMove = (e: ReactPointerEvent) => {
+    const d = dragRef.current;
+    const list = listRef.current;
+    if (!d || !list) return;
+    const raw = e.clientY - d.startY;
+    if (!d.active) {
+      if (Math.abs(raw) <= DRAG_THRESHOLD) return;
+      setPending(null);
+      setReturning(null);
+      d.items = itemElements(list).map((el) => ({
+        key: el.dataset.item!,
+        top: topOf(el, list),
+        height: el.offsetHeight,
+      }));
+    }
+    // Keep it within the list (it can reach halfway past the last row, to
+    // drop below it).
+    const self = d.items.find((i) => i.key === d.id);
+    const last = d.items.at(-1);
+    if (!self || !last) return;
+    const dy = Math.max(
+      -self.top,
+      Math.min(last.top + last.height - self.top - self.height / 2, raw),
+    );
+    update({ ...d, dy, active: true });
+  };
+
+  const finish = (commit: boolean) => {
+    const d = dragRef.current;
+    update(null);
+    if (!d?.active) return;
+    const drop = commit ? dropFor(d) : null;
+    const tab = tabs.find((t) => t.id === d.id);
+    const group = tab?.pinned ? pins : everyday;
+    const unchanged =
+      !drop ||
+      !tab ||
+      (drop.pinned === tab.pinned &&
+        drop.index === group.findIndex((t) => t.id === d.id));
+    if (unchanged) {
+      // Glide back to where it was.
+      setReturning(d.id);
+      setTimeout(() => setReturning(null), GLIDE.duration + 50);
+      return;
+    }
+    setPending({ signature, offsets: offsetsFor(d) });
+    window.firn.moveTab(d.id, drop.index, drop.pinned);
+    // In case the move doesn't happen, don't leave rows out of place.
+    setTimeout(() => setPending(null), 1000);
+  };
+
+  const offsets = drag?.active
+    ? offsetsFor(drag)
+    : pending?.signature === signature
+      ? pending.offsets
+      : null;
+  const nudge = (key: string) => {
+    const y = offsets?.get(key);
+    return y ? { transform: `translateY(${y}px)` } : undefined;
+  };
+
+  const row = (tab: TabView, kind: 'pinned' | 'everyday', listed = true) => (
+    <TabRow
+      key={tab.id}
+      tab={tab}
+      kind={kind}
+      active={tab.id === activeTabId}
+      dragged={drag?.active === true && drag.id === tab.id}
+      returning={returning === tab.id}
+      listed={listed}
+      style={listed ? nudge(tab.id) : undefined}
+      onPointerDown={(e) => onPointerDown(e, tab)}
+      onPointerMove={onPointerMove}
+      onPointerUp={() => finish(true)}
+      onPointerCancel={() => finish(false)}
+    />
+  );
+
+  return (
+    <div
+      ref={listRef}
+      className={`space-tabs ${drag?.active ? 'is-dragging' : ''}`}
+    >
+      <div className={`space-pins ${folded ? 'is-folded' : ''}`}>
+        <div className="space-pins-inner">
+          {pins.map((tab) => row(tab, 'pinned', !folded))}
+        </div>
+      </div>
+      {activePin && row(activePin, 'pinned')}
+
+      <div
+        className="space-divider"
+        data-item="divider"
+        style={nudge('divider')}
+      >
+        <span className="space-divider-line" />
+        {everyday.length > 0 && (
+          <button
+            className="space-clear"
+            title="Close this space's unpinned tabs"
+            onClick={() => window.firn.clearTabs()}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <button
+        className="new-tab"
+        data-item="new-tab"
+        style={nudge('new-tab')}
+        onClick={() => window.firn.newTab()}
+      >
+        <span className="tab-icon">
+          <PlusIcon />
+        </span>
+        New tab
+      </button>
+
+      {everyday.map((tab) => row(tab, 'everyday'))}
+    </div>
+  );
+}
+
+function TabRow({
+  tab,
+  kind,
+  active,
+  dragged,
+  returning,
+  listed,
+  style,
+  ...handlers
+}: {
+  tab: TabView;
+  kind: 'pinned' | 'everyday';
+  active: boolean;
+  dragged: boolean;
+  returning: boolean;
+  // False for the copies hidden inside folded pins (not part of dragging or
+  // gliding).
+  listed: boolean;
+  style?: React.CSSProperties;
+  onPointerDown: (e: ReactPointerEvent) => void;
+  onPointerMove: (e: ReactPointerEvent) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
+}) {
+  const pinned = kind === 'pinned';
+  return (
+    <div
+      className={[
+        'tab',
+        active && 'is-active',
+        pinned && !tab.loaded && 'is-unloaded',
+        dragged && 'is-dragged',
+        returning && 'is-returning',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-item={listed ? tab.id : undefined}
+      data-kind={kind}
+      style={style}
+      title={tabTitle(tab)}
+      {...handlers}
+      // Middle-click closes (or unloads a pinned tab), like other browsers.
+      onAuxClick={(e) => {
+        if (e.button === 1) window.firn.closeTab(tab.id);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        window.firn.showTabMenu(tab.id);
+      }}
+    >
+      <span className="tab-icon">
+        <TabIcon tab={tab} />
+      </span>
+      <span className="tab-title">{tabTitle(tab)}</span>
+      {(!pinned || tab.loaded) && (
+        <button
+          className="tab-close"
+          title={pinned ? 'Unload tab' : 'Close tab'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => window.firn.closeTab(tab.id)}
+        >
+          {pinned ? <UnloadIcon /> : <CloseIcon />}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// The list's draggable and gliding items, top to bottom.
+function itemElements(list: HTMLElement) {
+  return [...list.querySelectorAll<HTMLElement>('[data-item]')];
+}
+
+// An item's top edge within the list's content (so scrolling doesn't count).
+function topOf(el: HTMLElement, list: HTMLElement) {
+  return (
+    el.getBoundingClientRect().top -
+    list.getBoundingClientRect().top +
+    list.scrollTop
+  );
+}
+
+function measure(list: HTMLElement | null) {
+  const tops = new Map<string, number>();
+  if (list)
+    for (const el of itemElements(list))
+      tops.set(el.dataset.item!, topOf(el, list));
+  return tops;
+}

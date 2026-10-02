@@ -75,6 +75,9 @@ export const SCROLLBAR_SCRIPT = `
   const scroller = () => document.scrollingElement || document.documentElement;
   let geometry = null;
 
+  // The full check (can the page scroll at all, how big is the thumb) runs
+  // when the page changes size; while scrolling only the thumb moves, so
+  // scrolling never makes the page work out its styles again.
   const measure = () => {
     const el = scroller();
     const view = window.innerHeight;
@@ -86,19 +89,34 @@ export const SCROLLBAR_SCRIPT = `
     host.style.display = 'block';
     const room = view - 8; // the bar is inset 4px top and bottom
     const size = Math.max(MIN_THUMB, Math.round(room * (view / total)));
-    const travel = room - size;
-    const maxScroll = total - view;
-    const top = Math.round((el.scrollTop / maxScroll) * travel);
     thumb.style.height = size + 'px';
+    geometry = { size, travel: room - size, maxScroll: total - view, top: 0 };
+    position();
+  };
+
+  const position = () => {
+    if (!geometry) return;
+    const ratio = Math.min(1, Math.max(0, scroller().scrollTop / geometry.maxScroll));
+    const top = Math.round(ratio * geometry.travel);
+    if (top === geometry.top && thumb.style.transform) return;
+    geometry.top = top;
     thumb.style.transform = 'translateY(' + top + 'px)';
-    geometry = { size, travel, maxScroll, top };
   };
 
   let frame = 0;
-  const update = () => {
+  let full = false;
+  const schedule = (needsMeasure) => {
+    full = full || needsMeasure;
     if (frame) return;
-    frame = requestAnimationFrame(() => { frame = 0; measure(); });
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const doMeasure = full;
+      full = false;
+      if (doMeasure) measure(); else position();
+    });
   };
+  const update = () => schedule(true);
+  const onScroll = () => schedule(false);
 
   // Dragging the thumb.
   let drag = null;
@@ -128,7 +146,7 @@ export const SCROLLBAR_SCRIPT = `
     scroller().scrollBy({ top: y < geometry.top ? -page : page, behavior: 'smooth' });
   });
 
-  addEventListener('scroll', update, { passive: true });
+  addEventListener('scroll', onScroll, { passive: true });
   addEventListener('resize', update);
   document.addEventListener('fullscreenchange', update);
   const watchSize = new ResizeObserver(update);

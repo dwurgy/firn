@@ -327,8 +327,13 @@ const createWindow = () => {
   let pageLeft = windowState.sidebarCollapsed
     ? PAGE_INSET
     : windowState.sidebarWidth;
-  // Where the page's top edge is: lower while the top bar shows.
+  // Where the page's top edge is: lower while the top bar shows. While it
+  // glides, the page keeps one size and only moves (resizing every step
+  // makes the site re-fit each time, which looks jumpy); it takes its new
+  // size once, at whichever end of the glide it is taller.
   let pageTop = PAGE_INSET;
+  let topFrom = PAGE_INSET;
+  let topTo = PAGE_INSET;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -426,17 +431,21 @@ const createWindow = () => {
   // Slides the page's top edge, in step with the sidebar layer's outline of
   // the page (.page-area in styles.css).
   const glidePageTop = (to: number) => {
-    const from = pageTop;
+    topFrom = pageTop;
+    topTo = to;
     const start = Date.now();
     clearInterval(topGlide);
     topGlide = setInterval(() => {
       if (win.isDestroyed()) return clearInterval(topGlide);
       const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
       const eased = 1 - Math.pow(1 - t, 3); // ease-out
-      pageTop = Math.round(from + (to - from) * eased);
+      pageTop = Math.round(topFrom + (topTo - topFrom) * eased);
+      if (t === 1) {
+        clearInterval(topGlide);
+        topFrom = topTo;
+      }
       tabs.layout();
-      if (t === 1) clearInterval(topGlide);
-    }, 16);
+    }, 8);
   };
 
   // The cursor's position relative to the window's content area.
@@ -500,7 +509,9 @@ const createWindow = () => {
         x: pageLeft,
         y: pageTop,
         width: Math.max(0, width - pageLeft - PAGE_INSET),
-        height: Math.max(0, height - pageTop - PAGE_INSET),
+        // (While gliding, sized for the higher of the two positions; the
+        // part that dips below the window is simply out of sight.)
+        height: Math.max(0, height - Math.min(topFrom, topTo) - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {

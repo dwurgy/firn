@@ -511,6 +511,7 @@ const createWindow = () => {
     return true;
   };
   const hideOverlay = () => {
+    splitBeside = null;
     if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
     overlay = { mode: 'hidden' };
@@ -953,20 +954,40 @@ const createWindow = () => {
         ]
       : [];
     // Split view: show this tab beside the current one, or end the split.
+    const shortTitle = (title: string) =>
+      title.length > 42 ? `${title.slice(0, 40)}…` : title;
     const splitItems: Electron.MenuItemConstructorOptions[] = tab.splitId
       ? [
           { label: 'Separate split view', click: () => tabs.unsplit(id) },
           { type: 'separator' },
         ]
-      : tabs.canSplitWith(id)
+      : id === tabs.activeTabId
         ? [
+            // The current tab: pick what goes beside it.
             {
-              label: 'Split view with current tab',
-              click: () => tabs.splitWith(id),
+              label: 'Split view with',
+              submenu: [
+                ...tabs.splitCandidates().map((other) => ({
+                  label: shortTitle(other.title || other.url),
+                  click: () => tabs.splitWith(other.id),
+                })),
+                ...(tabs.splitCandidates().length
+                  ? [{ type: 'separator' as const }]
+                  : []),
+                { label: 'New tab…', click: () => openCommandBar(id) },
+              ],
             },
             { type: 'separator' },
           ]
-        : [];
+        : tabs.canSplitWith(id)
+          ? [
+              {
+                label: 'Split view with current tab',
+                click: () => tabs.splitWith(id),
+              },
+              { type: 'separator' },
+            ]
+          : [];
     const items: Electron.MenuItemConstructorOptions[] = tab.basecamp
       ? [
           { label: 'Go back to home', click: () => tabs.goHome(id) },
@@ -1162,8 +1183,19 @@ const createWindow = () => {
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
-  const openCommandBar = () =>
-    showOverlay({ mode: 'command', openId: ++commandOpenId });
+  // With `besideId`, whatever is picked opens in split view beside that tab.
+  let splitBeside: string | null = null;
+  const openCommandBar = (besideId?: string) => {
+    const beside = besideId
+      ? tabs.state().tabs.find((t) => t.id === besideId)
+      : undefined;
+    showOverlay({
+      mode: 'command',
+      openId: ++commandOpenId,
+      beside: beside ? beside.title || beside.url : undefined,
+    });
+    splitBeside = beside?.id ?? null;
+  };
 
   const focusAddress = () => {
     hideOverlay();
@@ -1244,8 +1276,14 @@ const createWindow = () => {
     'tabs:new': () => openCommandBar(),
     'tabs:open-url': (_sender, input) => {
       if (typeof input !== 'string') return;
+      const beside = splitBeside;
       hideOverlay();
-      tabs.openTyped(input);
+      const id = tabs.openTyped(input);
+      // Opened from "Split view with → New tab…": it goes beside that tab.
+      if (beside && id) {
+        tabs.activate(beside);
+        tabs.splitWith(id);
+      }
     },
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
@@ -1290,8 +1328,14 @@ const createWindow = () => {
     },
     'tabs:activate': (_sender, id) => {
       if (typeof id !== 'string') return;
+      const beside = overlay.mode === 'command' ? splitBeside : null;
       if (switcher) endSwitcher(false);
       hideOverlay();
+      // Picked in the command bar from "Split view with → New tab…".
+      if (beside && beside !== id) {
+        tabs.activate(beside);
+        if (tabs.canSplitWith(id)) return tabs.splitWith(id);
+      }
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),

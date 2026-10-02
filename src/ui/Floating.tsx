@@ -30,7 +30,9 @@ export function Floating() {
     return <Lookout key={overlay.openId} {...overlay} />;
   }
   if (overlay.mode === 'command') {
-    return <CommandBar key={overlay.openId} tabs={tabs} />;
+    return (
+      <CommandBar key={overlay.openId} tabs={tabs} beside={overlay.beside} />
+    );
   }
   if (overlay.mode === 'switcher' && overlay.revealed) {
     return (
@@ -76,7 +78,7 @@ function runResult(result: Result) {
   else window.firn.activateTab(result.tab.id);
 }
 
-function CommandBar({ tabs }: { tabs: TabView[] }) {
+function CommandBar({ tabs, beside }: { tabs: TabView[]; beside?: string }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +117,11 @@ function CommandBar({ tabs }: { tabs: TabView[] }) {
             ref={inputRef}
             className="command-input"
             spellCheck={false}
-            placeholder="Search or enter address"
+            placeholder={
+              beside
+                ? `Open beside “${beside.length > 32 ? `${beside.slice(0, 30)}…` : beside}”`
+                : 'Search or enter address'
+            }
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);

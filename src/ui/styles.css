@@ -956,7 +956,7 @@ button {
    just outside the page. */
 .split-side.is-active {
   box-shadow:
-    0 0 0 2px rgb(var(--space-rgb, 128 128 128) / 0.55),
+    0 0 0 2px rgb(var(--space-rgb, 128 128 128) / 0.9),
     var(--page-shadow);
 }
 

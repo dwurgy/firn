@@ -73,7 +73,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 
 ### Split view
 
-Right-click a tab and choose **Split view with current tab** to see the two side by side, each with its own address and back/forward. Click into a side to work in it (the address bar follows, and a soft ring shows which side it is). Drag the gap between them to resize, or double-click it to even them out. In the sidebar the pair is one row: click either half, or drag the row to move both. Hover it and use the button on the right (or right-click → **Separate split view**) to make them ordinary tabs again; closing one side leaves the other on its own. Split views are saved with your session.
+Right-click the tab you're on and choose **Split view with** to pick another tab to show beside it (or **New tab…** to open something new beside it), or right-click any other tab and choose **Split view with current tab**. The two sit side by side, each with its own address and back/forward. Click into a side to work in it (the address bar follows, and a soft ring shows which side it is). Drag the gap between them to resize, or double-click it to even them out. In the sidebar the pair is one row: click either half, or drag the row to move both. Hover it and use the button on the right (or right-click → **Separate split view**) to make them ordinary tabs again; closing one side leaves the other on its own. Split views are saved with your session.
 
 ### Frosted glass
 

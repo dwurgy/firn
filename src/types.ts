@@ -142,7 +142,9 @@ export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
 export type OverlayState =
   | { mode: 'hidden' }
   // `openId` changes each time it opens, so it always starts fresh.
-  | { mode: 'command'; openId: number }
+  // `beside`: what's picked opens in split view beside this tab (its
+  // title).
+  | { mode: 'command'; openId: number; beside?: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
   // `revealed` turns false-to-true once Ctrl has been held a moment.
   | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean }

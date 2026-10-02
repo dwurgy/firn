@@ -508,6 +508,13 @@ export class TabManager {
     );
   }
 
+  // The tabs that could go beside the active one, in sidebar order.
+  splitCandidates() {
+    return this.shown
+      .filter((id) => this.canSplitWith(id))
+      .map((id) => this.entries.get(id)!.tab);
+  }
+
   // Shows `id` beside the active tab, half and half. In the sidebar the two
   // become one row, where the active tab was.
   splitWith(id: string) {
@@ -659,7 +666,7 @@ export class TabManager {
   // Opens whatever was typed (an address or a search) in a new tab.
   openTyped(input: string) {
     const url = toNavigableUrl(input);
-    if (url) this.create(url);
+    return url ? this.create(url) : undefined;
   }
 
   // Moves a tab to a new position among the tabs of its own group that are

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from './icons';
 
-// The bar that slides down over the top of the page when the mouse reaches
-// the top edge, holding minimize / maximize / close (Windows and Linux).
-// It only covers the page itself; the frame around it belongs to the
-// sidebar's layer, which slides its outline of the page down in step.
-// When to slide away is decided in src/main.ts (it watches the cursor).
+// The window buttons (minimize / maximize / close, Windows and Linux) that
+// appear above the page when the mouse reaches the top edge, while the page
+// glides down to make room. The bar has no background: the frame behind it
+// (frosted glass, where available) shows through. When to go away is
+// decided in src/main.ts (it watches the cursor).
 export function TopBar() {
   const [maximized, setMaximized] = useState(false);
   const [shown, setShown] = useState(false);
@@ -21,11 +21,6 @@ export function TopBar() {
 
   return (
     <div className={`top-bar ${shown ? 'is-shown' : ''}`}>
-      <div className="top-bar-cover">
-        <span className="top-bar-corner is-left" />
-        <span className="top-bar-corner is-right" />
-        <span className="top-bar-edge" />
-      </div>
       {/* Empty bar space is a real title bar (drag, snap to screen edges,
           double-click to maximize). See the drag rules in styles.css. */}
       <div className="top-bar-drag" />

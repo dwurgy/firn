@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { TabView } from '../types';
-import { CloseIcon, GlobeIcon } from './icons';
+import { CloseIcon, GlobeIcon, UnloadIcon } from './icons';
 
 export function TabIcon({ tab }: { tab: TabView }) {
   const [broken, setBroken] = useState<string | null>(null);
@@ -45,13 +45,18 @@ const clamp = (n: number, lo: number, hi: number) =>
 const targetIndex = (drag: Drag, count: number) =>
   clamp(drag.from + Math.round(drag.dy / drag.pitch), 0, count - 1);
 
+// A list of tab rows: a space's everyday tabs, or its pinned tabs (which
+// unload instead of closing, and rest quieter while unloaded).
 export function TabList({
   tabs,
   activeTabId,
+  kind = 'everyday',
 }: {
   tabs: TabView[];
   activeTabId: string | null;
+  kind?: 'everyday' | 'pinned';
 }) {
+  const pinned = kind === 'pinned';
   const [drag, setDrag] = useState<Drag | null>(null);
   // Right after a drop, the moved tab glides from where it was let go into
   // its new slot. First it's drawn at the drop spot with animation off
@@ -154,6 +159,7 @@ export function TabList({
             className={[
               'tab',
               tab.id === activeTabId && 'is-active',
+              pinned && !tab.loaded && 'is-unloaded',
               isDragged && 'is-dragged',
               isSettling && 'is-settling-row',
               isSettling && settle.gliding && 'is-gliding',
@@ -196,19 +202,25 @@ export function TabList({
             onAuxClick={(e) => {
               if (e.button === 1) window.firn.closeTab(tab.id);
             }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              window.firn.showTabMenu(tab.id);
+            }}
           >
             <span className="tab-icon">
               <TabIcon tab={tab} />
             </span>
             <span className="tab-title">{tabTitle(tab)}</span>
-            <button
-              className="tab-close"
-              title="Close tab"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => window.firn.closeTab(tab.id)}
-            >
-              <CloseIcon />
-            </button>
+            {(!pinned || tab.loaded) && (
+              <button
+                className="tab-close"
+                title={pinned ? 'Unload tab' : 'Close tab'}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => window.firn.closeTab(tab.id)}
+              >
+                {pinned ? <UnloadIcon /> : <CloseIcon />}
+              </button>
+            )}
           </li>
         );
       })}

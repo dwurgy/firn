@@ -10,6 +10,8 @@ export interface Space {
   icon: string;
   color: string;
   order: number;
+  // The space's pinned tabs are folded away under its name.
+  pinsFolded?: boolean;
 }
 
 export interface Tab {
@@ -19,6 +21,9 @@ export interface Tab {
   title: string;
   favicon: string;
   pinned: boolean;
+  // In Basecamp: the grid of favorite sites shown in every space (then
+  // `spaceId` is just the space it was added from).
+  basecamp?: boolean;
   homeUrl?: string;
   order: number;
   lastActiveAt: number;
@@ -33,6 +38,33 @@ export interface WindowState {
   sidebarCollapsed: boolean;
 }
 
+// --- The saved session (src/store.ts) ---------------------------------------
+
+// A tab's back/forward history, including each page's scroll position and
+// form contents (Chromium's "page state"), so a restored tab picks up
+// exactly where it was.
+export interface SavedHistory {
+  entries: { url: string; title: string; pageState?: string }[];
+  index: number;
+}
+
+export interface SavedTab extends Tab {
+  history?: SavedHistory;
+}
+
+export interface SavedWindow extends WindowState {
+  bounds?: { x: number; y: number; width: number; height: number };
+  maximized?: boolean;
+}
+
+export interface SavedSession {
+  version: number;
+  spaces: Space[];
+  tabs: SavedTab[];
+  window: SavedWindow;
+  recentlyClosed: string[];
+}
+
 // --- What the UI is told ----------------------------------------------------
 
 // A tab as the sidebar shows it: the saved record plus live status.
@@ -43,11 +75,22 @@ export interface TabView {
   favicon: string;
   isLoading: boolean;
   lastActiveAt: number;
+  pinned: boolean;
+  basecamp: boolean;
+  // False for a tab whose page hasn't loaded yet (restored, or an unloaded
+  // pinned tab).
+  loaded: boolean;
 }
 
 export interface TabsState {
   tabs: TabView[]; // in sidebar order, top to bottom
   activeTabId: string | null;
+}
+
+// The spaces, in order, and which one is shown.
+export interface SpacesState {
+  spaces: Space[];
+  activeSpaceId: string;
 }
 
 // Navigation status of the active tab, for the back/forward/reload buttons.
@@ -66,6 +109,13 @@ export interface SidebarState {
   collapsed: boolean;
   pageLeft: number;
   peeking: boolean;
+}
+
+// Whether the window shows frosted glass, and whether it's in focus (glass
+// turns solid out of focus).
+export interface FrameState {
+  glass: boolean;
+  focused: boolean;
 }
 
 export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
@@ -94,6 +144,18 @@ export interface FirnBridge {
   closeTab(id: string): void;
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
+  showTabMenu(id: string): void;
+  switchSpace(id: string): void;
+  newSpace(): void;
+  updateSpace(
+    id: string,
+    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+  ): void;
+  // Closes the active space's everyday (unpinned) tabs.
+  clearTabs(): void;
+  showSpaceMenu(id: string): void;
+  // A favicon as a data: URL, so the UI can read its colors.
+  iconData(url: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
@@ -103,4 +165,8 @@ export interface FirnBridge {
   onOverlayState(listener: (state: OverlayState) => void): () => void;
   onTopBarState(listener: (shown: boolean) => void): () => void;
   onSidebarState(listener: (state: SidebarState) => void): () => void;
+  onFrameState(listener: (state: FrameState) => void): () => void;
+  onSpacesState(listener: (state: SpacesState) => void): () => void;
+  // The main process asks the sidebar to start renaming a space.
+  onRenameSpace(listener: (id: string) => void): () => void;
 }

@@ -10,10 +10,13 @@
   --top-bar-height: 40px;
   --page-radius: 12px;
   --motion: 200ms ease-out;
+  /* The page's own glides (src/main.ts): an ease-out curve, matched here. */
+  --glide: 200ms cubic-bezier(0.33, 1, 0.68, 1);
 
   /* Light: warm sand neutrals with a soft glacier accent */
   --frame: #e9e3da;
   --frame-glow: rgba(196, 214, 222, 0.55);
+  --frame-glass: rgba(233, 227, 218, 0.4); /* --frame, see-through */
   --page: #fbfaf8;
   --text: #2a2622;
   --text-muted: #6f675f;
@@ -31,9 +34,11 @@
     0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
   --frost-strong: rgba(110, 152, 178, 0.75);
-  --close-hover: #c8564a;
+  --close-hover: #d4392c;
   --backdrop: rgba(60, 45, 30, 0.08);
   --panel-edge: rgba(60, 40, 20, 0.08);
+  --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
+  --pin-edge: 0.45;
 
   color-scheme: light dark;
 }
@@ -43,6 +48,7 @@
     /* Warm mid-grey, not black, so dark pages still read as lifted. */
     --frame: #3a3734;
     --frame-glow: rgba(150, 178, 192, 0.1);
+    --frame-glass: rgba(58, 55, 52, 0.4);
     --page: #2b2826;
     --text: #f0ebe5;
     --text-muted: #c4bcb3;
@@ -54,6 +60,8 @@
     --press: rgba(255, 250, 245, 0.13);
     --tab-active: rgba(255, 250, 245, 0.14);
     --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --pin-wash: 0.24;
+    --pin-edge: 0.6;
     --tab-dragged-shadow:
       0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
     --frost: rgba(160, 196, 214, 0.45);
@@ -94,6 +102,25 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* Frosted glass (Windows 11, macOS): while the window is in focus, the
+   frame is see-through and the system blurs what's behind the window.
+   Out of focus it turns solid again. */
+:root.is-glass:not(.is-inactive) body {
+  background-color: var(--frame-glass);
+}
+
+/* No glow on glass: the backdrop brings its own color, and a soft gradient
+   over it can show faint bands. */
+:root.is-glass body {
+  background-image: none;
+}
+
+/* The page covers this box; on glass it only casts the shadow, so nothing
+   solid peeks out around the page's rounded corners. */
+:root.is-glass .page-area:not(.is-empty) {
+  background: transparent;
+}
+
 /* The layers above the page are see-through. */
 :root[data-view='floating'] body,
 :root[data-view='topbar'] body,
@@ -103,9 +130,13 @@ body,
 
 body {
   /* A faint glacier glow low on the frame. */
-  background:
-    radial-gradient(120% 70% at 0% 100%, var(--frame-glow), transparent 70%),
-    var(--frame);
+  background-color: var(--frame);
+  background-image: radial-gradient(
+    120% 70% at 0% 100%,
+    var(--frame-glow),
+    transparent 70%
+  );
+  transition: background-color var(--motion);
   color: var(--text);
   font-family:
     system-ui,
@@ -293,11 +324,319 @@ button {
   }
 }
 
+/* --- Spaces --------------------------------------------------------------- */
+
+/* Everything that belongs to the active space: its name, pins and tabs.
+   Switching spaces slides it in gently from the side the space is on. */
+.space-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+  animation: space-in var(--motion) both;
+}
+
+@keyframes space-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-from, 0));
+  }
+}
+
+.space-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  margin-top: 12px;
+  padding: 0 6px 0 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: background var(--motion);
+}
+
+.space-header:hover {
+  background: var(--hover);
+}
+
+/* The icon and the fold arrow share one spot; hovering swaps them. */
+.space-header-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.space-header-emoji,
+.space-header-chevron {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition:
+    opacity var(--motion),
+    transform var(--motion);
+}
+
+.space-header-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.space-header-chevron {
+  opacity: 0;
+}
+
+.space-header:hover .space-header-emoji {
+  opacity: 0;
+}
+
+.space-header:hover .space-header-chevron {
+  opacity: 1;
+}
+
+.space-header.is-folded .space-header-chevron {
+  transform: rotate(-90deg);
+}
+
+.space-header-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.space-header-more {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: default;
+  transition:
+    opacity var(--motion),
+    background var(--motion);
+}
+
+.space-header:hover .space-header-more {
+  opacity: 1;
+}
+
+.space-header-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The space's pinned tabs fold up smoothly under its name. */
+.space-pins {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--motion),
+    opacity var(--motion);
+}
+
+.space-pins.is-folded {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.space-pins-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* An unloaded pinned tab (not opened yet, or unloaded) rests quieter. */
+.tab.is-unloaded .tab-icon,
+.tab.is-unloaded .tab-title {
+  opacity: 0.6;
+}
+
+/* Between pinned and everyday tabs: a soft line, and "Clear" for the
+   everyday ones. */
+.space-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  margin: 2px 2px 2px 12px;
+}
+
+.space-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--panel-edge);
+}
+
+.space-clear {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.space-clear:hover {
+  background: var(--hover);
+  color: var(--text-muted);
+}
+
+.space-header-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 1px solid var(--frost);
+  border-radius: 8px;
+  outline: none;
+  background: var(--field-focus);
+  color: var(--text);
+  font: inherit;
+}
+
+/* The row of space icons at the bottom of the sidebar. */
+.space-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 0 2px;
+}
+
+.space-dot {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: default;
+  /* Other spaces sit back a little. */
+  filter: saturate(0.6);
+  opacity: 0.7;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    opacity var(--motion),
+    filter var(--motion);
+}
+
+.space-dot:hover {
+  background: var(--hover);
+  opacity: 1;
+  filter: none;
+}
+
+.space-dot.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+  opacity: 1;
+  filter: none;
+}
+
+.space-add {
+  color: var(--text-muted);
+  filter: none;
+}
+
+.space-dot:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+/* --- Basecamp: favorite sites shown in every space --------------------- */
+
+.basecamp {
+  margin-top: 12px;
+}
+
+.basecamp-grid {
+  display: grid;
+  /* Pins share each row evenly and wrap once tiles would get narrower than
+     this (so 1 pin fills the row, 2 split it, ... about 4 per row at the
+     default sidebar width, more when it's wider). */
+  grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+  gap: 6px;
+}
+
+.basecamp-tile {
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--field);
+  cursor: default;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion);
+}
+
+.basecamp-tile:hover {
+  background: var(--field-hover);
+}
+
+.basecamp-tile.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+}
+
+/* The active pin takes on its icon's color: a soft wash with a fine edge. */
+/* (The wash is an inset shadow over the usual tile so it fades in smoothly.) */
+.basecamp-tile.is-active.is-tinted {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--pin-rgb), var(--pin-edge)),
+    inset 0 0 0 40px rgba(var(--pin-rgb), var(--pin-wash)),
+    0 1px 4px rgba(var(--pin-rgb), 0.16);
+}
+
+.basecamp-tile:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+.basecamp-icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: opacity var(--motion);
+}
+
+.basecamp-icon .tab-favicon {
+  width: 18px;
+  height: 18px;
+}
+
+/* An unloaded pin (not opened yet, or "closed") rests a little quieter. */
+.basecamp-tile.is-unloaded .basecamp-icon {
+  opacity: 0.55;
+}
+
 /* --- Tabs ------------------------------------------------------------------ */
 
 .tabs-section {
-  /* Section spacing from the address bar. */
-  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -431,24 +770,47 @@ button {
   }
 }
 
+/* Long titles run almost to the row's edge and fade out there instead of
+   ending in "...". On hover the fade moves in to make room for the close
+   button. */
+@property --title-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 .tab-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   color: var(--text-muted);
+  --title-fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--title-fade-end) - 24px),
+    transparent calc(100% - var(--title-fade-end))
+  );
+  transition:
+    color var(--motion),
+    --title-fade-end var(--motion);
+}
+
+.tab:hover .tab-title {
+  --title-fade-end: 22px;
 }
 
 .tab.is-active .tab-title {
   color: var(--text);
 }
 
-/* The close button only appears on hover. */
+/* The close button only appears on hover, over the end of the title. */
 .tab-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
   width: 26px;
   height: 26px;
-  margin-right: -7px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -489,7 +851,7 @@ button {
   display: grid;
   place-items: center;
   transition:
-    top var(--motion),
+    top var(--glide),
     background var(--motion);
 }
 
@@ -529,78 +891,18 @@ button {
 
 /* --- Top bar with the window buttons (Windows / Linux) ------------------- */
 
-/* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
-   src/main.ts). It slides down by the same amount, at the same speed, as
-   .page-area below, so the page's rounded top edge and its shadow appear to
-   lower as one piece over the content. */
+/* Lives in its own see-through layer above the page's top edge (as tall as
+   the bar). The page glides down underneath at the same time (see
+   glidePageTop in src/main.ts), and the buttons fade in. */
+/* The buttons seem to sit behind the page all along: the layer is only as
+   tall as the gap above the page's top edge (src/main.ts resizes it in the
+   same step that moves the page), so it uncovers and covers them. */
 .top-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(var(--top-bar-height) + var(--page-radius));
-  transform: translateY(calc(var(--page-inset) - var(--top-bar-height)));
-  transition: transform var(--motion);
-}
-
-.top-bar.is-shown {
-  transform: none;
-}
-
-/* Covers only the page (not the frame beside it): frame colour down to the
-   page's new top edge, rounded cut-outs at the corners, and the same soft
-   shadow the page casts upward. */
-.top-bar-cover {
-  position: absolute;
-  inset: 0 var(--page-inset) 0 0;
-  overflow: hidden;
-}
-
-.top-bar-cover::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   height: var(--top-bar-height);
-  background: var(--frame);
-}
-
-.top-bar-corner {
-  position: absolute;
-  top: var(--top-bar-height);
-  width: var(--page-radius);
-  height: var(--page-radius);
-}
-
-.top-bar-corner.is-left {
-  left: 0;
-  background: radial-gradient(
-    circle at 100% 100%,
-    transparent calc(var(--page-radius) - 0.5px),
-    var(--frame) var(--page-radius)
-  );
-}
-
-.top-bar-corner.is-right {
-  right: 0;
-  background: radial-gradient(
-    circle at 0 100%,
-    transparent calc(var(--page-radius) - 0.5px),
-    var(--frame) var(--page-radius)
-  );
-}
-
-/* An empty outline of the page's top edge casting the page's shadow. Taller
-   than the layer, so only the shadow above the edge is ever seen. */
-.top-bar-edge {
-  position: absolute;
-  top: var(--top-bar-height);
-  left: 0;
-  right: 0;
-  height: 200px;
-  border-radius: var(--page-radius);
-  box-shadow: var(--page-shadow);
 }
 
 /* The bar's empty space: a real title bar while the bar is showing. */
@@ -616,12 +918,6 @@ button {
   position: absolute;
   top: calc((var(--top-bar-height) - 32px) / 2);
   right: var(--page-inset);
-  opacity: 0;
-  transition: opacity var(--motion);
-}
-
-.top-bar.is-shown .button-row {
-  opacity: 1;
 }
 
 /* --- Floating panels: command bar and tab switcher ------------------------- */
@@ -819,35 +1115,4 @@ button {
 
 .peek.is-shown .sidebar {
   transform: none;
-}
-
-/* --- Scrollbars (the tab list), matching the ones Firn gives web pages ---- */
-
-::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-  background: transparent;
-}
-
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-::-webkit-scrollbar-button {
-  display: none;
-}
-
-::-webkit-scrollbar-thumb {
-  background-color: rgba(128, 128, 128, 0.45);
-  border: 3.5px solid transparent;
-  border-radius: 12px;
-  background-clip: padding-box;
-  min-height: 40px;
-}
-
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
-  background-color: rgba(110, 110, 110, 0.7);
-  border-width: 2px;
 }

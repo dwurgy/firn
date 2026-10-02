@@ -95,3 +95,25 @@ export const SidebarIcon = () => (
 
 // Stopping a page load uses the very same mark as closing the window.
 export const StopIcon = CloseIcon;
+
+// A pinned tab's "unload" button (a pin is never closed outright).
+export const UnloadIcon = () => (
+  <svg {...base}>
+    <path d="M4.5 8h7" />
+  </svg>
+);
+
+// Points down while a space's pins are showing, right while folded away.
+export const ChevronIcon = () => (
+  <svg {...base} width={12} height={12}>
+    <path d="M4.5 6.5 8 10l3.5-3.5" />
+  </svg>
+);
+
+export const MoreIcon = () => (
+  <svg {...base} fill="currentColor" stroke="none">
+    <circle cx="4" cy="8" r="1.15" />
+    <circle cx="8" cy="8" r="1.15" />
+    <circle cx="12" cy="8" r="1.15" />
+  </svg>
+);

@@ -2,17 +2,31 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  dialog,
+  Menu,
   nativeTheme,
   screen,
+  session,
   WebContentsView,
   type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type Input,
   type WebContents,
 } from 'electron';
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { TabManager } from './tabs';
-import type { NavCommand, OverlayState, WindowState } from './types';
+import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
+import { BASECAMP_MAX, TabManager } from './tabs';
+import type {
+  FrameState,
+  NavCommand,
+  OverlayState,
+  SavedWindow,
+  Space,
+  WindowState,
+} from './types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -52,10 +66,8 @@ const PAGE_INSET = 8;
 // Matches macOS's window corners.
 const PAGE_RADIUS = 12;
 
-// Hovering the top edge slides a bar with the window buttons down over the
-// top of the page (Windows / Linux). The layer is a little taller than the
-// bar so the bar's soft shadow has room.
-const TOP_BAR_LAYER_HEIGHT = 60;
+// Hovering the top edge lowers the page to make room for a bar with the
+// window buttons above it (Windows / Linux).
 const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
@@ -65,12 +77,23 @@ const TOP_BAR_LINGER_MS = 250;
 const SWITCHER_DELAY_MS = 180;
 
 // Warm neutral frame colors, used before the UI has painted.
+// Frosted glass behind the window: acrylic on Windows 11 (version 22H2,
+// build 22621, and later) and vibrancy on macOS. Elsewhere the frame stays
+// solid. FIRN_NO_GLASS=1 turns it off.
+const GLASS = (() => {
+  if (process.env.FIRN_NO_GLASS) return false;
+  if (process.platform === 'darwin') return true;
+  if (process.platform === 'win32')
+    return Number(os.release().split('.')[2]) >= 22621;
+  return false;
+})();
+
 const FRAME = { light: '#e9e3da', dark: '#3a3734' };
 
 const frameColor = () =>
   nativeTheme.shouldUseDarkColors ? FRAME.dark : FRAME.light;
 
-// Phase 2 has one space; Phase 4 adds the rest.
+// The space a first run starts with.
 const DEFAULT_SPACE_ID = 'space-default';
 
 const NAV_COMMANDS: NavCommand[] = ['back', 'forward', 'reload', 'stop'];
@@ -110,15 +133,126 @@ function lockUi(web: WebContents) {
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
+// Downloads a favicon and returns it as a data: URL (or null). Small images
+// only; anything else is ignored.
+const ICON_MAX_BYTES = 512 * 1024;
+async function iconAsDataUrl(url: string): Promise<string | null> {
+  if (url.startsWith('data:image/')) return url;
+  if (!/^https?:\/\//i.test(url)) return null;
+  try {
+    const response = await session.defaultSession.fetch(url);
+    if (!response.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > ICON_MAX_BYTES) return null;
+    const type = (response.headers.get('content-type') ?? '').split(';')[0];
+    // Some sites send .ico files without an image type; Chromium sniffs it.
+    const mime = type.startsWith('image/') ? type : 'image/x-icon';
+    return `data:${mime};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+// --- Spaces ---------------------------------------------------------------
+
+// Icons to choose from for a space (a new space takes the next unused one).
+const SPACE_ICONS = [
+  '🏠',
+  '💼',
+  '🌿',
+  '📚',
+  '🎨',
+  '🎵',
+  '🎮',
+  '✈️',
+  '☕',
+  '🛒',
+  '💡',
+  '🧪',
+  '🏔️',
+  '🌊',
+  '⭐',
+  '❤️',
+];
+// Each space's theme color (used for its tint in the next step).
+const SPACE_COLORS = [
+  '#c9a27e',
+  '#7f9cb0',
+  '#8fae8b',
+  '#b88a9e',
+  '#c4a95b',
+  '#8e8fb8',
+  '#b07f6a',
+  '#6fa3a0',
+];
+
+const defaultSpaces = (): Space[] => [
+  {
+    id: DEFAULT_SPACE_ID,
+    name: 'Personal',
+    icon: SPACE_ICONS[0],
+    color: SPACE_COLORS[0],
+    order: 0,
+  },
+];
+
+// The saved spaces, if they look right; otherwise the default one. Older
+// sessions saved a space with no icon or color; those get one.
+function usableSpaces(saved: Space[] | undefined): Space[] {
+  const valid = (saved ?? []).filter(
+    (s) => s && typeof s.id === 'string' && typeof s.name === 'string',
+  );
+  if (!valid.length) return defaultSpaces();
+  return valid
+    .sort((a, b) => a.order - b.order)
+    .map((s, i) => ({
+      ...s,
+      icon: s.icon || SPACE_ICONS[i % SPACE_ICONS.length],
+      color: s.color || SPACE_COLORS[i % SPACE_COLORS.length],
+      order: i,
+    }));
+}
+
+// The saved window position, if it's still (mostly) on a connected screen;
+// otherwise Firn opens at its default size, centered.
+function usableBounds(saved: SavedWindow['bounds']) {
+  if (!saved) return undefined;
+  const visible = screen.getAllDisplays().some(({ workArea: a }) => {
+    const overlapX =
+      Math.min(saved.x + saved.width, a.x + a.width) - Math.max(saved.x, a.x);
+    const overlapY =
+      Math.min(saved.y + saved.height, a.y + a.height) - Math.max(saved.y, a.y);
+    return overlapX >= 200 && overlapY >= 100;
+  });
+  return visible ? saved : undefined;
+}
+
 const createWindow = () => {
+  // Bring back the last session, if there is one.
+  const saved = loadSession();
+  const bounds = usableBounds(saved?.window.bounds);
+
   // The window itself hosts Firn's own UI (the sidebar).
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 820,
+    x: bounds?.x,
+    y: bounds?.y,
     minWidth: 640,
     minHeight: 400,
     title: 'Firn',
-    backgroundColor: frameColor(),
+    // With glass, the window is see-through and the UI paints a tinted,
+    // partly transparent frame over the system's blur.
+    backgroundColor: GLASS ? '#00000000' : frameColor(),
+    ...(GLASS && process.platform === 'win32'
+      ? { backgroundMaterial: 'acrylic' as const }
+      : {}),
+    ...(GLASS && process.platform === 'darwin'
+      ? {
+          vibrancy: 'under-window' as const,
+          visualEffectState: 'followWindow' as const,
+        }
+      : {}),
     // Hide the OS title bar. macOS keeps its traffic lights; on Windows and
     // Linux Firn draws its own window buttons, hidden in the top-right corner.
     titleBarStyle: 'hidden',
@@ -126,13 +260,22 @@ const createWindow = () => {
     webPreferences: UI_WEB_PREFERENCES,
   });
 
+  let spaces = usableSpaces(saved?.spaces);
   const windowState: WindowState = {
     id: String(win.id),
-    activeSpaceId: DEFAULT_SPACE_ID,
+    activeSpaceId: spaces.some((s) => s.id === saved?.window.activeSpaceId)
+      ? saved!.window.activeSpaceId
+      : spaces[0].id,
     activeTabId: null,
-    sidebarWidth: SIDEBAR_WIDTH,
-    sidebarCollapsed: false,
+    sidebarWidth: Math.round(
+      Math.max(
+        SIDEBAR_MIN,
+        Math.min(SIDEBAR_MAX, saved?.window.sidebarWidth ?? SIDEBAR_WIDTH),
+      ),
+    ),
+    sidebarCollapsed: saved?.window.sidebarCollapsed ?? false,
   };
+  if (saved?.window.maximized) win.maximize();
 
   // --- Layers above the web page ------------------------------------------
   // Web pages are drawn on top of the sidebar's layer, so anything that has
@@ -241,7 +384,16 @@ const createWindow = () => {
 
   // Where the page starts: the sidebar's width, or just the inset when the
   // sidebar is collapsed. It glides between the two.
-  let pageLeft = SIDEBAR_WIDTH;
+  let pageLeft = windowState.sidebarCollapsed
+    ? PAGE_INSET
+    : windowState.sidebarWidth;
+  // Where the page's top edge is: lower while the top bar shows. While it
+  // glides, the page keeps one size and only moves (resizing every step
+  // makes the site re-fit each time, which looks jumpy); it takes its new
+  // size once, at whichever end of the glide it is taller.
+  let pageTop = PAGE_INSET;
+  let topFrom = PAGE_INSET;
+  let topTo = PAGE_INSET;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -252,11 +404,13 @@ const createWindow = () => {
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
     if (layer === topBar) {
+      // Only as tall as the gap above the page, so the bar's buttons are
+      // revealed and covered exactly as the page's top edge glides.
       return {
         x: pageLeft,
         y: 0,
         width: Math.max(0, width - pageLeft),
-        height: TOP_BAR_LAYER_HEIGHT,
+        height: Math.min(pageTop, TOP_BAR_HEIGHT),
       };
     }
     if (layer === peek) {
@@ -322,11 +476,10 @@ const createWindow = () => {
   };
 
   // --- The top bar with the window buttons -------------------------------
-  // Reaching the frame edge above the page shows a bar that slides down over
-  // the top of the page; the page itself stays where it is.
-
-  // Both the bar and the sidebar layer's outline of the page slide together,
-  // so every edge and shadow moves as one.
+  // Reaching the frame edge above the page glides the page down a little and
+  // shows the window buttons in the space above it. The bar has no
+  // background of its own: the frame (frosted glass, where available) shows
+  // through it, just like around the rest of the page.
   //
   // The bar's empty space moves the window like a title bar. Windows takes
   // over the mouse there, so the bar itself can't tell when the mouse
@@ -335,6 +488,29 @@ const createWindow = () => {
   let topBarHideTimer: ReturnType<typeof setTimeout> | undefined;
   let topBarWatch: ReturnType<typeof setInterval> | undefined;
   let mouseLastOverBar = 0;
+  let topGlide: ReturnType<typeof setInterval> | undefined;
+
+  // Slides the page's top edge, in step with the sidebar layer's outline of
+  // the page (.page-area in styles.css).
+  const glidePageTop = (to: number) => {
+    topFrom = pageTop;
+    topTo = to;
+    const start = Date.now();
+    clearInterval(topGlide);
+    topGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(topGlide);
+      const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out
+      pageTop = Math.round(topFrom + (topTo - topFrom) * eased);
+      if (t === 1) {
+        clearInterval(topGlide);
+        topFrom = topTo;
+      }
+      tabs.layout();
+      if (topBar && shownLayers.has(topBar))
+        topBar.setBounds(boundsFor(topBar));
+    }, 8);
+  };
 
   // The cursor's position relative to the window's content area.
   const cursorInWindow = () => {
@@ -367,6 +543,7 @@ const createWindow = () => {
       clearTimeout(topBarHideTimer);
       showLayer(topBar);
       send('top-bar:state', true);
+      glidePageTop(TOP_BAR_HEIGHT);
       mouseLastOverBar = Date.now();
       topBarWatch = setInterval(() => {
         if (win.isDestroyed()) return;
@@ -378,6 +555,7 @@ const createWindow = () => {
       topBarShown = false;
       clearInterval(topBarWatch);
       send('top-bar:state', false);
+      glidePageTop(PAGE_INSET);
       // Let the slide back up finish before the bar's layer goes away.
       topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
     }
@@ -386,20 +564,23 @@ const createWindow = () => {
   // --- Tabs ---------------------------------------------------------------
 
   const tabs = new TabManager(win, {
-    spaceId: DEFAULT_SPACE_ID,
+    spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
     // The page floats to the right of the sidebar, inset from the edges.
     pageBounds: () => {
       const [width, height] = win.getContentSize();
       return {
         x: pageLeft,
-        y: PAGE_INSET,
+        y: pageTop,
         width: Math.max(0, width - pageLeft - PAGE_INSET),
-        height: Math.max(0, height - PAGE_INSET * 2),
+        // (While gliding, sized for the higher of the two positions; the
+        // part that dips below the window is simply out of sight.)
+        height: Math.max(0, height - Math.min(topFrom, topTo) - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {
       windowState.activeTabId = state.activeTabId;
+      saver.schedule();
       send('tabs:state', state);
     },
     onNavChanged: (state) => {
@@ -458,6 +639,7 @@ const createWindow = () => {
     windowState.sidebarCollapsed = collapsed;
     hidePeek();
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
+    saver.schedule();
   };
 
   const setSidebarWidth = (requested: number) => {
@@ -472,6 +654,7 @@ const createWindow = () => {
     }
     relayout();
     sendSidebar();
+    saver.schedule();
   };
 
   // While collapsed, reaching the left edge slides the sidebar in over the
@@ -551,6 +734,179 @@ const createWindow = () => {
       revealTopBar(true);
     }
   }, EDGE_CHECK_MS);
+
+  // Right-click menu for a tab.
+  const showTabMenu = (id: string) => {
+    const tab = tabs.state().tabs.find((t) => t.id === id);
+    if (!tab) return;
+    const count = tabs.basecampCount;
+    const addToBasecamp: Electron.MenuItemConstructorOptions = {
+      label: `Add to Basecamp  (${count}/${BASECAMP_MAX})`,
+      enabled: count < BASECAMP_MAX,
+      click: () => tabs.addToBasecamp(id),
+    };
+    const others = spaces.filter((s) => s.id !== tabs.activeSpaceId);
+    const moveToSpace: Electron.MenuItemConstructorOptions[] = others.length
+      ? [
+          {
+            label: 'Move to space',
+            submenu: others.map((space) => ({
+              label: `${space.icon}  ${space.name}`,
+              click: () => tabs.moveToSpace(id, space.id),
+            })),
+          },
+        ]
+      : [];
+    const items: Electron.MenuItemConstructorOptions[] = tab.basecamp
+      ? [
+          { label: 'Go back to home', click: () => tabs.goHome(id) },
+          {
+            label: 'Remove from Basecamp',
+            click: () => tabs.removeFromBasecamp(id),
+          },
+          { type: 'separator' },
+          { label: 'Unload tab', click: () => tabs.close(id) },
+        ]
+      : tab.pinned
+        ? [
+            { label: 'Go back to home', click: () => tabs.goHome(id) },
+            {
+              label: 'Unpin tab',
+              accelerator: 'CmdOrCtrl+D',
+              click: () => tabs.unpin(id),
+            },
+            addToBasecamp,
+            ...moveToSpace,
+            { type: 'separator' },
+            { label: 'Unload tab', click: () => tabs.close(id) },
+          ]
+        : [
+            {
+              label: 'Pin tab',
+              accelerator: 'CmdOrCtrl+D',
+              click: () => tabs.pin(id),
+            },
+            addToBasecamp,
+            ...moveToSpace,
+            { type: 'separator' },
+            {
+              label: 'Close tab',
+              accelerator: 'CmdOrCtrl+W',
+              click: () => tabs.close(id),
+            },
+          ];
+    Menu.buildFromTemplate(items).popup({ window: win });
+  };
+
+  // --- Spaces ---------------------------------------------------------------
+
+  const sendSpaces = () =>
+    send('spaces:state', { spaces, activeSpaceId: windowState.activeSpaceId });
+
+  const switchSpace = (id: string) => {
+    if (id === windowState.activeSpaceId) return;
+    if (!spaces.some((s) => s.id === id)) return;
+    windowState.activeSpaceId = id;
+    hideOverlay();
+    tabs.setSpace(id);
+    sendSpaces();
+    saver.schedule();
+  };
+
+  // Asks the visible sidebar to show the space's name as a text field.
+  const startRenameSpace = (id: string) => {
+    const sidebar = peeking ? peek.webContents : win.webContents;
+    sidebar.focus();
+    sidebar.send('spaces:rename', id);
+  };
+
+  const newSpace = () => {
+    const used = new Set(spaces.map((s) => s.icon));
+    const space: Space = {
+      id: randomUUID(),
+      name: 'New space',
+      icon: SPACE_ICONS.find((icon) => !used.has(icon)) ?? SPACE_ICONS[0],
+      color: SPACE_COLORS[spaces.length % SPACE_COLORS.length],
+      order: spaces.length,
+    };
+    spaces = [...spaces, space];
+    switchSpace(space.id);
+    startRenameSpace(space.id);
+  };
+
+  const updateSpace = (
+    id: string,
+    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+  ) => {
+    spaces = spaces.map((s) =>
+      s.id === id
+        ? {
+            ...s,
+            name: changes.name?.trim().slice(0, 40) || s.name,
+            icon: changes.icon ?? s.icon,
+            pinsFolded: changes.pinsFolded ?? s.pinsFolded,
+          }
+        : s,
+    );
+    sendSpaces();
+    saver.schedule();
+  };
+
+  const deleteSpace = async (id: string) => {
+    const space = spaces.find((s) => s.id === id);
+    if (!space || spaces.length < 2) return;
+    const count = tabs.countIn(id);
+    if (count) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['Delete space', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `Delete “${space.name}”?`,
+        detail: `Its ${count} tab${count === 1 ? '' : 's'} will be closed.`,
+      });
+      if (response !== 0) return;
+    }
+    const index = spaces.indexOf(space);
+    if (windowState.activeSpaceId === id)
+      switchSpace(spaces[index === 0 ? 1 : index - 1].id);
+    tabs.closeSpace(id);
+    spaces = spaces
+      .filter((s) => s.id !== id)
+      .map((s, i) => ({ ...s, order: i }));
+    sendSpaces();
+    saver.schedule();
+  };
+
+  // Right-click menu for a space's icon.
+  const showSpaceMenu = (id: string) => {
+    const space = spaces.find((s) => s.id === id);
+    if (!space) return;
+    Menu.buildFromTemplate([
+      {
+        label: 'Rename space',
+        click: () => {
+          switchSpace(id);
+          startRenameSpace(id);
+        },
+      },
+      {
+        label: 'Change icon',
+        submenu: SPACE_ICONS.map((icon) => ({
+          label: icon,
+          type: 'checkbox' as const,
+          checked: icon === space.icon,
+          click: () => updateSpace(id, { icon }),
+        })),
+      },
+      { type: 'separator' },
+      {
+        label: 'Delete space…',
+        enabled: spaces.length > 1,
+        click: () => void deleteSpace(id),
+      },
+    ]).popup({ window: win });
+  };
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
@@ -642,6 +998,30 @@ const createWindow = () => {
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
     },
+    'spaces:switch': (_sender, id) => {
+      if (typeof id === 'string') switchSpace(id);
+    },
+    'spaces:new': () => newSpace(),
+    'spaces:update': (_sender, id, changes) => {
+      if (typeof id !== 'string' || !changes || typeof changes !== 'object')
+        return;
+      const { name, icon, pinsFolded } = changes as Record<string, unknown>;
+      updateSpace(id, {
+        name: typeof name === 'string' ? name : undefined,
+        icon:
+          typeof icon === 'string' && SPACE_ICONS.includes(icon)
+            ? icon
+            : undefined,
+        pinsFolded: typeof pinsFolded === 'boolean' ? pinsFolded : undefined,
+      });
+    },
+    'tabs:clear': () => tabs.clearEveryday(),
+    'spaces:menu': (_sender, id) => {
+      if (typeof id === 'string') showSpaceMenu(id);
+    },
+    'tabs:menu': (_sender, id) => {
+      if (typeof id === 'string') showTabMenu(id);
+    },
     'tabs:move': (_sender, id, toIndex) => {
       if (typeof id === 'string' && Number.isInteger(toIndex))
         tabs.move(id, toIndex as number);
@@ -672,6 +1052,11 @@ const createWindow = () => {
       sender.send('tabs:state', tabs.state());
       sender.send('nav:state', tabs.navState());
       sender.send('window:maximized', win.isMaximized());
+      sender.send('window:frame', frameState());
+      sender.send('spaces:state', {
+        spaces,
+        activeSpaceId: windowState.activeSpaceId,
+      });
       sender.send('overlay:state', overlay);
       sender.send('sidebar:state', {
         width: windowState.sidebarWidth,
@@ -689,6 +1074,23 @@ const createWindow = () => {
     ipcMain.on(channel, listener);
     return [channel, listener] as const;
   });
+
+  // The UI asks for a favicon's bytes so it can pick out the icon's main
+  // color (for tinting the active pin). Fetching here, rather than in the
+  // UI, sidesteps the browser rule that hides other sites' images' pixels.
+  ipcMain.handle('icon:data', (event: IpcMainInvokeEvent, url: unknown) =>
+    uiContents.includes(event.sender) && typeof url === 'string'
+      ? iconAsDataUrl(url)
+      : null,
+  );
+
+  // Glass turns solid while the window is out of focus.
+  const frameState = (): FrameState => ({
+    glass: GLASS,
+    focused: win.isFocused(),
+  });
+  win.on('focus', () => send('window:frame', frameState()));
+  win.on('blur', () => send('window:frame', frameState()));
 
   // Lets the UI swap the maximize icon for a restore icon.
   const sendMaximized = () => send('window:maximized', win.isMaximized());
@@ -728,6 +1130,8 @@ const createWindow = () => {
       endSwitcher(false);
     } else if (mod && input.shift && key === 'd') {
       printDiagnostics();
+    } else if (mod && key === 'd') {
+      if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
     } else if (mod && key === 's') {
       setSidebarCollapsed(!windowState.sidebarCollapsed);
     } else if (mod && key === 'l') {
@@ -738,6 +1142,10 @@ const createWindow = () => {
       openCommandBar();
     } else if (mod && key === 'w') {
       if (tabs.activeTabId) tabs.close(tabs.activeTabId);
+    } else if (mod && input.shift && /^Digit[1-9]$/.test(input.code)) {
+      // Ctrl+Shift+1…9 switch to that space.
+      const space = spaces[Number(input.code.slice(5)) - 1];
+      if (space) switchSpace(space.id);
     } else if (mod && /^[1-9]$/.test(key)) {
       // Ctrl+1…8 jump to that tab; Ctrl+9 always means the last one.
       tabs.activateIndex(key === '9' ? -1 : Number(key) - 1);
@@ -804,17 +1212,41 @@ const createWindow = () => {
 
   // --- Follow the OS light/dark setting ------------------------------------
 
-  const onThemeChange = () => win.setBackgroundColor(frameColor());
+  const onThemeChange = () => {
+    if (!GLASS) win.setBackgroundColor(frameColor());
+  };
   nativeTheme.on('updated', onThemeChange);
 
+  // Save the whole session at once, a moment after anything changes, and
+  // right away when the window closes.
+  const saver = new SaveScheduler(() => {
+    if (win.isDestroyed()) return;
+    saveSession({
+      spaces,
+      tabs: tabs.serialize(),
+      window: {
+        ...windowState,
+        bounds: win.getNormalBounds(),
+        maximized: win.isMaximized(),
+      },
+      recentlyClosed: tabs.closedUrls,
+    });
+  });
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
+    win.on(event as 'resize', () => saver.schedule());
+  win.on('close', () => saver.flush());
+
   win.on('closed', () => {
+    saver.cancel();
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
+    ipcMain.removeHandler('icon:data');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
+    clearInterval(topGlide);
     clearInterval(peekWatch);
     clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);
@@ -830,10 +1262,53 @@ const createWindow = () => {
     .filter((layer) => layer !== null)
     .map((layer) => layer.webContents);
   startUi(win.webContents);
-  tabs.create(HOME_URL);
+
+  // Restore the saved tabs; only the active one loads right away, the rest
+  // load when first shown. A first run (or an empty session) opens the home
+  // page.
+  const savedTabs = (saved?.tabs ?? []).filter(
+    (tab) => typeof tab.url === 'string' && tab.url,
+  );
+  tabs.closedUrls = saved?.recentlyClosed ?? [];
+  // Tabs whose space is gone go to the first space.
+  for (const tab of savedTabs) {
+    if (!spaces.some((s) => s.id === tab.spaceId)) tab.spaceId = spaces[0].id;
+    tabs.create(tab.url, { restore: tab, activate: false });
+  }
+  console.log(
+    savedTabs.length
+      ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`
+      : `[Firn] No saved tabs found (${sessionPath()}); starting fresh.`,
+  );
+  if (savedTabs.length) {
+    // The saved active tab, or the space's most recent one (a space can also
+    // be empty).
+    const inSpace = savedTabs.filter(
+      (t) => t.basecamp || t.spaceId === windowState.activeSpaceId,
+    );
+    const activeId = inSpace.some((t) => t.id === saved?.window.activeTabId)
+      ? saved!.window.activeTabId!
+      : tabs.recentIds()[0];
+    if (activeId) tabs.activate(activeId);
+  } else {
+    tabs.create(HOME_URL);
+  }
 };
 
+// Only one Firn runs at a time. Opening it again brings the existing window
+// forward instead, so two copies can never overwrite each other's session.
+const isFirstInstance = app.requestSingleInstanceLock();
+if (!isFirstInstance) app.quit();
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(() => {
+  if (!isFirstInstance) return;
   createWindow();
 
   // On macOS, re-create a window when the dock icon is clicked and none are open.

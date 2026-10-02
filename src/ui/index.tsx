@@ -18,6 +18,14 @@ const LAYERS: Record<string, () => React.JSX.Element | null> = {
 };
 const Root = LAYERS[view] ?? App;
 
+// Frosted glass behind the main window, solid while it's out of focus.
+if (view === 'main') {
+  window.firn.onFrameState(({ glass, focused }) => {
+    document.documentElement.classList.toggle('is-glass', glass);
+    document.documentElement.classList.toggle('is-inactive', !focused);
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Root />

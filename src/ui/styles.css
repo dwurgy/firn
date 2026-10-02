@@ -16,7 +16,7 @@
   /* Light: warm sand neutrals with a soft glacier accent */
   --frame: #e9e3da;
   --frame-glow: rgba(196, 214, 222, 0.55);
-  --frame-glass: rgba(233, 227, 218, 0.48); /* --frame, see-through */
+  --frame-glass: rgba(233, 227, 218, 0.4); /* --frame, see-through */
   --page: #fbfaf8;
   --text: #2a2622;
   --text-muted: #6f675f;
@@ -34,7 +34,7 @@
     0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
   --frost: rgba(130, 168, 190, 0.45);
   --frost-strong: rgba(110, 152, 178, 0.75);
-  --close-hover: #c8564a;
+  --close-hover: #d4392c;
   --backdrop: rgba(60, 45, 30, 0.08);
   --panel-edge: rgba(60, 40, 20, 0.08);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
@@ -48,7 +48,7 @@
     /* Warm mid-grey, not black, so dark pages still read as lifted. */
     --frame: #3a3734;
     --frame-glow: rgba(150, 178, 192, 0.1);
-    --frame-glass: rgba(58, 55, 52, 0.48);
+    --frame-glass: rgba(58, 55, 52, 0.4);
     --page: #2b2826;
     --text: #f0ebe5;
     --text-muted: #c4bcb3;
@@ -662,18 +662,15 @@ button {
 /* Lives in its own see-through layer above the page's top edge (as tall as
    the bar). The page glides down underneath at the same time (see
    glidePageTop in src/main.ts), and the buttons fade in. */
-/* The buttons seem to sit behind the page all along: the bar only shows
-   what's above the page's top edge, and that edge glides with the page
-   (same timing and easing as glidePageTop). */
+/* The buttons seem to sit behind the page all along: the layer is only as
+   tall as the gap above the page's top edge (src/main.ts resizes it in the
+   same step that moves the page), so it uncovers and covers them. */
 .top-bar {
   position: fixed;
-  inset: 0;
-  clip-path: inset(0 0 calc(var(--top-bar-height) - var(--page-inset)) 0);
-  transition: clip-path var(--glide);
-}
-
-.top-bar.is-shown {
-  clip-path: inset(0);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
 }
 
 /* The bar's empty space: a real title bar while the bar is showing. */

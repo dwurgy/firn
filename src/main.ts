@@ -344,11 +344,13 @@ const createWindow = () => {
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
     if (layer === topBar) {
+      // Only as tall as the gap above the page, so the bar's buttons are
+      // revealed and covered exactly as the page's top edge glides.
       return {
         x: pageLeft,
         y: 0,
         width: Math.max(0, width - pageLeft),
-        height: TOP_BAR_HEIGHT,
+        height: Math.min(pageTop, TOP_BAR_HEIGHT),
       };
     }
     if (layer === peek) {
@@ -445,6 +447,8 @@ const createWindow = () => {
         topFrom = topTo;
       }
       tabs.layout();
+      if (topBar && shownLayers.has(topBar))
+        topBar.setBounds(boundsFor(topBar));
     }, 8);
   };
 

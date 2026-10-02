@@ -31,6 +31,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | New tab (opens the command bar) | Ctrl+T | Cmd+T |
 | Close tab (a pinned tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
+| Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
 | Last-used tab (hold Ctrl and keep tapping Tab for the switcher) | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
 | Jump to tab 1–8 / last tab | Ctrl+1…8 / Ctrl+9 | Cmd+1…8 / Cmd+9 |
@@ -45,7 +46,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/tabs.ts` — the tab manager: the list of tabs and the web page behind each one.
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `PinnedGrid.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `PinnedGrid.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.
 
 ### Your session
@@ -55,6 +56,10 @@ Firn saves your tabs (with their back/forward history and scroll position), the 
 ### Pinned tabs
 
 Pin a tab with **Ctrl+D** or by right-clicking it. Pins sit as tiles at the top of the sidebar and stay there for good. Each pin remembers the address it was pinned at as its *home*: right-click it for **Go back to home** or **Unpin tab**. Closing a pin doesn't remove it; it unloads the page and resets it to home, and the tile shows dimmed until you click it again.
+
+### Spaces
+
+Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Double-click a space's name to rename it, and right-click its icon to rename it, change its icon or delete it. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
 
 ### Frosted glass
 

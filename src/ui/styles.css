@@ -324,10 +324,130 @@ button {
   }
 }
 
+/* --- Spaces --------------------------------------------------------------- */
+
+/* Everything that belongs to the active space: its name, pins and tabs.
+   Switching spaces slides it in gently from the side the space is on. */
+.space-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  animation: space-in var(--motion) both;
+}
+
+@keyframes space-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-from, 0));
+  }
+}
+
+.space-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin-top: 12px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.space-header-icon {
+  width: 16px;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.space-header-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.space-header-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 1px solid var(--frost);
+  border-radius: 8px;
+  outline: none;
+  background: var(--field-focus);
+  color: var(--text);
+  font: inherit;
+}
+
+/* A space without pins: its tabs follow the name closely. */
+.space-header + .tabs-section {
+  margin-top: 0;
+}
+
+/* The row of space icons at the bottom of the sidebar. */
+.space-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 0 2px;
+}
+
+.space-dot {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: default;
+  /* Other spaces sit back a little. */
+  filter: saturate(0.6);
+  opacity: 0.7;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    opacity var(--motion),
+    filter var(--motion);
+}
+
+.space-dot:hover {
+  background: var(--hover);
+  opacity: 1;
+  filter: none;
+}
+
+.space-dot.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+  opacity: 1;
+  filter: none;
+}
+
+.space-add {
+  color: var(--text-muted);
+  filter: none;
+}
+
+.space-dot:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
 /* --- Pinned tabs --------------------------------------------------------- */
 
 .pinned {
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 .pinned-grid {

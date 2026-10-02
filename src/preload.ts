@@ -25,6 +25,10 @@ const bridge: FirnBridge = {
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
   showTabMenu: (id) => ipcRenderer.send('tabs:menu', id),
+  switchSpace: (id) => ipcRenderer.send('spaces:switch', id),
+  newSpace: () => ipcRenderer.send('spaces:new'),
+  updateSpace: (id, changes) => ipcRenderer.send('spaces:update', id, changes),
+  showSpaceMenu: (id) => ipcRenderer.send('spaces:menu', id),
   iconData: (url) => ipcRenderer.invoke('icon:data', url),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),
@@ -36,6 +40,8 @@ const bridge: FirnBridge = {
   onTopBarState: (listener) => listen('top-bar:state', listener),
   onSidebarState: (listener) => listen('sidebar:state', listener),
   onFrameState: (listener) => listen('window:frame', listener),
+  onSpacesState: (listener) => listen('spaces:state', listener),
+  onRenameSpace: (listener) => listen('spaces:rename', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

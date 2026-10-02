@@ -1,6 +1,10 @@
 // Owns the tabs of one window: the tab records (the data model) and the web
 // page view behind each one. Everything that changes tabs goes through here,
 // and every change is reported back so the UI can redraw the sidebar.
+//
+// Tabs from every space live here together; only the active space's tabs
+// are shown, switched between and counted (tabs in other spaces stay as
+// they are in the background).
 
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
@@ -39,6 +43,7 @@ export interface PageBounds {
 }
 
 interface TabManagerOptions {
+  // The space shown first.
   spaceId: string;
   // Where the page sits inside the window (changes with window size).
   pageBounds: () => PageBounds;
@@ -62,13 +67,16 @@ export class TabManager {
   private entries = new Map<string, Entry>();
   private order: string[] = [];
   private activeId: string | null = null;
+  private spaceId: string;
   private recentlyClosed: string[] = [];
   private fullscreen = false;
 
   constructor(
     private win: BrowserWindow,
     private options: TabManagerOptions,
-  ) {}
+  ) {
+    this.spaceId = options.spaceId;
+  }
 
   // --- Reading --------------------------------------------------------------
 
@@ -80,10 +88,28 @@ export class TabManager {
     return this.activeId ? this.entries.get(this.activeId) : undefined;
   }
 
+  get activeSpaceId() {
+    return this.spaceId;
+  }
+
+  // The active space's tabs, in sidebar order.
+  private get shown(): string[] {
+    return this.order.filter(
+      (id) => this.entries.get(id)!.tab.spaceId === this.spaceId,
+    );
+  }
+
+  // How many tabs a space has (for "delete this space?").
+  countIn(spaceId: string) {
+    return this.order.filter(
+      (id) => this.entries.get(id)!.tab.spaceId === spaceId,
+    ).length;
+  }
+
   state(): TabsState {
     return {
       activeTabId: this.activeId,
-      tabs: this.order.map((id) => {
+      tabs: this.shown.map((id) => {
         const { tab, view } = this.entries.get(id)!;
         return {
           id,
@@ -134,7 +160,7 @@ export class TabManager {
     const id = restore?.id ?? randomUUID();
     const tab: Tab = {
       id,
-      spaceId: this.options.spaceId,
+      spaceId: restore?.spaceId ?? this.spaceId,
       url,
       title: restore?.title ?? '',
       favicon: restore?.favicon ?? '',
@@ -168,6 +194,56 @@ export class TabManager {
     if (activate || (!this.activeId && !restore)) this.activate(id);
     else this.emitTabs();
     return id;
+  }
+
+  // --- Spaces ---------------------------------------------------------------
+
+  // Shows another space: its most recently used tab comes back (or an empty
+  // page, if it has no tabs yet).
+  setSpace(spaceId: string) {
+    if (spaceId === this.spaceId) return;
+    this.active?.view.setVisible(false);
+    this.spaceId = spaceId;
+    this.activeId = null;
+    const next = this.recentIds()[0];
+    if (next) {
+      this.activate(next);
+    } else {
+      this.emitTabs();
+      this.emitNav();
+    }
+  }
+
+  // Moves a tab to another space (from its right-click menu). If it was the
+  // tab on screen, the space's next most recent tab takes its place.
+  moveToSpace(id: string, spaceId: string) {
+    const entry = this.entries.get(id);
+    if (!entry || entry.tab.spaceId === spaceId) return;
+    entry.tab.spaceId = spaceId;
+    if (this.activeId === id) {
+      entry.view.setVisible(false);
+      this.activeId = null;
+      const next = this.recentIds()[0];
+      if (next) {
+        this.activate(next);
+        return;
+      }
+      this.emitNav();
+    }
+    this.emitTabs();
+  }
+
+  // Closes every tab in a space (when the space is deleted).
+  closeSpace(spaceId: string) {
+    for (const id of [...this.order]) {
+      const entry = this.entries.get(id)!;
+      if (entry.tab.spaceId !== spaceId) continue;
+      this.order.splice(this.order.indexOf(id), 1);
+      this.entries.delete(id);
+      this.win.contentView.removeChildView(entry.view);
+      entry.view.webContents.close();
+    }
+    this.renumber();
   }
 
   // A fresh, empty page view for a tab, wired up and ready to load.
@@ -310,7 +386,7 @@ export class TabManager {
 
   activate(id: string) {
     const entry = this.entries.get(id);
-    if (!entry) return;
+    if (!entry || entry.tab.spaceId !== this.spaceId) return;
     const previous = this.active;
     this.activeId = id;
     entry.tab.lastActiveAt = Date.now();
@@ -330,8 +406,8 @@ export class TabManager {
       this.unloadPinned(entry);
       return;
     }
-    const index = this.order.indexOf(id);
-    this.order.splice(index, 1);
+    const index = this.shown.indexOf(id);
+    this.order.splice(this.order.indexOf(id), 1);
     this.entries.delete(id);
     if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
     this.recentlyClosed = this.recentlyClosed.slice(-20);
@@ -340,7 +416,8 @@ export class TabManager {
     entry.view.webContents.close();
     this.renumber();
 
-    if (this.order.length === 0) {
+    const shown = this.shown;
+    if (shown.length === 0) {
       this.activeId = null;
       this.emitTabs();
       this.emitNav();
@@ -349,7 +426,7 @@ export class TabManager {
     }
     if (this.activeId === id) {
       // Move to the tab that slid into its place, or the one above.
-      this.activate(this.order[Math.min(index, this.order.length - 1)]);
+      this.activate(shown[Math.min(index, shown.length - 1)]);
     } else {
       this.emitTabs();
     }
@@ -366,7 +443,7 @@ export class TabManager {
   move(id: string, toIndex: number) {
     const entry = this.entries.get(id);
     if (!entry) return;
-    const group = this.order.filter(
+    const group = this.shown.filter(
       (other) => this.entries.get(other)!.tab.pinned === entry.tab.pinned,
     );
     const to = Math.max(0, Math.min(toIndex, group.length - 1));
@@ -388,15 +465,18 @@ export class TabManager {
 
   // Moves to the next (1) or previous (-1) tab, wrapping around.
   cycle(step: 1 | -1) {
-    if (!this.activeId || this.order.length < 2) return;
-    const index = this.order.indexOf(this.activeId);
-    const next = (index + step + this.order.length) % this.order.length;
-    this.activate(this.order[next]);
+    const shown = this.shown;
+    if (!this.activeId || shown.length < 2) return;
+    const index = shown.indexOf(this.activeId);
+    const next = (index + step + shown.length) % shown.length;
+    this.activate(shown[next]);
   }
 
-  // Tab ids from most to least recently used, for Ctrl+Tab.
+  // The active space's tab ids from most to least recently used, for
+  // Ctrl+Tab.
   recentIds(): string[] {
     return [...this.entries.values()]
+      .filter((e) => e.tab.spaceId === this.spaceId)
       .sort((a, b) => b.tab.lastActiveAt - a.tab.lastActiveAt)
       .map((e) => e.tab.id);
   }
@@ -406,7 +486,8 @@ export class TabManager {
   }
 
   activateIndex(index: number) {
-    const id = index < 0 ? this.order.at(-1) : this.order[index];
+    const shown = this.shown;
+    const id = index < 0 ? shown.at(-1) : shown[index];
     if (id) this.activate(id);
   }
 

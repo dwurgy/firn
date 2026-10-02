@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  dialog,
   Menu,
   nativeTheme,
   screen,
@@ -12,6 +13,7 @@ import {
   type Input,
   type WebContents,
 } from 'electron';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
@@ -91,7 +93,7 @@ const FRAME = { light: '#e9e3da', dark: '#3a3734' };
 const frameColor = () =>
   nativeTheme.shouldUseDarkColors ? FRAME.dark : FRAME.light;
 
-// Phase 2 has one space; Phase 4 adds the rest.
+// The space a first run starts with.
 const DEFAULT_SPACE_ID = 'space-default';
 
 const NAV_COMMANDS: NavCommand[] = ['back', 'forward', 'reload', 'stop'];
@@ -151,10 +153,65 @@ async function iconAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-// The default space, saved with the session (Phase 4 adds more).
-const SPACES: Space[] = [
-  { id: DEFAULT_SPACE_ID, name: 'Personal', icon: '', color: '', order: 0 },
+// --- Spaces ---------------------------------------------------------------
+
+// Icons to choose from for a space (a new space takes the next unused one).
+const SPACE_ICONS = [
+  '🏠',
+  '💼',
+  '🌿',
+  '📚',
+  '🎨',
+  '🎵',
+  '🎮',
+  '✈️',
+  '☕',
+  '🛒',
+  '💡',
+  '🧪',
+  '🏔️',
+  '🌊',
+  '⭐',
+  '❤️',
 ];
+// Each space's theme color (used for its tint in the next step).
+const SPACE_COLORS = [
+  '#c9a27e',
+  '#7f9cb0',
+  '#8fae8b',
+  '#b88a9e',
+  '#c4a95b',
+  '#8e8fb8',
+  '#b07f6a',
+  '#6fa3a0',
+];
+
+const defaultSpaces = (): Space[] => [
+  {
+    id: DEFAULT_SPACE_ID,
+    name: 'Personal',
+    icon: SPACE_ICONS[0],
+    color: SPACE_COLORS[0],
+    order: 0,
+  },
+];
+
+// The saved spaces, if they look right; otherwise the default one. Older
+// sessions saved a space with no icon or color; those get one.
+function usableSpaces(saved: Space[] | undefined): Space[] {
+  const valid = (saved ?? []).filter(
+    (s) => s && typeof s.id === 'string' && typeof s.name === 'string',
+  );
+  if (!valid.length) return defaultSpaces();
+  return valid
+    .sort((a, b) => a.order - b.order)
+    .map((s, i) => ({
+      ...s,
+      icon: s.icon || SPACE_ICONS[i % SPACE_ICONS.length],
+      color: s.color || SPACE_COLORS[i % SPACE_COLORS.length],
+      order: i,
+    }));
+}
 
 // The saved window position, if it's still (mostly) on a connected screen;
 // otherwise Firn opens at its default size, centered.
@@ -203,9 +260,12 @@ const createWindow = () => {
     webPreferences: UI_WEB_PREFERENCES,
   });
 
+  let spaces = usableSpaces(saved?.spaces);
   const windowState: WindowState = {
     id: String(win.id),
-    activeSpaceId: DEFAULT_SPACE_ID,
+    activeSpaceId: spaces.some((s) => s.id === saved?.window.activeSpaceId)
+      ? saved!.window.activeSpaceId
+      : spaces[0].id,
     activeTabId: null,
     sidebarWidth: Math.round(
       Math.max(
@@ -504,7 +564,7 @@ const createWindow = () => {
   // --- Tabs ---------------------------------------------------------------
 
   const tabs = new TabManager(win, {
-    spaceId: DEFAULT_SPACE_ID,
+    spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
     // The page floats to the right of the sidebar, inset from the edges.
     pageBounds: () => {
@@ -699,7 +759,126 @@ const createWindow = () => {
             click: () => tabs.close(id),
           },
         ];
+    const others = spaces.filter((s) => s.id !== tabs.activeSpaceId);
+    if (others.length) {
+      items.splice(items.length - 2, 0, {
+        label: 'Move to space',
+        submenu: others.map((space) => ({
+          label: `${space.icon}  ${space.name}`,
+          click: () => tabs.moveToSpace(id, space.id),
+        })),
+      });
+    }
     Menu.buildFromTemplate(items).popup({ window: win });
+  };
+
+  // --- Spaces ---------------------------------------------------------------
+
+  const sendSpaces = () =>
+    send('spaces:state', { spaces, activeSpaceId: windowState.activeSpaceId });
+
+  const switchSpace = (id: string) => {
+    if (id === windowState.activeSpaceId) return;
+    if (!spaces.some((s) => s.id === id)) return;
+    windowState.activeSpaceId = id;
+    hideOverlay();
+    tabs.setSpace(id);
+    sendSpaces();
+    saver.schedule();
+  };
+
+  // Asks the visible sidebar to show the space's name as a text field.
+  const startRenameSpace = (id: string) => {
+    const sidebar = peeking ? peek.webContents : win.webContents;
+    sidebar.focus();
+    sidebar.send('spaces:rename', id);
+  };
+
+  const newSpace = () => {
+    const used = new Set(spaces.map((s) => s.icon));
+    const space: Space = {
+      id: randomUUID(),
+      name: 'New space',
+      icon: SPACE_ICONS.find((icon) => !used.has(icon)) ?? SPACE_ICONS[0],
+      color: SPACE_COLORS[spaces.length % SPACE_COLORS.length],
+      order: spaces.length,
+    };
+    spaces = [...spaces, space];
+    switchSpace(space.id);
+    startRenameSpace(space.id);
+  };
+
+  const updateSpace = (
+    id: string,
+    changes: { name?: string; icon?: string },
+  ) => {
+    spaces = spaces.map((s) =>
+      s.id === id
+        ? {
+            ...s,
+            name: changes.name?.trim().slice(0, 40) || s.name,
+            icon: changes.icon ?? s.icon,
+          }
+        : s,
+    );
+    sendSpaces();
+    saver.schedule();
+  };
+
+  const deleteSpace = async (id: string) => {
+    const space = spaces.find((s) => s.id === id);
+    if (!space || spaces.length < 2) return;
+    const count = tabs.countIn(id);
+    if (count) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['Delete space', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `Delete “${space.name}”?`,
+        detail: `Its ${count} tab${count === 1 ? '' : 's'} will be closed.`,
+      });
+      if (response !== 0) return;
+    }
+    const index = spaces.indexOf(space);
+    if (windowState.activeSpaceId === id)
+      switchSpace(spaces[index === 0 ? 1 : index - 1].id);
+    tabs.closeSpace(id);
+    spaces = spaces
+      .filter((s) => s.id !== id)
+      .map((s, i) => ({ ...s, order: i }));
+    sendSpaces();
+    saver.schedule();
+  };
+
+  // Right-click menu for a space's icon.
+  const showSpaceMenu = (id: string) => {
+    const space = spaces.find((s) => s.id === id);
+    if (!space) return;
+    Menu.buildFromTemplate([
+      {
+        label: 'Rename space',
+        click: () => {
+          switchSpace(id);
+          startRenameSpace(id);
+        },
+      },
+      {
+        label: 'Change icon',
+        submenu: SPACE_ICONS.map((icon) => ({
+          label: icon,
+          type: 'checkbox' as const,
+          checked: icon === space.icon,
+          click: () => updateSpace(id, { icon }),
+        })),
+      },
+      { type: 'separator' },
+      {
+        label: 'Delete space…',
+        enabled: spaces.length > 1,
+        click: () => void deleteSpace(id),
+      },
+    ]).popup({ window: win });
   };
 
   // New tab: a floating bar to search or type an address. Nothing is added
@@ -792,6 +971,25 @@ const createWindow = () => {
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
     },
+    'spaces:switch': (_sender, id) => {
+      if (typeof id === 'string') switchSpace(id);
+    },
+    'spaces:new': () => newSpace(),
+    'spaces:update': (_sender, id, changes) => {
+      if (typeof id !== 'string' || !changes || typeof changes !== 'object')
+        return;
+      const { name, icon } = changes as Record<string, unknown>;
+      updateSpace(id, {
+        name: typeof name === 'string' ? name : undefined,
+        icon:
+          typeof icon === 'string' && SPACE_ICONS.includes(icon)
+            ? icon
+            : undefined,
+      });
+    },
+    'spaces:menu': (_sender, id) => {
+      if (typeof id === 'string') showSpaceMenu(id);
+    },
     'tabs:menu': (_sender, id) => {
       if (typeof id === 'string') showTabMenu(id);
     },
@@ -826,6 +1024,10 @@ const createWindow = () => {
       sender.send('nav:state', tabs.navState());
       sender.send('window:maximized', win.isMaximized());
       sender.send('window:frame', frameState());
+      sender.send('spaces:state', {
+        spaces,
+        activeSpaceId: windowState.activeSpaceId,
+      });
       sender.send('overlay:state', overlay);
       sender.send('sidebar:state', {
         width: windowState.sidebarWidth,
@@ -911,6 +1113,10 @@ const createWindow = () => {
       openCommandBar();
     } else if (mod && key === 'w') {
       if (tabs.activeTabId) tabs.close(tabs.activeTabId);
+    } else if (mod && input.shift && /^Digit[1-9]$/.test(input.code)) {
+      // Ctrl+Shift+1…9 switch to that space.
+      const space = spaces[Number(input.code.slice(5)) - 1];
+      if (space) switchSpace(space.id);
     } else if (mod && /^[1-9]$/.test(key)) {
       // Ctrl+1…8 jump to that tab; Ctrl+9 always means the last one.
       tabs.activateIndex(key === '9' ? -1 : Number(key) - 1);
@@ -987,7 +1193,7 @@ const createWindow = () => {
   const saver = new SaveScheduler(() => {
     if (win.isDestroyed()) return;
     saveSession({
-      spaces: SPACES,
+      spaces,
       tabs: tabs.serialize(),
       window: {
         ...windowState,
@@ -1035,18 +1241,26 @@ const createWindow = () => {
     (tab) => typeof tab.url === 'string' && tab.url,
   );
   tabs.closedUrls = saved?.recentlyClosed ?? [];
-  for (const tab of savedTabs)
+  // Tabs whose space is gone go to the first space.
+  for (const tab of savedTabs) {
+    if (!spaces.some((s) => s.id === tab.spaceId)) tab.spaceId = spaces[0].id;
     tabs.create(tab.url, { restore: tab, activate: false });
+  }
   console.log(
     savedTabs.length
       ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`
       : `[Firn] No saved tabs found (${sessionPath()}); starting fresh.`,
   );
   if (savedTabs.length) {
-    const activeId = savedTabs.some((t) => t.id === saved?.window.activeTabId)
+    // The saved active tab, or the space's most recent one (a space can also
+    // be empty).
+    const inSpace = savedTabs.filter(
+      (t) => t.spaceId === windowState.activeSpaceId,
+    );
+    const activeId = inSpace.some((t) => t.id === saved?.window.activeTabId)
       ? saved!.window.activeTabId!
-      : savedTabs[0].id;
-    tabs.activate(activeId);
+      : tabs.recentIds()[0];
+    if (activeId) tabs.activate(activeId);
   } else {
     tabs.create(HOME_URL);
   }

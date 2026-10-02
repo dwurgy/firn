@@ -5,7 +5,7 @@ const PAGE_INSET = 8; // matches --page-inset in styles.css
 const DEFAULT_WIDTH = 260;
 
 export function App() {
-  const { nav, tabs, sidebar } = useSidebarData();
+  const { nav, tabs, sidebar, spaces } = useSidebarData();
   // The top bar is down: the outline of the page slides down with it.
   const [topBarShown, setTopBarShown] = useState(false);
   const [resizing, setResizing] = useState(false);
@@ -22,7 +22,8 @@ export function App() {
       (sidebar.width - sidebar.pageLeft) / (sidebar.width - PAGE_INSET),
     ),
   );
-  const noTabs = tabs.tabs.length === 0;
+  // Nothing on screen (e.g. a new, empty space).
+  const noTabs = !tabs.activeTabId;
 
   return (
     <div
@@ -43,6 +44,7 @@ export function App() {
       <Sidebar
         nav={nav}
         tabs={tabs}
+        spaces={spaces}
         collapsed={sidebar.collapsed}
         className={away > 0 ? 'is-tucking' : ''}
         style={

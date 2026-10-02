@@ -81,6 +81,12 @@ export interface TabsState {
   activeTabId: string | null;
 }
 
+// The spaces, in order, and which one is shown.
+export interface SpacesState {
+  spaces: Space[];
+  activeSpaceId: string;
+}
+
 // Navigation status of the active tab, for the back/forward/reload buttons.
 export interface NavState {
   url: string;
@@ -133,6 +139,10 @@ export interface FirnBridge {
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
   showTabMenu(id: string): void;
+  switchSpace(id: string): void;
+  newSpace(): void;
+  updateSpace(id: string, changes: { name?: string; icon?: string }): void;
+  showSpaceMenu(id: string): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
@@ -145,4 +155,7 @@ export interface FirnBridge {
   onTopBarState(listener: (shown: boolean) => void): () => void;
   onSidebarState(listener: (state: SidebarState) => void): () => void;
   onFrameState(listener: (state: FrameState) => void): () => void;
+  onSpacesState(listener: (state: SpacesState) => void): () => void;
+  // The main process asks the sidebar to start renaming a space.
+  onRenameSpace(listener: (id: string) => void): () => void;
 }

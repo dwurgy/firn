@@ -632,13 +632,24 @@ button {
   box-shadow: var(--tab-active-shadow);
 }
 
-/* The active pin takes on its icon's color: a soft wash with a fine edge. */
-/* (The wash is an inset shadow over the usual tile so it fades in smoothly.) */
+/* The active tile takes on its icon's color: a soft wash with a fine edge.
+   (The wash is an inset shadow over the usual tile so it fades in
+   smoothly.) */
 .basecamp-tile.is-active.is-tinted {
   box-shadow:
     inset 0 0 0 1px rgba(var(--pin-rgb), var(--pin-edge)),
     inset 0 0 0 40px rgba(var(--pin-rgb), var(--pin-wash)),
     0 1px 4px rgba(var(--pin-rgb), 0.16);
+}
+
+/* Icons with no color of their own (black, white or gray, like GitHub's)
+   glow in the space's color instead, a little stronger since the space's
+   color is already in the frame around them. */
+.basecamp-tile.is-active:not(.is-tinted) {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--space-rgb, 128 128 128) / 0.75),
+    inset 0 0 0 40px rgb(var(--space-rgb, 128 128 128) / 0.24),
+    0 1px 4px rgb(var(--space-rgb, 128 128 128) / 0.2);
 }
 
 .basecamp-tile:focus-visible {

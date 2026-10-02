@@ -838,11 +838,18 @@ const createWindow = () => {
 
   // Slides the page's left edge (and the sidebar with it) to a new spot.
   // Each step is sent to the UI too, so the sidebar moves in step with the
-  // page.
+  // page. Like glidePageTop, the site's layout is held at the wider of the
+  // two sizes for the glide, so it re-fits once at the end instead of on
+  // every step.
   const glidePageLeft = (to: number) => {
     const from = pageLeft;
     const start = Date.now();
     clearInterval(glide);
+    const [contentWidth] = win.getContentSize();
+    tabs.holdLayout({
+      width: Math.max(0, contentWidth - Math.min(from, to) - PAGE_INSET),
+      height: tabs.pageBoundsFor(pageTop).height,
+    });
     glide = setInterval(() => {
       if (win.isDestroyed()) return clearInterval(glide);
       const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
@@ -850,7 +857,10 @@ const createWindow = () => {
       pageLeft = Math.round(from + (to - from) * eased);
       relayout();
       sendSidebar();
-      if (t === 1) clearInterval(glide);
+      if (t === 1) {
+        clearInterval(glide);
+        tabs.holdLayout(null);
+      }
     }, 16);
   };
 
@@ -870,6 +880,7 @@ const createWindow = () => {
     windowState.sidebarWidth = width;
     if (!windowState.sidebarCollapsed) {
       clearInterval(glide);
+      tabs.holdLayout(null);
       pageLeft = width;
     }
     relayout();

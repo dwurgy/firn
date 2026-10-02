@@ -99,6 +99,13 @@ export interface SidebarState {
   peeking: boolean;
 }
 
+// Whether the window shows frosted glass, and whether it's in focus (glass
+// turns solid out of focus).
+export interface FrameState {
+  glass: boolean;
+  focused: boolean;
+}
+
 export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
@@ -137,4 +144,5 @@ export interface FirnBridge {
   onOverlayState(listener: (state: OverlayState) => void): () => void;
   onTopBarState(listener: (shown: boolean) => void): () => void;
   onSidebarState(listener: (state: SidebarState) => void): () => void;
+  onFrameState(listener: (state: FrameState) => void): () => void;
 }

@@ -12,11 +12,13 @@ import {
   type Input,
   type WebContents,
 } from 'electron';
+import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import { TabManager } from './tabs';
 import type {
+  FrameState,
   NavCommand,
   OverlayState,
   SavedWindow,
@@ -75,6 +77,17 @@ const TOP_BAR_LINGER_MS = 250;
 const SWITCHER_DELAY_MS = 180;
 
 // Warm neutral frame colors, used before the UI has painted.
+// Frosted glass behind the window: acrylic on Windows 11 (version 22H2,
+// build 22621, and later) and vibrancy on macOS. Elsewhere the frame stays
+// solid. FIRN_NO_GLASS=1 turns it off.
+const GLASS = (() => {
+  if (process.env.FIRN_NO_GLASS) return false;
+  if (process.platform === 'darwin') return true;
+  if (process.platform === 'win32')
+    return Number(os.release().split('.')[2]) >= 22621;
+  return false;
+})();
+
 const FRAME = { light: '#e9e3da', dark: '#3a3734' };
 
 const frameColor = () =>
@@ -173,7 +186,18 @@ const createWindow = () => {
     minWidth: 640,
     minHeight: 400,
     title: 'Firn',
-    backgroundColor: frameColor(),
+    // With glass, the window is see-through and the UI paints a tinted,
+    // partly transparent frame over the system's blur.
+    backgroundColor: GLASS ? '#00000000' : frameColor(),
+    ...(GLASS && process.platform === 'win32'
+      ? { backgroundMaterial: 'acrylic' as const }
+      : {}),
+    ...(GLASS && process.platform === 'darwin'
+      ? {
+          vibrancy: 'under-window' as const,
+          visualEffectState: 'followWindow' as const,
+        }
+      : {}),
     // Hide the OS title bar. macOS keeps its traffic lights; on Windows and
     // Linux Firn draws its own window buttons, hidden in the top-right corner.
     titleBarStyle: 'hidden',
@@ -768,6 +792,7 @@ const createWindow = () => {
       sender.send('tabs:state', tabs.state());
       sender.send('nav:state', tabs.navState());
       sender.send('window:maximized', win.isMaximized());
+      sender.send('window:frame', frameState());
       sender.send('overlay:state', overlay);
       sender.send('sidebar:state', {
         width: windowState.sidebarWidth,
@@ -794,6 +819,14 @@ const createWindow = () => {
       ? iconAsDataUrl(url)
       : null,
   );
+
+  // Glass turns solid while the window is out of focus.
+  const frameState = (): FrameState => ({
+    glass: GLASS,
+    focused: win.isFocused(),
+  });
+  win.on('focus', () => send('window:frame', frameState()));
+  win.on('blur', () => send('window:frame', frameState()));
 
   // Lets the UI swap the maximize icon for a restore icon.
   const sendMaximized = () => send('window:maximized', win.isMaximized());
@@ -911,7 +944,9 @@ const createWindow = () => {
 
   // --- Follow the OS light/dark setting ------------------------------------
 
-  const onThemeChange = () => win.setBackgroundColor(frameColor());
+  const onThemeChange = () => {
+    if (!GLASS) win.setBackgroundColor(frameColor());
+  };
   nativeTheme.on('updated', onThemeChange);
 
   // Save the whole session at once, a moment after anything changes, and

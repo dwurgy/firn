@@ -56,7 +56,12 @@ Firn saves your tabs (with their back/forward history and scroll position), the 
 
 Pin a tab with **Ctrl+D** or by right-clicking it. Pins sit as tiles at the top of the sidebar and stay there for good. Each pin remembers the address it was pinned at as its *home*: right-click it for **Go back to home** or **Unpin tab**. Closing a pin doesn't remove it; it unloads the page and resets it to home, and the tile shows dimmed until you click it again.
 
+### Frosted glass
+
+On Windows 11 (22H2 or later) and macOS, the frame around the page is frosted glass while Firn is in focus: the colors behind the window softly show through. When you switch to another app it turns solid. To turn it off, start Firn with `FIRN_NO_GLASS=1` (in PowerShell: `$env:FIRN_NO_GLASS=1; npm start`).
+
 ### If something misbehaves
 
 - **Ctrl+Shift+D** prints a snapshot of the window's layers, the cursor and the screen to the terminal.
+- If the window ever shows black or flickers behind the sidebar, try turning frosted glass off (above) and tell Claude.
 - To log what the layers do as you use Firn, start it with debug logging. In PowerShell: `$env:FIRN_DEBUG=1; npm start` (close and reopen PowerShell to turn it off again).

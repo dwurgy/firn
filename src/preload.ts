@@ -35,6 +35,7 @@ const bridge: FirnBridge = {
   onOverlayState: (listener) => listen('overlay:state', listener),
   onTopBarState: (listener) => listen('top-bar:state', listener),
   onSidebarState: (listener) => listen('sidebar:state', listener),
+  onFrameState: (listener) => listen('window:frame', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

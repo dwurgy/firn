@@ -14,6 +14,7 @@
   /* Light: warm sand neutrals with a soft glacier accent */
   --frame: #e9e3da;
   --frame-glow: rgba(196, 214, 222, 0.55);
+  --frame-glass: rgba(233, 227, 218, 0.62); /* --frame, see-through */
   --page: #fbfaf8;
   --text: #2a2622;
   --text-muted: #6f675f;
@@ -45,6 +46,7 @@
     /* Warm mid-grey, not black, so dark pages still read as lifted. */
     --frame: #3a3734;
     --frame-glow: rgba(150, 178, 192, 0.1);
+    --frame-glass: rgba(58, 55, 52, 0.62);
     --page: #2b2826;
     --text: #f0ebe5;
     --text-muted: #c4bcb3;
@@ -98,6 +100,13 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* Frosted glass (Windows 11, macOS): while the window is in focus, the
+   frame is see-through and the system blurs what's behind the window.
+   Out of focus it turns solid again. */
+:root.is-glass:not(.is-inactive) body {
+  background-color: var(--frame-glass);
+}
+
 /* The layers above the page are see-through. */
 :root[data-view='floating'] body,
 :root[data-view='topbar'] body,
@@ -107,9 +116,13 @@ body,
 
 body {
   /* A faint glacier glow low on the frame. */
-  background:
-    radial-gradient(120% 70% at 0% 100%, var(--frame-glow), transparent 70%),
-    var(--frame);
+  background-color: var(--frame);
+  background-image: radial-gradient(
+    120% 70% at 0% 100%,
+    var(--frame-glow),
+    transparent 70%
+  );
+  transition: background-color var(--motion);
   color: var(--text);
   font-family:
     system-ui,
@@ -511,24 +524,47 @@ button {
   }
 }
 
+/* Long titles run almost to the row's edge and fade out there instead of
+   ending in "...". On hover the fade moves in to make room for the close
+   button. */
+@property --title-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 .tab-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   color: var(--text-muted);
+  --title-fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--title-fade-end) - 24px),
+    transparent calc(100% - var(--title-fade-end))
+  );
+  transition:
+    color var(--motion),
+    --title-fade-end var(--motion);
+}
+
+.tab:hover .tab-title {
+  --title-fade-end: 22px;
 }
 
 .tab.is-active .tab-title {
   color: var(--text);
 }
 
-/* The close button only appears on hover. */
+/* The close button only appears on hover, over the end of the title. */
 .tab-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
   width: 26px;
   height: 26px;
-  margin-right: -7px;
   display: grid;
   place-items: center;
   flex-shrink: 0;

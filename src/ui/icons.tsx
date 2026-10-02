@@ -103,6 +103,13 @@ export const ClearDownIcon = () => (
   </svg>
 );
 
+// Glance's "Open as tab": two corners pulling outward.
+export const ExpandIcon = () => (
+  <svg {...base}>
+    <path d="M9.5 3.5h3v3M12.5 3.5 9 7M6.5 12.5h-3v-3M3.5 12.5 7 9" />
+  </svg>
+);
+
 // A pinned tab's "unload" button (a pin is never closed outright).
 export const UnloadIcon = () => (
   <svg {...base}>

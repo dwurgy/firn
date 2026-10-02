@@ -36,6 +36,9 @@
   --frost-strong: rgba(110, 152, 178, 0.75);
   --close-hover: #d4392c;
   --backdrop: rgba(60, 45, 30, 0.08);
+  --glance-dim: rgba(45, 34, 24, 0.26); /* the page behind Glance */
+  --glance-shadow:
+    0 2px 8px rgba(40, 28, 16, 0.14), 0 18px 48px rgba(40, 28, 16, 0.22);
   --panel-edge: rgba(60, 40, 20, 0.08);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
   --space-wash: 0.16; /* how strongly the space's color tints the frame */
@@ -70,6 +73,9 @@
     --frost-strong: rgba(176, 208, 224, 0.8);
     --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
     --backdrop: rgba(0, 0, 0, 0.18);
+    --glance-dim: rgba(0, 0, 0, 0.42);
+    --glance-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
     --panel-edge: rgba(255, 250, 245, 0.08);
   }
 }
@@ -1146,4 +1152,103 @@ button {
 
 .peek.is-shown .sidebar {
   transform: none;
+}
+
+/* --- Glance: a link previewed over the page -------------------------------- */
+
+.glance {
+  position: fixed;
+  inset: 0;
+}
+
+/* The page behind, dimmed (only the page, not the sidebar). */
+.glance-backdrop {
+  position: absolute;
+  border-radius: var(--page-radius);
+  background: var(--glance-dim);
+  animation: glance-fade-in var(--glide) both;
+}
+
+/* A stand-in for the preview that scales in; the real page appears on top
+   of it once it has, and its soft shadow stays around the page. */
+.glance-panel {
+  position: absolute;
+  border-radius: 14px;
+  background: var(--page);
+  box-shadow: var(--glance-shadow);
+  animation: glance-in var(--glide) both;
+}
+
+/* Close and "Open as tab", beside the panel's top-right corner. */
+.glance-actions {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: glance-fade-in var(--glide) both;
+}
+
+.glance-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--page);
+  color: var(--text-muted);
+  box-shadow: 0 1px 3px rgba(40, 28, 16, 0.18);
+  cursor: default;
+  transition:
+    color var(--motion),
+    background var(--motion);
+}
+
+.glance-button:hover {
+  color: var(--text);
+  background: var(--field-focus);
+}
+
+/* Closing: everything fades away gently. */
+.glance.is-closing .glance-backdrop,
+.glance.is-closing .glance-actions,
+.glance.is-expanding .glance-backdrop,
+.glance.is-expanding .glance-actions {
+  animation: glance-fade-out var(--glide) both;
+}
+
+.glance.is-closing .glance-panel {
+  animation: glance-out var(--glide) both;
+}
+
+/* Opening as a tab: the page itself grows into place. */
+.glance.is-expanding .glance-panel {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes glance-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes glance-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes glance-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes glance-fade-out {
+  to {
+    opacity: 0;
+  }
 }

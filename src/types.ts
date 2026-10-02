@@ -129,7 +129,23 @@ export type OverlayState =
   | { mode: 'command'; openId: number }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
   // `revealed` turns false-to-true once Ctrl has been held a moment.
-  | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean };
+  | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean }
+  // Glance: a link previewed in a panel over the page. `area` is the page's
+  // box and `panel` the preview's, both in window coordinates.
+  | {
+      mode: 'glance';
+      openId: number;
+      phase: 'open' | 'closing' | 'expanding';
+      area: Rect;
+      panel: Rect;
+    };
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 // The narrow API the preload script exposes to Firn's UI as `window.firn`.
 export interface FirnBridge {
@@ -139,6 +155,8 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
+  // Glance's "Open as tab".
+  expandGlance(): void;
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;

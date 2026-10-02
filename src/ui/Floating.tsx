@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isSearch, toNavigableUrl } from '../url';
-import type { OverlayState, TabView } from '../types';
+import type { OverlayState, Rect, TabView } from '../types';
 import { TabIcon, tabTitle } from './TabList';
-import { ArrowIcon, GlobeIcon, SearchIcon } from './icons';
+import {
+  ArrowIcon,
+  CloseIcon,
+  ExpandIcon,
+  GlobeIcon,
+  SearchIcon,
+} from './icons';
 
-// The layer that floats above the web page: the command bar (new tab) and
-// the Ctrl+Tab switcher. It's transparent unless one of them is open.
+// The layer that floats above the web page: the command bar (new tab), the
+// Ctrl+Tab switcher and Glance's backdrop and buttons. It's transparent
+// unless one of them is open.
 export function Floating() {
   const [overlay, setOverlay] = useState<OverlayState>({ mode: 'hidden' });
   const [tabs, setTabs] = useState<TabView[]>([]);
@@ -19,6 +26,9 @@ export function Floating() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  if (overlay.mode === 'glance') {
+    return <Glance key={overlay.openId} {...overlay} />;
+  }
   if (overlay.mode === 'command') {
     return <CommandBar key={overlay.openId} tabs={tabs} />;
   }
@@ -197,6 +207,59 @@ function Switcher({
             </li>
           ))}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+// --- Glance -----------------------------------------------------------------
+
+// Around a link previewed in Glance: the page dimmed behind it, a stand-in
+// panel that scales in (the real page appears on top of it once it has),
+// and the buttons beside the panel. Clicking anywhere outside closes it.
+function Glance({
+  phase,
+  area,
+  panel,
+}: {
+  phase: 'open' | 'closing' | 'expanding';
+  area: Rect;
+  panel: Rect;
+}) {
+  const box = (r: Rect) => ({
+    left: r.x,
+    top: r.y,
+    width: r.width,
+    height: r.height,
+  });
+  return (
+    <div
+      className={`glance is-${phase}`}
+      onPointerDown={(e) => {
+        if (!(e.target as HTMLElement).closest('.glance-actions'))
+          window.firn.closeOverlay();
+      }}
+    >
+      <div className="glance-backdrop" style={box(area)} />
+      <div className="glance-panel" style={box(panel)} />
+      <div
+        className="glance-actions"
+        style={{ left: panel.x + panel.width + 10, top: panel.y }}
+      >
+        <button
+          className="glance-button"
+          title="Close (Esc)"
+          onClick={() => window.firn.closeOverlay()}
+        >
+          <CloseIcon />
+        </button>
+        <button
+          className="glance-button"
+          title="Open as tab"
+          onClick={() => window.firn.expandGlance()}
+        >
+          <ExpandIcon />
+        </button>
       </div>
     </div>
   );

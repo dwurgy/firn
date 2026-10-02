@@ -19,6 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
+import type { Page } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
@@ -457,10 +458,20 @@ const createWindow = () => {
   // Stacking order, bottom to top.
   const layerOrder = [peek, topBar, floating];
 
+  // Glance: a link previewed in a floating panel over the page (see the
+  // Glance section below). Its page floats above every layer.
+  let glance: {
+    page: Page;
+    favicon: string;
+    openId: number;
+    shown: boolean;
+  } | null = null;
+
   // New tabs are added on top, so lift any shown layer back above them.
   const raiseLayers = () => {
     for (const layer of layerOrder)
       if (layer && shownLayers.has(layer)) win.contentView.addChildView(layer);
+    if (glance?.shown) glance.page.raise();
   };
 
   // Returns false (and shows nothing) if the panel hasn't started yet, so a
@@ -490,13 +501,17 @@ const createWindow = () => {
 
   const showOverlay = (state: OverlayState) => {
     if (!readyUi.has(floating.webContents)) return false;
+    // Something else (the command bar, the switcher) replaces Glance.
+    if (state.mode !== 'glance') dropGlance();
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
-    if (state.mode !== 'hidden') floating.webContents.focus();
+    if (state.mode !== 'hidden' && state.mode !== 'glance')
+      floating.webContents.focus();
     return true;
   };
   const hideOverlay = () => {
+    if (overlay.mode === 'glance') return closeGlance();
     if (overlay.mode === 'hidden') return;
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
@@ -626,13 +641,159 @@ const createWindow = () => {
       send('nav:state', state);
     },
     onEmpty: () => openCommandBar(),
+    onGlance: (url) => openGlance(url),
   });
 
   const relayout = () => {
     tabs.layout();
     layoutLayers();
+    layoutGlance();
   };
   win.on('resize', relayout);
+
+  // --- Glance -----------------------------------------------------------------
+  // Shift+clicking a link previews it in a rounded panel floating over the
+  // page, with the page dimmed behind it. Esc or a click outside closes it;
+  // "Open as tab" grows the panel into the page and keeps it as a tab.
+  //
+  // The floating layer draws the dimmed backdrop, a stand-in panel that
+  // scales in, and the buttons beside it; the real page appears on top of
+  // the stand-in once it has scaled in.
+
+  const GLANCE_RADIUS = 14; // matches the panel radius in styles.css
+  let glanceTimer: ReturnType<typeof setTimeout> | undefined;
+  let glanceGlide: ReturnType<typeof setInterval> | undefined;
+
+  // The page's area, and the panel centered within it.
+  const glanceArea = () => tabs.pageBoundsFor(pageTop);
+  const glancePanel = () => {
+    const area = glanceArea();
+    const marginX = Math.max(56, Math.round(area.width * 0.08));
+    const marginY = 24;
+    return {
+      x: area.x + marginX,
+      y: area.y + marginY,
+      width: Math.max(0, area.width - marginX * 2),
+      height: Math.max(0, area.height - marginY * 2),
+    };
+  };
+
+  const sendGlance = (phase: 'open' | 'closing' | 'expanding') => {
+    if (!glance && phase === 'open') return;
+    const openId =
+      glance?.openId ?? (overlay.mode === 'glance' ? overlay.openId : 0);
+    showOverlay({
+      mode: 'glance',
+      openId,
+      phase,
+      area: glanceArea(),
+      panel: glancePanel(),
+    });
+  };
+
+  const openGlance = (url: string) => {
+    // Already open: show the new link in the same panel.
+    if (glance) {
+      glance.page.load(url);
+      return;
+    }
+    if (overlay.mode !== 'hidden') hideOverlay();
+    const page = engine.createPage({
+      onUpdate: () => {},
+      onFavicon: (icon) => {
+        if (glance?.page === page) glance.favicon = icon;
+      },
+      onNavigationStart: () => {},
+      // Links in the preview that ask for a new tab open one quietly.
+      onOpenTab: (link) => void tabs.create(link, { activate: false }),
+      onGlance: (link) => page.load(link),
+      onFullscreen: () => {},
+    });
+    glance = { page, favicon: '', openId: ++commandOpenId, shown: false };
+    page.load(url);
+    page.place(glancePanel(), GLANCE_RADIUS);
+    sendGlance('open');
+    // Show the page once the stand-in panel has scaled in.
+    clearTimeout(glanceTimer);
+    glanceTimer = setTimeout(() => {
+      if (glance?.page !== page) return;
+      glance.shown = true;
+      page.show();
+      page.raise();
+      page.focus();
+    }, GLIDE_MS);
+  };
+
+  // Closes Glance at once (something else is taking its place).
+  const dropGlance = () => {
+    if (!glance) return;
+    clearTimeout(glanceTimer);
+    glance.page.destroy();
+    glance = null;
+  };
+
+  // Closes Glance gently: the page goes, the stand-in panel and backdrop
+  // fade away.
+  const closeGlance = () => {
+    if (!glance) return;
+    dropGlance();
+    sendGlance('closing');
+    clearTimeout(glanceTimer);
+    glanceTimer = setTimeout(() => {
+      if (overlay.mode !== 'glance' || overlay.phase !== 'closing') return;
+      overlay = { mode: 'hidden' };
+      send('overlay:state', overlay);
+      hideLayer(floating);
+    }, GLIDE_MS);
+    tabs.focusActive();
+  };
+
+  // "Open as tab": the panel grows into the page, then becomes a tab.
+  const expandGlance = () => {
+    if (!glance) return;
+    const { page, favicon } = glance;
+    clearTimeout(glanceTimer);
+    glance = null;
+    sendGlance('expanding');
+    page.show();
+    page.raise();
+    const from = glancePanel();
+    const to = glanceArea();
+    // Lay the page out at its final size right away, so it doesn't re-fit
+    // on every step of the glide.
+    page.holdLayout({ width: to.width, height: to.height });
+    const start = Date.now();
+    clearInterval(glanceGlide);
+    glanceGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(glanceGlide);
+      const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
+      const e = 1 - Math.pow(1 - t, 3); // ease-out
+      const mix = (a: number, b: number) => Math.round(a + (b - a) * e);
+      page.place(
+        {
+          x: mix(from.x, to.x),
+          y: mix(from.y, to.y),
+          width: mix(from.width, to.width),
+          height: mix(from.height, to.height),
+        },
+        mix(GLANCE_RADIUS, PAGE_RADIUS),
+      );
+      if (t < 1) return;
+      clearInterval(glanceGlide);
+      page.holdLayout(null);
+      overlay = { mode: 'hidden' };
+      send('overlay:state', overlay);
+      hideLayer(floating);
+      tabs.adopt(page, favicon);
+    }, 8);
+  };
+
+  // Keeps the panel centered when the window changes size.
+  const layoutGlance = () => {
+    if (!glance || overlay.mode !== 'glance') return;
+    glance.page.place(glancePanel(), GLANCE_RADIUS);
+    sendGlance('open');
+  };
 
   // --- Sidebar: resize, collapse, peek -------------------------------------
 
@@ -1116,6 +1277,7 @@ const createWindow = () => {
       hideOverlay();
       tabs.activate(id);
     },
+    'glance:expand': () => expandGlance(),
     'overlay:close': () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
@@ -1210,6 +1372,8 @@ const createWindow = () => {
       // Blocking a key here also hides the matching key release from that
       // same view, so let the switcher layer keep its own key events.
       if (source === floating.webContents) handled = false;
+    } else if (glance && key === 'escape') {
+      closeGlance();
     } else if (switcher && key === 'escape') {
       endSwitcher(false);
     } else if (mod && input.shift && key === 'd') {
@@ -1331,6 +1495,8 @@ const createWindow = () => {
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
     clearInterval(topGlide);
+    clearTimeout(glanceTimer);
+    clearInterval(glanceGlide);
     clearInterval(peekWatch);
     clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);

@@ -13,7 +13,7 @@
 // then everyday tabs.
 
 import { randomUUID } from 'node:crypto';
-import type { Page, PageBounds, PageEngine } from './engine/engine';
+import type { Page, PageBounds, PageEngine, PageEvents } from './engine/engine';
 import { toNavigableUrl } from './url';
 import type {
   NavCommand,
@@ -57,6 +57,8 @@ interface TabManagerOptions {
   onNavChanged: (state: NavState) => void;
   // The last tab was closed.
   onEmpty: () => void;
+  // A link was Shift+clicked: preview it in Glance.
+  onGlance: (url: string) => void;
 }
 
 export class TabManager {
@@ -670,13 +672,23 @@ export class TabManager {
 
   // A fresh, empty page for a tab, kept in step with the tab's record.
   private makePage(id: string): Page {
-    const entryOf = () => this.entries.get(id);
-    const page = this.engine.createPage({
+    let page: Page | null = null;
+    page = this.engine.createPage(this.eventsFor(id, () => page));
+    return page;
+  }
+
+  // Keeps a tab's record in step with its page.
+  private eventsFor(id: string, pageOf: () => Page | null): PageEvents {
+    const entryOf = () => {
+      const entry = this.entries.get(id);
+      return entry && entry.page === pageOf() ? entry : undefined;
+    };
+    return {
       onUpdate: () => {
         const entry = entryOf();
-        if (!entry || entry.page !== page) return;
-        if (page.url) entry.tab.url = page.url;
-        entry.tab.title = page.title;
+        if (!entry) return;
+        if (entry.page.url) entry.tab.url = entry.page.url;
+        entry.tab.title = entry.page.title;
         this.emitTabs();
         if (id === this.activeId) this.emitNav();
       },
@@ -694,10 +706,32 @@ export class TabManager {
       },
       // Links that ask for a new tab open one right below this tab.
       onOpenTab: (url, background) =>
-        this.create(url, { after: id, activate: !background }),
+        void this.create(url, { after: id, activate: !background }),
+      onGlance: (url) => this.options.onGlance(url),
       onFullscreen: (on) => this.setFullscreen(on),
-    });
-    return page;
+    };
+  }
+
+  // Turns a page that's already open (one previewed in Glance) into a new
+  // tab at the top of the everyday tabs, keeping everything on it.
+  adopt(page: Page, favicon = '') {
+    const id = randomUUID();
+    const tab: Tab = {
+      id,
+      spaceId: this.spaceId,
+      url: page.url,
+      title: page.title,
+      favicon,
+      pinned: false,
+      order: 0,
+      lastActiveAt: Date.now(),
+    };
+    page.listen(this.eventsFor(id, () => page));
+    this.entries.set(id, { tab, page, loaded: true });
+    this.order.splice(this.groupStart(EVERYDAY), 0, id);
+    this.renumber();
+    this.activate(id);
+    return id;
   }
 
   // Remember whether the window was already fullscreen before the page asked,

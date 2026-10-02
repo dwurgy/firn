@@ -19,6 +19,7 @@ const bridge: FirnBridge = {
   newTab: () => ipcRenderer.send('tabs:new'),
   openUrl: (input) => ipcRenderer.send('tabs:open-url', input),
   closeOverlay: () => ipcRenderer.send('overlay:close'),
+  expandGlance: () => ipcRenderer.send('glance:expand'),
   toggleSidebar: () => ipcRenderer.send('sidebar:toggle'),
   setSidebarWidth: (width) => ipcRenderer.send('sidebar:width', width),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),

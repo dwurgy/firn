@@ -24,6 +24,8 @@ export interface PageEvents {
   // it). Real popup windows, such as sign-in flows, are handled by the
   // engine and never come here.
   onOpenTab(url: string, background: boolean): void;
+  // A link was Shift+clicked: preview it in Glance.
+  onGlance(url: string): void;
   // The page went into or out of fullscreen (e.g. a video).
   onFullscreen(on: boolean): void;
 }
@@ -59,6 +61,12 @@ export interface Page {
   holdLayout(size: { width: number; height: number } | null): void;
   show(): void;
   hide(): void;
+  // Puts the page above everything else in the window (Glance floats over
+  // Firn's own layers).
+  raise(): void;
+  // Sends the page's reports somewhere else from now on (a page previewed
+  // in Glance becomes a tab).
+  listen(events: PageEvents): void;
   // Closes the page for good.
   destroy(): void;
 }

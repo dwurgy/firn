@@ -96,6 +96,13 @@ export const SidebarIcon = () => (
 // Stopping a page load uses the very same mark as closing the window.
 export const StopIcon = CloseIcon;
 
+// Points down at the everyday tabs that "Clear" closes.
+export const ClearDownIcon = () => (
+  <svg {...base} width={11} height={11} strokeWidth={1.7}>
+    <path d="M8 3v9.5M4 9l4 4 4-4" />
+  </svg>
+);
+
 // A pinned tab's "unload" button (a pin is never closed outright).
 export const UnloadIcon = () => (
   <svg {...base}>

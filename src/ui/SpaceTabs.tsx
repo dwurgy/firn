@@ -5,7 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { TabView } from '../types';
-import { CloseIcon, PlusIcon, UnloadIcon } from './icons';
+import { ClearDownIcon, CloseIcon, PlusIcon, UnloadIcon } from './icons';
 import { TabIcon, tabTitle } from './TabList';
 
 // A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
@@ -247,9 +247,10 @@ export function SpaceTabs({
         {everyday.length > 0 && (
           <button
             className="space-clear"
-            title="Close this space's unpinned tabs"
+            title="Close the unpinned tabs below"
             onClick={() => window.firn.clearTabs()}
           >
+            <ClearDownIcon />
             Clear
           </button>
         )}

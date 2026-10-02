@@ -49,8 +49,9 @@ const groupOf = (tab: Tab) =>
 interface TabManagerOptions {
   // The space shown first.
   spaceId: string;
-  // Where the page sits inside the window (changes with window size).
-  pageBounds: () => PageBounds;
+  // Where the page sits inside the window (changes with window size), or
+  // would sit with its top edge at `top`.
+  pageBounds: (top?: number) => PageBounds;
   pageRadius: number;
   onTabsChanged: (state: TabsState) => void;
   onNavChanged: (state: NavState) => void;
@@ -611,6 +612,24 @@ export class TabManager {
     } else {
       entry.page.place(this.options.pageBounds(), this.options.pageRadius);
     }
+  }
+
+  // Where the page would sit with its top edge at `top`.
+  pageBoundsFor(top: number) {
+    return this.options.pageBounds(top);
+  }
+
+  // Holds the active page's layout at a fixed size while its box changes
+  // (null lets it fit its box again). See glidePageTop in src/main.ts.
+  private heldPage: Page | null = null;
+
+  holdLayout(size: { width: number; height: number } | null) {
+    this.heldPage?.holdLayout(null);
+    this.heldPage = null;
+    const page = this.active?.page;
+    if (!size || !page || this.fullscreen) return;
+    page.holdLayout(size);
+    this.heldPage = page;
   }
 
   destroy() {

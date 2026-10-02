@@ -144,6 +144,27 @@ class ElectronPage implements Page {
     this.view.setBounds(bounds);
   }
 
+  // Chromium's device emulation (what DevTools' device preview uses) lays
+  // the page out at a set size, independent of the view's own size.
+  holdLayout(size: { width: number; height: number } | null) {
+    if (this.web.isDestroyed()) return;
+    if (!size) {
+      this.web.disableDeviceEmulation();
+      return;
+    }
+    this.web.enableDeviceEmulation({
+      screenPosition: 'desktop',
+      screenSize: { width: 0, height: 0 },
+      viewPosition: { x: 0, y: 0 },
+      deviceScaleFactor: 0,
+      viewSize: {
+        width: Math.round(size.width),
+        height: Math.round(size.height),
+      },
+      scale: 1,
+    });
+  }
+
   show() {
     this.view.setVisible(true);
   }

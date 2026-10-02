@@ -419,12 +419,10 @@ const createWindow = () => {
     ? PAGE_INSET
     : windowState.sidebarWidth;
   // Where the page's top edge is: lower while the top bar shows. While it
-  // glides, the page keeps one size and only moves (resizing every step
-  // makes the site re-fit each time, which looks jumpy); it takes its new
-  // size once, at whichever end of the glide it is taller.
+  // glides, only the top edge moves (the bottom stays put), and the site's
+  // layout is held at its taller size so it doesn't re-fit on every step,
+  // which looks jumpy; it re-fits once, when the glide ends.
   let pageTop = PAGE_INSET;
-  let topFrom = PAGE_INSET;
-  let topTo = PAGE_INSET;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -524,20 +522,23 @@ const createWindow = () => {
   // Slides the page's top edge, in step with the sidebar layer's outline of
   // the page (.page-area in styles.css).
   const glidePageTop = (to: number) => {
-    topFrom = pageTop;
-    topTo = to;
+    const from = pageTop;
     const start = Date.now();
     clearInterval(topGlide);
+    // Hold the site's layout at the taller of the two sizes for the glide;
+    // the part that doesn't fit is simply hidden under the bottom edge.
+    const { width, height } = tabs.pageBoundsFor(Math.min(from, to));
+    tabs.holdLayout({ width, height });
     topGlide = setInterval(() => {
       if (win.isDestroyed()) return clearInterval(topGlide);
       const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
       const eased = 1 - Math.pow(1 - t, 3); // ease-out
-      pageTop = Math.round(topFrom + (topTo - topFrom) * eased);
+      pageTop = Math.round(from + (to - from) * eased);
+      tabs.layout();
       if (t === 1) {
         clearInterval(topGlide);
-        topFrom = topTo;
+        tabs.holdLayout(null);
       }
-      tabs.layout();
       if (topBar && shownLayers.has(topBar))
         topBar.setBounds(boundsFor(topBar));
     }, 8);
@@ -604,15 +605,14 @@ const createWindow = () => {
     spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
     // The page floats to the right of the sidebar, inset from the edges.
-    pageBounds: () => {
+    // `top` is where its top edge is (it lowers while the top bar shows).
+    pageBounds: (top = pageTop) => {
       const [width, height] = win.getContentSize();
       return {
         x: pageLeft,
-        y: pageTop,
+        y: top,
         width: Math.max(0, width - pageLeft - PAGE_INSET),
-        // (While gliding, sized for the higher of the two positions; the
-        // part that dips below the window is simply out of sight.)
-        height: Math.max(0, height - Math.min(topFrom, topTo) - PAGE_INSET),
+        height: Math.max(0, height - top - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {

@@ -53,6 +53,10 @@ export interface Page {
 
   // Where the page sits in the window, and how round its corners are.
   place(bounds: PageBounds, cornerRadius: number): void;
+  // Lays the page out at a fixed size whatever its box (null: fit the box
+  // again). While its box changes size for a moment, the site doesn't have
+  // to re-fit on every step; whatever doesn't fit is simply hidden.
+  holdLayout(size: { width: number; height: number } | null): void;
   show(): void;
   hide(): void;
   // Closes the page for good.

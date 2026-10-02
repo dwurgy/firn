@@ -898,6 +898,94 @@ button {
   background: var(--page);
 }
 
+/* --- Split view ------------------------------------------------------------ */
+
+/* In the sidebar: one row, both tabs side by side. The half you're working
+   in reads a little stronger. */
+.tab.split-row {
+  gap: 0;
+  padding: 0 4px;
+}
+
+.split-half {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.split-half .tab-title {
+  font-size: 12.5px;
+}
+
+.tab.is-active .split-half:not(.is-current) .tab-title {
+  color: var(--text-muted);
+}
+
+.split-line {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: var(--panel-edge);
+}
+
+/* Two pages side by side: the area itself steps back, and each side gets
+   its own lifted outline. */
+.page-area.is-split {
+  background: transparent;
+  box-shadow: none;
+}
+
+.split-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--page-radius);
+  background: var(--page);
+  box-shadow: var(--page-shadow);
+  transition: box-shadow var(--motion);
+}
+
+/* The side you're working in: a soft ring in the space's color, in the gap
+   just outside the page. */
+.split-side.is-active {
+  box-shadow:
+    0 0 0 2px rgb(var(--space-rgb, 128 128 128) / 0.55),
+    var(--page-shadow);
+}
+
+/* The gap between the sides: drag to resize. A small grip appears on
+   hover. */
+.split-gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+}
+
+.split-grip {
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.split-gap:hover .split-grip,
+.split-gap.is-dragging .split-grip {
+  opacity: 0.8;
+}
+
 .empty-page {
   text-align: center;
   animation: settle 250ms ease-out;

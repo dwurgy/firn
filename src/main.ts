@@ -708,6 +708,7 @@ const createWindow = () => {
       onOpenTab: (link) => void tabs.create(link, { activate: false }),
       onLookout: (link) => page.load(link),
       onFullscreen: () => {},
+      onFocus: () => {},
     });
     lookout = { page, favicon: '', openId: ++commandOpenId, shown: false };
     page.load(url);
@@ -951,6 +952,21 @@ const createWindow = () => {
           },
         ]
       : [];
+    // Split view: show this tab beside the current one, or end the split.
+    const splitItems: Electron.MenuItemConstructorOptions[] = tab.splitId
+      ? [
+          { label: 'Separate split view', click: () => tabs.unsplit(id) },
+          { type: 'separator' },
+        ]
+      : tabs.canSplitWith(id)
+        ? [
+            {
+              label: 'Split view with current tab',
+              click: () => tabs.splitWith(id),
+            },
+            { type: 'separator' },
+          ]
+        : [];
     const items: Electron.MenuItemConstructorOptions[] = tab.basecamp
       ? [
           { label: 'Go back to home', click: () => tabs.goHome(id) },
@@ -975,6 +991,7 @@ const createWindow = () => {
             { label: 'Unload tab', click: () => tabs.close(id) },
           ]
         : [
+            ...splitItems,
             {
               label: 'Pin tab',
               accelerator: 'CmdOrCtrl+D',
@@ -1278,6 +1295,13 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'split:resize': (_sender, id, ratio) => {
+      if (typeof id === 'string' && typeof ratio === 'number')
+        tabs.resizeSplit(id, ratio);
+    },
+    'split:separate': (_sender, tabId) => {
+      if (typeof tabId === 'string') tabs.unsplit(tabId);
+    },
     'overlay:close': () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
@@ -1478,6 +1502,7 @@ const createWindow = () => {
         maximized: win.isMaximized(),
       },
       recentlyClosed: tabs.closedUrls,
+      splits: tabs.splitGroups,
     });
   });
   for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
@@ -1525,6 +1550,7 @@ const createWindow = () => {
     if (!spaces.some((s) => s.id === tab.spaceId)) tab.spaceId = spaces[0].id;
     tabs.create(tab.url, { restore: tab, activate: false });
   }
+  tabs.restoreSplits(saved?.splits);
   console.log(
     savedTabs.length
       ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`

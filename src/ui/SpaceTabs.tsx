@@ -5,7 +5,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { TabView } from '../types';
-import { ClearDownIcon, CloseIcon, PlusIcon, UnloadIcon } from './icons';
+import {
+  ClearDownIcon,
+  CloseIcon,
+  PlusIcon,
+  SeparateIcon,
+  UnloadIcon,
+} from './icons';
 import { TabIcon, tabTitle } from './TabList';
 
 // A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
@@ -66,8 +72,17 @@ export function SpaceTabs({
 
   const pins = tabs.filter((t) => t.pinned);
   const everyday = tabs.filter((t) => !t.pinned);
+  // Everyday tabs as rows: the two sides of a split view share one row.
+  const everydayRows: TabView[][] = [];
+  for (const tab of everyday) {
+    const last = everydayRows.at(-1);
+    if (tab.splitId && last && last[0].splitId === tab.splitId) last.push(tab);
+    else everydayRows.push([tab]);
+  }
   const activePin = folded && pins.find((t) => t.id === activeTabId);
-  const signature = tabs.map((t) => `${t.id}:${t.pinned ? 1 : 0}`).join(',');
+  const signature = tabs
+    .map((t) => `${t.id}:${t.pinned ? 1 : 0}:${t.splitId ?? ''}`)
+    .join(',');
 
   // --- Gliding into new places ----------------------------------------------
   // When the order changes, note where every row was just before the update
@@ -141,11 +156,17 @@ export function SpaceTabs({
     return offsets;
   };
 
-  const onPointerDown = (e: ReactPointerEvent, tab: TabView) => {
+  // `rowId` is the row being dragged (a split view's row is its first
+  // tab's); `tabId` is the tab to switch to.
+  const onPointerDown = (
+    e: ReactPointerEvent,
+    rowId: string,
+    tabId = rowId,
+  ) => {
     if (e.button !== 0) return;
-    window.firn.activateTab(tab.id);
+    window.firn.activateTab(tabId);
     e.currentTarget.setPointerCapture(e.pointerId);
-    update({ id: tab.id, startY: e.clientY, dy: 0, active: false, items: [] });
+    update({ id: rowId, startY: e.clientY, dy: 0, active: false, items: [] });
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
@@ -181,12 +202,12 @@ export function SpaceTabs({
     if (!d?.active) return;
     const drop = commit ? dropFor(d) : null;
     const tab = tabs.find((t) => t.id === d.id);
-    const group = tab?.pinned ? pins : everyday;
+    const rows = tab?.pinned ? pins.map((t) => [t]) : everydayRows;
     const unchanged =
       !drop ||
       !tab ||
       (drop.pinned === tab.pinned &&
-        drop.index === group.findIndex((t) => t.id === d.id));
+        drop.index === rows.findIndex((r) => r.some((t) => t.id === d.id)));
     if (unchanged) {
       // Glide back to where it was.
       setReturning(d.id);
@@ -219,7 +240,7 @@ export function SpaceTabs({
       returning={returning === tab.id}
       listed={listed}
       style={listed ? nudge(tab.id) : undefined}
-      onPointerDown={(e) => onPointerDown(e, tab)}
+      onPointerDown={(e) => onPointerDown(e, tab.id)}
       onPointerMove={onPointerMove}
       onPointerUp={() => finish(true)}
       onPointerCancel={() => finish(false)}
@@ -268,7 +289,26 @@ export function SpaceTabs({
         New tab
       </button>
 
-      {everyday.map((tab) => row(tab, 'everyday'))}
+      {everydayRows.map((tabsInRow) =>
+        tabsInRow.length === 2 ? (
+          <SplitRow
+            key={tabsInRow[0].id}
+            tabs={tabsInRow}
+            activeTabId={activeTabId}
+            dragged={drag?.active === true && drag.id === tabsInRow[0].id}
+            returning={returning === tabsInRow[0].id}
+            style={nudge(tabsInRow[0].id)}
+            onPointerDown={(e, tabId) =>
+              onPointerDown(e, tabsInRow[0].id, tabId)
+            }
+            onPointerMove={onPointerMove}
+            onPointerUp={() => finish(true)}
+            onPointerCancel={() => finish(false)}
+          />
+        ) : (
+          row(tabsInRow[0], 'everyday')
+        ),
+      )}
     </div>
   );
 }
@@ -337,6 +377,79 @@ function TabRow({
           {pinned ? <UnloadIcon /> : <CloseIcon />}
         </button>
       )}
+    </div>
+  );
+}
+
+// A split view in the sidebar: one row with both tabs, side by side. Click
+// either half to work in that side; drag the row to move both. The button
+// on hover separates them again.
+function SplitRow({
+  tabs,
+  activeTabId,
+  dragged,
+  returning,
+  style,
+  onPointerDown,
+  ...handlers
+}: {
+  tabs: TabView[];
+  activeTabId: string | null;
+  dragged: boolean;
+  returning: boolean;
+  style?: React.CSSProperties;
+  onPointerDown: (e: ReactPointerEvent, tabId: string) => void;
+  onPointerMove: (e: ReactPointerEvent) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
+}) {
+  const active = tabs.some((t) => t.id === activeTabId);
+  return (
+    <div
+      className={[
+        'tab',
+        'split-row',
+        active && 'is-active',
+        dragged && 'is-dragged',
+        returning && 'is-returning',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-item={tabs[0].id}
+      data-kind="everyday"
+      style={style}
+      {...handlers}
+    >
+      {tabs.map((tab, i) => (
+        <span
+          key={tab.id}
+          className={`split-half ${tab.id === activeTabId ? 'is-current' : ''}`}
+          title={tabTitle(tab)}
+          onPointerDown={(e) => onPointerDown(e, tab.id)}
+          // Middle-click closes that side; the other carries on alone.
+          onAuxClick={(e) => {
+            if (e.button === 1) window.firn.closeTab(tab.id);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            window.firn.showTabMenu(tab.id);
+          }}
+        >
+          {i === 1 && <span className="split-line" />}
+          <span className="tab-icon">
+            <TabIcon tab={tab} />
+          </span>
+          <span className="tab-title">{tabTitle(tab)}</span>
+        </span>
+      ))}
+      <button
+        className="tab-close"
+        title="Separate split view"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => window.firn.separateSplit(tabs[0].id)}
+      >
+        <SeparateIcon />
+      </button>
     </div>
   );
 }

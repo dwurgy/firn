@@ -110,6 +110,14 @@ export const ExpandIcon = () => (
   </svg>
 );
 
+// "Separate split view": two panes drawing apart.
+export const SeparateIcon = () => (
+  <svg {...base}>
+    <rect x="2.5" y="4" width="4.5" height="8" rx="1.2" />
+    <rect x="9" y="4" width="4.5" height="8" rx="1.2" />
+  </svg>
+);
+
 // A pinned tab's "unload" button (a pin is never closed outright).
 export const UnloadIcon = () => (
   <svg {...base}>

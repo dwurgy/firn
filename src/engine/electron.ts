@@ -244,6 +244,10 @@ class ElectronPage implements Page {
       return { action: 'deny' };
     });
 
+    // A press inside the page (the person starting to work in it).
+    web.on('before-mouse-event', (_event, mouse) => {
+      if (mouse.type === 'mouseDown') events().onFocus();
+    });
     web.on('enter-html-full-screen', () => events().onFullscreen(true));
     web.on('leave-html-full-screen', () => events().onFullscreen(false));
   }

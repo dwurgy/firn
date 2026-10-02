@@ -30,6 +30,16 @@ export interface Tab {
   splitGroupId?: string;
 }
 
+// Two tabs shown side by side (split view). `sizes` are each side's share
+// of the width; the sidebar shows the pair as one row.
+export interface SplitGroup {
+  id: string;
+  spaceId: string;
+  tabIds: string[];
+  layout: 'columns';
+  sizes: number[];
+}
+
 export interface WindowState {
   id: string;
   activeSpaceId: string;
@@ -61,6 +71,7 @@ export interface SavedSession {
   version: number;
   spaces: Space[];
   tabs: SavedTab[];
+  splits?: SplitGroup[];
   window: SavedWindow;
   recentlyClosed: string[];
 }
@@ -80,11 +91,16 @@ export interface TabView {
   // False for a tab whose page hasn't loaded yet (restored, or an unloaded
   // pinned tab).
   loaded: boolean;
+  // Set when the tab is one side of a split view.
+  splitId?: string;
 }
 
 export interface TabsState {
   tabs: TabView[]; // in sidebar order, top to bottom
   activeTabId: string | null;
+  // Split views among these tabs (both sides are always next to each other
+  // in `tabs`).
+  splits: SplitGroup[];
 }
 
 // The spaces, in order, and which one is shown.
@@ -157,6 +173,9 @@ export interface FirnBridge {
   closeOverlay(): void;
   // Lookout's "Open as tab".
   expandLookout(): void;
+  // Split view: drag the gap (`ratio` is the left side's share), or end it.
+  resizeSplit(id: string, ratio: number): void;
+  separateSplit(tabId: string): void;
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;

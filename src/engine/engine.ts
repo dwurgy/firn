@@ -28,6 +28,8 @@ export interface PageEvents {
   onLookout(url: string): void;
   // The page went into or out of fullscreen (e.g. a video).
   onFullscreen(on: boolean): void;
+  // The mouse was pressed inside the page (the person is working in it).
+  onFocus(): void;
 }
 
 // One web page: the content of a tab.

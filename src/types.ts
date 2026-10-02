@@ -161,6 +161,8 @@ export interface FirnBridge {
   // Closes the active space's everyday (unpinned) tabs.
   clearTabs(): void;
   showSpaceMenu(id: string): void;
+  // Right-click on empty space in the sidebar.
+  showSidebarMenu(): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;

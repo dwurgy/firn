@@ -104,7 +104,19 @@ export function Sidebar({
   }, [index]);
 
   return (
-    <aside className={`sidebar ${className}`} style={style}>
+    <aside
+      className={`sidebar ${className}`}
+      style={style}
+      // Right-click on empty space: the space's menu (Change color...).
+      // Tabs, tiles and the space's name have their own menus, and text
+      // fields keep the usual one.
+      onContextMenu={(e) => {
+        if (e.defaultPrevented) return;
+        if ((e.target as HTMLElement).closest('input, textarea')) return;
+        e.preventDefault();
+        window.firn.showSidebarMenu();
+      }}
+    >
       <div className="sidebar-top">
         <div className="button-row">
           <button

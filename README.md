@@ -64,7 +64,7 @@ Both remember the address they were added at as their *home*: right-click for **
 
 ### Spaces
 
-Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them). Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them). Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
 
 ### Frosted glass
 

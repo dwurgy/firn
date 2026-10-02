@@ -921,36 +921,58 @@ const createWindow = () => {
   };
 
   // Right-click menu for a space's icon.
+  // The space's own menu items, shared by its menu and the sidebar's.
+  const spaceItems = (space: Space): Electron.MenuItemConstructorOptions[] => [
+    {
+      label: 'Change color',
+      submenu: SPACE_COLOR_CHOICES.map(({ name, hex }) => ({
+        label: name,
+        icon: colorSwatch(hex),
+        type: 'checkbox' as const,
+        checked: hex === space.color,
+        click: () => updateSpace(space.id, { color: hex }),
+      })),
+    },
+    {
+      label: 'Change icon',
+      submenu: SPACE_ICONS.map((icon) => ({
+        label: icon,
+        type: 'checkbox' as const,
+        checked: icon === space.icon,
+        click: () => updateSpace(space.id, { icon }),
+      })),
+    },
+    {
+      label: 'Rename space',
+      click: () => {
+        switchSpace(space.id);
+        startRenameSpace(space.id);
+      },
+    },
+  ];
+
+  // Right-click on empty space in the sidebar: the active space's options,
+  // plus a new tab or space.
+  const showSidebarMenu = () => {
+    const space = spaces.find((s) => s.id === windowState.activeSpaceId);
+    if (!space) return;
+    Menu.buildFromTemplate([
+      ...spaceItems(space),
+      { type: 'separator' },
+      {
+        label: 'New tab',
+        accelerator: 'CmdOrCtrl+T',
+        click: () => openCommandBar(),
+      },
+      { label: 'New space', click: () => newSpace() },
+    ]).popup({ window: win });
+  };
+
   const showSpaceMenu = (id: string) => {
     const space = spaces.find((s) => s.id === id);
     if (!space) return;
     Menu.buildFromTemplate([
-      {
-        label: 'Rename space',
-        click: () => {
-          switchSpace(id);
-          startRenameSpace(id);
-        },
-      },
-      {
-        label: 'Change icon',
-        submenu: SPACE_ICONS.map((icon) => ({
-          label: icon,
-          type: 'checkbox' as const,
-          checked: icon === space.icon,
-          click: () => updateSpace(id, { icon }),
-        })),
-      },
-      {
-        label: 'Change color',
-        submenu: SPACE_COLOR_CHOICES.map(({ name, hex }) => ({
-          label: name,
-          icon: colorSwatch(hex),
-          type: 'checkbox' as const,
-          checked: hex === space.color,
-          click: () => updateSpace(id, { color: hex }),
-        })),
-      },
+      ...spaceItems(space),
       { type: 'separator' },
       {
         label: 'Delete space…',
@@ -1075,6 +1097,7 @@ const createWindow = () => {
       });
     },
     'tabs:clear': () => tabs.clearEveryday(),
+    'sidebar:menu': () => showSidebarMenu(),
     'spaces:menu': (_sender, id) => {
       if (typeof id === 'string') showSpaceMenu(id);
     },

@@ -50,8 +50,8 @@ web_modules/
 # Optional npm cache directory
 .npm
 
-# Optional eslint cache
-.eslintcache
+# Optional oxlint cache
+.oxlintcache
 
 # Optional stylelint cache
 .stylelintcache
@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Electron-Forge
+out/

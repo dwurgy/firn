@@ -1,0 +1,853 @@
+/* Firn — calm, warm, a little frost. */
+
+:root {
+  /* Layout (keep in sync with SIDEBAR_WIDTH / PAGE_INSET in src/main.ts) */
+  --sidebar-width: 260px;
+  /* Where the page starts; set live by the UI as the sidebar resizes or
+     collapses. */
+  --page-left: var(--sidebar-width);
+  --page-inset: 8px;
+  --top-bar-height: 40px;
+  --page-radius: 12px;
+  --motion: 200ms ease-out;
+
+  /* Light: warm sand neutrals with a soft glacier accent */
+  --frame: #e9e3da;
+  --frame-glow: rgba(196, 214, 222, 0.55);
+  --page: #fbfaf8;
+  --text: #2a2622;
+  --text-muted: #6f675f;
+  --text-faint: #b3aaa0;
+  --field: rgba(255, 255, 255, 0.55);
+  --field-hover: rgba(255, 255, 255, 0.75);
+  --field-focus: #fbfaf8;
+  --hover: rgba(70, 55, 40, 0.07);
+  --press: rgba(70, 55, 40, 0.13);
+  --tab-active: rgba(255, 255, 255, 0.78);
+  --tab-active-shadow: 0 1px 2px rgba(60, 40, 20, 0.08);
+  --tab-dragged-shadow:
+    0 2px 6px rgba(60, 40, 20, 0.12), 0 8px 20px rgba(60, 40, 20, 0.12);
+  --page-shadow:
+    0 1px 3px rgba(60, 40, 20, 0.14), 0 6px 20px rgba(60, 40, 20, 0.2);
+  --frost: rgba(130, 168, 190, 0.45);
+  --frost-strong: rgba(110, 152, 178, 0.75);
+  --close-hover: #c8564a;
+  --backdrop: rgba(60, 45, 30, 0.08);
+  --panel-edge: rgba(60, 40, 20, 0.08);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Warm mid-grey, not black, so dark pages still read as lifted. */
+    --frame: #3a3734;
+    --frame-glow: rgba(150, 178, 192, 0.1);
+    --page: #2b2826;
+    --text: #f0ebe5;
+    --text-muted: #c4bcb3;
+    --text-faint: #7d766f;
+    --field: rgba(255, 250, 245, 0.08);
+    --field-hover: rgba(255, 250, 245, 0.12);
+    --field-focus: rgba(255, 250, 245, 0.15);
+    --hover: rgba(255, 250, 245, 0.07);
+    --press: rgba(255, 250, 245, 0.13);
+    --tab-active: rgba(255, 250, 245, 0.14);
+    --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --tab-dragged-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
+    --frost: rgba(160, 196, 214, 0.45);
+    --frost-strong: rgba(176, 208, 224, 0.8);
+    --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
+    --backdrop: rgba(0, 0, 0, 0.18);
+    --panel-edge: rgba(255, 250, 245, 0.08);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+/* "Drag to move the window" areas (-webkit-app-region).
+   On Windows, Electron asks every *visible* layer whether a spot is title
+   bar, in the order the layers were created (not the order they're
+   stacked), and a layer's drag areas count even outside its own edges. So
+   drag areas are kept to exactly two places:
+   - the main window's sidebar top row, and
+   - the top bar layer's empty band, which only counts while the bar is
+     showing (hidden layers are skipped).
+   No other layer declares any drag setting at all. */
+:root[data-view='main'] .sidebar-top,
+:root[data-view='topbar'] .top-bar-drag {
+  -webkit-app-region: drag;
+}
+
+:root[data-view='main'] .sidebar-top .icon-button,
+:root[data-view='topbar'] .top-bar .icon-button {
+  -webkit-app-region: no-drag;
+}
+
+/* The layers above the page are see-through. */
+:root[data-view='floating'] body,
+:root[data-view='topbar'] body,
+:root[data-view='peek'] body {
+  background: transparent;
+}
+
+body {
+  /* A faint glacier glow low on the frame. */
+  background:
+    radial-gradient(120% 70% at 0% 100%, var(--frame-glow), transparent 70%),
+    var(--frame);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  /* Windows adds its own padding to buttons, which pushes icons off-centre. */
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
+/* --- Sidebar -------------------------------------------------------------- */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Left inset matches the page's; the page's own inset is the gap on the
+     right. */
+  padding: 8px var(--page-inset) 8px var(--page-inset);
+}
+
+/* While collapsing, the sidebar glides out with the page's left edge. */
+.sidebar.is-tucking {
+  pointer-events: none;
+}
+
+/* Top row: the sidebar toggle on the left (room for a menu button later),
+   back/forward/reload on the right. Its empty space moves the window, like
+   a title bar. */
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+}
+
+/* Leave room for the macOS traffic lights. */
+:root[data-platform='darwin'] .sidebar-top {
+  padding-left: 68px;
+}
+
+.button-row {
+  display: flex;
+  gap: 2px;
+}
+
+.icon-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion),
+    opacity var(--motion);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--press);
+}
+
+/* A soft warm red, rather than the usual harsh one. */
+.close-button:hover:not(:disabled) {
+  background: var(--close-hover);
+  color: #fff;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+}
+
+.icon-button:focus-visible,
+.new-tab:focus-visible,
+.tab-close:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+/* --- Address bar ----------------------------------------------------------- */
+
+.address {
+  position: relative;
+}
+
+.address-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+  outline: none;
+  transition:
+    background var(--motion),
+    border-color var(--motion),
+    box-shadow var(--motion);
+}
+
+.address-input::placeholder {
+  color: var(--text-muted);
+}
+
+.address-input:hover {
+  background: var(--field-hover);
+}
+
+.address-input:focus {
+  background: var(--field-focus);
+  border-color: var(--frost);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--frost) 35%, transparent);
+  user-select: text;
+}
+
+.address-input::selection {
+  background: var(--frost);
+}
+
+/* A soft, slow shimmer along the bottom of the address bar while a page
+   loads. The track clips it to the bar's rounded shape. */
+.loading-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.loading-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--frost-strong),
+    transparent
+  );
+  background-size: 35% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity var(--motion);
+  pointer-events: none;
+}
+
+.loading-line.is-loading {
+  opacity: 1;
+  animation: drift 1.4s ease-in-out infinite;
+}
+
+@keyframes drift {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+/* --- Tabs ------------------------------------------------------------------ */
+
+.tabs-section {
+  /* Section spacing from the address bar. */
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  flex: 1;
+}
+
+.tab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  /* Room so the active tab's soft shadow isn't clipped. */
+  padding-bottom: 4px;
+}
+
+.tab,
+.new-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    color var(--motion);
+}
+
+.new-tab {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: default;
+}
+
+.new-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tab {
+  position: relative;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    color var(--motion),
+    transform var(--motion);
+}
+
+.tab:hover {
+  background: var(--hover);
+}
+
+/* While dragging: the picked-up tab follows the pointer, lifted a little;
+   the others glide out of its way. */
+.tab.is-dragged {
+  z-index: 1;
+  box-shadow: var(--tab-dragged-shadow);
+  transition:
+    background var(--motion),
+    box-shadow var(--motion);
+}
+
+.tab-list.is-dragging .tab:not(.is-dragged) .tab-close {
+  opacity: 0;
+}
+
+/* Just after a drop, only the moved tab glides; the rest are already in
+   place. */
+.tab-list.is-settling .tab:not(.is-settling-row) {
+  transition: none;
+}
+
+.tab.is-settling-row {
+  z-index: 1;
+  transition: none;
+}
+
+.tab.is-settling-row.is-gliding {
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    transform var(--motion);
+}
+
+.tab:active:not(.is-active) {
+  background: var(--press);
+}
+
+.tab.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.tab-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.tab-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.6px solid var(--frost);
+  border-top-color: var(--frost-strong);
+  border-right-color: var(--frost-strong);
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.tab.is-active .tab-title {
+  color: var(--text);
+}
+
+/* The close button only appears on hover. */
+.tab-close {
+  width: 26px;
+  height: 26px;
+  margin-right: -7px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: default;
+  transition:
+    opacity var(--motion),
+    background var(--motion),
+    color var(--motion);
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* --- The page's place ------------------------------------------------------ */
+
+/* Matches the web page's position (see pageBounds in src/main.ts). The page
+   covers this box; only its soft shadow shows in the frame around it. */
+.page-area {
+  position: fixed;
+  top: var(--page-inset);
+  left: var(--page-left);
+  right: var(--page-inset);
+  bottom: var(--page-inset);
+  border-radius: var(--page-radius);
+  background: var(--frame);
+  box-shadow: var(--page-shadow);
+  display: grid;
+  place-items: center;
+  transition:
+    top var(--motion),
+    background var(--motion);
+}
+
+/* The top bar is down: the page's outline (and its shadow) lowers with it. */
+.top-bar-shown .page-area {
+  top: var(--top-bar-height);
+}
+
+/* With no tabs open, Firn shows its own calm page here. */
+.page-area.is-empty {
+  background: var(--page);
+}
+
+.empty-page {
+  text-align: center;
+  animation: settle 250ms ease-out;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* --- Top bar with the window buttons (Windows / Linux) ------------------- */
+
+/* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
+   src/main.ts). It slides down by the same amount, at the same speed, as
+   .page-area below, so the page's rounded top edge and its shadow appear to
+   lower as one piece over the content. */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--top-bar-height) + var(--page-radius));
+  transform: translateY(calc(var(--page-inset) - var(--top-bar-height)));
+  transition: transform var(--motion);
+}
+
+.top-bar.is-shown {
+  transform: none;
+}
+
+/* Covers only the page (not the frame beside it): frame colour down to the
+   page's new top edge, rounded cut-outs at the corners, and the same soft
+   shadow the page casts upward. */
+.top-bar-cover {
+  position: absolute;
+  inset: 0 var(--page-inset) 0 0;
+  overflow: hidden;
+}
+
+.top-bar-cover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
+  background: var(--frame);
+}
+
+.top-bar-corner {
+  position: absolute;
+  top: var(--top-bar-height);
+  width: var(--page-radius);
+  height: var(--page-radius);
+}
+
+.top-bar-corner.is-left {
+  left: 0;
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent calc(var(--page-radius) - 0.5px),
+    var(--frame) var(--page-radius)
+  );
+}
+
+.top-bar-corner.is-right {
+  right: 0;
+  background: radial-gradient(
+    circle at 0 100%,
+    transparent calc(var(--page-radius) - 0.5px),
+    var(--frame) var(--page-radius)
+  );
+}
+
+/* An empty outline of the page's top edge casting the page's shadow. Taller
+   than the layer, so only the shadow above the edge is ever seen. */
+.top-bar-edge {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: 0;
+  height: 200px;
+  border-radius: var(--page-radius);
+  box-shadow: var(--page-shadow);
+}
+
+/* The bar's empty space: a real title bar while the bar is showing. */
+.top-bar-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
+}
+
+.top-bar .button-row {
+  position: absolute;
+  top: calc((var(--top-bar-height) - 32px) / 2);
+  right: var(--page-inset);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.top-bar.is-shown .button-row {
+  opacity: 1;
+}
+
+/* --- Floating panels: command bar and tab switcher ------------------------- */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 18vh;
+  background: var(--backdrop);
+  animation: fade-in 180ms ease-out;
+}
+
+.backdrop.is-switcher {
+  align-items: center;
+  padding-top: 0;
+}
+
+.panel {
+  border-radius: 14px;
+  background: var(--page);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 24px 60px rgba(30, 20, 10, 0.22);
+  overflow: hidden;
+  animation: rise 200ms ease-out;
+}
+
+.command-bar {
+  width: min(640px, calc(100vw - 64px));
+}
+
+.switcher {
+  width: min(440px, calc(100vw - 64px));
+  padding: 4px 0;
+}
+
+.command-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+}
+
+.command-search-icon {
+  display: grid;
+  color: var(--text-muted);
+}
+
+.command-input {
+  flex: 1;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+
+.command-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-input::selection {
+  background: var(--frost);
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.command-bar .results {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  transition: background 120ms ease-out;
+}
+
+.result.is-selected {
+  background: var(--hover);
+}
+
+.result-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.result-detail {
+  color: var(--text-muted);
+}
+
+.result-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.result.is-selected .result-action {
+  opacity: 1;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+/* --- Sidebar resize and collapse ------------------------------------------- */
+
+/* The gap between the sidebar and the page. */
+.sidebar-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-width) - var(--page-inset));
+  width: var(--page-inset);
+  cursor: col-resize;
+}
+
+/* A soft line in the gap while hovering or dragging. */
+.sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 48px;
+  margin-top: -24px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.sidebar-resizer:hover::after,
+.is-resizing .sidebar-resizer::after {
+  opacity: 0.8;
+}
+
+.is-resizing,
+.is-resizing * {
+  cursor: col-resize !important;
+}
+
+/* The sidebar peeking over the page while collapsed: a floating panel that
+   slides in from the left. */
+.peek .sidebar {
+  top: var(--page-inset);
+  left: var(--page-inset);
+  bottom: var(--page-inset);
+  width: calc(var(--sidebar-width) - var(--page-inset));
+  padding: 8px;
+  border-radius: var(--page-radius);
+  background: var(--frame);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 16px 40px rgba(30, 20, 10, 0.18);
+  transform: translateX(calc(-100% - 2 * var(--page-inset)));
+  transition: transform var(--motion);
+}
+
+.peek.is-shown .sidebar {
+  transform: none;
+}
+
+/* --- Scrollbars (the tab list), matching the ones Firn gives web pages ---- */
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(128, 128, 128, 0.45);
+  border: 3.5px solid transparent;
+  border-radius: 12px;
+  background-clip: padding-box;
+  min-height: 40px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(110, 110, 110, 0.7);
+  border-width: 2px;
+}

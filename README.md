@@ -1,5 +1,5 @@
 # firn
-A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, pinned tabs, spaces, glance previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
+A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, pinned tabs, spaces, lookout previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
 
 ## Running Firn on your computer
 
@@ -31,7 +31,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | New tab (opens the command bar) | Ctrl+T | Cmd+T |
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
-| Preview a link in Glance | Shift+click | Shift+click |
+| Preview a link in Lookout | Shift+click | Shift+click |
 | Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
 | Last-used tab (hold Ctrl and keep tapping Tab for the switcher) | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
@@ -67,9 +67,9 @@ Both remember the address they were added at as their *home*: right-click for **
 
 Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them). Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
 
-### Glance
+### Lookout
 
-**Shift+click** a link to preview it in Glance: a rounded panel floating over the page, with the page dimmed behind it. Press **Esc** or click outside to close it, or use the button beside it to **open it as a tab** (the panel grows into the page and keeps everything, scroll position included). Links that open real popup windows, like "Sign in with Google", still open as windows.
+**Shift+click** a link to preview it in Lookout: a rounded panel floating over the page, with the page dimmed behind it. Press **Esc** or click outside to close it, or use the button beside it to **open it as a tab** (the panel grows into the page and keeps everything, scroll position included). Links that open real popup windows, like "Sign in with Google", still open as windows.
 
 ### Frosted glass
 

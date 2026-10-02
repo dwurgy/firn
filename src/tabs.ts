@@ -57,8 +57,8 @@ interface TabManagerOptions {
   onNavChanged: (state: NavState) => void;
   // The last tab was closed.
   onEmpty: () => void;
-  // A link was Shift+clicked: preview it in Glance.
-  onGlance: (url: string) => void;
+  // A link was Shift+clicked: preview it in Lookout.
+  onLookout: (url: string) => void;
 }
 
 export class TabManager {
@@ -707,12 +707,12 @@ export class TabManager {
       // Links that ask for a new tab open one right below this tab.
       onOpenTab: (url, background) =>
         void this.create(url, { after: id, activate: !background }),
-      onGlance: (url) => this.options.onGlance(url),
+      onLookout: (url) => this.options.onLookout(url),
       onFullscreen: (on) => this.setFullscreen(on),
     };
   }
 
-  // Turns a page that's already open (one previewed in Glance) into a new
+  // Turns a page that's already open (one previewed in Lookout) into a new
   // tab at the top of the everyday tabs, keeping everything on it.
   adopt(page: Page, favicon = '') {
     const id = randomUUID();

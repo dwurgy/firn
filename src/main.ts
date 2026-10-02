@@ -458,9 +458,9 @@ const createWindow = () => {
   // Stacking order, bottom to top.
   const layerOrder = [peek, topBar, floating];
 
-  // Glance: a link previewed in a floating panel over the page (see the
-  // Glance section below). Its page floats above every layer.
-  let glance: {
+  // Lookout: a link previewed in a floating panel over the page (see the
+  // Lookout section below). Its page floats above every layer.
+  let lookout: {
     page: Page;
     favicon: string;
     openId: number;
@@ -471,7 +471,7 @@ const createWindow = () => {
   const raiseLayers = () => {
     for (const layer of layerOrder)
       if (layer && shownLayers.has(layer)) win.contentView.addChildView(layer);
-    if (glance?.shown) glance.page.raise();
+    if (lookout?.shown) lookout.page.raise();
   };
 
   // Returns false (and shows nothing) if the panel hasn't started yet, so a
@@ -501,17 +501,17 @@ const createWindow = () => {
 
   const showOverlay = (state: OverlayState) => {
     if (!readyUi.has(floating.webContents)) return false;
-    // Something else (the command bar, the switcher) replaces Glance.
-    if (state.mode !== 'glance') dropGlance();
+    // Something else (the command bar, the switcher) replaces Lookout.
+    if (state.mode !== 'lookout') dropLookout();
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
-    if (state.mode !== 'hidden' && state.mode !== 'glance')
+    if (state.mode !== 'hidden' && state.mode !== 'lookout')
       floating.webContents.focus();
     return true;
   };
   const hideOverlay = () => {
-    if (overlay.mode === 'glance') return closeGlance();
+    if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
@@ -641,17 +641,17 @@ const createWindow = () => {
       send('nav:state', state);
     },
     onEmpty: () => openCommandBar(),
-    onGlance: (url) => openGlance(url),
+    onLookout: (url) => openLookout(url),
   });
 
   const relayout = () => {
     tabs.layout();
     layoutLayers();
-    layoutGlance();
+    layoutLookout();
   };
   win.on('resize', relayout);
 
-  // --- Glance -----------------------------------------------------------------
+  // --- Lookout -----------------------------------------------------------------
   // Shift+clicking a link previews it in a rounded panel floating over the
   // page, with the page dimmed behind it. Esc or a click outside closes it;
   // "Open as tab" grows the panel into the page and keeps it as a tab.
@@ -660,14 +660,14 @@ const createWindow = () => {
   // scales in, and the buttons beside it; the real page appears on top of
   // the stand-in once it has scaled in.
 
-  const GLANCE_RADIUS = 14; // matches the panel radius in styles.css
-  let glanceTimer: ReturnType<typeof setTimeout> | undefined;
-  let glanceGlide: ReturnType<typeof setInterval> | undefined;
+  const LOOKOUT_RADIUS = 14; // matches the panel radius in styles.css
+  let lookoutTimer: ReturnType<typeof setTimeout> | undefined;
+  let lookoutGlide: ReturnType<typeof setInterval> | undefined;
 
   // The page's area, and the panel centered within it.
-  const glanceArea = () => tabs.pageBoundsFor(pageTop);
-  const glancePanel = () => {
-    const area = glanceArea();
+  const lookoutArea = () => tabs.pageBoundsFor(pageTop);
+  const lookoutPanel = () => {
+    const area = lookoutArea();
     const marginX = Math.max(56, Math.round(area.width * 0.08));
     const marginY = 24;
     return {
@@ -678,69 +678,69 @@ const createWindow = () => {
     };
   };
 
-  const sendGlance = (phase: 'open' | 'closing' | 'expanding') => {
-    if (!glance && phase === 'open') return;
+  const sendLookout = (phase: 'open' | 'closing' | 'expanding') => {
+    if (!lookout && phase === 'open') return;
     const openId =
-      glance?.openId ?? (overlay.mode === 'glance' ? overlay.openId : 0);
+      lookout?.openId ?? (overlay.mode === 'lookout' ? overlay.openId : 0);
     showOverlay({
-      mode: 'glance',
+      mode: 'lookout',
       openId,
       phase,
-      area: glanceArea(),
-      panel: glancePanel(),
+      area: lookoutArea(),
+      panel: lookoutPanel(),
     });
   };
 
-  const openGlance = (url: string) => {
+  const openLookout = (url: string) => {
     // Already open: show the new link in the same panel.
-    if (glance) {
-      glance.page.load(url);
+    if (lookout) {
+      lookout.page.load(url);
       return;
     }
     if (overlay.mode !== 'hidden') hideOverlay();
     const page = engine.createPage({
       onUpdate: () => {},
       onFavicon: (icon) => {
-        if (glance?.page === page) glance.favicon = icon;
+        if (lookout?.page === page) lookout.favicon = icon;
       },
       onNavigationStart: () => {},
       // Links in the preview that ask for a new tab open one quietly.
       onOpenTab: (link) => void tabs.create(link, { activate: false }),
-      onGlance: (link) => page.load(link),
+      onLookout: (link) => page.load(link),
       onFullscreen: () => {},
     });
-    glance = { page, favicon: '', openId: ++commandOpenId, shown: false };
+    lookout = { page, favicon: '', openId: ++commandOpenId, shown: false };
     page.load(url);
-    page.place(glancePanel(), GLANCE_RADIUS);
-    sendGlance('open');
+    page.place(lookoutPanel(), LOOKOUT_RADIUS);
+    sendLookout('open');
     // Show the page once the stand-in panel has scaled in.
-    clearTimeout(glanceTimer);
-    glanceTimer = setTimeout(() => {
-      if (glance?.page !== page) return;
-      glance.shown = true;
+    clearTimeout(lookoutTimer);
+    lookoutTimer = setTimeout(() => {
+      if (lookout?.page !== page) return;
+      lookout.shown = true;
       page.show();
       page.raise();
       page.focus();
     }, GLIDE_MS);
   };
 
-  // Closes Glance at once (something else is taking its place).
-  const dropGlance = () => {
-    if (!glance) return;
-    clearTimeout(glanceTimer);
-    glance.page.destroy();
-    glance = null;
+  // Closes Lookout at once (something else is taking its place).
+  const dropLookout = () => {
+    if (!lookout) return;
+    clearTimeout(lookoutTimer);
+    lookout.page.destroy();
+    lookout = null;
   };
 
-  // Closes Glance gently: the page goes, the stand-in panel and backdrop
+  // Closes Lookout gently: the page goes, the stand-in panel and backdrop
   // fade away.
-  const closeGlance = () => {
-    if (!glance) return;
-    dropGlance();
-    sendGlance('closing');
-    clearTimeout(glanceTimer);
-    glanceTimer = setTimeout(() => {
-      if (overlay.mode !== 'glance' || overlay.phase !== 'closing') return;
+  const closeLookout = () => {
+    if (!lookout) return;
+    dropLookout();
+    sendLookout('closing');
+    clearTimeout(lookoutTimer);
+    lookoutTimer = setTimeout(() => {
+      if (overlay.mode !== 'lookout' || overlay.phase !== 'closing') return;
       overlay = { mode: 'hidden' };
       send('overlay:state', overlay);
       hideLayer(floating);
@@ -749,23 +749,23 @@ const createWindow = () => {
   };
 
   // "Open as tab": the panel grows into the page, then becomes a tab.
-  const expandGlance = () => {
-    if (!glance) return;
-    const { page, favicon } = glance;
-    clearTimeout(glanceTimer);
-    glance = null;
-    sendGlance('expanding');
+  const expandLookout = () => {
+    if (!lookout) return;
+    const { page, favicon } = lookout;
+    clearTimeout(lookoutTimer);
+    lookout = null;
+    sendLookout('expanding');
     page.show();
     page.raise();
-    const from = glancePanel();
-    const to = glanceArea();
+    const from = lookoutPanel();
+    const to = lookoutArea();
     // Lay the page out at its final size right away, so it doesn't re-fit
     // on every step of the glide.
     page.holdLayout({ width: to.width, height: to.height });
     const start = Date.now();
-    clearInterval(glanceGlide);
-    glanceGlide = setInterval(() => {
-      if (win.isDestroyed()) return clearInterval(glanceGlide);
+    clearInterval(lookoutGlide);
+    lookoutGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(lookoutGlide);
       const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
       const e = 1 - Math.pow(1 - t, 3); // ease-out
       const mix = (a: number, b: number) => Math.round(a + (b - a) * e);
@@ -776,10 +776,10 @@ const createWindow = () => {
           width: mix(from.width, to.width),
           height: mix(from.height, to.height),
         },
-        mix(GLANCE_RADIUS, PAGE_RADIUS),
+        mix(LOOKOUT_RADIUS, PAGE_RADIUS),
       );
       if (t < 1) return;
-      clearInterval(glanceGlide);
+      clearInterval(lookoutGlide);
       page.holdLayout(null);
       overlay = { mode: 'hidden' };
       send('overlay:state', overlay);
@@ -789,10 +789,10 @@ const createWindow = () => {
   };
 
   // Keeps the panel centered when the window changes size.
-  const layoutGlance = () => {
-    if (!glance || overlay.mode !== 'glance') return;
-    glance.page.place(glancePanel(), GLANCE_RADIUS);
-    sendGlance('open');
+  const layoutLookout = () => {
+    if (!lookout || overlay.mode !== 'lookout') return;
+    lookout.page.place(lookoutPanel(), LOOKOUT_RADIUS);
+    sendLookout('open');
   };
 
   // --- Sidebar: resize, collapse, peek -------------------------------------
@@ -1277,7 +1277,7 @@ const createWindow = () => {
       hideOverlay();
       tabs.activate(id);
     },
-    'glance:expand': () => expandGlance(),
+    'lookout:expand': () => expandLookout(),
     'overlay:close': () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
@@ -1372,8 +1372,8 @@ const createWindow = () => {
       // Blocking a key here also hides the matching key release from that
       // same view, so let the switcher layer keep its own key events.
       if (source === floating.webContents) handled = false;
-    } else if (glance && key === 'escape') {
-      closeGlance();
+    } else if (lookout && key === 'escape') {
+      closeLookout();
     } else if (switcher && key === 'escape') {
       endSwitcher(false);
     } else if (mod && input.shift && key === 'd') {
@@ -1495,8 +1495,8 @@ const createWindow = () => {
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
     clearInterval(topGlide);
-    clearTimeout(glanceTimer);
-    clearInterval(glanceGlide);
+    clearTimeout(lookoutTimer);
+    clearInterval(lookoutGlide);
     clearInterval(peekWatch);
     clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);

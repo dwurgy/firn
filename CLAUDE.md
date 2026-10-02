@@ -2,7 +2,7 @@
 
 **Firn** (firnbrowser.com) is a calm, minimalist desktop browser. The name comes from firn, the settled, compacted snow high on alpine glaciers — quiet, clean, and still. Let that idea quietly inform the visual identity (soft whites, frost, gentle glacier tones alongside warm neutrals) without getting literal or icy-cold.
 
-It is a calm, minimalist desktop browser in the spirit of Arc and Zen: sidebar-first, vertical tabs, pinned tabs, spaces, glance, and split view. Built on Electron (real Chromium rendering). Built by David with Claude — David is not a professional developer, so explain decisions in plain language and keep changes small and testable.
+It is a calm, minimalist desktop browser in the spirit of Arc and Zen: sidebar-first, vertical tabs, pinned tabs, spaces, lookout, and split view. Built on Electron (real Chromium rendering). Built by David with Claude — David is not a professional developer, so explain decisions in plain language and keep changes small and testable.
 
 Personal use first. Testers later. No rush — quality and feel over speed.
 
@@ -65,7 +65,7 @@ Light & dark:         both, following the OS setting
 - Switch with a row of dots/icons at the bottom of the sidebar, or with a keyboard shortcut / horizontal swipe.
 - Switching spaces gently cross-fades the sidebar tint.
 
-### Glance (link preview)
+### Lookout (link preview)
 - Configurable trigger (e.g. modifier+click or click on links that leave the site).
 - Opens the link in a floating rounded overlay over the current page, with a dimmed backdrop.
 - Close with Esc or clicking outside. One button promotes it to a full tab.
@@ -108,7 +108,7 @@ SplitGroup { id, spaceId, tabIds[], layout, sizes[] }
 Window  { id, activeSpaceId, activeTabId, sidebarWidth, sidebarCollapsed }
 ```
 
-Glance overlays are temporary and are not stored as tabs until promoted.
+Lookout overlays are temporary and are not stored as tabs until promoted.
 
 ---
 
@@ -124,7 +124,7 @@ Each phase has a "done" test. Don't start the next phase until the current one p
    *Done:* Close and reopen; everything comes back exactly as it was.
 4. **Spaces** — Create/switch/theme spaces.
    *Done:* Work and personal spaces feel like separate browsers.
-5. **Glance + split view + command bar.**
+5. **Lookout + split view + command bar.**
    *Done:* Used daily without reaching for another browser.
 6. **Polish & shipping** — Shortcuts, settings, auto-updates, Windows/Mac/Linux builds, code signing (later, when sharing with testers).
 7. **Later** — Cross-device sync, mobile companion app (iOS requires WebKit, so it's a separate native app).

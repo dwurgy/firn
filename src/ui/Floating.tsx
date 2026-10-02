@@ -11,7 +11,7 @@ import {
 } from './icons';
 
 // The layer that floats above the web page: the command bar (new tab), the
-// Ctrl+Tab switcher and Glance's backdrop and buttons. It's transparent
+// Ctrl+Tab switcher and Lookout's backdrop and buttons. It's transparent
 // unless one of them is open.
 export function Floating() {
   const [overlay, setOverlay] = useState<OverlayState>({ mode: 'hidden' });
@@ -26,8 +26,8 @@ export function Floating() {
     return () => offs.forEach((off) => off());
   }, []);
 
-  if (overlay.mode === 'glance') {
-    return <Glance key={overlay.openId} {...overlay} />;
+  if (overlay.mode === 'lookout') {
+    return <Lookout key={overlay.openId} {...overlay} />;
   }
   if (overlay.mode === 'command') {
     return <CommandBar key={overlay.openId} tabs={tabs} />;
@@ -212,12 +212,12 @@ function Switcher({
   );
 }
 
-// --- Glance -----------------------------------------------------------------
+// --- Lookout -----------------------------------------------------------------
 
-// Around a link previewed in Glance: the page dimmed behind it, a stand-in
+// Around a link previewed in Lookout: the page dimmed behind it, a stand-in
 // panel that scales in (the real page appears on top of it once it has),
 // and the buttons beside the panel. Clicking anywhere outside closes it.
-function Glance({
+function Lookout({
   phase,
   area,
   panel,
@@ -234,29 +234,29 @@ function Glance({
   });
   return (
     <div
-      className={`glance is-${phase}`}
+      className={`lookout is-${phase}`}
       onPointerDown={(e) => {
-        if (!(e.target as HTMLElement).closest('.glance-actions'))
+        if (!(e.target as HTMLElement).closest('.lookout-actions'))
           window.firn.closeOverlay();
       }}
     >
-      <div className="glance-backdrop" style={box(area)} />
-      <div className="glance-panel" style={box(panel)} />
+      <div className="lookout-backdrop" style={box(area)} />
+      <div className="lookout-panel" style={box(panel)} />
       <div
-        className="glance-actions"
+        className="lookout-actions"
         style={{ left: panel.x + panel.width + 10, top: panel.y }}
       >
         <button
-          className="glance-button"
+          className="lookout-button"
           title="Close (Esc)"
           onClick={() => window.firn.closeOverlay()}
         >
           <CloseIcon />
         </button>
         <button
-          className="glance-button"
+          className="lookout-button"
           title="Open as tab"
-          onClick={() => window.firn.expandGlance()}
+          onClick={() => window.firn.expandLookout()}
         >
           <ExpandIcon />
         </button>

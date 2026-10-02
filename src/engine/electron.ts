@@ -221,14 +221,14 @@ class ElectronPage implements Page {
     });
 
     // Links that ask for a new tab become tabs, and Shift+clicked links
-    // (which Chromium treats as "open in a new window") open in Glance.
+    // (which Chromium treats as "open in a new window") open in Lookout.
     // Real popup windows (sign-in flows and the like, which a page opens
     // with a size or other window features) stay popups so they keep
     // working.
     web.setWindowOpenHandler(({ url, disposition, features }) => {
       const isWeb = /^https?:/i.test(url);
       if (disposition === 'new-window' && !features && isWeb) {
-        events().onGlance(url);
+        events().onLookout(url);
         return { action: 'deny' };
       }
       if (disposition === 'new-window') {

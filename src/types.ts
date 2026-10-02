@@ -130,10 +130,10 @@ export type OverlayState =
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
   // `revealed` turns false-to-true once Ctrl has been held a moment.
   | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean }
-  // Glance: a link previewed in a panel over the page. `area` is the page's
+  // Lookout: a link previewed in a panel over the page. `area` is the page's
   // box and `panel` the preview's, both in window coordinates.
   | {
-      mode: 'glance';
+      mode: 'lookout';
       openId: number;
       phase: 'open' | 'closing' | 'expanding';
       area: Rect;
@@ -155,8 +155,8 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
-  // Glance's "Open as tab".
-  expandGlance(): void;
+  // Lookout's "Open as tab".
+  expandLookout(): void;
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;

@@ -4,6 +4,11 @@
 
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
+import {
+  SCROLLBAR_CSS,
+  SCROLLBAR_SCRIPT,
+  SCROLLBAR_WORLD_ID,
+} from './scrollbar';
 import { toNavigableUrl } from './url';
 import type {
   NavCommand,
@@ -45,15 +50,6 @@ interface TabManagerOptions {
   // The last tab was closed.
   onEmpty: () => void;
 }
-
-// Every site gets the same overlay scrollbar (switched on in src/main.ts).
-// Sites that draw their own scrollbars (e.g. YouTube's chunky one) do it
-// with ::-webkit-scrollbar styles; setting the standard scrollbar
-// properties makes the browser ignore those and use its own. "!important"
-// in the user stylesheet outranks the site's styles.
-const SCROLLBAR_CSS = `
-* { scrollbar-width: thin !important; scrollbar-color: auto !important; }
-`;
 
 // Popup windows (e.g. "Sign in with Google") keep the same safe settings.
 const SAFE_WEB_PREFERENCES = {
@@ -390,7 +386,13 @@ export class TabManager {
   // Keeps a tab's record in step with its page, and reports changes.
   private watch(id: string, web: WebContents) {
     web.on('dom-ready', () => {
+      // Firn's own floating scrollbar (src/scrollbar.ts).
       web.insertCSS(SCROLLBAR_CSS, { cssOrigin: 'user' }).catch(() => {});
+      web
+        .executeJavaScriptInIsolatedWorld(SCROLLBAR_WORLD_ID, [
+          { code: SCROLLBAR_SCRIPT },
+        ])
+        .catch(() => {});
     });
     const update = () => {
       const entry = this.entries.get(id);

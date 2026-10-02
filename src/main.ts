@@ -22,14 +22,6 @@ import type {
 } from './types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-// Overlay scrollbars, like Zen's: thin, floating over the page instead of
-// taking up a strip of it, and only showing while in use. (FluentOverlay is
-// Windows 11's version.)
-app.commandLine.appendSwitch(
-  'enable-features',
-  'OverlayScrollbar,FluentOverlayScrollbar',
-);
-
 if (started) {
   app.quit();
 }

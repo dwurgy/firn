@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
+import { ElectronEngine } from './engine/electron';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
   FrameState,
@@ -563,7 +564,13 @@ const createWindow = () => {
 
   // --- Tabs ---------------------------------------------------------------
 
-  const tabs = new TabManager(win, {
+  // Web pages come from the Electron engine; the tab model itself doesn't
+  // depend on Electron (see src/engine/engine.ts).
+  const engine = new ElectronEngine(win, (web) => {
+    watchShortcuts(web);
+    raiseLayers();
+  });
+  const tabs = new TabManager(engine, {
     spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
     // The page floats to the right of the sidebar, inset from the edges.
@@ -587,10 +594,6 @@ const createWindow = () => {
       if (!win.isDestroyed())
         win.setTitle(state.title ? `${state.title} — Firn` : 'Firn');
       send('nav:state', state);
-    },
-    onPageCreated: (web) => {
-      watchShortcuts(web);
-      raiseLayers();
     },
     onEmpty: () => openCommandBar(),
   });

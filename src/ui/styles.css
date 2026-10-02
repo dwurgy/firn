@@ -107,6 +107,18 @@ body,
   background-color: var(--frame-glass);
 }
 
+/* No glow on glass: the backdrop brings its own color, and a soft gradient
+   over it can show faint bands. */
+:root.is-glass body {
+  background-image: none;
+}
+
+/* The page covers this box; on glass it only casts the shadow, so nothing
+   solid peeks out around the page's rounded corners. */
+:root.is-glass .page-area:not(.is-empty) {
+  background: transparent;
+}
+
 /* The layers above the page are see-through. */
 :root[data-view='floating'] body,
 :root[data-view='topbar'] body,
@@ -645,78 +657,12 @@ button {
 
 /* --- Top bar with the window buttons (Windows / Linux) ------------------- */
 
-/* Lives in its own layer above the page (TOP_BAR_LAYER_HEIGHT in
-   src/main.ts). It slides down by the same amount, at the same speed, as
-   .page-area below, so the page's rounded top edge and its shadow appear to
-   lower as one piece over the content. */
+/* Lives in its own see-through layer above the page's top edge (as tall as
+   the bar). The page glides down underneath at the same time (see
+   glidePageTop in src/main.ts), and the buttons fade in. */
 .top-bar {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(var(--top-bar-height) + var(--page-radius));
-  transform: translateY(calc(var(--page-inset) - var(--top-bar-height)));
-  transition: transform var(--motion);
-}
-
-.top-bar.is-shown {
-  transform: none;
-}
-
-/* Covers only the page (not the frame beside it): frame colour down to the
-   page's new top edge, rounded cut-outs at the corners, and the same soft
-   shadow the page casts upward. */
-.top-bar-cover {
-  position: absolute;
-  inset: 0 var(--page-inset) 0 0;
-  overflow: hidden;
-}
-
-.top-bar-cover::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--top-bar-height);
-  background: var(--frame);
-}
-
-.top-bar-corner {
-  position: absolute;
-  top: var(--top-bar-height);
-  width: var(--page-radius);
-  height: var(--page-radius);
-}
-
-.top-bar-corner.is-left {
-  left: 0;
-  background: radial-gradient(
-    circle at 100% 100%,
-    transparent calc(var(--page-radius) - 0.5px),
-    var(--frame) var(--page-radius)
-  );
-}
-
-.top-bar-corner.is-right {
-  right: 0;
-  background: radial-gradient(
-    circle at 0 100%,
-    transparent calc(var(--page-radius) - 0.5px),
-    var(--frame) var(--page-radius)
-  );
-}
-
-/* An empty outline of the page's top edge casting the page's shadow. Taller
-   than the layer, so only the shadow above the edge is ever seen. */
-.top-bar-edge {
-  position: absolute;
-  top: var(--top-bar-height);
-  left: 0;
-  right: 0;
-  height: 200px;
-  border-radius: var(--page-radius);
-  box-shadow: var(--page-shadow);
+  inset: 0;
 }
 
 /* The bar's empty space: a real title bar while the bar is showing. */

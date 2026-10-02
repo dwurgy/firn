@@ -64,10 +64,8 @@ const PAGE_INSET = 8;
 // Matches macOS's window corners.
 const PAGE_RADIUS = 12;
 
-// Hovering the top edge slides a bar with the window buttons down over the
-// top of the page (Windows / Linux). The layer is a little taller than the
-// bar so the bar's soft shadow has room.
-const TOP_BAR_LAYER_HEIGHT = 60;
+// Hovering the top edge lowers the page to make room for a bar with the
+// window buttons above it (Windows / Linux).
 const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
@@ -329,6 +327,8 @@ const createWindow = () => {
   let pageLeft = windowState.sidebarCollapsed
     ? PAGE_INSET
     : windowState.sidebarWidth;
+  // Where the page's top edge is: lower while the top bar shows.
+  let pageTop = PAGE_INSET;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -343,7 +343,7 @@ const createWindow = () => {
         x: pageLeft,
         y: 0,
         width: Math.max(0, width - pageLeft),
-        height: TOP_BAR_LAYER_HEIGHT,
+        height: TOP_BAR_HEIGHT,
       };
     }
     if (layer === peek) {
@@ -409,11 +409,10 @@ const createWindow = () => {
   };
 
   // --- The top bar with the window buttons -------------------------------
-  // Reaching the frame edge above the page shows a bar that slides down over
-  // the top of the page; the page itself stays where it is.
-
-  // Both the bar and the sidebar layer's outline of the page slide together,
-  // so every edge and shadow moves as one.
+  // Reaching the frame edge above the page glides the page down a little and
+  // shows the window buttons in the space above it. The bar has no
+  // background of its own: the frame (frosted glass, where available) shows
+  // through it, just like around the rest of the page.
   //
   // The bar's empty space moves the window like a title bar. Windows takes
   // over the mouse there, so the bar itself can't tell when the mouse
@@ -422,6 +421,23 @@ const createWindow = () => {
   let topBarHideTimer: ReturnType<typeof setTimeout> | undefined;
   let topBarWatch: ReturnType<typeof setInterval> | undefined;
   let mouseLastOverBar = 0;
+  let topGlide: ReturnType<typeof setInterval> | undefined;
+
+  // Slides the page's top edge, in step with the sidebar layer's outline of
+  // the page (.page-area in styles.css).
+  const glidePageTop = (to: number) => {
+    const from = pageTop;
+    const start = Date.now();
+    clearInterval(topGlide);
+    topGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(topGlide);
+      const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out
+      pageTop = Math.round(from + (to - from) * eased);
+      tabs.layout();
+      if (t === 1) clearInterval(topGlide);
+    }, 16);
+  };
 
   // The cursor's position relative to the window's content area.
   const cursorInWindow = () => {
@@ -454,6 +470,7 @@ const createWindow = () => {
       clearTimeout(topBarHideTimer);
       showLayer(topBar);
       send('top-bar:state', true);
+      glidePageTop(TOP_BAR_HEIGHT);
       mouseLastOverBar = Date.now();
       topBarWatch = setInterval(() => {
         if (win.isDestroyed()) return;
@@ -465,6 +482,7 @@ const createWindow = () => {
       topBarShown = false;
       clearInterval(topBarWatch);
       send('top-bar:state', false);
+      glidePageTop(PAGE_INSET);
       // Let the slide back up finish before the bar's layer goes away.
       topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
     }
@@ -480,9 +498,9 @@ const createWindow = () => {
       const [width, height] = win.getContentSize();
       return {
         x: pageLeft,
-        y: PAGE_INSET,
+        y: pageTop,
         width: Math.max(0, width - pageLeft - PAGE_INSET),
-        height: Math.max(0, height - PAGE_INSET * 2),
+        height: Math.max(0, height - pageTop - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {
@@ -978,6 +996,7 @@ const createWindow = () => {
     tabs.destroy();
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
+    clearInterval(topGlide);
     clearInterval(peekWatch);
     clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);

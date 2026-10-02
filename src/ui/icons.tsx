@@ -103,6 +103,36 @@ export const ClearDownIcon = () => (
   </svg>
 );
 
+// Lookout's "Open as tab": two corners pulling outward.
+export const ExpandIcon = () => (
+  <svg {...base}>
+    <path d="M9.5 3.5h3v3M12.5 3.5 9 7M6.5 12.5h-3v-3M3.5 12.5 7 9" />
+  </svg>
+);
+
+// "Separate split view": two panes drawing apart.
+export const SeparateIcon = () => (
+  <svg {...base}>
+    <rect x="2.5" y="4" width="4.5" height="8" rx="1.2" />
+    <rect x="9" y="4" width="4.5" height="8" rx="1.2" />
+  </svg>
+);
+
+// A page from the history: a soft clock.
+export const HistoryIcon = () => (
+  <svg {...base} strokeWidth={1.4}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 5v3.2l2 1.3" />
+  </svg>
+);
+
+// A quick action in the command bar: a small four-pointed spark.
+export const ActionIcon = () => (
+  <svg {...base} strokeWidth={1.4}>
+    <path d="M8 2.8c.4 2.6 1.6 3.8 4.2 4.2v.1c-2.6.4-3.8 1.6-4.2 4.2h-.1c-.4-2.6-1.6-3.8-4.2-4.2V7c2.6-.4 3.8-1.6 4.2-4.2Z" />
+  </svg>
+);
+
 // A pinned tab's "unload" button (a pin is never closed outright).
 export const UnloadIcon = () => (
   <svg {...base}>

@@ -30,7 +30,11 @@ export const DEFAULT_SIDEBAR: SidebarState = {
 // The live state every sidebar needs, kept in step with the main process.
 export function useSidebarData() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
-  const [tabs, setTabs] = useState<TabsState>({ tabs: [], activeTabId: null });
+  const [tabs, setTabs] = useState<TabsState>({
+    tabs: [],
+    activeTabId: null,
+    splits: [],
+  });
   const [sidebar, setSidebar] = useState<SidebarState>(DEFAULT_SIDEBAR);
   const [spaces, setSpaces] = useState<SpacesState>({
     spaces: [],

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { SplitGroup } from '../types';
+import firnMark from './firn-mark.svg';
 import { Sidebar, useSidebarData } from './Sidebar';
 
 const PAGE_INSET = 8; // matches --page-inset in styles.css
@@ -24,6 +26,11 @@ export function App() {
   );
   // Nothing on screen (e.g. a new, empty space).
   const noTabs = !tabs.activeTabId;
+  // The active tab is one side of a split view.
+  const activeSplitId = tabs.tabs.find(
+    (t) => t.id === tabs.activeTabId,
+  )?.splitId;
+  const split = tabs.splits.find((s) => s.id === activeSplitId);
 
   return (
     <div
@@ -84,14 +91,72 @@ export function App() {
 
       {/* Sits right behind the web page so the page looks lifted off the
           frame. With no tabs open, this calm page shows instead. */}
-      <main className={`page-area ${noTabs ? 'is-empty' : ''}`}>
+      <main
+        className={['page-area', noTabs && 'is-empty', split && 'is-split']
+          .filter(Boolean)
+          .join(' ')}
+      >
         {noTabs && (
           <div className="empty-page">
+            <img className="empty-mark" src={firnMark} alt="" />
             <p className="empty-title">No open tabs</p>
             <p className="empty-hint">Press Ctrl+T to open one.</p>
           </div>
         )}
+        {split && <SplitFrame split={split} activeTabId={tabs.activeTabId} />}
       </main>
     </div>
+  );
+}
+
+const SPLIT_GAP = 8; // matches SPLIT_GAP in src/tabs.ts
+
+// Behind a split view's two pages: each side's lifted outline (the side you
+// last clicked into has a soft ring in the space's color), and the gap
+// between them, which can be dragged to resize the sides. Double-click it
+// to go back to half and half.
+function SplitFrame({
+  split,
+  activeTabId,
+}: {
+  split: SplitGroup;
+  activeTabId: string | null;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const left = split.sizes[0];
+  const leftWidth = `calc((100% - ${SPLIT_GAP}px) * ${left})`;
+  const ratioAt = (e: React.PointerEvent) => {
+    const area = e.currentTarget.parentElement!.getBoundingClientRect();
+    return (e.clientX - area.left - SPLIT_GAP / 2) / (area.width - SPLIT_GAP);
+  };
+  return (
+    <>
+      <div
+        className={`split-side ${split.tabIds[0] === activeTabId ? 'is-active' : ''}`}
+        style={{ left: 0, width: leftWidth }}
+      />
+      <div
+        className={`split-side ${split.tabIds[1] === activeTabId ? 'is-active' : ''}`}
+        style={{ left: `calc(${leftWidth} + ${SPLIT_GAP}px)`, right: 0 }}
+      />
+      <div
+        className={`split-gap ${dragging ? 'is-dragging' : ''}`}
+        style={{ left: leftWidth }}
+        title="Drag to resize · Double-click to even out"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setDragging(true);
+        }}
+        onPointerMove={(e) => {
+          if (dragging) window.firn.resizeSplit(split.id, ratioAt(e));
+        }}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+        onDoubleClick={() => window.firn.resizeSplit(split.id, 0.5)}
+      >
+        <span className="split-grip" />
+      </div>
+    </>
   );
 }

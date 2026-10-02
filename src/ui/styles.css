@@ -36,6 +36,9 @@
   --frost-strong: rgba(110, 152, 178, 0.75);
   --close-hover: #d4392c;
   --backdrop: rgba(60, 45, 30, 0.08);
+  --lookout-dim: rgba(45, 34, 24, 0.26); /* the page behind Lookout */
+  --lookout-shadow:
+    0 2px 8px rgba(40, 28, 16, 0.14), 0 18px 48px rgba(40, 28, 16, 0.22);
   --panel-edge: rgba(60, 40, 20, 0.08);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
   --space-wash: 0.16; /* how strongly the space's color tints the frame */
@@ -70,6 +73,9 @@
     --frost-strong: rgba(176, 208, 224, 0.8);
     --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
     --backdrop: rgba(0, 0, 0, 0.18);
+    --lookout-dim: rgba(0, 0, 0, 0.42);
+    --lookout-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
     --panel-edge: rgba(255, 250, 245, 0.08);
   }
 }
@@ -892,9 +898,106 @@ button {
   background: var(--page);
 }
 
+/* --- Split view ------------------------------------------------------------ */
+
+/* In the sidebar: one row, both tabs side by side. The half you're working
+   in reads a little stronger. */
+.tab.split-row {
+  gap: 0;
+  padding: 0 4px;
+}
+
+.split-half {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.split-half .tab-title {
+  font-size: 12.5px;
+}
+
+.tab.is-active .split-half:not(.is-current) .tab-title {
+  color: var(--text-muted);
+}
+
+.split-line {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: var(--panel-edge);
+}
+
+/* Two pages side by side: the area itself steps back, and each side gets
+   its own lifted outline. */
+.page-area.is-split {
+  background: transparent;
+  box-shadow: none;
+}
+
+.split-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--page-radius);
+  background: var(--page);
+  box-shadow: var(--page-shadow);
+  transition: box-shadow var(--motion);
+}
+
+/* The side you're working in: a soft ring in the space's color, in the gap
+   just outside the page. */
+.split-side.is-active {
+  box-shadow:
+    0 0 0 2px rgb(var(--space-rgb, 128 128 128) / 0.9),
+    var(--page-shadow);
+}
+
+/* The gap between the sides: drag to resize. A small grip appears on
+   hover. */
+.split-gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+}
+
+.split-grip {
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.split-gap:hover .split-grip,
+.split-gap.is-dragging .split-grip {
+  opacity: 0.8;
+}
+
 .empty-page {
   text-align: center;
   animation: settle 250ms ease-out;
+}
+
+/* Firn's mark, resting quietly above the words. */
+.empty-mark {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 18px;
+  opacity: 0.85;
 }
 
 .empty-title {
@@ -1146,4 +1249,103 @@ button {
 
 .peek.is-shown .sidebar {
   transform: none;
+}
+
+/* --- Lookout: a link previewed over the page -------------------------------- */
+
+.lookout {
+  position: fixed;
+  inset: 0;
+}
+
+/* The page behind, dimmed (only the page, not the sidebar). */
+.lookout-backdrop {
+  position: absolute;
+  border-radius: var(--page-radius);
+  background: var(--lookout-dim);
+  animation: lookout-fade-in var(--glide) both;
+}
+
+/* A stand-in for the preview that scales in; the real page appears on top
+   of it once it has, and its soft shadow stays around the page. */
+.lookout-panel {
+  position: absolute;
+  border-radius: 14px;
+  background: var(--page);
+  box-shadow: var(--lookout-shadow);
+  animation: lookout-in var(--glide) both;
+}
+
+/* Close and "Open as tab", beside the panel's top-right corner. */
+.lookout-actions {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: lookout-fade-in var(--glide) both;
+}
+
+.lookout-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--page);
+  color: var(--text-muted);
+  box-shadow: 0 1px 3px rgba(40, 28, 16, 0.18);
+  cursor: default;
+  transition:
+    color var(--motion),
+    background var(--motion);
+}
+
+.lookout-button:hover {
+  color: var(--text);
+  background: var(--field-focus);
+}
+
+/* Closing: everything fades away gently. */
+.lookout.is-closing .lookout-backdrop,
+.lookout.is-closing .lookout-actions,
+.lookout.is-expanding .lookout-backdrop,
+.lookout.is-expanding .lookout-actions {
+  animation: lookout-fade-out var(--glide) both;
+}
+
+.lookout.is-closing .lookout-panel {
+  animation: lookout-out var(--glide) both;
+}
+
+/* Opening as a tab: the page itself grows into place. */
+.lookout.is-expanding .lookout-panel {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes lookout-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes lookout-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes lookout-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes lookout-fade-out {
+  to {
+    opacity: 0;
+  }
 }

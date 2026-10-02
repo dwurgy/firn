@@ -24,8 +24,12 @@ export interface PageEvents {
   // it). Real popup windows, such as sign-in flows, are handled by the
   // engine and never come here.
   onOpenTab(url: string, background: boolean): void;
+  // A link was Shift+clicked: preview it in Lookout.
+  onLookout(url: string): void;
   // The page went into or out of fullscreen (e.g. a video).
   onFullscreen(on: boolean): void;
+  // The mouse was pressed inside the page (the person is working in it).
+  onFocus(): void;
 }
 
 // One web page: the content of a tab.
@@ -59,6 +63,12 @@ export interface Page {
   holdLayout(size: { width: number; height: number } | null): void;
   show(): void;
   hide(): void;
+  // Puts the page above everything else in the window (Lookout floats over
+  // Firn's own layers).
+  raise(): void;
+  // Sends the page's reports somewhere else from now on (a page previewed
+  // in Lookout becomes a tab).
+  listen(events: PageEvents): void;
   // Closes the page for good.
   destroy(): void;
 }

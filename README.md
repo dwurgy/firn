@@ -1,5 +1,5 @@
 # firn
-A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, pinned tabs, spaces, glance previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
+A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, Basecamp for your favorite sites, pinned tabs, spaces, Lookout link previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
 
 ## Running Firn on your computer
 
@@ -28,9 +28,10 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | --- | --- | --- |
 | Focus address bar | Ctrl+L | Cmd+L |
 | Hide / show sidebar | Ctrl+S | Cmd+S |
-| New tab (opens the command bar) | Ctrl+T | Cmd+T |
+| Command bar (new tab, find tabs and history, actions) | Ctrl+T | Cmd+T |
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
+| Preview a link in Lookout | Shift+click | Shift+click |
 | Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
 | Last-used tab (hold Ctrl and keep tapping Tab for the switcher) | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
@@ -48,11 +49,16 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
+
+### Command bar
+
+**Ctrl+T** opens the command bar. Type an address or a search; it also finds your open tabs in every space (tabs in another space say which, and picking one takes you there) and pages from your history. Type a couple of letters of an action to run it: **pin**, **basecamp**, **copy** link, **close**, **reopen**, **clear**, **sidebar**, **new space**, or a space's name to go there.
 
 ### Your session
 
-Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh.
+Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh. Your browsing history (for the command bar) is kept next to it in `history.json`, on your computer only.
 
 ### Basecamp and pinned tabs
 
@@ -65,6 +71,14 @@ Both remember the address they were added at as their *home*: right-click for **
 ### Spaces
 
 Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them). Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+
+### Lookout
+
+**Shift+click** a link to preview it in Lookout: a rounded panel floating over the page, with the page dimmed behind it. Press **Esc** or click outside to close it, or use the button beside it to **open it as a tab** (the panel grows into the page and keeps everything, scroll position included). Links that open real popup windows, like "Sign in with Google", still open as windows.
+
+### Split view
+
+Right-click the tab you're on and choose **Split view with** to pick another tab to show beside it (or **New tab…** to open something new beside it), or right-click any other tab and choose **Split view with current tab**. The two sit side by side, each with its own address and back/forward. Click into a side to work in it (the address bar follows, and a soft ring shows which side it is). Drag the gap between them to resize, or double-click it to even them out. In the sidebar the pair is one row: click either half, or drag the row to move both. Hover it and use the button on the right (or right-click → **Separate split view**) to make them ordinary tabs again; closing one side leaves the other on its own. Split views are saved with your session.
 
 ### Frosted glass
 

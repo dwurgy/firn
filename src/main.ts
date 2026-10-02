@@ -1,5 +1,6 @@
 import {
   app,
+  clipboard,
   BrowserWindow,
   ipcMain,
   dialog,
@@ -15,13 +16,17 @@ import {
   type WebContents,
 } from 'electron';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
+import type { Page } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
+import { History } from './history';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
+  CommandAction,
   FrameState,
   NavCommand,
   OverlayState,
@@ -133,6 +138,16 @@ function loadUi(web: WebContents, view?: LayerView) {
 function lockUi(web: WebContents) {
   web.on('will-navigate', (event) => event.preventDefault());
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
+// Firn's app icon (assets/icon.*), if it's there.
+function appIcon() {
+  const file = path.join(
+    app.getAppPath(),
+    'assets',
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+  );
+  return fs.existsSync(file) ? file : undefined;
 }
 
 // Downloads a favicon and returns it as a data: URL (or null). Small images
@@ -272,6 +287,9 @@ const createWindow = () => {
     minWidth: 640,
     minHeight: 400,
     title: 'Firn',
+    // The window and taskbar icon while running from source (a packaged
+    // Firn gets its icon from forge.config.mts).
+    icon: appIcon(),
     // With glass, the window is see-through and the UI paints a tinted,
     // partly transparent frame over the system's blur.
     backgroundColor: GLASS ? '#00000000' : frameColor(),
@@ -457,10 +475,20 @@ const createWindow = () => {
   // Stacking order, bottom to top.
   const layerOrder = [peek, topBar, floating];
 
+  // Lookout: a link previewed in a floating panel over the page (see the
+  // Lookout section below). Its page floats above every layer.
+  let lookout: {
+    page: Page;
+    favicon: string;
+    openId: number;
+    shown: boolean;
+  } | null = null;
+
   // New tabs are added on top, so lift any shown layer back above them.
   const raiseLayers = () => {
     for (const layer of layerOrder)
       if (layer && shownLayers.has(layer)) win.contentView.addChildView(layer);
+    if (lookout?.shown) lookout.page.raise();
   };
 
   // Returns false (and shows nothing) if the panel hasn't started yet, so a
@@ -490,13 +518,18 @@ const createWindow = () => {
 
   const showOverlay = (state: OverlayState) => {
     if (!readyUi.has(floating.webContents)) return false;
+    // Something else (the command bar, the switcher) replaces Lookout.
+    if (state.mode !== 'lookout') dropLookout();
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
-    if (state.mode !== 'hidden') floating.webContents.focus();
+    if (state.mode !== 'hidden' && state.mode !== 'lookout')
+      floating.webContents.focus();
     return true;
   };
   const hideOverlay = () => {
+    splitBeside = null;
+    if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
@@ -595,6 +628,11 @@ const createWindow = () => {
 
   // --- Tabs ---------------------------------------------------------------
 
+  // Pages visited, for the command bar (history.json next to the session).
+  const history = new History(
+    path.join(app.getPath('userData'), 'history.json'),
+  );
+
   // Web pages come from the Electron engine; the tab model itself doesn't
   // depend on Electron (see src/engine/engine.ts).
   const engine = new ElectronEngine(win, (web) => {
@@ -626,13 +664,162 @@ const createWindow = () => {
       send('nav:state', state);
     },
     onEmpty: () => openCommandBar(),
+    onLookout: (url) => openLookout(url),
+    onVisit: (url, title, favicon, newVisit) =>
+      history.visit(url, title, favicon, newVisit),
   });
 
   const relayout = () => {
     tabs.layout();
     layoutLayers();
+    layoutLookout();
   };
   win.on('resize', relayout);
+
+  // --- Lookout -----------------------------------------------------------------
+  // Shift+clicking a link previews it in a rounded panel floating over the
+  // page, with the page dimmed behind it. Esc or a click outside closes it;
+  // "Open as tab" grows the panel into the page and keeps it as a tab.
+  //
+  // The floating layer draws the dimmed backdrop, a stand-in panel that
+  // scales in, and the buttons beside it; the real page appears on top of
+  // the stand-in once it has scaled in.
+
+  const LOOKOUT_RADIUS = 14; // matches the panel radius in styles.css
+  let lookoutTimer: ReturnType<typeof setTimeout> | undefined;
+  let lookoutGlide: ReturnType<typeof setInterval> | undefined;
+
+  // The page's area, and the panel centered within it.
+  const lookoutArea = () => tabs.pageBoundsFor(pageTop);
+  const lookoutPanel = () => {
+    const area = lookoutArea();
+    const marginX = Math.max(56, Math.round(area.width * 0.08));
+    const marginY = 24;
+    return {
+      x: area.x + marginX,
+      y: area.y + marginY,
+      width: Math.max(0, area.width - marginX * 2),
+      height: Math.max(0, area.height - marginY * 2),
+    };
+  };
+
+  const sendLookout = (phase: 'open' | 'closing' | 'expanding') => {
+    if (!lookout && phase === 'open') return;
+    const openId =
+      lookout?.openId ?? (overlay.mode === 'lookout' ? overlay.openId : 0);
+    showOverlay({
+      mode: 'lookout',
+      openId,
+      phase,
+      area: lookoutArea(),
+      panel: lookoutPanel(),
+    });
+  };
+
+  const openLookout = (url: string) => {
+    // Already open: show the new link in the same panel.
+    if (lookout) {
+      lookout.page.load(url);
+      return;
+    }
+    if (overlay.mode !== 'hidden') hideOverlay();
+    const page = engine.createPage({
+      onUpdate: () => {},
+      onFavicon: (icon) => {
+        if (lookout?.page === page) lookout.favicon = icon;
+      },
+      onNavigationStart: () => {},
+      // Links in the preview that ask for a new tab open one quietly.
+      onOpenTab: (link) => void tabs.create(link, { activate: false }),
+      onLookout: (link) => page.load(link),
+      onFullscreen: () => {},
+      onFocus: () => {},
+    });
+    lookout = { page, favicon: '', openId: ++commandOpenId, shown: false };
+    page.load(url);
+    page.place(lookoutPanel(), LOOKOUT_RADIUS);
+    sendLookout('open');
+    // Show the page once the stand-in panel has scaled in.
+    clearTimeout(lookoutTimer);
+    lookoutTimer = setTimeout(() => {
+      if (lookout?.page !== page) return;
+      lookout.shown = true;
+      page.show();
+      page.raise();
+      page.focus();
+    }, GLIDE_MS);
+  };
+
+  // Closes Lookout at once (something else is taking its place).
+  const dropLookout = () => {
+    if (!lookout) return;
+    clearTimeout(lookoutTimer);
+    lookout.page.destroy();
+    lookout = null;
+  };
+
+  // Closes Lookout gently: the page goes, the stand-in panel and backdrop
+  // fade away.
+  const closeLookout = () => {
+    if (!lookout) return;
+    dropLookout();
+    sendLookout('closing');
+    clearTimeout(lookoutTimer);
+    lookoutTimer = setTimeout(() => {
+      if (overlay.mode !== 'lookout' || overlay.phase !== 'closing') return;
+      overlay = { mode: 'hidden' };
+      send('overlay:state', overlay);
+      hideLayer(floating);
+    }, GLIDE_MS);
+    tabs.focusActive();
+  };
+
+  // "Open as tab": the panel grows into the page, then becomes a tab.
+  const expandLookout = () => {
+    if (!lookout) return;
+    const { page, favicon } = lookout;
+    clearTimeout(lookoutTimer);
+    lookout = null;
+    sendLookout('expanding');
+    page.show();
+    page.raise();
+    const from = lookoutPanel();
+    const to = lookoutArea();
+    // Lay the page out at its final size right away, so it doesn't re-fit
+    // on every step of the glide.
+    page.holdLayout({ width: to.width, height: to.height });
+    const start = Date.now();
+    clearInterval(lookoutGlide);
+    lookoutGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(lookoutGlide);
+      const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
+      const e = 1 - Math.pow(1 - t, 3); // ease-out
+      const mix = (a: number, b: number) => Math.round(a + (b - a) * e);
+      page.place(
+        {
+          x: mix(from.x, to.x),
+          y: mix(from.y, to.y),
+          width: mix(from.width, to.width),
+          height: mix(from.height, to.height),
+        },
+        mix(LOOKOUT_RADIUS, PAGE_RADIUS),
+      );
+      if (t < 1) return;
+      clearInterval(lookoutGlide);
+      page.holdLayout(null);
+      overlay = { mode: 'hidden' };
+      send('overlay:state', overlay);
+      hideLayer(floating);
+      tabs.adopt(page, favicon);
+    }, 8);
+  };
+
+  // Keeps the panel centered when the window changes size.
+  const layoutLookout = () => {
+    if (!lookout || overlay.mode !== 'lookout') return;
+    lookout.page.place(lookoutPanel(), LOOKOUT_RADIUS);
+    sendLookout('open');
+  };
 
   // --- Sidebar: resize, collapse, peek -------------------------------------
 
@@ -790,6 +977,41 @@ const createWindow = () => {
           },
         ]
       : [];
+    // Split view: show this tab beside the current one, or end the split.
+    const shortTitle = (title: string) =>
+      title.length > 42 ? `${title.slice(0, 40)}…` : title;
+    const splitItems: Electron.MenuItemConstructorOptions[] = tab.splitId
+      ? [
+          { label: 'Separate split view', click: () => tabs.unsplit(id) },
+          { type: 'separator' },
+        ]
+      : id === tabs.activeTabId
+        ? [
+            // The current tab: pick what goes beside it.
+            {
+              label: 'Split view with',
+              submenu: [
+                ...tabs.splitCandidates().map((other) => ({
+                  label: shortTitle(other.title || other.url),
+                  click: () => tabs.splitWith(other.id),
+                })),
+                ...(tabs.splitCandidates().length
+                  ? [{ type: 'separator' as const }]
+                  : []),
+                { label: 'New tab…', click: () => openCommandBar(id) },
+              ],
+            },
+            { type: 'separator' },
+          ]
+        : tabs.canSplitWith(id)
+          ? [
+              {
+                label: 'Split view with current tab',
+                click: () => tabs.splitWith(id),
+              },
+              { type: 'separator' },
+            ]
+          : [];
     const items: Electron.MenuItemConstructorOptions[] = tab.basecamp
       ? [
           { label: 'Go back to home', click: () => tabs.goHome(id) },
@@ -814,6 +1036,7 @@ const createWindow = () => {
             { label: 'Unload tab', click: () => tabs.close(id) },
           ]
         : [
+            ...splitItems,
             {
               label: 'Pin tab',
               accelerator: 'CmdOrCtrl+D',
@@ -984,8 +1207,60 @@ const createWindow = () => {
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
-  const openCommandBar = () =>
-    showOverlay({ mode: 'command', openId: ++commandOpenId });
+  // Quick actions from the command bar, on the tab you're on.
+  const runAction = (action: CommandAction, arg: string) => {
+    hideOverlay();
+    const id = tabs.activeTabId;
+    const tab = id ? tabs.state().tabs.find((t) => t.id === id) : undefined;
+    switch (action) {
+      case 'pin':
+        if (id && tab && !tab.basecamp) tabs.togglePin(id);
+        break;
+      case 'basecamp':
+        if (!id || !tab) break;
+        if (tab.basecamp) tabs.removeFromBasecamp(id);
+        else tabs.addToBasecamp(id);
+        break;
+      case 'close':
+        if (id) tabs.close(id);
+        break;
+      case 'reopen':
+        tabs.reopenClosed();
+        break;
+      case 'separate':
+        if (id) tabs.unsplit(id);
+        break;
+      case 'sidebar':
+        setSidebarCollapsed(!windowState.sidebarCollapsed);
+        break;
+      case 'new-space':
+        newSpace();
+        break;
+      case 'clear':
+        tabs.clearEveryday();
+        break;
+      case 'copy-link':
+        if (tab?.url) clipboard.writeText(tab.url);
+        break;
+      case 'switch-space':
+        switchSpace(arg);
+        break;
+    }
+  };
+
+  // With `besideId`, whatever is picked opens in split view beside that tab.
+  let splitBeside: string | null = null;
+  const openCommandBar = (besideId?: string) => {
+    const beside = besideId
+      ? tabs.state().tabs.find((t) => t.id === besideId)
+      : undefined;
+    showOverlay({
+      mode: 'command',
+      openId: ++commandOpenId,
+      beside: beside ? beside.title || beside.url : undefined,
+    });
+    splitBeside = beside?.id ?? null;
+  };
 
   const focusAddress = () => {
     hideOverlay();
@@ -1066,8 +1341,14 @@ const createWindow = () => {
     'tabs:new': () => openCommandBar(),
     'tabs:open-url': (_sender, input) => {
       if (typeof input !== 'string') return;
+      const beside = splitBeside;
       hideOverlay();
-      tabs.openTyped(input);
+      const id = tabs.openTyped(input);
+      // Opened from "Split view with → New tab…": it goes beside that tab.
+      if (beside && id) {
+        tabs.activate(beside);
+        tabs.splitWith(id);
+      }
     },
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
@@ -1112,9 +1393,31 @@ const createWindow = () => {
     },
     'tabs:activate': (_sender, id) => {
       if (typeof id !== 'string') return;
+      const beside = overlay.mode === 'command' ? splitBeside : null;
       if (switcher) endSwitcher(false);
       hideOverlay();
+      // Picked in the command bar from "Split view with → New tab…".
+      if (beside && beside !== id) {
+        tabs.activate(beside);
+        if (tabs.canSplitWith(id)) return tabs.splitWith(id);
+      }
+      // A tab in another space (from the command bar): go to that space.
+      const spaceId = tabs.spaceOfTab(id);
+      if (spaceId && spaceId !== windowState.activeSpaceId)
+        switchSpace(spaceId);
       tabs.activate(id);
+    },
+    'lookout:expand': () => expandLookout(),
+    'command:run': (_sender, action, arg) => {
+      if (typeof action === 'string')
+        runAction(action as CommandAction, typeof arg === 'string' ? arg : '');
+    },
+    'split:resize': (_sender, id, ratio) => {
+      if (typeof id === 'string' && typeof ratio === 'number')
+        tabs.resizeSplit(id, ratio);
+    },
+    'split:separate': (_sender, tabId) => {
+      if (typeof tabId === 'string') tabs.unsplit(tabId);
     },
     'overlay:close': () => {
       if (switcher) endSwitcher(false);
@@ -1168,6 +1471,18 @@ const createWindow = () => {
       : null,
   );
 
+  // The command bar asks for every open tab, and for history matches.
+  ipcMain.handle('command:tabs', (event: IpcMainInvokeEvent) =>
+    uiContents.includes(event.sender) ? tabs.allTabs() : [],
+  );
+  ipcMain.handle(
+    'history:search',
+    (event: IpcMainInvokeEvent, query: unknown) =>
+      uiContents.includes(event.sender) && typeof query === 'string'
+        ? history.search(query.slice(0, 200), 6)
+        : [],
+  );
+
   // Glass turns solid while the window is out of focus.
   const frameState = (): FrameState => ({
     glass: GLASS,
@@ -1210,6 +1525,8 @@ const createWindow = () => {
       // Blocking a key here also hides the matching key release from that
       // same view, so let the switcher layer keep its own key events.
       if (source === floating.webContents) handled = false;
+    } else if (lookout && key === 'escape') {
+      closeLookout();
     } else if (switcher && key === 'escape') {
       endSwitcher(false);
     } else if (mod && input.shift && key === 'd') {
@@ -1314,23 +1631,31 @@ const createWindow = () => {
         maximized: win.isMaximized(),
       },
       recentlyClosed: tabs.closedUrls,
+      splits: tabs.splitGroups,
     });
   });
   for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
     win.on(event as 'resize', () => saver.schedule());
-  win.on('close', () => saver.flush());
+  win.on('close', () => {
+    saver.flush();
+    history.flush();
+  });
 
   win.on('closed', () => {
     saver.cancel();
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
     ipcMain.removeHandler('icon:data');
+    ipcMain.removeHandler('command:tabs');
+    ipcMain.removeHandler('history:search');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();
     clearTimeout(topBarHideTimer);
     clearInterval(topBarWatch);
     clearInterval(topGlide);
+    clearTimeout(lookoutTimer);
+    clearInterval(lookoutGlide);
     clearInterval(peekWatch);
     clearInterval(edgeWatch);
     clearTimeout(peekHideTimer);
@@ -1359,6 +1684,7 @@ const createWindow = () => {
     if (!spaces.some((s) => s.id === tab.spaceId)) tab.spaceId = spaces[0].id;
     tabs.create(tab.url, { restore: tab, activate: false });
   }
+  tabs.restoreSplits(saved?.splits);
   console.log(
     savedTabs.length
       ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`

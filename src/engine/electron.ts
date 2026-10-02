@@ -54,15 +54,18 @@ export class ElectronEngine implements PageEngine {
 class ElectronPage implements Page {
   private view: WebContentsView;
 
+  private events: PageEvents;
+
   constructor(
     private win: BrowserWindow,
     events: PageEvents,
   ) {
+    this.events = events;
     this.view = new WebContentsView({ webPreferences: SAFE_WEB_PREFERENCES });
     this.view.setBackgroundColor('#ffffff');
     this.view.setVisible(false);
     win.contentView.addChildView(this.view);
-    this.listen(events);
+    this.wire();
   }
 
   get web() {
@@ -173,14 +176,24 @@ class ElectronPage implements Page {
     this.view.setVisible(false);
   }
 
+  raise() {
+    if (!this.win.isDestroyed()) this.win.contentView.addChildView(this.view);
+  }
+
+  listen(events: PageEvents) {
+    this.events = events;
+  }
+
   destroy() {
     if (!this.win.isDestroyed())
       this.win.contentView.removeChildView(this.view);
     if (!this.web.isDestroyed()) this.web.close();
   }
 
-  private listen(events: PageEvents) {
+  // Passes the page's reports on to whoever is listening now.
+  private wire() {
     const web = this.web;
+    const events = () => this.events;
     web.on('dom-ready', () => {
       // Firn's own floating scrollbar (src/scrollbar.ts).
       web.insertCSS(SCROLLBAR_CSS, { cssOrigin: 'user' }).catch(() => {});
@@ -192,7 +205,7 @@ class ElectronPage implements Page {
     });
 
     const update = () => {
-      if (!web.isDestroyed()) events.onUpdate();
+      if (!web.isDestroyed()) events().onUpdate();
     };
     web.on('did-start-loading', update);
     web.on('did-stop-loading', update);
@@ -200,16 +213,24 @@ class ElectronPage implements Page {
     web.on('did-navigate-in-page', update);
     web.on('page-title-updated', update);
     web.on('page-favicon-updated', (_event, favicons) =>
-      events.onFavicon(favicons[0] ?? ''),
+      events().onFavicon(favicons[0] ?? ''),
     );
     web.on('did-start-navigation', (details) => {
       if (details.isMainFrame && !details.isSameDocument)
-        events.onNavigationStart(details.url);
+        events().onNavigationStart(details.url);
     });
 
-    // Links that ask for a new tab become tabs. Real popup windows (sign-in
-    // flows and the like) stay popups so they keep working.
-    web.setWindowOpenHandler(({ url, disposition }) => {
+    // Links that ask for a new tab become tabs, and Shift+clicked links
+    // (which Chromium treats as "open in a new window") open in Lookout.
+    // Real popup windows (sign-in flows and the like, which a page opens
+    // with a size or other window features) stay popups so they keep
+    // working.
+    web.setWindowOpenHandler(({ url, disposition, features }) => {
+      const isWeb = /^https?:/i.test(url);
+      if (disposition === 'new-window' && !features && isWeb) {
+        events().onLookout(url);
+        return { action: 'deny' };
+      }
       if (disposition === 'new-window') {
         return {
           action: 'allow',
@@ -219,12 +240,15 @@ class ElectronPage implements Page {
           },
         };
       }
-      if (/^https?:/i.test(url))
-        events.onOpenTab(url, disposition === 'background-tab');
+      if (isWeb) events().onOpenTab(url, disposition === 'background-tab');
       return { action: 'deny' };
     });
 
-    web.on('enter-html-full-screen', () => events.onFullscreen(true));
-    web.on('leave-html-full-screen', () => events.onFullscreen(false));
+    // A press inside the page (the person starting to work in it).
+    web.on('before-mouse-event', (_event, mouse) => {
+      if (mouse.type === 'mouseDown') events().onFocus();
+    });
+    web.on('enter-html-full-screen', () => events().onFullscreen(true));
+    web.on('leave-html-full-screen', () => events().onFullscreen(false));
   }
 }

@@ -13,13 +13,14 @@
 // then everyday tabs.
 
 import { randomUUID } from 'node:crypto';
-import type { Page, PageBounds, PageEngine } from './engine/engine';
+import type { Page, PageBounds, PageEngine, PageEvents } from './engine/engine';
 import { toNavigableUrl } from './url';
 import type {
   NavCommand,
   NavState,
   SavedHistory,
   SavedTab,
+  SplitGroup,
   Tab,
   TabsState,
 } from './types';
@@ -46,6 +47,24 @@ const EVERYDAY = 2;
 const groupOf = (tab: Tab) =>
   tab.basecamp ? BASECAMP : tab.pinned ? PINNED : EVERYDAY;
 
+// Split view: the gap between the two sides (the same as the page's inset
+// from the window), and how narrow a side can get.
+export const SPLIT_GAP = 8;
+const SPLIT_MIN = 0.2;
+
+// Where each side of a split view sits within the page's area.
+export function splitRects(area: PageBounds, sizes: number[]): PageBounds[] {
+  const first = Math.round((area.width - SPLIT_GAP) * sizes[0]);
+  return [
+    { ...area, width: first },
+    {
+      ...area,
+      x: area.x + first + SPLIT_GAP,
+      width: area.width - first - SPLIT_GAP,
+    },
+  ];
+}
+
 interface TabManagerOptions {
   // The space shown first.
   spaceId: string;
@@ -57,6 +76,16 @@ interface TabManagerOptions {
   onNavChanged: (state: NavState) => void;
   // The last tab was closed.
   onEmpty: () => void;
+  // A link was Shift+clicked: preview it in Lookout.
+  onLookout: (url: string) => void;
+  // A tab's page went somewhere (`newVisit`), or its title or icon became
+  // known (for the browsing history).
+  onVisit: (
+    url: string,
+    title: string,
+    favicon: string,
+    newVisit: boolean,
+  ) => void;
 }
 
 export class TabManager {
@@ -66,6 +95,10 @@ export class TabManager {
   private spaceId: string;
   // The tab each space was last on, to return to when switching back.
   private lastInSpace = new Map<string, string>();
+  // Split views, and the tabs whose pages are on screen right now (two
+  // when the active tab is in a split view).
+  private splits = new Map<string, SplitGroup>();
+  private onScreen: string[] = [];
   private recentlyClosed: string[] = [];
   private fullscreen = false;
 
@@ -100,6 +133,32 @@ export class TabManager {
     return !!tab && (tab.basecamp || tab.spaceId === this.spaceId);
   }
 
+  // Which space a tab belongs to (none for Basecamp, which is in every one).
+  spaceOfTab(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    return tab && !tab.basecamp ? tab.spaceId : undefined;
+  }
+
+  // Every tab in every space (for the command bar), Basecamp first.
+  allTabs() {
+    return this.order.map((id) => {
+      const { tab, page, loaded } = this.entries.get(id)!;
+      return {
+        id,
+        spaceId: tab.spaceId,
+        url: tab.url,
+        title: tab.title,
+        favicon: tab.favicon,
+        isLoading: page.isLoading,
+        lastActiveAt: tab.lastActiveAt,
+        pinned: tab.pinned,
+        basecamp: !!tab.basecamp,
+        loaded,
+        splitId: tab.splitGroupId,
+      };
+    });
+  }
+
   // How many tabs a space has of its own (for "delete this space?").
   countIn(spaceId: string) {
     return this.order.filter((id) => {
@@ -127,8 +186,12 @@ export class TabManager {
           pinned: tab.pinned,
           basecamp: !!tab.basecamp,
           loaded: this.entries.get(id)!.loaded,
+          splitId: tab.splitGroupId,
         };
       }),
+      splits: [...this.splits.values()].filter(
+        (split) => split.spaceId === this.spaceId,
+      ),
     };
   }
 
@@ -209,7 +272,7 @@ export class TabManager {
   // page, if it has no tabs yet).
   setSpace(spaceId: string) {
     if (spaceId === this.spaceId) return;
-    this.active?.page.hide();
+    this.hideOnScreen();
     this.spaceId = spaceId;
     this.activeId = null;
     // The tab this space was last on, or its most recent own tab.
@@ -233,9 +296,10 @@ export class TabManager {
   moveToSpace(id: string, spaceId: string) {
     const entry = this.entries.get(id);
     if (!entry || entry.tab.basecamp || entry.tab.spaceId === spaceId) return;
+    this.separate(id);
     entry.tab.spaceId = spaceId;
     if (this.activeId === id) {
-      entry.page.hide();
+      this.hideOnScreen();
       this.activeId = null;
       const next = this.recentIds()[0];
       if (next) {
@@ -252,6 +316,7 @@ export class TabManager {
     for (const id of this.order.slice()) {
       const entry = this.entries.get(id)!;
       if (entry.tab.basecamp || entry.tab.spaceId !== spaceId) continue;
+      this.separate(id);
       this.order.splice(this.order.indexOf(id), 1);
       this.entries.delete(id);
       entry.page.destroy();
@@ -294,6 +359,7 @@ export class TabManager {
   pin(id: string) {
     const tab = this.entries.get(id)?.tab;
     if (!tab || groupOf(tab) !== EVERYDAY) return;
+    this.separate(id);
     tab.pinned = true;
     tab.homeUrl = tab.url;
     this.reinsert(id, () => this.groupEnd(PINNED));
@@ -319,6 +385,7 @@ export class TabManager {
   addToBasecamp(id: string) {
     const tab = this.entries.get(id)?.tab;
     if (!tab || tab.basecamp || this.basecampCount >= BASECAMP_MAX) return;
+    this.separate(id);
     tab.basecamp = true;
     tab.pinned = false;
     tab.homeUrl = tab.homeUrl ?? tab.url;
@@ -344,6 +411,7 @@ export class TabManager {
     const wasActive = this.activeId && everyday.includes(this.activeId);
     for (const id of everyday) {
       const entry = this.entries.get(id)!;
+      this.separate(id);
       this.order.splice(this.order.indexOf(id), 1);
       this.entries.delete(id);
       if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
@@ -430,17 +498,153 @@ export class TabManager {
   activate(id: string) {
     const entry = this.entries.get(id);
     if (!entry || !this.isShown(id)) return;
-    const previous = this.active;
     this.activeId = id;
     this.lastInSpace.set(this.spaceId, id);
     entry.tab.lastActiveAt = Date.now();
-    if (previous && previous !== entry) previous.page.hide();
-    this.load(entry);
+    // Both sides of a split view are on screen together.
+    const next = this.splitOf(id)?.tabIds ?? [id];
+    for (const other of this.onScreen)
+      if (!next.includes(other)) this.entries.get(other)?.page.hide();
+    this.onScreen = next;
+    for (const shownId of next) this.load(this.entries.get(shownId)!);
     this.layout();
-    entry.page.show();
     entry.page.focus();
     this.emitTabs();
     this.emitNav();
+  }
+
+  private hideOnScreen() {
+    for (const id of this.onScreen) this.entries.get(id)?.page.hide();
+    this.onScreen = [];
+  }
+
+  // --- Split view -------------------------------------------------------------
+
+  private splitOf(id: string) {
+    const splitId = this.entries.get(id)?.tab.splitGroupId;
+    return splitId ? this.splits.get(splitId) : undefined;
+  }
+
+  // Can `id` be shown beside the active tab? (Two everyday tabs of the same
+  // space, neither already in a split view.)
+  canSplitWith(id: string) {
+    const other = this.entries.get(id)?.tab;
+    const active = this.active?.tab;
+    return (
+      !!other &&
+      !!active &&
+      other !== active &&
+      groupOf(other) === EVERYDAY &&
+      groupOf(active) === EVERYDAY &&
+      other.spaceId === active.spaceId &&
+      !other.splitGroupId &&
+      !active.splitGroupId
+    );
+  }
+
+  // The tabs that could go beside the active one, in sidebar order.
+  splitCandidates() {
+    return this.shown
+      .filter((id) => this.canSplitWith(id))
+      .map((id) => this.entries.get(id)!.tab);
+  }
+
+  // Shows `id` beside the active tab, half and half. In the sidebar the two
+  // become one row, where the active tab was.
+  splitWith(id: string) {
+    if (!this.canSplitWith(id)) return;
+    const activeId = this.activeId!;
+    const split: SplitGroup = {
+      id: randomUUID(),
+      spaceId: this.spaceId,
+      tabIds: [activeId, id],
+      layout: 'columns',
+      sizes: [0.5, 0.5],
+    };
+    this.splits.set(split.id, split);
+    for (const tabId of split.tabIds)
+      this.entries.get(tabId)!.tab.splitGroupId = split.id;
+    this.order.splice(this.order.indexOf(id), 1);
+    this.order.splice(this.order.indexOf(activeId) + 1, 0, id);
+    this.renumber();
+    this.activate(activeId);
+  }
+
+  // Ends a split view: both tabs carry on as ordinary tabs, and the one that
+  // was active fills the page again.
+  unsplit(id: string) {
+    if (!this.splitOf(id)) return;
+    this.separate(id);
+    if (this.activeId) this.activate(this.activeId);
+    else this.emitTabs();
+  }
+
+  // Takes a tab's split view apart (without redrawing).
+  private separate(id: string) {
+    const split = this.splitOf(id);
+    if (!split) return;
+    this.splits.delete(split.id);
+    for (const tabId of split.tabIds) {
+      const tab = this.entries.get(tabId)?.tab;
+      if (tab) tab.splitGroupId = undefined;
+    }
+  }
+
+  // Dragging the gap between the two sides: `ratio` is the left side's
+  // share of the width.
+  resizeSplit(splitId: string, ratio: number) {
+    const split = this.splits.get(splitId);
+    if (!split || !Number.isFinite(ratio)) return;
+    const left = Math.max(SPLIT_MIN, Math.min(1 - SPLIT_MIN, ratio));
+    split.sizes = [left, 1 - left];
+    this.layout();
+    this.emitTabs();
+  }
+
+  // Clicking into one side makes it the current tab (the address bar and
+  // buttons follow it), without anything moving.
+  private focused(id: string) {
+    if (id === this.activeId || !this.onScreen.includes(id)) return;
+    this.activeId = id;
+    this.lastInSpace.set(this.spaceId, id);
+    this.entries.get(id)!.tab.lastActiveAt = Date.now();
+    this.emitTabs();
+    this.emitNav();
+  }
+
+  get splitGroups() {
+    return [...this.splits.values()];
+  }
+
+  // Brings back saved split views whose tabs are all still here.
+  restoreSplits(saved: SplitGroup[] = []) {
+    for (const split of saved) {
+      const tabs = split.tabIds.map((id) => this.entries.get(id)?.tab);
+      if (
+        split.tabIds.length !== 2 ||
+        tabs.some(
+          (tab) => !tab || groupOf(tab) !== EVERYDAY || tab.splitGroupId,
+        )
+      )
+        continue;
+      const left = Math.max(SPLIT_MIN, Math.min(1 - SPLIT_MIN, split.sizes[0]));
+      this.splits.set(split.id, {
+        ...split,
+        spaceId: tabs[0]!.spaceId,
+        layout: 'columns',
+        sizes: [left, 1 - left],
+      });
+      for (const tab of tabs) tab!.splitGroupId = split.id;
+      // Keep the two sides next to each other.
+      const [first, second] = split.tabIds;
+      this.order.splice(this.order.indexOf(second), 1);
+      this.order.splice(this.order.indexOf(first) + 1, 0, second);
+    }
+    // A tab that says it's in a split view that didn't come back isn't.
+    for (const { tab } of this.entries.values())
+      if (tab.splitGroupId && !this.splits.has(tab.splitGroupId))
+        tab.splitGroupId = undefined;
+    this.renumber();
   }
 
   close(id: string) {
@@ -450,9 +654,13 @@ export class TabManager {
       this.unloadPinned(entry);
       return;
     }
+    // Closing one side of a split view leaves the other on its own.
+    const partner = this.splitOf(id)?.tabIds.find((other) => other !== id);
+    this.separate(id);
     const index = this.everyday.indexOf(id);
     this.order.splice(this.order.indexOf(id), 1);
     this.entries.delete(id);
+    this.onScreen = this.onScreen.filter((other) => other !== id);
     if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
     this.recentlyClosed = this.recentlyClosed.slice(-20);
 
@@ -460,13 +668,16 @@ export class TabManager {
     this.renumber();
 
     if (this.activeId !== id) {
+      // The split's other side, still on screen, now fills the page.
+      if (partner && this.onScreen.includes(partner)) this.layout();
       this.emitTabs();
       return;
     }
-    // Move to the tab that slid into its place or the one above, else the
-    // most recent page still open.
+    // Move to the split's other side, else the tab that slid into its place
+    // or the one above, else the most recent page still open.
     const everyday = this.everyday;
     const next =
+      partner ??
       everyday[Math.min(index, everyday.length - 1)] ??
       this.recentIds().find((other) => this.entries.get(other)!.loaded);
     if (next) {
@@ -489,12 +700,13 @@ export class TabManager {
   // Opens whatever was typed (an address or a search) in a new tab.
   openTyped(input: string) {
     const url = toNavigableUrl(input);
-    if (url) this.create(url);
+    return url ? this.create(url) : undefined;
   }
 
   // Moves a tab to a new position among the tabs of its own group that are
   // on screen (Basecamp, this space's pins, or its everyday tabs), for drag
   // to reorder. Tabs of other spaces keep their places.
+  // A split view counts as one row and moves as one.
   move(id: string, toIndex: number) {
     const entry = this.entries.get(id);
     if (!entry) return;
@@ -502,12 +714,27 @@ export class TabManager {
     const group = this.shown.filter(
       (other) => groupOf(this.entries.get(other)!.tab) === groupId,
     );
-    const to = Math.max(0, Math.min(toIndex, group.length - 1));
-    if (group.indexOf(id) === to) return;
+    // The group's rows, as the sidebar shows them.
+    const rows: string[][] = [];
+    for (const tabId of group) {
+      const splitId = this.entries.get(tabId)!.tab.splitGroupId;
+      const last = rows.at(-1);
+      if (
+        splitId &&
+        last &&
+        this.entries.get(last[0])!.tab.splitGroupId === splitId
+      )
+        last.push(tabId);
+      else rows.push([tabId]);
+    }
+    const from = rows.findIndex((row) => row.includes(id));
+    const to = Math.max(0, Math.min(toIndex, rows.length - 1));
+    if (from === to) return;
     const slots = group.map((other) => this.order.indexOf(other));
-    group.splice(group.indexOf(id), 1);
-    group.splice(to, 0, id);
-    slots.forEach((slot, i) => (this.order[slot] = group[i]));
+    const [row] = rows.splice(from, 1);
+    rows.splice(to, 0, row);
+    const flat = rows.flat();
+    slots.forEach((slot, i) => (this.order[slot] = flat[i]));
     this.renumber();
     this.emitTabs();
   }
@@ -518,6 +745,8 @@ export class TabManager {
     const tab = this.entries.get(id)?.tab;
     if (!tab || tab.basecamp) return;
     if (tab.pinned !== pinned) {
+      // Only single tabs can be pinned: a split view comes apart.
+      if (pinned) this.unsplit(id);
       tab.pinned = pinned;
       tab.homeUrl = pinned ? tab.url : undefined;
       this.order.splice(this.order.indexOf(id), 1);
@@ -606,12 +835,25 @@ export class TabManager {
   layout() {
     const entry = this.active;
     if (!entry) return;
+    const split = this.splitOf(entry.tab.id);
     if (this.fullscreen) {
+      // A fullscreen video fills the window; a split's other side waits.
       const { width, height } = this.engine.windowSize();
       entry.page.place({ x: 0, y: 0, width, height }, 0);
-    } else {
-      entry.page.place(this.options.pageBounds(), this.options.pageRadius);
+      for (const id of this.onScreen)
+        if (id !== entry.tab.id) this.entries.get(id)?.page.hide();
+      entry.page.show();
+      return;
     }
+    const area = this.options.pageBounds();
+    const ids = split ? split.tabIds : [entry.tab.id];
+    const rects = split ? splitRects(area, split.sizes) : [area];
+    ids.forEach((id, i) => {
+      const page = this.entries.get(id)?.page;
+      if (!page) return;
+      page.place(rects[i], this.options.pageRadius);
+      page.show();
+    });
   }
 
   // Where the page would sit with its top edge at `top`.
@@ -619,17 +861,27 @@ export class TabManager {
     return this.options.pageBounds(top);
   }
 
-  // Holds the active page's layout at a fixed size while its box changes
-  // (null lets it fit its box again). See glidePageTop in src/main.ts.
-  private heldPage: Page | null = null;
+  // Holds the layout of the pages on screen at a fixed size while their box
+  // changes (null lets them fit their box again). `size` is the whole page
+  // area's; each side of a split view gets its share. See glidePageTop in
+  // src/main.ts.
+  private heldPages: Page[] = [];
 
   holdLayout(size: { width: number; height: number } | null) {
-    this.heldPage?.holdLayout(null);
-    this.heldPage = null;
-    const page = this.active?.page;
-    if (!size || !page || this.fullscreen) return;
-    page.holdLayout(size);
-    this.heldPage = page;
+    for (const page of this.heldPages) page.holdLayout(null);
+    this.heldPages = [];
+    const entry = this.active;
+    if (!size || !entry || this.fullscreen) return;
+    const split = this.splitOf(entry.tab.id);
+    const area = { x: 0, y: 0, ...size };
+    const ids = split ? split.tabIds : [entry.tab.id];
+    const rects = split ? splitRects(area, split.sizes) : [area];
+    ids.forEach((id, i) => {
+      const page = this.entries.get(id)?.page;
+      if (!page) return;
+      page.holdLayout({ width: rects[i].width, height: rects[i].height });
+      this.heldPages.push(page);
+    });
   }
 
   destroy() {
@@ -670,13 +922,35 @@ export class TabManager {
 
   // A fresh, empty page for a tab, kept in step with the tab's record.
   private makePage(id: string): Page {
-    const entryOf = () => this.entries.get(id);
-    const page = this.engine.createPage({
+    let page: Page | null = null;
+    page = this.engine.createPage(this.eventsFor(id, () => page));
+    return page;
+  }
+
+  // Keeps a tab's record in step with its page.
+  private eventsFor(id: string, pageOf: () => Page | null): PageEvents {
+    const entryOf = () => {
+      const entry = this.entries.get(id);
+      return entry && entry.page === pageOf() ? entry : undefined;
+    };
+    // The last page recorded in the history for this tab.
+    let visited = { url: '', title: '' };
+    return {
       onUpdate: () => {
         const entry = entryOf();
-        if (!entry || entry.page !== page) return;
-        if (page.url) entry.tab.url = page.url;
-        entry.tab.title = page.title;
+        if (!entry) return;
+        const { url, title } = entry.page;
+        if (url && (url !== visited.url || title !== visited.title)) {
+          this.options.onVisit(
+            url,
+            title,
+            entry.tab.favicon,
+            url !== visited.url,
+          );
+          visited = { url, title };
+        }
+        if (url) entry.tab.url = url;
+        entry.tab.title = title;
         this.emitTabs();
         if (id === this.activeId) this.emitNav();
       },
@@ -684,6 +958,7 @@ export class TabManager {
         const entry = entryOf();
         if (!entry) return;
         entry.tab.favicon = url;
+        if (visited.url) this.options.onVisit(visited.url, '', url, false);
         this.emitTabs();
       },
       // A new site gets a fresh favicon instead of keeping the old one.
@@ -694,10 +969,35 @@ export class TabManager {
       },
       // Links that ask for a new tab open one right below this tab.
       onOpenTab: (url, background) =>
-        this.create(url, { after: id, activate: !background }),
+        void this.create(url, { after: id, activate: !background }),
+      onLookout: (url) => this.options.onLookout(url),
+      onFocus: () => {
+        if (entryOf()) this.focused(id);
+      },
       onFullscreen: (on) => this.setFullscreen(on),
-    });
-    return page;
+    };
+  }
+
+  // Turns a page that's already open (one previewed in Lookout) into a new
+  // tab at the top of the everyday tabs, keeping everything on it.
+  adopt(page: Page, favicon = '') {
+    const id = randomUUID();
+    const tab: Tab = {
+      id,
+      spaceId: this.spaceId,
+      url: page.url,
+      title: page.title,
+      favicon,
+      pinned: false,
+      order: 0,
+      lastActiveAt: Date.now(),
+    };
+    page.listen(this.eventsFor(id, () => page));
+    this.entries.set(id, { tab, page, loaded: true });
+    this.order.splice(this.groupStart(EVERYDAY), 0, id);
+    this.renumber();
+    this.activate(id);
+    return id;
   }
 
   // Remember whether the window was already fullscreen before the page asked,

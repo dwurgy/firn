@@ -30,6 +30,16 @@ export interface Tab {
   splitGroupId?: string;
 }
 
+// Two tabs shown side by side (split view). `sizes` are each side's share
+// of the width; the sidebar shows the pair as one row.
+export interface SplitGroup {
+  id: string;
+  spaceId: string;
+  tabIds: string[];
+  layout: 'columns';
+  sizes: number[];
+}
+
 export interface WindowState {
   id: string;
   activeSpaceId: string;
@@ -61,9 +71,32 @@ export interface SavedSession {
   version: number;
   spaces: Space[];
   tabs: SavedTab[];
+  splits?: SplitGroup[];
   window: SavedWindow;
   recentlyClosed: string[];
 }
+
+// A page in the browsing history (src/history.ts).
+export interface HistoryEntry {
+  url: string;
+  title: string;
+  favicon: string;
+  visits: number;
+  lastVisit: number;
+}
+
+// Quick actions the command bar can run (see runAction in src/main.ts).
+export type CommandAction =
+  | 'pin'
+  | 'basecamp'
+  | 'close'
+  | 'reopen'
+  | 'separate'
+  | 'sidebar'
+  | 'new-space'
+  | 'clear'
+  | 'copy-link'
+  | 'switch-space';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -80,11 +113,16 @@ export interface TabView {
   // False for a tab whose page hasn't loaded yet (restored, or an unloaded
   // pinned tab).
   loaded: boolean;
+  // Set when the tab is one side of a split view.
+  splitId?: string;
 }
 
 export interface TabsState {
   tabs: TabView[]; // in sidebar order, top to bottom
   activeTabId: string | null;
+  // Split views among these tabs (both sides are always next to each other
+  // in `tabs`).
+  splits: SplitGroup[];
 }
 
 // The spaces, in order, and which one is shown.
@@ -126,10 +164,28 @@ export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
 export type OverlayState =
   | { mode: 'hidden' }
   // `openId` changes each time it opens, so it always starts fresh.
-  | { mode: 'command'; openId: number }
+  // `beside`: what's picked opens in split view beside this tab (its
+  // title).
+  | { mode: 'command'; openId: number; beside?: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
   // `revealed` turns false-to-true once Ctrl has been held a moment.
-  | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean };
+  | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean }
+  // Lookout: a link previewed in a panel over the page. `area` is the page's
+  // box and `panel` the preview's, both in window coordinates.
+  | {
+      mode: 'lookout';
+      openId: number;
+      phase: 'open' | 'closing' | 'expanding';
+      area: Rect;
+      panel: Rect;
+    };
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 // The narrow API the preload script exposes to Firn's UI as `window.firn`.
 export interface FirnBridge {
@@ -139,6 +195,16 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
+  // The command bar: every open tab (all spaces), history matches, and its
+  // quick actions (`arg` is a space id for 'switch-space').
+  allTabs(): Promise<(TabView & { spaceId: string })[]>;
+  searchHistory(query: string): Promise<HistoryEntry[]>;
+  runAction(action: CommandAction, arg?: string): void;
+  // Lookout's "Open as tab".
+  expandLookout(): void;
+  // Split view: drag the gap (`ratio` is the left side's share), or end it.
+  resizeSplit(id: string, ratio: number): void;
+  separateSplit(tabId: string): void;
   toggleSidebar(): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;

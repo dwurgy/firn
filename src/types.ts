@@ -143,17 +143,26 @@ export interface FirnBridge {
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;
-  moveTab(id: string, toIndex: number): void;
+  // Moves a tab within its group, or (with `pinned`) into the pinned or
+  // everyday tabs at that spot.
+  moveTab(id: string, toIndex: number, pinned?: boolean): void;
   showTabMenu(id: string): void;
   switchSpace(id: string): void;
   newSpace(): void;
   updateSpace(
     id: string,
-    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+    changes: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      pinsFolded?: boolean;
+    },
   ): void;
   // Closes the active space's everyday (unpinned) tabs.
   clearTabs(): void;
   showSpaceMenu(id: string): void;
+  // Right-click on empty space in the sidebar.
+  showSidebarMenu(): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;

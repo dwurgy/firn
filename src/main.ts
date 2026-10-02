@@ -4,6 +4,7 @@ import {
   ipcMain,
   dialog,
   Menu,
+  nativeImage,
   nativeTheme,
   screen,
   session,
@@ -18,6 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
+import { ElectronEngine } from './engine/electron';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
   FrameState,
@@ -174,17 +176,46 @@ const SPACE_ICONS = [
   '⭐',
   '❤️',
 ];
-// Each space's theme color (used for its tint in the next step).
-const SPACE_COLORS = [
-  '#c9a27e',
-  '#7f9cb0',
-  '#8fae8b',
-  '#b88a9e',
-  '#c4a95b',
-  '#8e8fb8',
-  '#b07f6a',
-  '#6fa3a0',
+// Each space's theme color: it softly tints the frame and the glass.
+// Muted, natural tones so the tint stays calm.
+const SPACE_COLOR_CHOICES = [
+  { name: 'Sand', hex: '#c9a27e' },
+  { name: 'Glacier', hex: '#7f9cb0' },
+  { name: 'Sage', hex: '#8fae8b' },
+  { name: 'Heather', hex: '#b88a9e' },
+  { name: 'Ochre', hex: '#c4a95b' },
+  { name: 'Dusk', hex: '#8e8fb8' },
+  { name: 'Clay', hex: '#b07f6a' },
+  { name: 'Lagoon', hex: '#6fa3a0' },
 ];
+const SPACE_COLORS = SPACE_COLOR_CHOICES.map((c) => c.hex);
+
+// A small round swatch of a color, for the "Change color" menu.
+function colorSwatch(hex: string) {
+  const size = 32; // drawn at 2x, shown at 16px
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const pixels = Buffer.alloc(size * size * 4);
+  const center = size / 2;
+  const radius = size / 2 - 3;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const distance = Math.hypot(x + 0.5 - center, y + 0.5 - center);
+      // Soft edge: fully opaque inside, fading over the last pixel.
+      const alpha = Math.max(0, Math.min(1, radius + 0.5 - distance));
+      const i = (y * size + x) * 4;
+      // BGRA, with the color premultiplied by its opacity.
+      pixels[i] = Math.round(b * alpha);
+      pixels[i + 1] = Math.round(g * alpha);
+      pixels[i + 2] = Math.round(r * alpha);
+      pixels[i + 3] = Math.round(255 * alpha);
+    }
+  }
+  return nativeImage.createFromBitmap(pixels, {
+    width: size,
+    height: size,
+    scaleFactor: 2,
+  });
+}
 
 const defaultSpaces = (): Space[] => [
   {
@@ -388,12 +419,10 @@ const createWindow = () => {
     ? PAGE_INSET
     : windowState.sidebarWidth;
   // Where the page's top edge is: lower while the top bar shows. While it
-  // glides, the page keeps one size and only moves (resizing every step
-  // makes the site re-fit each time, which looks jumpy); it takes its new
-  // size once, at whichever end of the glide it is taller.
+  // glides, only the top edge moves (the bottom stays put), and the site's
+  // layout is held at its taller size so it doesn't re-fit on every step,
+  // which looks jumpy; it re-fits once, when the glide ends.
   let pageTop = PAGE_INSET;
-  let topFrom = PAGE_INSET;
-  let topTo = PAGE_INSET;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -493,20 +522,23 @@ const createWindow = () => {
   // Slides the page's top edge, in step with the sidebar layer's outline of
   // the page (.page-area in styles.css).
   const glidePageTop = (to: number) => {
-    topFrom = pageTop;
-    topTo = to;
+    const from = pageTop;
     const start = Date.now();
     clearInterval(topGlide);
+    // Hold the site's layout at the taller of the two sizes for the glide;
+    // the part that doesn't fit is simply hidden under the bottom edge.
+    const { width, height } = tabs.pageBoundsFor(Math.min(from, to));
+    tabs.holdLayout({ width, height });
     topGlide = setInterval(() => {
       if (win.isDestroyed()) return clearInterval(topGlide);
       const t = Math.min(1, (Date.now() - start) / GLIDE_MS);
       const eased = 1 - Math.pow(1 - t, 3); // ease-out
-      pageTop = Math.round(topFrom + (topTo - topFrom) * eased);
+      pageTop = Math.round(from + (to - from) * eased);
+      tabs.layout();
       if (t === 1) {
         clearInterval(topGlide);
-        topFrom = topTo;
+        tabs.holdLayout(null);
       }
-      tabs.layout();
       if (topBar && shownLayers.has(topBar))
         topBar.setBounds(boundsFor(topBar));
     }, 8);
@@ -563,19 +595,24 @@ const createWindow = () => {
 
   // --- Tabs ---------------------------------------------------------------
 
-  const tabs = new TabManager(win, {
+  // Web pages come from the Electron engine; the tab model itself doesn't
+  // depend on Electron (see src/engine/engine.ts).
+  const engine = new ElectronEngine(win, (web) => {
+    watchShortcuts(web);
+    raiseLayers();
+  });
+  const tabs = new TabManager(engine, {
     spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
     // The page floats to the right of the sidebar, inset from the edges.
-    pageBounds: () => {
+    // `top` is where its top edge is (it lowers while the top bar shows).
+    pageBounds: (top = pageTop) => {
       const [width, height] = win.getContentSize();
       return {
         x: pageLeft,
-        y: pageTop,
+        y: top,
         width: Math.max(0, width - pageLeft - PAGE_INSET),
-        // (While gliding, sized for the higher of the two positions; the
-        // part that dips below the window is simply out of sight.)
-        height: Math.max(0, height - Math.min(topFrom, topTo) - PAGE_INSET),
+        height: Math.max(0, height - top - PAGE_INSET),
       };
     },
     onTabsChanged: (state) => {
@@ -587,10 +624,6 @@ const createWindow = () => {
       if (!win.isDestroyed())
         win.setTitle(state.title ? `${state.title} — Firn` : 'Firn');
       send('nav:state', state);
-    },
-    onPageCreated: (web) => {
-      watchShortcuts(web);
-      raiseLayers();
     },
     onEmpty: () => openCommandBar(),
   });
@@ -826,7 +859,10 @@ const createWindow = () => {
       id: randomUUID(),
       name: 'New space',
       icon: SPACE_ICONS.find((icon) => !used.has(icon)) ?? SPACE_ICONS[0],
-      color: SPACE_COLORS[spaces.length % SPACE_COLORS.length],
+      // The first color no other space has yet.
+      color:
+        SPACE_COLORS.find((c) => !spaces.some((s) => s.color === c)) ??
+        SPACE_COLORS[spaces.length % SPACE_COLORS.length],
       order: spaces.length,
     };
     spaces = [...spaces, space];
@@ -836,7 +872,12 @@ const createWindow = () => {
 
   const updateSpace = (
     id: string,
-    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+    changes: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      pinsFolded?: boolean;
+    },
   ) => {
     spaces = spaces.map((s) =>
       s.id === id
@@ -844,6 +885,7 @@ const createWindow = () => {
             ...s,
             name: changes.name?.trim().slice(0, 40) || s.name,
             icon: changes.icon ?? s.icon,
+            color: changes.color ?? s.color,
             pinsFolded: changes.pinsFolded ?? s.pinsFolded,
           }
         : s,
@@ -879,26 +921,58 @@ const createWindow = () => {
   };
 
   // Right-click menu for a space's icon.
+  // The space's own menu items, shared by its menu and the sidebar's.
+  const spaceItems = (space: Space): Electron.MenuItemConstructorOptions[] => [
+    {
+      label: 'Change color',
+      submenu: SPACE_COLOR_CHOICES.map(({ name, hex }) => ({
+        label: name,
+        icon: colorSwatch(hex),
+        type: 'checkbox' as const,
+        checked: hex === space.color,
+        click: () => updateSpace(space.id, { color: hex }),
+      })),
+    },
+    {
+      label: 'Change icon',
+      submenu: SPACE_ICONS.map((icon) => ({
+        label: icon,
+        type: 'checkbox' as const,
+        checked: icon === space.icon,
+        click: () => updateSpace(space.id, { icon }),
+      })),
+    },
+    {
+      label: 'Rename space',
+      click: () => {
+        switchSpace(space.id);
+        startRenameSpace(space.id);
+      },
+    },
+  ];
+
+  // Right-click on empty space in the sidebar: the active space's options,
+  // plus a new tab or space.
+  const showSidebarMenu = () => {
+    const space = spaces.find((s) => s.id === windowState.activeSpaceId);
+    if (!space) return;
+    Menu.buildFromTemplate([
+      ...spaceItems(space),
+      { type: 'separator' },
+      {
+        label: 'New tab',
+        accelerator: 'CmdOrCtrl+T',
+        click: () => openCommandBar(),
+      },
+      { label: 'New space', click: () => newSpace() },
+    ]).popup({ window: win });
+  };
+
   const showSpaceMenu = (id: string) => {
     const space = spaces.find((s) => s.id === id);
     if (!space) return;
     Menu.buildFromTemplate([
-      {
-        label: 'Rename space',
-        click: () => {
-          switchSpace(id);
-          startRenameSpace(id);
-        },
-      },
-      {
-        label: 'Change icon',
-        submenu: SPACE_ICONS.map((icon) => ({
-          label: icon,
-          type: 'checkbox' as const,
-          checked: icon === space.icon,
-          click: () => updateSpace(id, { icon }),
-        })),
-      },
+      ...spaceItems(space),
       { type: 'separator' },
       {
         label: 'Delete space…',
@@ -1005,26 +1079,36 @@ const createWindow = () => {
     'spaces:update': (_sender, id, changes) => {
       if (typeof id !== 'string' || !changes || typeof changes !== 'object')
         return;
-      const { name, icon, pinsFolded } = changes as Record<string, unknown>;
+      const { name, icon, color, pinsFolded } = changes as Record<
+        string,
+        unknown
+      >;
       updateSpace(id, {
         name: typeof name === 'string' ? name : undefined,
         icon:
           typeof icon === 'string' && SPACE_ICONS.includes(icon)
             ? icon
             : undefined,
+        color:
+          typeof color === 'string' && SPACE_COLORS.includes(color)
+            ? color
+            : undefined,
         pinsFolded: typeof pinsFolded === 'boolean' ? pinsFolded : undefined,
       });
     },
     'tabs:clear': () => tabs.clearEveryday(),
+    'sidebar:menu': () => showSidebarMenu(),
     'spaces:menu': (_sender, id) => {
       if (typeof id === 'string') showSpaceMenu(id);
     },
     'tabs:menu': (_sender, id) => {
       if (typeof id === 'string') showTabMenu(id);
     },
-    'tabs:move': (_sender, id, toIndex) => {
-      if (typeof id === 'string' && Number.isInteger(toIndex))
-        tabs.move(id, toIndex as number);
+    'tabs:move': (_sender, id, toIndex, pinned) => {
+      if (typeof id !== 'string' || !Number.isInteger(toIndex)) return;
+      if (typeof pinned === 'boolean')
+        tabs.place(id, pinned, toIndex as number);
+      else tabs.move(id, toIndex as number);
     },
     'tabs:activate': (_sender, id) => {
       if (typeof id !== 'string') return;

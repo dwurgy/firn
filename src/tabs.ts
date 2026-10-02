@@ -1,6 +1,9 @@
 // Owns the tabs of one window: the tab records (the data model) and the web
-// page view behind each one. Everything that changes tabs goes through here,
-// and every change is reported back so the UI can redraw the sidebar.
+// page behind each one. Everything that changes tabs goes through here, and
+// every change is reported back so the UI can redraw the sidebar.
+//
+// Pages come from the browser engine (src/engine/engine.ts); nothing here
+// depends on Electron.
 //
 // Tabs from every space live here together; only the active space's tabs
 // (plus Basecamp, which every space shares) are shown, switched between and
@@ -10,12 +13,7 @@
 // then everyday tabs.
 
 import { randomUUID } from 'node:crypto';
-import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
-import {
-  SCROLLBAR_CSS,
-  SCROLLBAR_SCRIPT,
-  SCROLLBAR_WORLD_ID,
-} from './scrollbar';
+import type { Page, PageBounds, PageEngine } from './engine/engine';
 import { toNavigableUrl } from './url';
 import type {
   NavCommand,
@@ -28,7 +26,7 @@ import type {
 
 interface Entry {
   tab: Tab;
-  view: WebContentsView;
+  page: Page;
   // Restored tabs wait to load their page until they're first shown.
   loaded: boolean;
   // Saved back/forward history to restore when the tab first loads.
@@ -48,33 +46,18 @@ const EVERYDAY = 2;
 const groupOf = (tab: Tab) =>
   tab.basecamp ? BASECAMP : tab.pinned ? PINNED : EVERYDAY;
 
-export interface PageBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 interface TabManagerOptions {
   // The space shown first.
   spaceId: string;
-  // Where the page sits inside the window (changes with window size).
-  pageBounds: () => PageBounds;
+  // Where the page sits inside the window (changes with window size), or
+  // would sit with its top edge at `top`.
+  pageBounds: (top?: number) => PageBounds;
   pageRadius: number;
   onTabsChanged: (state: TabsState) => void;
   onNavChanged: (state: NavState) => void;
-  // Lets the window attach keyboard shortcuts to every page.
-  onPageCreated: (web: WebContents) => void;
   // The last tab was closed.
   onEmpty: () => void;
 }
-
-// Popup windows (e.g. "Sign in with Google") keep the same safe settings.
-const SAFE_WEB_PREFERENCES = {
-  contextIsolation: true,
-  sandbox: true,
-  nodeIntegration: false,
-};
 
 export class TabManager {
   private entries = new Map<string, Entry>();
@@ -87,7 +70,7 @@ export class TabManager {
   private fullscreen = false;
 
   constructor(
-    private win: BrowserWindow,
+    private engine: PageEngine,
     private options: TabManagerOptions,
   ) {
     this.spaceId = options.spaceId;
@@ -133,13 +116,13 @@ export class TabManager {
     return {
       activeTabId: this.activeId,
       tabs: this.shown.map((id) => {
-        const { tab, view } = this.entries.get(id)!;
+        const { tab, page } = this.entries.get(id)!;
         return {
           id,
           url: tab.url,
           title: tab.title,
           favicon: tab.favicon,
-          isLoading: view.webContents.isLoading(),
+          isLoading: page.isLoading,
           lastActiveAt: tab.lastActiveAt,
           pinned: tab.pinned,
           basecamp: !!tab.basecamp,
@@ -160,13 +143,13 @@ export class TabManager {
         isLoading: false,
       };
     }
-    const web = entry.view.webContents;
+    const { page } = entry;
     return {
       url: entry.tab.url,
       title: entry.tab.title,
-      canGoBack: web.navigationHistory.canGoBack(),
-      canGoForward: web.navigationHistory.canGoForward(),
-      isLoading: web.isLoading(),
+      canGoBack: page.canGoBack,
+      canGoForward: page.canGoForward,
+      isLoading: page.isLoading,
     };
   }
 
@@ -195,10 +178,10 @@ export class TabManager {
       lastActiveAt: restore?.lastActiveAt ?? Date.now(),
     };
 
-    const view = this.makeView(id);
+    const page = this.makePage(id);
     const entry: Entry = {
       tab,
-      view,
+      page,
       loaded: false,
       savedHistory: restore?.history,
     };
@@ -226,7 +209,7 @@ export class TabManager {
   // page, if it has no tabs yet).
   setSpace(spaceId: string) {
     if (spaceId === this.spaceId) return;
-    this.active?.view.setVisible(false);
+    this.active?.page.hide();
     this.spaceId = spaceId;
     this.activeId = null;
     // The tab this space was last on, or its most recent own tab.
@@ -252,7 +235,7 @@ export class TabManager {
     if (!entry || entry.tab.basecamp || entry.tab.spaceId === spaceId) return;
     entry.tab.spaceId = spaceId;
     if (this.activeId === id) {
-      entry.view.setVisible(false);
+      entry.page.hide();
       this.activeId = null;
       const next = this.recentIds()[0];
       if (next) {
@@ -271,22 +254,9 @@ export class TabManager {
       if (entry.tab.basecamp || entry.tab.spaceId !== spaceId) continue;
       this.order.splice(this.order.indexOf(id), 1);
       this.entries.delete(id);
-      this.win.contentView.removeChildView(entry.view);
-      entry.view.webContents.close();
+      entry.page.destroy();
     }
     this.renumber();
-  }
-
-  // A fresh, empty page view for a tab, wired up and ready to load.
-  private makeView(id: string) {
-    const view = new WebContentsView({ webPreferences: SAFE_WEB_PREFERENCES });
-    view.setBorderRadius(this.options.pageRadius);
-    view.setBackgroundColor('#ffffff');
-    view.setVisible(false);
-    this.win.contentView.addChildView(view);
-    this.watch(id, view.webContents);
-    this.options.onPageCreated(view.webContents);
-    return view;
   }
 
   // Where a group starts in the order (or would start, if it's empty).
@@ -377,8 +347,7 @@ export class TabManager {
       this.order.splice(this.order.indexOf(id), 1);
       this.entries.delete(id);
       if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
-      this.win.contentView.removeChildView(entry.view);
-      entry.view.webContents.close();
+      entry.page.destroy();
     }
     this.recentlyClosed = this.recentlyClosed.slice(-20);
     this.renumber();
@@ -399,7 +368,7 @@ export class TabManager {
     if (!entry || !home) return;
     entry.tab.url = home;
     entry.savedHistory = undefined;
-    if (entry.loaded) entry.view.webContents.loadURL(home);
+    if (entry.loaded) entry.page.load(home);
     this.emitTabs();
   }
 
@@ -415,10 +384,9 @@ export class TabManager {
       if (next) this.activate(next);
     }
     if (!entry.loaded && !wasActive) return;
-    // Swap in a fresh, empty page view.
-    this.win.contentView.removeChildView(entry.view);
-    entry.view.webContents.close();
-    entry.view = this.makeView(tab.id);
+    // Swap in a fresh, empty page.
+    entry.page.destroy();
+    entry.page = this.makePage(tab.id);
     entry.loaded = false;
     entry.savedHistory = undefined;
     tab.url = tab.homeUrl ?? tab.url;
@@ -431,38 +399,22 @@ export class TabManager {
   private load(entry: Entry) {
     if (entry.loaded) return;
     entry.loaded = true;
-    const web = entry.view.webContents;
+    const { page } = entry;
     const history = entry.savedHistory;
     entry.savedHistory = undefined;
     if (history?.entries.length) {
-      web.navigationHistory
-        .restore({ entries: history.entries, index: history.index })
-        .catch(() => web.loadURL(entry.tab.url));
+      page.restoreHistory(history).catch(() => page.load(entry.tab.url));
     } else {
-      web.loadURL(entry.tab.url);
+      page.load(entry.tab.url);
     }
   }
 
   // Every tab as it should be saved, in sidebar order.
   serialize(): SavedTab[] {
     return this.order.map((id) => {
-      const { tab, view, loaded, savedHistory } = this.entries.get(id)!;
-      let history = savedHistory;
-      const web = view.webContents;
-      if (loaded && !web.isDestroyed()) {
-        const all = web.navigationHistory.getAllEntries();
-        const index = web.navigationHistory.getActiveIndex();
-        // Keep the most recent part of a long history.
-        const start = Math.max(0, all.length - MAX_SAVED_HISTORY);
-        history = {
-          entries: all.slice(start).map(({ url, title, pageState }) => ({
-            url,
-            title,
-            pageState,
-          })),
-          index: Math.max(0, index - start),
-        };
-      }
+      const { tab, page, loaded, savedHistory } = this.entries.get(id)!;
+      // Keep the most recent part of a long history.
+      const history = loaded ? page.history(MAX_SAVED_HISTORY) : savedHistory;
       return { ...tab, history };
     });
   }
@@ -482,11 +434,11 @@ export class TabManager {
     this.activeId = id;
     this.lastInSpace.set(this.spaceId, id);
     entry.tab.lastActiveAt = Date.now();
-    if (previous && previous !== entry) previous.view.setVisible(false);
+    if (previous && previous !== entry) previous.page.hide();
     this.load(entry);
     this.layout();
-    entry.view.setVisible(true);
-    entry.view.webContents.focus();
+    entry.page.show();
+    entry.page.focus();
     this.emitTabs();
     this.emitNav();
   }
@@ -504,8 +456,7 @@ export class TabManager {
     if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
     this.recentlyClosed = this.recentlyClosed.slice(-20);
 
-    this.win.contentView.removeChildView(entry.view);
-    entry.view.webContents.close();
+    entry.page.destroy();
     this.renumber();
 
     if (this.activeId !== id) {
@@ -561,6 +512,26 @@ export class TabManager {
     this.emitTabs();
   }
 
+  // Drops a tab into the pinned tabs or the everyday tabs at `toIndex`
+  // (dragging it across the divider pins or unpins it).
+  place(id: string, pinned: boolean, toIndex: number) {
+    const tab = this.entries.get(id)?.tab;
+    if (!tab || tab.basecamp) return;
+    if (tab.pinned !== pinned) {
+      tab.pinned = pinned;
+      tab.homeUrl = pinned ? tab.url : undefined;
+      this.order.splice(this.order.indexOf(id), 1);
+      this.order.splice(
+        pinned ? this.groupEnd(PINNED) : this.groupStart(EVERYDAY),
+        0,
+        id,
+      );
+      this.renumber();
+    }
+    this.move(id, toIndex);
+    this.emitTabs();
+  }
+
   reopenClosed() {
     const url = this.recentlyClosed.pop();
     if (url) this.create(url);
@@ -585,7 +556,7 @@ export class TabManager {
   }
 
   focusActive() {
-    this.active?.view.webContents.focus();
+    this.active?.page.focus();
   }
 
   activateIndex(index: number) {
@@ -607,28 +578,27 @@ export class TabManager {
     entry.tab.url = url;
     entry.loaded = true;
     entry.savedHistory = undefined;
-    entry.view.setVisible(true);
-    entry.view.webContents.loadURL(url);
-    entry.view.webContents.focus();
+    entry.page.show();
+    entry.page.load(url);
+    entry.page.focus();
     this.emitTabs();
   }
 
   command(command: NavCommand) {
-    const web = this.active?.view.webContents;
-    if (!web) return;
-    const history = web.navigationHistory;
-    if (command === 'back' && history.canGoBack()) history.goBack();
-    if (command === 'forward' && history.canGoForward()) history.goForward();
-    if (command === 'reload') web.reload();
-    if (command === 'stop') web.stop();
+    const page = this.active?.page;
+    if (!page) return;
+    if (command === 'back') page.back();
+    if (command === 'forward') page.forward();
+    if (command === 'reload') page.reload();
+    if (command === 'stop') page.stop();
   }
 
   hardReload() {
-    this.active?.view.webContents.reloadIgnoringCache();
+    this.active?.page.reload(true);
   }
 
   toggleDevTools() {
-    this.active?.view.webContents.toggleDevTools();
+    this.active?.page.toggleDevTools();
   }
 
   // --- Layout ---------------------------------------------------------------
@@ -637,19 +607,33 @@ export class TabManager {
     const entry = this.active;
     if (!entry) return;
     if (this.fullscreen) {
-      const [width, height] = this.win.getContentSize();
-      entry.view.setBorderRadius(0);
-      entry.view.setBounds({ x: 0, y: 0, width, height });
+      const { width, height } = this.engine.windowSize();
+      entry.page.place({ x: 0, y: 0, width, height }, 0);
     } else {
-      entry.view.setBorderRadius(this.options.pageRadius);
-      entry.view.setBounds(this.options.pageBounds());
+      entry.page.place(this.options.pageBounds(), this.options.pageRadius);
     }
   }
 
+  // Where the page would sit with its top edge at `top`.
+  pageBoundsFor(top: number) {
+    return this.options.pageBounds(top);
+  }
+
+  // Holds the active page's layout at a fixed size while its box changes
+  // (null lets it fit its box again). See glidePageTop in src/main.ts.
+  private heldPage: Page | null = null;
+
+  holdLayout(size: { width: number; height: number } | null) {
+    this.heldPage?.holdLayout(null);
+    this.heldPage = null;
+    const page = this.active?.page;
+    if (!size || !page || this.fullscreen) return;
+    page.holdLayout(size);
+    this.heldPage = page;
+  }
+
   destroy() {
-    for (const { view } of this.entries.values()) {
-      if (!view.webContents.isDestroyed()) view.webContents.close();
-    }
+    for (const { page } of this.entries.values()) page.destroy();
     this.entries.clear();
     this.order = [];
   }
@@ -660,78 +644,60 @@ export class TabManager {
     this.order.forEach((id, i) => (this.entries.get(id)!.tab.order = i));
   }
 
+  // Pages report many small changes at once while loading (title, icon,
+  // address, loading...). They're gathered into one update for the UI.
+  private tabsPending = false;
+
   private emitTabs() {
-    this.options.onTabsChanged(this.state());
+    if (this.tabsPending) return;
+    this.tabsPending = true;
+    setImmediate(() => {
+      this.tabsPending = false;
+      if (!this.engine.closed) this.options.onTabsChanged(this.state());
+    });
   }
+
+  private navPending = false;
 
   private emitNav() {
-    this.options.onNavChanged(this.navState());
+    if (this.navPending) return;
+    this.navPending = true;
+    setImmediate(() => {
+      this.navPending = false;
+      if (!this.engine.closed) this.options.onNavChanged(this.navState());
+    });
   }
 
-  // Keeps a tab's record in step with its page, and reports changes.
-  private watch(id: string, web: WebContents) {
-    web.on('dom-ready', () => {
-      // Firn's own floating scrollbar (src/scrollbar.ts).
-      web.insertCSS(SCROLLBAR_CSS, { cssOrigin: 'user' }).catch(() => {});
-      web
-        .executeJavaScriptInIsolatedWorld(SCROLLBAR_WORLD_ID, [
-          { code: SCROLLBAR_SCRIPT },
-        ])
-        .catch(() => {});
-    });
-    const update = () => {
-      const entry = this.entries.get(id);
-      if (!entry || web.isDestroyed()) return;
-      const url = web.getURL();
-      if (url) entry.tab.url = url;
-      entry.tab.title = web.getTitle();
-      this.emitTabs();
-      if (id === this.activeId) this.emitNav();
-    };
-    web.on('did-start-loading', update);
-    web.on('did-stop-loading', update);
-    web.on('did-navigate', update);
-    web.on('did-navigate-in-page', update);
-    web.on('page-title-updated', update);
-    web.on('page-favicon-updated', (_event, favicons) => {
-      const entry = this.entries.get(id);
-      if (!entry) return;
-      entry.tab.favicon = favicons[0] ?? '';
-      this.emitTabs();
-    });
-    web.on('did-start-navigation', (details) => {
+  // A fresh, empty page for a tab, kept in step with the tab's record.
+  private makePage(id: string): Page {
+    const entryOf = () => this.entries.get(id);
+    const page = this.engine.createPage({
+      onUpdate: () => {
+        const entry = entryOf();
+        if (!entry || entry.page !== page) return;
+        if (page.url) entry.tab.url = page.url;
+        entry.tab.title = page.title;
+        this.emitTabs();
+        if (id === this.activeId) this.emitNav();
+      },
+      onFavicon: (url) => {
+        const entry = entryOf();
+        if (!entry) return;
+        entry.tab.favicon = url;
+        this.emitTabs();
+      },
       // A new site gets a fresh favicon instead of keeping the old one.
-      const entry = this.entries.get(id);
-      if (entry && details.isMainFrame && !details.isSameDocument) {
-        if (safeHost(details.url) !== safeHost(entry.tab.url)) {
+      onNavigationStart: (url) => {
+        const entry = entryOf();
+        if (entry && safeHost(url) !== safeHost(entry.tab.url))
           entry.tab.favicon = '';
-        }
-      }
+      },
+      // Links that ask for a new tab open one right below this tab.
+      onOpenTab: (url, background) =>
+        this.create(url, { after: id, activate: !background }),
+      onFullscreen: (on) => this.setFullscreen(on),
     });
-
-    // Links that ask for a new tab open one right below this tab. Real popup
-    // windows (sign-in flows and the like) stay popups so they keep working.
-    web.setWindowOpenHandler(({ url, disposition }) => {
-      if (disposition === 'new-window') {
-        return {
-          action: 'allow',
-          overrideBrowserWindowOptions: {
-            autoHideMenuBar: true,
-            webPreferences: SAFE_WEB_PREFERENCES,
-          },
-        };
-      }
-      if (/^https?:/i.test(url)) {
-        this.create(url, {
-          after: id,
-          activate: disposition !== 'background-tab',
-        });
-      }
-      return { action: 'deny' };
-    });
-
-    web.on('enter-html-full-screen', () => this.setFullscreen(true));
-    web.on('leave-html-full-screen', () => this.setFullscreen(false));
+    return page;
   }
 
   // Remember whether the window was already fullscreen before the page asked,
@@ -741,10 +707,10 @@ export class TabManager {
   private setFullscreen(on: boolean) {
     this.fullscreen = on;
     if (on) {
-      this.wasWindowFullscreen = this.win.isFullScreen();
-      if (!this.wasWindowFullscreen) this.win.setFullScreen(true);
+      this.wasWindowFullscreen = this.engine.isWindowFullscreen();
+      if (!this.wasWindowFullscreen) this.engine.setWindowFullscreen(true);
     } else if (!this.wasWindowFullscreen) {
-      this.win.setFullScreen(false);
+      this.engine.setWindowFullscreen(false);
     }
     this.layout();
   }

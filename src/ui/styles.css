@@ -18,9 +18,9 @@
   --frame-glow: rgba(196, 214, 222, 0.55);
   --frame-glass: rgba(233, 227, 218, 0.4); /* --frame, see-through */
   --page: #fbfaf8;
-  --text: #2a2622;
-  --text-muted: #6f675f;
-  --text-faint: #b3aaa0;
+  --text: #241f1b;
+  --text-muted: #5e564e;
+  --text-faint: #9d9389;
   --field: rgba(255, 255, 255, 0.55);
   --field-hover: rgba(255, 255, 255, 0.75);
   --field-focus: #fbfaf8;
@@ -38,6 +38,7 @@
   --backdrop: rgba(60, 45, 30, 0.08);
   --panel-edge: rgba(60, 40, 20, 0.08);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
+  --space-wash: 0.16; /* how strongly the space's color tints the frame */
   --pin-edge: 0.45;
 
   color-scheme: light dark;
@@ -50,9 +51,9 @@
     --frame-glow: rgba(150, 178, 192, 0.1);
     --frame-glass: rgba(58, 55, 52, 0.4);
     --page: #2b2826;
-    --text: #f0ebe5;
-    --text-muted: #c4bcb3;
-    --text-faint: #7d766f;
+    --text: #f5f1ec;
+    --text-muted: #d4cdc5;
+    --text-faint: #958d85;
     --field: rgba(255, 250, 245, 0.08);
     --field-hover: rgba(255, 250, 245, 0.12);
     --field-focus: rgba(255, 250, 245, 0.15);
@@ -61,6 +62,7 @@
     --tab-active: rgba(255, 250, 245, 0.14);
     --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
     --pin-wash: 0.24;
+    --space-wash: 0.14;
     --pin-edge: 0.6;
     --tab-dragged-shadow:
       0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
@@ -119,6 +121,22 @@ body,
    solid peeks out around the page's rounded corners. */
 :root.is-glass .page-area:not(.is-empty) {
   background: transparent;
+}
+
+/* Space tint: a soft wash of the active space's color over the frame (and
+   the glass). Switching spaces cross-fades from one color to the next. */
+:root[data-view='main'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgb(var(--space-rgb, 0 0 0) / 0);
+  transition: background-color 300ms ease-out;
+}
+
+:root[data-view='main'][data-tinted] body::before {
+  background-color: rgb(var(--space-rgb) / var(--space-wash));
 }
 
 /* The layers above the page are see-through. */
@@ -229,7 +247,7 @@ button {
 }
 
 .icon-button:disabled {
-  opacity: 0.35;
+  opacity: 0.4;
 }
 
 .icon-button:focus-visible,
@@ -439,6 +457,9 @@ button {
 /* The space's pinned tabs fold up smoothly under its name. */
 .space-pins {
   display: grid;
+  /* One column exactly as wide as the sidebar, however long a title is
+     (so pinned tabs fade at the edge just like everyday tabs). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   transition:
     grid-template-rows var(--motion),
@@ -451,7 +472,14 @@ button {
 }
 
 .space-pins-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-height: 0;
+}
+
+/* Clipped only while folded, so a pinned tab can be dragged out freely. */
+.space-pins.is-folded .space-pins-inner {
   overflow: hidden;
 }
 
@@ -478,7 +506,10 @@ button {
 }
 
 .space-clear {
-  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -601,13 +632,24 @@ button {
   box-shadow: var(--tab-active-shadow);
 }
 
-/* The active pin takes on its icon's color: a soft wash with a fine edge. */
-/* (The wash is an inset shadow over the usual tile so it fades in smoothly.) */
+/* The active tile takes on its icon's color: a soft wash with a fine edge.
+   (The wash is an inset shadow over the usual tile so it fades in
+   smoothly.) */
 .basecamp-tile.is-active.is-tinted {
   box-shadow:
     inset 0 0 0 1px rgba(var(--pin-rgb), var(--pin-edge)),
     inset 0 0 0 40px rgba(var(--pin-rgb), var(--pin-wash)),
     0 1px 4px rgba(var(--pin-rgb), 0.16);
+}
+
+/* Icons with no color of their own (black, white or gray, like GitHub's)
+   glow in the space's color instead, a little stronger since the space's
+   color is already in the frame around them. */
+.basecamp-tile.is-active:not(.is-tinted) {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--space-rgb, 128 128 128) / 0.75),
+    inset 0 0 0 40px rgb(var(--space-rgb, 128 128 128) / 0.24),
+    0 1px 4px rgb(var(--space-rgb, 128 128 128) / 0.2);
 }
 
 .basecamp-tile:focus-visible {
@@ -636,21 +678,15 @@ button {
 
 /* --- Tabs ------------------------------------------------------------------ */
 
-.tabs-section {
+/* A space's pinned tabs, divider, "New tab" and everyday tabs: one list
+   that scrolls together (see SpaceTabs.tsx). */
+.space-tabs {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-height: 0;
   flex: 1;
-}
-
-.tab-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  overflow-x: hidden;
   overflow-y: auto;
   /* Room so the active tab's soft shadow isn't clipped. */
   padding-bottom: 4px;
@@ -690,8 +726,7 @@ button {
   transition:
     background var(--motion),
     box-shadow var(--motion),
-    color var(--motion),
-    transform var(--motion);
+    color var(--motion);
 }
 
 .tab:hover {
@@ -708,26 +743,18 @@ button {
     box-shadow var(--motion);
 }
 
-.tab-list.is-dragging .tab:not(.is-dragged) .tab-close {
-  opacity: 0;
-}
-
-/* Just after a drop, only the moved tab glides; the rest are already in
-   place. */
-.tab-list.is-settling .tab:not(.is-settling-row) {
-  transition: none;
-}
-
-.tab.is-settling-row {
-  z-index: 1;
-  transition: none;
-}
-
-.tab.is-settling-row.is-gliding {
+/* The others glide out of the dragged tab's way (the divider and "New tab"
+   too); a tab dropped back where it started glides home. */
+.space-tabs.is-dragging [data-item]:not(.is-dragged),
+.tab.is-returning {
   transition:
     background var(--motion),
     box-shadow var(--motion),
     transform var(--motion);
+}
+
+.space-tabs.is-dragging .tab:not(.is-dragged) .tab-close {
+  opacity: 0;
 }
 
 .tab:active:not(.is-active) {
@@ -1105,6 +1132,10 @@ button {
   padding: 8px;
   border-radius: var(--page-radius);
   background: var(--frame);
+  background-image: linear-gradient(
+    rgb(var(--space-rgb, 0 0 0) / var(--space-wash)),
+    rgb(var(--space-rgb, 0 0 0) / var(--space-wash))
+  );
   box-shadow:
     0 0 0 1px var(--panel-edge),
     0 4px 12px rgba(30, 20, 10, 0.12),

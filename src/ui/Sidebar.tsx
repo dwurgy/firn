@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { NavState, SidebarState, SpacesState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
 import { Basecamp } from './Basecamp';
-import { SpaceDivider, SpaceHeader, SpacePins, SpaceSwitcher } from './Spaces';
-import { TabList } from './TabList';
+import { SpaceHeader, SpaceSwitcher } from './Spaces';
+import { SpaceTabs } from './SpaceTabs';
 import {
   BackIcon,
   ForwardIcon,
-  PlusIcon,
   ReloadIcon,
   SidebarIcon,
   StopIcon,
@@ -49,7 +48,28 @@ export function useSidebarData() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  // The active space's color tints the frame (see "Space tint" in
+  // styles.css); changing it cross-fades.
+  const color = spaces.spaces.find((s) => s.id === spaces.activeSpaceId)?.color;
+  useEffect(() => {
+    const root = document.documentElement;
+    const rgb = color && hexToRgb(color);
+    if (rgb) {
+      root.style.setProperty('--space-rgb', rgb);
+      root.dataset.tinted = '';
+    } else {
+      delete root.dataset.tinted;
+    }
+  }, [color]);
+
   return { nav, tabs, sidebar, spaces };
+}
+
+// "#c9a27e" -> "201 162 126", for use in rgb().
+function hexToRgb(hex: string) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return null;
+  return [0, 2, 4].map((i) => parseInt(match[1].slice(i, i + 2), 16)).join(' ');
 }
 
 // The sidebar's contents: buttons, address bar and tabs. Used both in its
@@ -70,7 +90,6 @@ export function Sidebar({
   style?: React.CSSProperties;
 }) {
   const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
-  const everyday = tabs.tabs.filter((t) => !t.pinned && !t.basecamp);
   // Which space's name is being edited (only shown while it's the active
   // space).
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -85,7 +104,19 @@ export function Sidebar({
   }, [index]);
 
   return (
-    <aside className={`sidebar ${className}`} style={style}>
+    <aside
+      className={`sidebar ${className}`}
+      style={style}
+      // Right-click on empty space: the space's menu (Change color...).
+      // Tabs, tiles and the space's name have their own menus, and text
+      // fields keep the usual one.
+      onContextMenu={(e) => {
+        if (e.defaultPrevented) return;
+        if ((e.target as HTMLElement).closest('input, textarea')) return;
+        e.preventDefault();
+        window.firn.showSidebarMenu();
+      }}
+    >
       <div className="sidebar-top">
         <div className="button-row">
           <button
@@ -146,23 +177,11 @@ export function Sidebar({
           onDoneRenaming={() => setRenamingId(null)}
         />
 
-        <SpacePins
-          tabs={tabs.tabs.filter((t) => t.pinned)}
+        <SpaceTabs
+          tabs={tabs.tabs.filter((t) => !t.basecamp)}
           activeTabId={tabs.activeTabId}
           folded={!!space?.pinsFolded}
         />
-
-        <SpaceDivider canClear={everyday.length > 0} />
-
-        <section className="tabs-section">
-          <button className="new-tab" onClick={() => window.firn.newTab()}>
-            <span className="tab-icon">
-              <PlusIcon />
-            </span>
-            New tab
-          </button>
-          <TabList tabs={everyday} activeTabId={tabs.activeTabId} />
-        </section>
       </div>
 
       <SpaceSwitcher {...spaces} />

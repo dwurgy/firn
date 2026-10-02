@@ -92,6 +92,10 @@ Light & dark:         both, following the OS setting
 - **Electron + TypeScript.** UI built with React + Vite (via Electron Forge's Vite template) unless there's a strong reason otherwise.
 - **Web pages** render in `WebContentsView`s managed by the main process (not the deprecated `BrowserView`, and avoid the `<webview>` tag). The sidebar and overlays are the app's own UI layer.
 - **Security defaults, always:** `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` for any web content. Only a narrow preload bridge between UI and main process.
+- **Engine layer:** keep Firn able to move to a Chromium fork later. Two rules for all code:
+  1. The UI (`src/ui/`) never touches Electron; it only talks through the preload bridge (`window.firn`).
+  2. App logic (tabs, spaces, Basecamp, pins, session) never touches Electron's page views directly; it uses the engine interface in `src/engine/engine.ts`. Electron's version lives in `src/engine/electron.ts`.
+  Window and overlay code (`src/main.ts`) may stay Electron-specific; a fork would rewrite it natively anyway.
 - **State:** one central store for the tab model, saved to disk so sessions survive restarts. Design it so it can later sync to a cloud database (Supabase or Firebase) for multi-device.
 
 ### Core data model (get this right first)

@@ -5,8 +5,10 @@ import {
   Menu,
   nativeTheme,
   screen,
+  session,
   WebContentsView,
   type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type Input,
   type WebContents,
 } from 'electron';
@@ -116,6 +118,26 @@ function loadUi(web: WebContents, view?: LayerView) {
 function lockUi(web: WebContents) {
   web.on('will-navigate', (event) => event.preventDefault());
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
+// Downloads a favicon and returns it as a data: URL (or null). Small images
+// only; anything else is ignored.
+const ICON_MAX_BYTES = 512 * 1024;
+async function iconAsDataUrl(url: string): Promise<string | null> {
+  if (url.startsWith('data:image/')) return url;
+  if (!/^https?:\/\//i.test(url)) return null;
+  try {
+    const response = await session.defaultSession.fetch(url);
+    if (!response.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > ICON_MAX_BYTES) return null;
+    const type = (response.headers.get('content-type') ?? '').split(';')[0];
+    // Some sites send .ico files without an image type; Chromium sniffs it.
+    const mime = type.startsWith('image/') ? type : 'image/x-icon';
+    return `data:${mime};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }
 
 // The default space, saved with the session (Phase 4 adds more).
@@ -764,6 +786,15 @@ const createWindow = () => {
     return [channel, listener] as const;
   });
 
+  // The UI asks for a favicon's bytes so it can pick out the icon's main
+  // color (for tinting the active pin). Fetching here, rather than in the
+  // UI, sidesteps the browser rule that hides other sites' images' pixels.
+  ipcMain.handle('icon:data', (event: IpcMainInvokeEvent, url: unknown) =>
+    uiContents.includes(event.sender) && typeof url === 'string'
+      ? iconAsDataUrl(url)
+      : null,
+  );
+
   // Lets the UI swap the maximize icon for a restore icon.
   const sendMaximized = () => send('window:maximized', win.isMaximized());
   win.on('maximize', sendMaximized);
@@ -906,6 +937,7 @@ const createWindow = () => {
     saver.cancel();
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
+    ipcMain.removeHandler('icon:data');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();

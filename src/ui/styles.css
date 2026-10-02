@@ -34,6 +34,8 @@
   --close-hover: #c8564a;
   --backdrop: rgba(60, 45, 30, 0.08);
   --panel-edge: rgba(60, 40, 20, 0.08);
+  --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
+  --pin-edge: 0.45;
 
   color-scheme: light dark;
 }
@@ -54,6 +56,8 @@
     --press: rgba(255, 250, 245, 0.13);
     --tab-active: rgba(255, 250, 245, 0.14);
     --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --pin-wash: 0.24;
+    --pin-edge: 0.6;
     --tab-dragged-shadow:
       0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
     --frost: rgba(160, 196, 214, 0.45);
@@ -301,7 +305,10 @@ button {
 
 .pinned-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Pins share each row evenly and wrap once tiles would get narrower than
+     this (so 1 pin fills the row, 2 split it, ... about 4 per row at the
+     default sidebar width, more when it's wider). */
+  grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
   gap: 6px;
 }
 
@@ -325,6 +332,15 @@ button {
 .pinned-tile.is-active {
   background: var(--tab-active);
   box-shadow: var(--tab-active-shadow);
+}
+
+/* The active pin takes on its icon's color: a soft wash with a fine edge. */
+/* (The wash is an inset shadow over the usual tile so it fades in smoothly.) */
+.pinned-tile.is-active.is-tinted {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--pin-rgb), var(--pin-edge)),
+    inset 0 0 0 40px rgba(var(--pin-rgb), var(--pin-wash)),
+    0 1px 4px rgba(var(--pin-rgb), 0.16);
 }
 
 .pinned-tile:focus-visible {

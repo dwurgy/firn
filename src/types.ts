@@ -126,6 +126,8 @@ export interface FirnBridge {
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
   showTabMenu(id: string): void;
+  // A favicon as a data: URL, so the UI can read its colors.
+  iconData(url: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;

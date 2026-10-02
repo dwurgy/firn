@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SplitGroup } from '../types';
+import firnMark from './firn-mark.svg';
 import { Sidebar, useSidebarData } from './Sidebar';
 
 const PAGE_INSET = 8; // matches --page-inset in styles.css
@@ -97,6 +98,7 @@ export function App() {
       >
         {noTabs && (
           <div className="empty-page">
+            <img className="empty-mark" src={firnMark} alt="" />
             <p className="empty-title">No open tabs</p>
             <p className="empty-hint">Press Ctrl+T to open one.</p>
           </div>

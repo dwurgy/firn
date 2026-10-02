@@ -16,6 +16,7 @@ import {
   type WebContents,
 } from 'electron';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
@@ -137,6 +138,16 @@ function loadUi(web: WebContents, view?: LayerView) {
 function lockUi(web: WebContents) {
   web.on('will-navigate', (event) => event.preventDefault());
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
+// Firn's app icon (assets/icon.*), if it's there.
+function appIcon() {
+  const file = path.join(
+    app.getAppPath(),
+    'assets',
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+  );
+  return fs.existsSync(file) ? file : undefined;
 }
 
 // Downloads a favicon and returns it as a data: URL (or null). Small images
@@ -276,6 +287,9 @@ const createWindow = () => {
     minWidth: 640,
     minHeight: 400,
     title: 'Firn',
+    // The window and taskbar icon while running from source (a packaged
+    // Firn gets its icon from forge.config.mts).
+    icon: appIcon(),
     // With glass, the window is see-through and the UI paints a tinted,
     // partly transparent frame over the system's blur.
     backgroundColor: GLASS ? '#00000000' : frameColor(),

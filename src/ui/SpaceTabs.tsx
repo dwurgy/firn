@@ -165,7 +165,13 @@ export function SpaceTabs({
   ) => {
     if (e.button !== 0) return;
     window.firn.activateTab(tabId);
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // (A click without a real pointer behind it can't be captured; it still
+    // switches tabs, it just can't start a drag.)
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      return;
+    }
     update({ id: rowId, startY: e.clientY, dy: 0, active: false, items: [] });
   };
 

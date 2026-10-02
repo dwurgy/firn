@@ -10,10 +10,12 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Firn's app icon (Glacier); .ico on Windows, .icns on macOS.
+    icon: './assets/icon',
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({ setupIcon: './assets/icon.ico' }),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),

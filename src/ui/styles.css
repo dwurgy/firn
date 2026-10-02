@@ -991,6 +991,15 @@ button {
   animation: settle 250ms ease-out;
 }
 
+/* Firn's mark, resting quietly above the words. */
+.empty-mark {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 18px;
+  opacity: 0.85;
+}
+
 .empty-title {
   margin: 0 0 6px;
   font-size: 15px;

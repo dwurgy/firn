@@ -439,6 +439,9 @@ button {
 /* The space's pinned tabs fold up smoothly under its name. */
 .space-pins {
   display: grid;
+  /* One column exactly as wide as the sidebar, however long a title is
+     (so pinned tabs fade at the edge just like everyday tabs). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   transition:
     grid-template-rows var(--motion),
@@ -651,6 +654,7 @@ button {
   gap: 4px;
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   /* Room so the active tab's soft shadow isn't clipped. */
   padding-bottom: 4px;

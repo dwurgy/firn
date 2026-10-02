@@ -118,6 +118,21 @@ export const SeparateIcon = () => (
   </svg>
 );
 
+// A page from the history: a soft clock.
+export const HistoryIcon = () => (
+  <svg {...base} strokeWidth={1.4}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 5v3.2l2 1.3" />
+  </svg>
+);
+
+// A quick action in the command bar: a small four-pointed spark.
+export const ActionIcon = () => (
+  <svg {...base} strokeWidth={1.4}>
+    <path d="M8 2.8c.4 2.6 1.6 3.8 4.2 4.2v.1c-2.6.4-3.8 1.6-4.2 4.2h-.1c-.4-2.6-1.6-3.8-4.2-4.2V7c2.6-.4 3.8-1.6 4.2-4.2Z" />
+  </svg>
+);
+
 // A pinned tab's "unload" button (a pin is never closed outright).
 export const UnloadIcon = () => (
   <svg {...base}>

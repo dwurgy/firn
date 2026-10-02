@@ -1,5 +1,6 @@
 import {
   app,
+  clipboard,
   BrowserWindow,
   ipcMain,
   dialog,
@@ -21,8 +22,10 @@ import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
+import { History } from './history';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
+  CommandAction,
   FrameState,
   NavCommand,
   OverlayState,
@@ -611,6 +614,11 @@ const createWindow = () => {
 
   // --- Tabs ---------------------------------------------------------------
 
+  // Pages visited, for the command bar (history.json next to the session).
+  const history = new History(
+    path.join(app.getPath('userData'), 'history.json'),
+  );
+
   // Web pages come from the Electron engine; the tab model itself doesn't
   // depend on Electron (see src/engine/engine.ts).
   const engine = new ElectronEngine(win, (web) => {
@@ -643,6 +651,8 @@ const createWindow = () => {
     },
     onEmpty: () => openCommandBar(),
     onLookout: (url) => openLookout(url),
+    onVisit: (url, title, favicon, newVisit) =>
+      history.visit(url, title, favicon, newVisit),
   });
 
   const relayout = () => {
@@ -1183,6 +1193,47 @@ const createWindow = () => {
 
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
+  // Quick actions from the command bar, on the tab you're on.
+  const runAction = (action: CommandAction, arg: string) => {
+    hideOverlay();
+    const id = tabs.activeTabId;
+    const tab = id ? tabs.state().tabs.find((t) => t.id === id) : undefined;
+    switch (action) {
+      case 'pin':
+        if (id && tab && !tab.basecamp) tabs.togglePin(id);
+        break;
+      case 'basecamp':
+        if (!id || !tab) break;
+        if (tab.basecamp) tabs.removeFromBasecamp(id);
+        else tabs.addToBasecamp(id);
+        break;
+      case 'close':
+        if (id) tabs.close(id);
+        break;
+      case 'reopen':
+        tabs.reopenClosed();
+        break;
+      case 'separate':
+        if (id) tabs.unsplit(id);
+        break;
+      case 'sidebar':
+        setSidebarCollapsed(!windowState.sidebarCollapsed);
+        break;
+      case 'new-space':
+        newSpace();
+        break;
+      case 'clear':
+        tabs.clearEveryday();
+        break;
+      case 'copy-link':
+        if (tab?.url) clipboard.writeText(tab.url);
+        break;
+      case 'switch-space':
+        switchSpace(arg);
+        break;
+    }
+  };
+
   // With `besideId`, whatever is picked opens in split view beside that tab.
   let splitBeside: string | null = null;
   const openCommandBar = (besideId?: string) => {
@@ -1336,9 +1387,17 @@ const createWindow = () => {
         tabs.activate(beside);
         if (tabs.canSplitWith(id)) return tabs.splitWith(id);
       }
+      // A tab in another space (from the command bar): go to that space.
+      const spaceId = tabs.spaceOfTab(id);
+      if (spaceId && spaceId !== windowState.activeSpaceId)
+        switchSpace(spaceId);
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'command:run': (_sender, action, arg) => {
+      if (typeof action === 'string')
+        runAction(action as CommandAction, typeof arg === 'string' ? arg : '');
+    },
     'split:resize': (_sender, id, ratio) => {
       if (typeof id === 'string' && typeof ratio === 'number')
         tabs.resizeSplit(id, ratio);
@@ -1396,6 +1455,18 @@ const createWindow = () => {
     uiContents.includes(event.sender) && typeof url === 'string'
       ? iconAsDataUrl(url)
       : null,
+  );
+
+  // The command bar asks for every open tab, and for history matches.
+  ipcMain.handle('command:tabs', (event: IpcMainInvokeEvent) =>
+    uiContents.includes(event.sender) ? tabs.allTabs() : [],
+  );
+  ipcMain.handle(
+    'history:search',
+    (event: IpcMainInvokeEvent, query: unknown) =>
+      uiContents.includes(event.sender) && typeof query === 'string'
+        ? history.search(query.slice(0, 200), 6)
+        : [],
   );
 
   // Glass turns solid while the window is out of focus.
@@ -1551,13 +1622,18 @@ const createWindow = () => {
   });
   for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
     win.on(event as 'resize', () => saver.schedule());
-  win.on('close', () => saver.flush());
+  win.on('close', () => {
+    saver.flush();
+    history.flush();
+  });
 
   win.on('closed', () => {
     saver.cancel();
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
     ipcMain.removeHandler('icon:data');
+    ipcMain.removeHandler('command:tabs');
+    ipcMain.removeHandler('history:search');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();

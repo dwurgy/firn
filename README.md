@@ -28,7 +28,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | --- | --- | --- |
 | Focus address bar | Ctrl+L | Cmd+L |
 | Hide / show sidebar | Ctrl+S | Cmd+S |
-| New tab (opens the command bar) | Ctrl+T | Cmd+T |
+| Command bar (new tab, find tabs and history, actions) | Ctrl+T | Cmd+T |
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
 | Preview a link in Lookout | Shift+click | Shift+click |
@@ -51,9 +51,13 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.
 
+### Command bar
+
+**Ctrl+T** opens the command bar. Type an address or a search; it also finds your open tabs in every space (tabs in another space say which, and picking one takes you there) and pages from your history. Type a couple of letters of an action to run it: **pin**, **basecamp**, **copy** link, **close**, **reopen**, **clear**, **sidebar**, **new space**, or a space's name to go there.
+
 ### Your session
 
-Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh.
+Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh. Your browsing history (for the command bar) is kept next to it in `history.json`, on your computer only.
 
 ### Basecamp and pinned tabs
 

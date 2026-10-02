@@ -76,6 +76,28 @@ export interface SavedSession {
   recentlyClosed: string[];
 }
 
+// A page in the browsing history (src/history.ts).
+export interface HistoryEntry {
+  url: string;
+  title: string;
+  favicon: string;
+  visits: number;
+  lastVisit: number;
+}
+
+// Quick actions the command bar can run (see runAction in src/main.ts).
+export type CommandAction =
+  | 'pin'
+  | 'basecamp'
+  | 'close'
+  | 'reopen'
+  | 'separate'
+  | 'sidebar'
+  | 'new-space'
+  | 'clear'
+  | 'copy-link'
+  | 'switch-space';
+
 // --- What the UI is told ----------------------------------------------------
 
 // A tab as the sidebar shows it: the saved record plus live status.
@@ -173,6 +195,11 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
+  // The command bar: every open tab (all spaces), history matches, and its
+  // quick actions (`arg` is a space id for 'switch-space').
+  allTabs(): Promise<(TabView & { spaceId: string })[]>;
+  searchHistory(query: string): Promise<HistoryEntry[]>;
+  runAction(action: CommandAction, arg?: string): void;
   // Lookout's "Open as tab".
   expandLookout(): void;
   // Split view: drag the gap (`ratio` is the left side's share), or end it.

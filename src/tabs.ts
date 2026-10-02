@@ -78,6 +78,14 @@ interface TabManagerOptions {
   onEmpty: () => void;
   // A link was Shift+clicked: preview it in Lookout.
   onLookout: (url: string) => void;
+  // A tab's page went somewhere (`newVisit`), or its title or icon became
+  // known (for the browsing history).
+  onVisit: (
+    url: string,
+    title: string,
+    favicon: string,
+    newVisit: boolean,
+  ) => void;
 }
 
 export class TabManager {
@@ -123,6 +131,32 @@ export class TabManager {
   private isShown(id: string) {
     const tab = this.entries.get(id)?.tab;
     return !!tab && (tab.basecamp || tab.spaceId === this.spaceId);
+  }
+
+  // Which space a tab belongs to (none for Basecamp, which is in every one).
+  spaceOfTab(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    return tab && !tab.basecamp ? tab.spaceId : undefined;
+  }
+
+  // Every tab in every space (for the command bar), Basecamp first.
+  allTabs() {
+    return this.order.map((id) => {
+      const { tab, page, loaded } = this.entries.get(id)!;
+      return {
+        id,
+        spaceId: tab.spaceId,
+        url: tab.url,
+        title: tab.title,
+        favicon: tab.favicon,
+        isLoading: page.isLoading,
+        lastActiveAt: tab.lastActiveAt,
+        pinned: tab.pinned,
+        basecamp: !!tab.basecamp,
+        loaded,
+        splitId: tab.splitGroupId,
+      };
+    });
   }
 
   // How many tabs a space has of its own (for "delete this space?").
@@ -899,12 +933,24 @@ export class TabManager {
       const entry = this.entries.get(id);
       return entry && entry.page === pageOf() ? entry : undefined;
     };
+    // The last page recorded in the history for this tab.
+    let visited = { url: '', title: '' };
     return {
       onUpdate: () => {
         const entry = entryOf();
         if (!entry) return;
-        if (entry.page.url) entry.tab.url = entry.page.url;
-        entry.tab.title = entry.page.title;
+        const { url, title } = entry.page;
+        if (url && (url !== visited.url || title !== visited.title)) {
+          this.options.onVisit(
+            url,
+            title,
+            entry.tab.favicon,
+            url !== visited.url,
+          );
+          visited = { url, title };
+        }
+        if (url) entry.tab.url = url;
+        entry.tab.title = title;
         this.emitTabs();
         if (id === this.activeId) this.emitNav();
       },
@@ -912,6 +958,7 @@ export class TabManager {
         const entry = entryOf();
         if (!entry) return;
         entry.tab.favicon = url;
+        if (visited.url) this.options.onVisit(visited.url, '', url, false);
         this.emitTabs();
       },
       // A new site gets a fresh favicon instead of keeping the old one.

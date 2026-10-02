@@ -10,6 +10,8 @@ export interface Space {
   icon: string;
   color: string;
   order: number;
+  // The space's pinned tabs are folded away under its name.
+  pinsFolded?: boolean;
 }
 
 export interface Tab {
@@ -19,6 +21,9 @@ export interface Tab {
   title: string;
   favicon: string;
   pinned: boolean;
+  // In Basecamp: the grid of favorite sites shown in every space (then
+  // `spaceId` is just the space it was added from).
+  basecamp?: boolean;
   homeUrl?: string;
   order: number;
   lastActiveAt: number;
@@ -71,6 +76,7 @@ export interface TabView {
   isLoading: boolean;
   lastActiveAt: number;
   pinned: boolean;
+  basecamp: boolean;
   // False for a tab whose page hasn't loaded yet (restored, or an unloaded
   // pinned tab).
   loaded: boolean;
@@ -141,7 +147,12 @@ export interface FirnBridge {
   showTabMenu(id: string): void;
   switchSpace(id: string): void;
   newSpace(): void;
-  updateSpace(id: string, changes: { name?: string; icon?: string }): void;
+  updateSpace(
+    id: string,
+    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+  ): void;
+  // Closes the active space's everyday (unpinned) tabs.
+  clearTabs(): void;
   showSpaceMenu(id: string): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;

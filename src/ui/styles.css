@@ -331,7 +331,7 @@ button {
 .space-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   flex: 1;
   min-height: 0;
   animation: space-in var(--motion) both;
@@ -347,20 +347,59 @@ button {
 .space-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
+  gap: 10px;
+  height: 32px;
   margin-top: 12px;
-  padding: 0 12px;
+  padding: 0 6px 0 12px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
+  transition: background var(--motion);
 }
 
+.space-header:hover {
+  background: var(--hover);
+}
+
+/* The icon and the fold arrow share one spot; hovering swaps them. */
 .space-header-icon {
+  position: relative;
   width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.space-header-emoji,
+.space-header-chevron {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition:
+    opacity var(--motion),
+    transform var(--motion);
+}
+
+.space-header-emoji {
   font-size: 14px;
   line-height: 1;
-  text-align: center;
+}
+
+.space-header-chevron {
+  opacity: 0;
+}
+
+.space-header:hover .space-header-emoji {
+  opacity: 0;
+}
+
+.space-header:hover .space-header-chevron {
+  opacity: 1;
+}
+
+.space-header.is-folded .space-header-chevron {
+  transform: rotate(-90deg);
 }
 
 .space-header-name {
@@ -369,6 +408,92 @@ button {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.space-header-more {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: default;
+  transition:
+    opacity var(--motion),
+    background var(--motion);
+}
+
+.space-header:hover .space-header-more {
+  opacity: 1;
+}
+
+.space-header-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The space's pinned tabs fold up smoothly under its name. */
+.space-pins {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--motion),
+    opacity var(--motion);
+}
+
+.space-pins.is-folded {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.space-pins-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* An unloaded pinned tab (not opened yet, or unloaded) rests quieter. */
+.tab.is-unloaded .tab-icon,
+.tab.is-unloaded .tab-title {
+  opacity: 0.6;
+}
+
+/* Between pinned and everyday tabs: a soft line, and "Clear" for the
+   everyday ones. */
+.space-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  margin: 2px 2px 2px 12px;
+}
+
+.space-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--panel-edge);
+}
+
+.space-clear {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.space-clear:hover {
+  background: var(--hover);
+  color: var(--text-muted);
 }
 
 .space-header-input {
@@ -383,11 +508,6 @@ button {
   background: var(--field-focus);
   color: var(--text);
   font: inherit;
-}
-
-/* A space without pins: its tabs follow the name closely. */
-.space-header + .tabs-section {
-  margin-top: 0;
 }
 
 /* The row of space icons at the bottom of the sidebar. */
@@ -444,13 +564,13 @@ button {
   outline-offset: 1px;
 }
 
-/* --- Pinned tabs --------------------------------------------------------- */
+/* --- Basecamp: favorite sites shown in every space --------------------- */
 
-.pinned {
-  margin-top: 2px;
+.basecamp {
+  margin-top: 12px;
 }
 
-.pinned-grid {
+.basecamp-grid {
   display: grid;
   /* Pins share each row evenly and wrap once tiles would get narrower than
      this (so 1 pin fills the row, 2 split it, ... about 4 per row at the
@@ -459,7 +579,7 @@ button {
   gap: 6px;
 }
 
-.pinned-tile {
+.basecamp-tile {
   height: 44px;
   display: grid;
   place-items: center;
@@ -472,30 +592,30 @@ button {
     box-shadow var(--motion);
 }
 
-.pinned-tile:hover {
+.basecamp-tile:hover {
   background: var(--field-hover);
 }
 
-.pinned-tile.is-active {
+.basecamp-tile.is-active {
   background: var(--tab-active);
   box-shadow: var(--tab-active-shadow);
 }
 
 /* The active pin takes on its icon's color: a soft wash with a fine edge. */
 /* (The wash is an inset shadow over the usual tile so it fades in smoothly.) */
-.pinned-tile.is-active.is-tinted {
+.basecamp-tile.is-active.is-tinted {
   box-shadow:
     inset 0 0 0 1px rgba(var(--pin-rgb), var(--pin-edge)),
     inset 0 0 0 40px rgba(var(--pin-rgb), var(--pin-wash)),
     0 1px 4px rgba(var(--pin-rgb), 0.16);
 }
 
-.pinned-tile:focus-visible {
+.basecamp-tile:focus-visible {
   outline: 2px solid var(--frost);
   outline-offset: 1px;
 }
 
-.pinned-icon {
+.basecamp-icon {
   width: 18px;
   height: 18px;
   display: grid;
@@ -504,27 +624,19 @@ button {
   transition: opacity var(--motion);
 }
 
-.pinned-icon .tab-favicon {
+.basecamp-icon .tab-favicon {
   width: 18px;
   height: 18px;
 }
 
 /* An unloaded pin (not opened yet, or "closed") rests a little quieter. */
-.pinned-tile.is-unloaded .pinned-icon {
+.basecamp-tile.is-unloaded .basecamp-icon {
   opacity: 0.55;
-}
-
-.pinned-divider {
-  height: 1px;
-  margin: 14px 6px 0;
-  background: var(--panel-edge);
 }
 
 /* --- Tabs ------------------------------------------------------------------ */
 
 .tabs-section {
-  /* Section spacing from the address bar. */
-  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;

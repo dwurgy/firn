@@ -1,40 +1,101 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Space, SpacesState } from '../types';
-import { PlusIcon } from './icons';
+import type { Space, SpacesState, TabView } from '../types';
+import { ChevronIcon, MoreIcon, PlusIcon } from './icons';
+import { TabList } from './TabList';
 
-// The active space's name above its tabs. Double-click it (or pick
-// "Rename space" from the space's right-click menu) to rename it.
+// The active space's name above its pinned tabs. Click it to fold the
+// pins away (or bring them back); the ... button (or right-click) has
+// Rename, Change icon and Delete.
 export function SpaceHeader({
   space,
   renaming,
-  onRename,
   onDoneRenaming,
 }: {
   space: Space | undefined;
   renaming: boolean;
-  onRename: () => void;
   onDoneRenaming: () => void;
 }) {
   if (!space) return null;
+  const folded = !!space.pinsFolded;
+  const toggleFold = () => {
+    if (!renaming) window.firn.updateSpace(space.id, { pinsFolded: !folded });
+  };
   return (
     <div
-      className="space-header"
+      className={`space-header ${folded ? 'is-folded' : ''}`}
+      title={folded ? 'Show pinned tabs' : 'Fold pinned tabs away'}
+      onClick={toggleFold}
       onContextMenu={(e) => {
         e.preventDefault();
         window.firn.showSpaceMenu(space.id);
       }}
     >
-      <span className="space-header-icon">{space.icon}</span>
+      {/* The space's icon, which turns into a fold arrow on hover. */}
+      <span className="space-header-icon">
+        <span className="space-header-emoji">{space.icon}</span>
+        <span className="space-header-chevron">
+          <ChevronIcon />
+        </span>
+      </span>
       {renaming ? (
         <SpaceNameInput space={space} onDone={onDoneRenaming} />
       ) : (
-        <span
-          className="space-header-name"
-          title="Double-click to rename"
-          onDoubleClick={onRename}
+        <span className="space-header-name">{space.name}</span>
+      )}
+      <button
+        className="space-header-more"
+        title="Space options"
+        onClick={(e) => {
+          e.stopPropagation();
+          window.firn.showSpaceMenu(space.id);
+        }}
+      >
+        <MoreIcon />
+      </button>
+    </div>
+  );
+}
+
+// The space's pinned tabs, as ordinary rows under its name. Folded away,
+// only the pinned tab you're on (if any) stays in view.
+export function SpacePins({
+  tabs,
+  activeTabId,
+  folded,
+}: {
+  tabs: TabView[];
+  activeTabId: string | null;
+  folded: boolean;
+}) {
+  const activePin = folded && tabs.find((t) => t.id === activeTabId);
+  return (
+    <>
+      <div className={`space-pins ${folded ? 'is-folded' : ''}`}>
+        <div className="space-pins-inner">
+          <TabList tabs={tabs} activeTabId={activeTabId} kind="pinned" />
+        </div>
+      </div>
+      {activePin && (
+        <TabList tabs={[activePin]} activeTabId={activeTabId} kind="pinned" />
+      )}
+    </>
+  );
+}
+
+// The soft line between pinned and everyday tabs, with "Clear" to close the
+// everyday ones.
+export function SpaceDivider({ canClear }: { canClear: boolean }) {
+  return (
+    <div className="space-divider">
+      <span className="space-divider-line" />
+      {canClear && (
+        <button
+          className="space-clear"
+          title="Close this space's unpinned tabs"
+          onClick={() => window.firn.clearTabs()}
         >
-          {space.name}
-        </span>
+          Clear
+        </button>
       )}
     </div>
   );

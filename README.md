@@ -29,7 +29,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | Focus address bar | Ctrl+L | Cmd+L |
 | Hide / show sidebar | Ctrl+S | Cmd+S |
 | New tab (opens the command bar) | Ctrl+T | Cmd+T |
-| Close tab (a pinned tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
+| Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
 | Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
@@ -46,20 +46,24 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 - `src/tabs.ts` — the tab manager: the list of tabs and the web page behind each one.
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `PinnedGrid.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `src/url.ts` — decides whether what you typed is an address or a search.
 
 ### Your session
 
 Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh.
 
-### Pinned tabs
+### Basecamp and pinned tabs
 
-Pin a tab with **Ctrl+D** or by right-clicking it. Pins sit as tiles at the top of the sidebar and stay there for good. Each pin remembers the address it was pinned at as its *home*: right-click it for **Go back to home** or **Unpin tab**. Closing a pin doesn't remove it; it unloads the page and resets it to home, and the tile shows dimmed until you click it again.
+**Basecamp** is the grid of favorite sites at the top of the sidebar: the same in every space, up to 12. Right-click any tab and choose **Add to Basecamp**. The site you're on glows softly in its own color.
+
+**Pinned tabs** belong to one space and sit as rows under its name. Pin a tab with **Ctrl+D** or by right-clicking it. Click the space's name to fold its pins away (the pin you're on stays in view).
+
+Both remember the address they were added at as their *home*: right-click for **Go back to home**. Closing one doesn't remove it; it unloads the page and resets it to home, and it rests a little dimmed until you click it again. The line below the pins has **Clear**, which closes the space's everyday tabs.
 
 ### Spaces
 
-Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Double-click a space's name to rename it, and right-click its icon to rename it, change its icon or delete it. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or delete it. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
 
 ### Frosted glass
 

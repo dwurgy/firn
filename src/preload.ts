@@ -29,6 +29,7 @@ const bridge: FirnBridge = {
   newSpace: () => ipcRenderer.send('spaces:new'),
   updateSpace: (id, changes) => ipcRenderer.send('spaces:update', id, changes),
   showSpaceMenu: (id) => ipcRenderer.send('spaces:menu', id),
+  clearTabs: () => ipcRenderer.send('tabs:clear'),
   iconData: (url) => ipcRenderer.invoke('icon:data', url),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),

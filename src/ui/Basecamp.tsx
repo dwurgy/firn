@@ -3,14 +3,15 @@ import type { TabView } from '../types';
 import { useIconColor } from './iconColor';
 import { TabIcon, tabTitle } from './TabList';
 
-// Pinned tabs: a grid of favicon tiles at the top of the sidebar. Closing a
-// pin (middle-click) unloads it rather than removing it; right-click for
-// "Go back to home" and "Unpin".
+// Basecamp: a grid of favorite sites at the top of the sidebar, the same in
+// every space (at most 12). Closing one (middle-click) unloads it rather
+// than removing it; right-click for "Go back to home" and "Remove from
+// Basecamp".
 //
 // The tiles share each row evenly: one pin fills the row, two split it, and
 // so on, until the tiles would get too narrow and a new row starts (so a
 // wider sidebar fits more per row).
-export function PinnedGrid({
+export function Basecamp({
   tabs,
   activeTabId,
 }: {
@@ -19,24 +20,27 @@ export function PinnedGrid({
 }) {
   if (!tabs.length) return null;
   return (
-    <div className="pinned">
-      <div className="pinned-grid">
+    <div className="basecamp">
+      <div className="basecamp-grid">
         {tabs.map((tab) => (
-          <PinnedTile key={tab.id} tab={tab} active={tab.id === activeTabId} />
+          <BasecampTile
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+          />
         ))}
       </div>
-      <div className="pinned-divider" />
     </div>
   );
 }
 
-function PinnedTile({ tab, active }: { tab: TabView; active: boolean }) {
-  // The active pin is tinted with its icon's own color.
+function BasecampTile({ tab, active }: { tab: TabView; active: boolean }) {
+  // The active tile is tinted with its icon's own color.
   const color = useIconColor(tab.favicon);
   return (
     <button
       className={[
-        'pinned-tile',
+        'basecamp-tile',
         active && 'is-active',
         color && 'is-tinted',
         !tab.loaded && 'is-unloaded',
@@ -56,7 +60,7 @@ function PinnedTile({ tab, active }: { tab: TabView; active: boolean }) {
         window.firn.showTabMenu(tab.id);
       }}
     >
-      <span className="pinned-icon">
+      <span className="basecamp-icon">
         <TabIcon tab={tab} />
       </span>
     </button>

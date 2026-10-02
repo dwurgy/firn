@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
-import { TabManager } from './tabs';
+import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
   FrameState,
   NavCommand,
@@ -739,36 +739,62 @@ const createWindow = () => {
   const showTabMenu = (id: string) => {
     const tab = tabs.state().tabs.find((t) => t.id === id);
     if (!tab) return;
-    const items: Electron.MenuItemConstructorOptions[] = tab.pinned
+    const count = tabs.basecampCount;
+    const addToBasecamp: Electron.MenuItemConstructorOptions = {
+      label: `Add to Basecamp  (${count}/${BASECAMP_MAX})`,
+      enabled: count < BASECAMP_MAX,
+      click: () => tabs.addToBasecamp(id),
+    };
+    const others = spaces.filter((s) => s.id !== tabs.activeSpaceId);
+    const moveToSpace: Electron.MenuItemConstructorOptions[] = others.length
+      ? [
+          {
+            label: 'Move to space',
+            submenu: others.map((space) => ({
+              label: `${space.icon}  ${space.name}`,
+              click: () => tabs.moveToSpace(id, space.id),
+            })),
+          },
+        ]
+      : [];
+    const items: Electron.MenuItemConstructorOptions[] = tab.basecamp
       ? [
           { label: 'Go back to home', click: () => tabs.goHome(id) },
-          { label: 'Unpin tab', click: () => tabs.unpin(id) },
+          {
+            label: 'Remove from Basecamp',
+            click: () => tabs.removeFromBasecamp(id),
+          },
           { type: 'separator' },
           { label: 'Unload tab', click: () => tabs.close(id) },
         ]
-      : [
-          {
-            label: 'Pin tab',
-            accelerator: 'CmdOrCtrl+D',
-            click: () => tabs.pin(id),
-          },
-          { type: 'separator' },
-          {
-            label: 'Close tab',
-            accelerator: 'CmdOrCtrl+W',
-            click: () => tabs.close(id),
-          },
-        ];
-    const others = spaces.filter((s) => s.id !== tabs.activeSpaceId);
-    if (others.length) {
-      items.splice(items.length - 2, 0, {
-        label: 'Move to space',
-        submenu: others.map((space) => ({
-          label: `${space.icon}  ${space.name}`,
-          click: () => tabs.moveToSpace(id, space.id),
-        })),
-      });
-    }
+      : tab.pinned
+        ? [
+            { label: 'Go back to home', click: () => tabs.goHome(id) },
+            {
+              label: 'Unpin tab',
+              accelerator: 'CmdOrCtrl+D',
+              click: () => tabs.unpin(id),
+            },
+            addToBasecamp,
+            ...moveToSpace,
+            { type: 'separator' },
+            { label: 'Unload tab', click: () => tabs.close(id) },
+          ]
+        : [
+            {
+              label: 'Pin tab',
+              accelerator: 'CmdOrCtrl+D',
+              click: () => tabs.pin(id),
+            },
+            addToBasecamp,
+            ...moveToSpace,
+            { type: 'separator' },
+            {
+              label: 'Close tab',
+              accelerator: 'CmdOrCtrl+W',
+              click: () => tabs.close(id),
+            },
+          ];
     Menu.buildFromTemplate(items).popup({ window: win });
   };
 
@@ -810,7 +836,7 @@ const createWindow = () => {
 
   const updateSpace = (
     id: string,
-    changes: { name?: string; icon?: string },
+    changes: { name?: string; icon?: string; pinsFolded?: boolean },
   ) => {
     spaces = spaces.map((s) =>
       s.id === id
@@ -818,6 +844,7 @@ const createWindow = () => {
             ...s,
             name: changes.name?.trim().slice(0, 40) || s.name,
             icon: changes.icon ?? s.icon,
+            pinsFolded: changes.pinsFolded ?? s.pinsFolded,
           }
         : s,
     );
@@ -978,15 +1005,17 @@ const createWindow = () => {
     'spaces:update': (_sender, id, changes) => {
       if (typeof id !== 'string' || !changes || typeof changes !== 'object')
         return;
-      const { name, icon } = changes as Record<string, unknown>;
+      const { name, icon, pinsFolded } = changes as Record<string, unknown>;
       updateSpace(id, {
         name: typeof name === 'string' ? name : undefined,
         icon:
           typeof icon === 'string' && SPACE_ICONS.includes(icon)
             ? icon
             : undefined,
+        pinsFolded: typeof pinsFolded === 'boolean' ? pinsFolded : undefined,
       });
     },
+    'tabs:clear': () => tabs.clearEveryday(),
     'spaces:menu': (_sender, id) => {
       if (typeof id === 'string') showSpaceMenu(id);
     },
@@ -1255,7 +1284,7 @@ const createWindow = () => {
     // The saved active tab, or the space's most recent one (a space can also
     // be empty).
     const inSpace = savedTabs.filter(
-      (t) => t.spaceId === windowState.activeSpaceId,
+      (t) => t.basecamp || t.spaceId === windowState.activeSpaceId,
     );
     const activeId = inSpace.some((t) => t.id === saved?.window.activeTabId)
       ? saved!.window.activeTabId!

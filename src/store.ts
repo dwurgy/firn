@@ -8,9 +8,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import type { SavedSession } from './types';
+import { BASECAMP_MAX } from './tabs';
+import type { SavedSession, SavedTab } from './types';
 
-const SESSION_VERSION = 1;
+// Version 2 added Basecamp: version 1's pinned tabs (shown as a grid back
+// then) become Basecamp, which is where that grid lives now.
+const SESSION_VERSION = 2;
 
 export const sessionPath = () =>
   path.join(app.getPath('userData'), 'session.json');
@@ -18,10 +21,20 @@ export const sessionPath = () =>
 export function loadSession(): SavedSession | null {
   try {
     const data = JSON.parse(fs.readFileSync(sessionPath(), 'utf8'));
-    if (data?.version !== SESSION_VERSION || !Array.isArray(data.tabs)) {
+    if (!Array.isArray(data?.tabs)) return null;
+    if (data.version === 1) {
+      let room = BASECAMP_MAX;
+      for (const tab of data.tabs as SavedTab[]) {
+        if (tab.pinned && room > 0) {
+          tab.pinned = false;
+          tab.basecamp = true;
+          room--;
+        }
+      }
+    } else if (data.version !== SESSION_VERSION) {
       return null;
     }
-    return data as SavedSession;
+    return { ...data, version: SESSION_VERSION } as SavedSession;
   } catch {
     // No session yet (first run) or an unreadable file: start fresh.
     return null;

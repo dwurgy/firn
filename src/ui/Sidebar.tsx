@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NavState, SidebarState, SpacesState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
-import { PinnedGrid } from './PinnedGrid';
-import { SpaceHeader, SpaceSwitcher } from './Spaces';
+import { Basecamp } from './Basecamp';
+import { SpaceDivider, SpaceHeader, SpacePins, SpaceSwitcher } from './Spaces';
 import { TabList } from './TabList';
 import {
   BackIcon,
@@ -70,6 +70,7 @@ export function Sidebar({
   style?: React.CSSProperties;
 }) {
   const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
+  const everyday = tabs.tabs.filter((t) => !t.pinned && !t.basecamp);
   // Which space's name is being edited (only shown while it's the active
   // space).
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -129,6 +130,11 @@ export function Sidebar({
 
       <AddressBar nav={nav} />
 
+      <Basecamp
+        tabs={tabs.tabs.filter((t) => t.basecamp)}
+        activeTabId={tabs.activeTabId}
+      />
+
       <div
         key={spaces.activeSpaceId}
         className="space-content"
@@ -137,14 +143,16 @@ export function Sidebar({
         <SpaceHeader
           space={space}
           renaming={!!space && renamingId === space.id}
-          onRename={() => space && setRenamingId(space.id)}
           onDoneRenaming={() => setRenamingId(null)}
         />
 
-        <PinnedGrid
+        <SpacePins
           tabs={tabs.tabs.filter((t) => t.pinned)}
           activeTabId={tabs.activeTabId}
+          folded={!!space?.pinsFolded}
         />
+
+        <SpaceDivider canClear={everyday.length > 0} />
 
         <section className="tabs-section">
           <button className="new-tab" onClick={() => window.firn.newTab()}>
@@ -153,10 +161,7 @@ export function Sidebar({
             </span>
             New tab
           </button>
-          <TabList
-            tabs={tabs.tabs.filter((t) => !t.pinned)}
-            activeTabId={tabs.activeTabId}
-          />
+          <TabList tabs={everyday} activeTabId={tabs.activeTabId} />
         </section>
       </div>
 

@@ -3,8 +3,11 @@
 // and every change is reported back so the UI can redraw the sidebar.
 //
 // Tabs from every space live here together; only the active space's tabs
-// are shown, switched between and counted (tabs in other spaces stay as
-// they are in the background).
+// (plus Basecamp, which every space shares) are shown, switched between and
+// counted. Tabs in other spaces stay as they are in the background.
+//
+// The order always keeps three groups: Basecamp first, then pinned tabs,
+// then everyday tabs.
 
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
@@ -34,6 +37,16 @@ interface Entry {
 
 // How much back/forward history is kept per tab in the saved session.
 const MAX_SAVED_HISTORY = 50;
+
+// Basecamp holds at most this many sites.
+export const BASECAMP_MAX = 12;
+
+// Which of the three groups a tab is in (the order keeps them in this order).
+const BASECAMP = 0;
+const PINNED = 1;
+const EVERYDAY = 2;
+const groupOf = (tab: Tab) =>
+  tab.basecamp ? BASECAMP : tab.pinned ? PINNED : EVERYDAY;
 
 export interface PageBounds {
   x: number;
@@ -68,6 +81,8 @@ export class TabManager {
   private order: string[] = [];
   private activeId: string | null = null;
   private spaceId: string;
+  // The tab each space was last on, to return to when switching back.
+  private lastInSpace = new Map<string, string>();
   private recentlyClosed: string[] = [];
   private fullscreen = false;
 
@@ -92,18 +107,26 @@ export class TabManager {
     return this.spaceId;
   }
 
-  // The active space's tabs, in sidebar order.
+  // Basecamp and the active space's tabs, in sidebar order.
   private get shown(): string[] {
-    return this.order.filter(
-      (id) => this.entries.get(id)!.tab.spaceId === this.spaceId,
-    );
+    return this.order.filter((id) => this.isShown(id));
   }
 
-  // How many tabs a space has (for "delete this space?").
+  private isShown(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    return !!tab && (tab.basecamp || tab.spaceId === this.spaceId);
+  }
+
+  // How many tabs a space has of its own (for "delete this space?").
   countIn(spaceId: string) {
-    return this.order.filter(
-      (id) => this.entries.get(id)!.tab.spaceId === spaceId,
-    ).length;
+    return this.order.filter((id) => {
+      const { tab } = this.entries.get(id)!;
+      return !tab.basecamp && tab.spaceId === spaceId;
+    }).length;
+  }
+
+  get basecampCount() {
+    return this.order.filter((id) => this.entries.get(id)!.tab.basecamp).length;
   }
 
   state(): TabsState {
@@ -119,6 +142,7 @@ export class TabManager {
           isLoading: view.webContents.isLoading(),
           lastActiveAt: tab.lastActiveAt,
           pinned: tab.pinned,
+          basecamp: !!tab.basecamp,
           loaded: this.entries.get(id)!.loaded,
         };
       }),
@@ -165,6 +189,7 @@ export class TabManager {
       title: restore?.title ?? '',
       favicon: restore?.favicon ?? '',
       pinned: restore?.pinned ?? false,
+      basecamp: restore?.basecamp || undefined,
       homeUrl: restore?.homeUrl,
       order: 0,
       lastActiveAt: restore?.lastActiveAt ?? Date.now(),
@@ -178,15 +203,14 @@ export class TabManager {
       savedHistory: restore?.history,
     };
     this.entries.set(id, entry);
-    // Pinned tabs always come first. New tabs go to the top of the everyday
-    // tabs, or right below the tab they were opened from.
-    const afterIndex = after ? this.order.indexOf(after) : -1;
-    const afterPinned = after ? this.entries.get(after)?.tab.pinned : false;
+    // New tabs go to the top of the everyday tabs, or right below the
+    // everyday tab they were opened from.
+    const afterTab = after ? this.entries.get(after)?.tab : undefined;
     if (restore) this.order.push(id);
-    else if (afterIndex >= 0 && !afterPinned)
-      this.order.splice(afterIndex + 1, 0, id);
-    else this.order.splice(this.firstUnpinnedIndex(), 0, id);
-    if (restore) this.keepPinnedFirst();
+    else if (afterTab && groupOf(afterTab) === EVERYDAY)
+      this.order.splice(this.order.indexOf(after!) + 1, 0, id);
+    else this.order.splice(this.groupStart(EVERYDAY), 0, id);
+    if (restore) this.keepGroupsInOrder();
     this.renumber();
 
     if (!restore) this.load(entry);
@@ -205,7 +229,14 @@ export class TabManager {
     this.active?.view.setVisible(false);
     this.spaceId = spaceId;
     this.activeId = null;
-    const next = this.recentIds()[0];
+    // The tab this space was last on, or its most recent own tab.
+    const remembered = this.lastInSpace.get(spaceId);
+    const recent = this.recentIds();
+    const next =
+      remembered && this.isShown(remembered)
+        ? remembered
+        : (recent.find((id) => !this.entries.get(id)!.tab.basecamp) ??
+          recent[0]);
     if (next) {
       this.activate(next);
     } else {
@@ -218,7 +249,7 @@ export class TabManager {
   // tab on screen, the space's next most recent tab takes its place.
   moveToSpace(id: string, spaceId: string) {
     const entry = this.entries.get(id);
-    if (!entry || entry.tab.spaceId === spaceId) return;
+    if (!entry || entry.tab.basecamp || entry.tab.spaceId === spaceId) return;
     entry.tab.spaceId = spaceId;
     if (this.activeId === id) {
       entry.view.setVisible(false);
@@ -235,9 +266,9 @@ export class TabManager {
 
   // Closes every tab in a space (when the space is deleted).
   closeSpace(spaceId: string) {
-    for (const id of [...this.order]) {
+    for (const id of this.order.slice()) {
       const entry = this.entries.get(id)!;
-      if (entry.tab.spaceId !== spaceId) continue;
+      if (entry.tab.basecamp || entry.tab.spaceId !== spaceId) continue;
       this.order.splice(this.order.indexOf(id), 1);
       this.entries.delete(id);
       this.win.contentView.removeChildView(entry.view);
@@ -258,49 +289,107 @@ export class TabManager {
     return view;
   }
 
-  private firstUnpinnedIndex() {
+  // Where a group starts in the order (or would start, if it's empty).
+  private groupStart(group: number) {
     const index = this.order.findIndex(
-      (id) => !this.entries.get(id)!.tab.pinned,
+      (id) => groupOf(this.entries.get(id)!.tab) >= group,
     );
     return index < 0 ? this.order.length : index;
   }
 
-  private keepPinnedFirst() {
-    const pinned = this.order.filter((id) => this.entries.get(id)!.tab.pinned);
-    const others = this.order.filter((id) => !this.entries.get(id)!.tab.pinned);
-    this.order = [...pinned, ...others];
+  // Where a group ends: the spot right after its last tab.
+  private groupEnd(group: number) {
+    return this.groupStart(group + 1);
   }
 
-  // --- Pinned tabs ----------------------------------------------------------
+  private keepGroupsInOrder() {
+    this.order = [0, 1, 2].flatMap((group) =>
+      this.order.filter((id) => groupOf(this.entries.get(id)!.tab) === group),
+    );
+  }
 
-  // Pins a tab: it moves to the end of the pinned grid and remembers the page
-  // it's on as its home.
-  pin(id: string) {
-    const entry = this.entries.get(id);
-    if (!entry || entry.tab.pinned) return;
-    entry.tab.pinned = true;
-    entry.tab.homeUrl = entry.tab.url;
+  // Takes a tab out of the order and puts it back at `index` (worked out
+  // after it's been taken out).
+  private reinsert(id: string, where: () => number) {
     this.order.splice(this.order.indexOf(id), 1);
-    this.order.splice(this.firstUnpinnedIndex(), 0, id);
+    this.order.splice(where(), 0, id);
     this.renumber();
     this.emitTabs();
+  }
+
+  // --- Pinned tabs and Basecamp ----------------------------------------------
+
+  // Pins a tab: it moves to the end of the space's pinned tabs and remembers
+  // the page it's on as its home.
+  pin(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    if (!tab || groupOf(tab) !== EVERYDAY) return;
+    tab.pinned = true;
+    tab.homeUrl = tab.url;
+    this.reinsert(id, () => this.groupEnd(PINNED));
   }
 
   // Unpins a tab: it moves to the top of the everyday tabs.
   unpin(id: string) {
-    const entry = this.entries.get(id);
-    if (!entry || !entry.tab.pinned) return;
-    entry.tab.pinned = false;
-    entry.tab.homeUrl = undefined;
-    this.order.splice(this.order.indexOf(id), 1);
-    this.order.splice(this.firstUnpinnedIndex(), 0, id);
-    this.renumber();
-    this.emitTabs();
+    const tab = this.entries.get(id)?.tab;
+    if (!tab || groupOf(tab) !== PINNED) return;
+    tab.pinned = false;
+    tab.homeUrl = undefined;
+    this.reinsert(id, () => this.groupStart(EVERYDAY));
   }
 
   togglePin(id: string) {
-    if (this.entries.get(id)?.tab.pinned) this.unpin(id);
+    const tab = this.entries.get(id)?.tab;
+    if (tab?.pinned) this.unpin(id);
     else this.pin(id);
+  }
+
+  // Adds a tab to Basecamp (shown in every space), keeping its home page if
+  // it was pinned.
+  addToBasecamp(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    if (!tab || tab.basecamp || this.basecampCount >= BASECAMP_MAX) return;
+    tab.basecamp = true;
+    tab.pinned = false;
+    tab.homeUrl = tab.homeUrl ?? tab.url;
+    this.reinsert(id, () => this.groupEnd(BASECAMP));
+  }
+
+  // Takes a tab out of Basecamp: it becomes an everyday tab in this space.
+  removeFromBasecamp(id: string) {
+    const tab = this.entries.get(id)?.tab;
+    if (!tab?.basecamp) return;
+    tab.basecamp = undefined;
+    tab.homeUrl = undefined;
+    tab.spaceId = this.spaceId;
+    this.reinsert(id, () => this.groupStart(EVERYDAY));
+  }
+
+  // Closes the active space's everyday tabs (the divider's "Clear").
+  clearEveryday() {
+    const everyday = this.shown.filter(
+      (id) => groupOf(this.entries.get(id)!.tab) === EVERYDAY,
+    );
+    if (!everyday.length) return;
+    const wasActive = this.activeId && everyday.includes(this.activeId);
+    for (const id of everyday) {
+      const entry = this.entries.get(id)!;
+      this.order.splice(this.order.indexOf(id), 1);
+      this.entries.delete(id);
+      if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
+      this.win.contentView.removeChildView(entry.view);
+      entry.view.webContents.close();
+    }
+    this.recentlyClosed = this.recentlyClosed.slice(-20);
+    this.renumber();
+    if (wasActive) {
+      // Back to the most recent page that's still open, if there is one.
+      this.activeId = null;
+      const next = this.recentIds().find((id) => this.entries.get(id)!.loaded);
+      if (next) return this.activate(next);
+      this.emitNav();
+    }
+    this.emitTabs();
   }
 
   // Takes a pinned tab back to its home page.
@@ -320,7 +409,9 @@ export class TabManager {
     const { tab } = entry;
     const wasActive = this.activeId === tab.id;
     if (wasActive) {
-      const next = this.recentIds().find((other) => other !== tab.id);
+      const others = this.recentIds().filter((other) => other !== tab.id);
+      const next =
+        others.find((other) => this.entries.get(other)!.loaded) ?? others[0];
       if (next) this.activate(next);
     }
     if (!entry.loaded && !wasActive) return;
@@ -386,9 +477,10 @@ export class TabManager {
 
   activate(id: string) {
     const entry = this.entries.get(id);
-    if (!entry || entry.tab.spaceId !== this.spaceId) return;
+    if (!entry || !this.isShown(id)) return;
     const previous = this.active;
     this.activeId = id;
+    this.lastInSpace.set(this.spaceId, id);
     entry.tab.lastActiveAt = Date.now();
     if (previous && previous !== entry) previous.view.setVisible(false);
     this.load(entry);
@@ -402,11 +494,11 @@ export class TabManager {
   close(id: string) {
     const entry = this.entries.get(id);
     if (!entry) return;
-    if (entry.tab.pinned) {
+    if (groupOf(entry.tab) !== EVERYDAY) {
       this.unloadPinned(entry);
       return;
     }
-    const index = this.shown.indexOf(id);
+    const index = this.everyday.indexOf(id);
     this.order.splice(this.order.indexOf(id), 1);
     this.entries.delete(id);
     if (entry.tab.url) this.recentlyClosed.push(entry.tab.url);
@@ -416,20 +508,31 @@ export class TabManager {
     entry.view.webContents.close();
     this.renumber();
 
-    const shown = this.shown;
-    if (shown.length === 0) {
-      this.activeId = null;
+    if (this.activeId !== id) {
       this.emitTabs();
-      this.emitNav();
-      this.options.onEmpty();
       return;
     }
-    if (this.activeId === id) {
-      // Move to the tab that slid into its place, or the one above.
-      this.activate(shown[Math.min(index, shown.length - 1)]);
-    } else {
-      this.emitTabs();
+    // Move to the tab that slid into its place or the one above, else the
+    // most recent page still open.
+    const everyday = this.everyday;
+    const next =
+      everyday[Math.min(index, everyday.length - 1)] ??
+      this.recentIds().find((other) => this.entries.get(other)!.loaded);
+    if (next) {
+      this.activate(next);
+      return;
     }
+    this.activeId = null;
+    this.emitTabs();
+    this.emitNav();
+    this.options.onEmpty();
+  }
+
+  // The active space's everyday tabs, in order.
+  private get everyday() {
+    return this.shown.filter(
+      (id) => groupOf(this.entries.get(id)!.tab) === EVERYDAY,
+    );
   }
 
   // Opens whatever was typed (an address or a search) in a new tab.
@@ -438,22 +541,22 @@ export class TabManager {
     if (url) this.create(url);
   }
 
-  // Moves a tab to a new position within its own group (pinned tiles or
-  // everyday tabs), for drag to reorder.
+  // Moves a tab to a new position among the tabs of its own group that are
+  // on screen (Basecamp, this space's pins, or its everyday tabs), for drag
+  // to reorder. Tabs of other spaces keep their places.
   move(id: string, toIndex: number) {
     const entry = this.entries.get(id);
     if (!entry) return;
+    const groupId = groupOf(entry.tab);
     const group = this.shown.filter(
-      (other) => this.entries.get(other)!.tab.pinned === entry.tab.pinned,
+      (other) => groupOf(this.entries.get(other)!.tab) === groupId,
     );
     const to = Math.max(0, Math.min(toIndex, group.length - 1));
     if (group.indexOf(id) === to) return;
+    const slots = group.map((other) => this.order.indexOf(other));
     group.splice(group.indexOf(id), 1);
     group.splice(to, 0, id);
-    const others = this.order.filter((other) => !group.includes(other));
-    this.order = entry.tab.pinned
-      ? [...group, ...others]
-      : [...others, ...group];
+    slots.forEach((slot, i) => (this.order[slot] = group[i]));
     this.renumber();
     this.emitTabs();
   }

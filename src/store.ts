@@ -12,7 +12,8 @@ import type { SavedSession } from './types';
 
 const SESSION_VERSION = 1;
 
-const sessionPath = () => path.join(app.getPath('userData'), 'session.json');
+export const sessionPath = () =>
+  path.join(app.getPath('userData'), 'session.json');
 
 export function loadSession(): SavedSession | null {
   try {

@@ -11,7 +11,7 @@ import {
 } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { loadSession, SaveScheduler, saveSession } from './store';
+import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import { TabManager } from './tabs';
 import type {
   NavCommand,
@@ -22,6 +22,14 @@ import type {
 } from './types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
+// Overlay scrollbars, like Zen's: thin, floating over the page instead of
+// taking up a strip of it, and only showing while in use. (FluentOverlay is
+// Windows 11's version.)
+app.commandLine.appendSwitch(
+  'enable-features',
+  'OverlayScrollbar,FluentOverlayScrollbar',
+);
+
 if (started) {
   app.quit();
 }
@@ -903,6 +911,11 @@ const createWindow = () => {
   tabs.closedUrls = saved?.recentlyClosed ?? [];
   for (const tab of savedTabs)
     tabs.create(tab.url, { restore: tab, activate: false });
+  console.log(
+    savedTabs.length
+      ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`
+      : `[Firn] No saved tabs found (${sessionPath()}); starting fresh.`,
+  );
   if (savedTabs.length) {
     const activeId = savedTabs.some((t) => t.id === saved?.window.activeTabId)
       ? saved!.window.activeTabId!
@@ -913,7 +926,20 @@ const createWindow = () => {
   }
 };
 
+// Only one Firn runs at a time. Opening it again brings the existing window
+// forward instead, so two copies can never overwrite each other's session.
+const isFirstInstance = app.requestSingleInstanceLock();
+if (!isFirstInstance) app.quit();
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(() => {
+  if (!isFirstInstance) return;
   createWindow();
 
   // On macOS, re-create a window when the dock icon is clicked and none are open.

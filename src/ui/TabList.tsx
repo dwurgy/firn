@@ -196,6 +196,10 @@ export function TabList({
             onAuxClick={(e) => {
               if (e.button === 1) window.firn.closeTab(tab.id);
             }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              window.firn.showTabMenu(tab.id);
+            }}
           >
             <span className="tab-icon">
               <TabIcon tab={tab} />

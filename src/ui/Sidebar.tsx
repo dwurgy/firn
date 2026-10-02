@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { NavState, SidebarState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
+import { PinnedGrid } from './PinnedGrid';
 import { TabList } from './TabList';
 import {
   BackIcon,
@@ -106,6 +107,11 @@ export function Sidebar({
 
       <AddressBar nav={nav} />
 
+      <PinnedGrid
+        tabs={tabs.tabs.filter((t) => t.pinned)}
+        activeTabId={tabs.activeTabId}
+      />
+
       <section className="tabs-section">
         <button className="new-tab" onClick={() => window.firn.newTab()}>
           <span className="tab-icon">
@@ -113,7 +119,10 @@ export function Sidebar({
           </span>
           New tab
         </button>
-        <TabList tabs={tabs.tabs} activeTabId={tabs.activeTabId} />
+        <TabList
+          tabs={tabs.tabs.filter((t) => !t.pinned)}
+          activeTabId={tabs.activeTabId}
+        />
       </section>
     </aside>
   );

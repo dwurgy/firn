@@ -70,6 +70,10 @@ export interface TabView {
   favicon: string;
   isLoading: boolean;
   lastActiveAt: number;
+  pinned: boolean;
+  // False for a tab whose page hasn't loaded yet (restored, or an unloaded
+  // pinned tab).
+  loaded: boolean;
 }
 
 export interface TabsState {
@@ -121,6 +125,7 @@ export interface FirnBridge {
   closeTab(id: string): void;
   activateTab(id: string): void;
   moveTab(id: string, toIndex: number): void;
+  showTabMenu(id: string): void;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;

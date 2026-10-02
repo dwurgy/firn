@@ -92,6 +92,8 @@ export class TabManager {
           favicon: tab.favicon,
           isLoading: view.webContents.isLoading(),
           lastActiveAt: tab.lastActiveAt,
+          pinned: tab.pinned,
+          loaded: this.entries.get(id)!.loaded,
         };
       }),
     };
@@ -142,12 +144,7 @@ export class TabManager {
       lastActiveAt: restore?.lastActiveAt ?? Date.now(),
     };
 
-    const view = new WebContentsView({ webPreferences: SAFE_WEB_PREFERENCES });
-    view.setBorderRadius(this.options.pageRadius);
-    view.setBackgroundColor('#ffffff');
-    view.setVisible(false);
-    this.win.contentView.addChildView(view);
-
+    const view = this.makeView(id);
     const entry: Entry = {
       tab,
       view,
@@ -155,19 +152,111 @@ export class TabManager {
       savedHistory: restore?.history,
     };
     this.entries.set(id, entry);
+    // Pinned tabs always come first. New tabs go to the top of the everyday
+    // tabs, or right below the tab they were opened from.
     const afterIndex = after ? this.order.indexOf(after) : -1;
+    const afterPinned = after ? this.entries.get(after)?.tab.pinned : false;
     if (restore) this.order.push(id);
-    else if (afterIndex >= 0) this.order.splice(afterIndex + 1, 0, id);
-    else this.order.unshift(id);
+    else if (afterIndex >= 0 && !afterPinned)
+      this.order.splice(afterIndex + 1, 0, id);
+    else this.order.splice(this.firstUnpinnedIndex(), 0, id);
+    if (restore) this.keepPinnedFirst();
     this.renumber();
 
-    this.watch(id, view.webContents);
-    this.options.onPageCreated(view.webContents);
     if (!restore) this.load(entry);
 
     if (activate || (!this.activeId && !restore)) this.activate(id);
     else this.emitTabs();
     return id;
+  }
+
+  // A fresh, empty page view for a tab, wired up and ready to load.
+  private makeView(id: string) {
+    const view = new WebContentsView({ webPreferences: SAFE_WEB_PREFERENCES });
+    view.setBorderRadius(this.options.pageRadius);
+    view.setBackgroundColor('#ffffff');
+    view.setVisible(false);
+    this.win.contentView.addChildView(view);
+    this.watch(id, view.webContents);
+    this.options.onPageCreated(view.webContents);
+    return view;
+  }
+
+  private firstUnpinnedIndex() {
+    const index = this.order.findIndex(
+      (id) => !this.entries.get(id)!.tab.pinned,
+    );
+    return index < 0 ? this.order.length : index;
+  }
+
+  private keepPinnedFirst() {
+    const pinned = this.order.filter((id) => this.entries.get(id)!.tab.pinned);
+    const others = this.order.filter((id) => !this.entries.get(id)!.tab.pinned);
+    this.order = [...pinned, ...others];
+  }
+
+  // --- Pinned tabs ----------------------------------------------------------
+
+  // Pins a tab: it moves to the end of the pinned grid and remembers the page
+  // it's on as its home.
+  pin(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry || entry.tab.pinned) return;
+    entry.tab.pinned = true;
+    entry.tab.homeUrl = entry.tab.url;
+    this.order.splice(this.order.indexOf(id), 1);
+    this.order.splice(this.firstUnpinnedIndex(), 0, id);
+    this.renumber();
+    this.emitTabs();
+  }
+
+  // Unpins a tab: it moves to the top of the everyday tabs.
+  unpin(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry || !entry.tab.pinned) return;
+    entry.tab.pinned = false;
+    entry.tab.homeUrl = undefined;
+    this.order.splice(this.order.indexOf(id), 1);
+    this.order.splice(this.firstUnpinnedIndex(), 0, id);
+    this.renumber();
+    this.emitTabs();
+  }
+
+  togglePin(id: string) {
+    if (this.entries.get(id)?.tab.pinned) this.unpin(id);
+    else this.pin(id);
+  }
+
+  // Takes a pinned tab back to its home page.
+  goHome(id: string) {
+    const entry = this.entries.get(id);
+    const home = entry?.tab.homeUrl;
+    if (!entry || !home) return;
+    entry.tab.url = home;
+    entry.savedHistory = undefined;
+    if (entry.loaded) entry.view.webContents.loadURL(home);
+    this.emitTabs();
+  }
+
+  // "Closing" a pinned tab keeps the pin: its page is unloaded and it goes
+  // back to its home page, to load again when it's next clicked.
+  private unloadPinned(entry: Entry) {
+    const { tab } = entry;
+    const wasActive = this.activeId === tab.id;
+    if (wasActive) {
+      const next = this.recentIds().find((other) => other !== tab.id);
+      if (next) this.activate(next);
+    }
+    if (!entry.loaded && !wasActive) return;
+    // Swap in a fresh, empty page view.
+    this.win.contentView.removeChildView(entry.view);
+    entry.view.webContents.close();
+    entry.view = this.makeView(tab.id);
+    entry.loaded = false;
+    entry.savedHistory = undefined;
+    tab.url = tab.homeUrl ?? tab.url;
+    if (this.activeId === tab.id) this.activate(tab.id);
+    else this.emitTabs();
   }
 
   // Loads a tab's page: its saved history if it has one (landing back on the
@@ -237,6 +326,10 @@ export class TabManager {
   close(id: string) {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (entry.tab.pinned) {
+      this.unloadPinned(entry);
+      return;
+    }
     const index = this.order.indexOf(id);
     this.order.splice(index, 1);
     this.entries.delete(id);
@@ -268,14 +361,22 @@ export class TabManager {
     if (url) this.create(url);
   }
 
-  // Moves a tab to a new position in the list (drag to reorder).
+  // Moves a tab to a new position within its own group (pinned tiles or
+  // everyday tabs), for drag to reorder.
   move(id: string, toIndex: number) {
-    const from = this.order.indexOf(id);
-    if (from < 0) return;
-    const to = Math.max(0, Math.min(toIndex, this.order.length - 1));
-    if (from === to) return;
-    this.order.splice(from, 1);
-    this.order.splice(to, 0, id);
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    const group = this.order.filter(
+      (other) => this.entries.get(other)!.tab.pinned === entry.tab.pinned,
+    );
+    const to = Math.max(0, Math.min(toIndex, group.length - 1));
+    if (group.indexOf(id) === to) return;
+    group.splice(group.indexOf(id), 1);
+    group.splice(to, 0, id);
+    const others = this.order.filter((other) => !group.includes(other));
+    this.order = entry.tab.pinned
+      ? [...group, ...others]
+      : [...others, ...group];
     this.renumber();
     this.emitTabs();
   }

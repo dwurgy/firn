@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  Menu,
   nativeTheme,
   screen,
   WebContentsView,
@@ -595,6 +596,33 @@ const createWindow = () => {
     }
   }, EDGE_CHECK_MS);
 
+  // Right-click menu for a tab.
+  const showTabMenu = (id: string) => {
+    const tab = tabs.state().tabs.find((t) => t.id === id);
+    if (!tab) return;
+    const items: Electron.MenuItemConstructorOptions[] = tab.pinned
+      ? [
+          { label: 'Go back to home', click: () => tabs.goHome(id) },
+          { label: 'Unpin tab', click: () => tabs.unpin(id) },
+          { type: 'separator' },
+          { label: 'Unload tab', click: () => tabs.close(id) },
+        ]
+      : [
+          {
+            label: 'Pin tab',
+            accelerator: 'CmdOrCtrl+D',
+            click: () => tabs.pin(id),
+          },
+          { type: 'separator' },
+          {
+            label: 'Close tab',
+            accelerator: 'CmdOrCtrl+W',
+            click: () => tabs.close(id),
+          },
+        ];
+    Menu.buildFromTemplate(items).popup({ window: win });
+  };
+
   // New tab: a floating bar to search or type an address. Nothing is added
   // to the tab list until something is picked.
   const openCommandBar = () =>
@@ -685,6 +713,9 @@ const createWindow = () => {
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
     },
+    'tabs:menu': (_sender, id) => {
+      if (typeof id === 'string') showTabMenu(id);
+    },
     'tabs:move': (_sender, id, toIndex) => {
       if (typeof id === 'string' && Number.isInteger(toIndex))
         tabs.move(id, toIndex as number);
@@ -771,6 +802,8 @@ const createWindow = () => {
       endSwitcher(false);
     } else if (mod && input.shift && key === 'd') {
       printDiagnostics();
+    } else if (mod && key === 'd') {
+      if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
     } else if (mod && key === 's') {
       setSidebarCollapsed(!windowState.sidebarCollapsed);
     } else if (mod && key === 'l') {

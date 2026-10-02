@@ -293,6 +293,70 @@ button {
   }
 }
 
+/* --- Pinned tabs --------------------------------------------------------- */
+
+.pinned {
+  margin-top: 12px;
+}
+
+.pinned-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.pinned-tile {
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--field);
+  cursor: default;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion);
+}
+
+.pinned-tile:hover {
+  background: var(--field-hover);
+}
+
+.pinned-tile.is-active {
+  background: var(--tab-active);
+  box-shadow: var(--tab-active-shadow);
+}
+
+.pinned-tile:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+.pinned-icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: opacity var(--motion);
+}
+
+.pinned-icon .tab-favicon {
+  width: 18px;
+  height: 18px;
+}
+
+/* An unloaded pin (not opened yet, or "closed") rests a little quieter. */
+.pinned-tile.is-unloaded .pinned-icon {
+  opacity: 0.55;
+}
+
+.pinned-divider {
+  height: 1px;
+  margin: 14px 6px 0;
+  background: var(--panel-edge);
+}
+
 /* --- Tabs ------------------------------------------------------------------ */
 
 .tabs-section {

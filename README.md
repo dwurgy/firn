@@ -1,5 +1,5 @@
 # firn
-A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, pinned tabs, spaces, lookout previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
+A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, Basecamp for your favorite sites, pinned tabs, spaces, Lookout link previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
 
 ## Running Firn on your computer
 

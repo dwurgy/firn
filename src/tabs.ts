@@ -5,12 +5,26 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
 import { toNavigableUrl } from './url';
-import type { NavCommand, NavState, Tab, TabsState } from './types';
+import type {
+  NavCommand,
+  NavState,
+  SavedHistory,
+  SavedTab,
+  Tab,
+  TabsState,
+} from './types';
 
 interface Entry {
   tab: Tab;
   view: WebContentsView;
+  // Restored tabs wait to load their page until they're first shown.
+  loaded: boolean;
+  // Saved back/forward history to restore when the tab first loads.
+  savedHistory?: SavedHistory;
 }
+
+// How much back/forward history is kept per tab in the saved session.
+const MAX_SAVED_HISTORY = 50;
 
 export interface PageBounds {
   x: number;
@@ -134,18 +148,24 @@ export class TabManager {
 
   // Opens a tab. `after` places it right below another tab (e.g. links
   // opened from a page); otherwise it goes to the top of the list.
-  create(url: string, opts: { activate?: boolean; after?: string } = {}) {
-    const { activate = true, after } = opts;
-    const id = randomUUID();
+  // `restore` brings back a saved tab: it goes to the end of the list and
+  // waits to load until it's first shown.
+  create(
+    url: string,
+    opts: { activate?: boolean; after?: string; restore?: SavedTab } = {},
+  ) {
+    const { activate = true, after, restore } = opts;
+    const id = restore?.id ?? randomUUID();
     const tab: Tab = {
       id,
       spaceId: this.options.spaceId,
       url,
-      title: '',
-      favicon: '',
-      pinned: false,
+      title: restore?.title ?? '',
+      favicon: restore?.favicon ?? '',
+      pinned: restore?.pinned ?? false,
+      homeUrl: restore?.homeUrl,
       order: 0,
-      lastActiveAt: Date.now(),
+      lastActiveAt: restore?.lastActiveAt ?? Date.now(),
     };
 
     const view = new WebContentsView({ webPreferences: SAFE_WEB_PREFERENCES });
@@ -154,19 +174,75 @@ export class TabManager {
     view.setVisible(false);
     this.win.contentView.addChildView(view);
 
-    this.entries.set(id, { tab, view });
+    const entry: Entry = {
+      tab,
+      view,
+      loaded: false,
+      savedHistory: restore?.history,
+    };
+    this.entries.set(id, entry);
     const afterIndex = after ? this.order.indexOf(after) : -1;
-    if (afterIndex >= 0) this.order.splice(afterIndex + 1, 0, id);
+    if (restore) this.order.push(id);
+    else if (afterIndex >= 0) this.order.splice(afterIndex + 1, 0, id);
     else this.order.unshift(id);
     this.renumber();
 
     this.watch(id, view.webContents);
     this.options.onPageCreated(view.webContents);
-    view.webContents.loadURL(url);
+    if (!restore) this.load(entry);
 
-    if (activate || !this.activeId) this.activate(id);
+    if (activate || (!this.activeId && !restore)) this.activate(id);
     else this.emitTabs();
     return id;
+  }
+
+  // Loads a tab's page: its saved history if it has one (landing back on the
+  // same page and scroll position), otherwise its address.
+  private load(entry: Entry) {
+    if (entry.loaded) return;
+    entry.loaded = true;
+    const web = entry.view.webContents;
+    const history = entry.savedHistory;
+    entry.savedHistory = undefined;
+    if (history?.entries.length) {
+      web.navigationHistory
+        .restore({ entries: history.entries, index: history.index })
+        .catch(() => web.loadURL(entry.tab.url));
+    } else {
+      web.loadURL(entry.tab.url);
+    }
+  }
+
+  // Every tab as it should be saved, in sidebar order.
+  serialize(): SavedTab[] {
+    return this.order.map((id) => {
+      const { tab, view, loaded, savedHistory } = this.entries.get(id)!;
+      let history = savedHistory;
+      const web = view.webContents;
+      if (loaded && !web.isDestroyed()) {
+        const all = web.navigationHistory.getAllEntries();
+        const index = web.navigationHistory.getActiveIndex();
+        // Keep the most recent part of a long history.
+        const start = Math.max(0, all.length - MAX_SAVED_HISTORY);
+        history = {
+          entries: all.slice(start).map(({ url, title, pageState }) => ({
+            url,
+            title,
+            pageState,
+          })),
+          index: Math.max(0, index - start),
+        };
+      }
+      return { ...tab, history };
+    });
+  }
+
+  get closedUrls() {
+    return [...this.recentlyClosed];
+  }
+
+  set closedUrls(urls: string[]) {
+    this.recentlyClosed = urls.slice(-20);
   }
 
   activate(id: string) {
@@ -176,6 +252,7 @@ export class TabManager {
     this.activeId = id;
     entry.tab.lastActiveAt = Date.now();
     if (previous && previous !== entry) previous.view.setVisible(false);
+    this.load(entry);
     this.layout();
     entry.view.setVisible(true);
     entry.view.webContents.focus();
@@ -269,6 +346,8 @@ export class TabManager {
       return;
     }
     entry.tab.url = url;
+    entry.loaded = true;
+    entry.savedHistory = undefined;
     entry.view.setVisible(true);
     entry.view.webContents.loadURL(url);
     entry.view.webContents.focus();

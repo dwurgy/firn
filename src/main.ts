@@ -11,8 +11,15 @@ import {
 } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+import { loadSession, SaveScheduler, saveSession } from './store';
 import { TabManager } from './tabs';
-import type { NavCommand, OverlayState, WindowState } from './types';
+import type {
+  NavCommand,
+  OverlayState,
+  SavedWindow,
+  Space,
+  WindowState,
+} from './types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -110,11 +117,36 @@ function lockUi(web: WebContents) {
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
+// The default space, saved with the session (Phase 4 adds more).
+const SPACES: Space[] = [
+  { id: DEFAULT_SPACE_ID, name: 'Personal', icon: '', color: '', order: 0 },
+];
+
+// The saved window position, if it's still (mostly) on a connected screen;
+// otherwise Firn opens at its default size, centered.
+function usableBounds(saved: SavedWindow['bounds']) {
+  if (!saved) return undefined;
+  const visible = screen.getAllDisplays().some(({ workArea: a }) => {
+    const overlapX =
+      Math.min(saved.x + saved.width, a.x + a.width) - Math.max(saved.x, a.x);
+    const overlapY =
+      Math.min(saved.y + saved.height, a.y + a.height) - Math.max(saved.y, a.y);
+    return overlapX >= 200 && overlapY >= 100;
+  });
+  return visible ? saved : undefined;
+}
+
 const createWindow = () => {
+  // Bring back the last session, if there is one.
+  const saved = loadSession();
+  const bounds = usableBounds(saved?.window.bounds);
+
   // The window itself hosts Firn's own UI (the sidebar).
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 820,
+    x: bounds?.x,
+    y: bounds?.y,
     minWidth: 640,
     minHeight: 400,
     title: 'Firn',
@@ -130,9 +162,15 @@ const createWindow = () => {
     id: String(win.id),
     activeSpaceId: DEFAULT_SPACE_ID,
     activeTabId: null,
-    sidebarWidth: SIDEBAR_WIDTH,
-    sidebarCollapsed: false,
+    sidebarWidth: Math.round(
+      Math.max(
+        SIDEBAR_MIN,
+        Math.min(SIDEBAR_MAX, saved?.window.sidebarWidth ?? SIDEBAR_WIDTH),
+      ),
+    ),
+    sidebarCollapsed: saved?.window.sidebarCollapsed ?? false,
   };
+  if (saved?.window.maximized) win.maximize();
 
   // --- Layers above the web page ------------------------------------------
   // Web pages are drawn on top of the sidebar's layer, so anything that has
@@ -241,7 +279,9 @@ const createWindow = () => {
 
   // Where the page starts: the sidebar's width, or just the inset when the
   // sidebar is collapsed. It glides between the two.
-  let pageLeft = SIDEBAR_WIDTH;
+  let pageLeft = windowState.sidebarCollapsed
+    ? PAGE_INSET
+    : windowState.sidebarWidth;
 
   // Sends a message to every part of Firn's UI.
   const send = (channel: string, ...args: unknown[]) => {
@@ -400,6 +440,7 @@ const createWindow = () => {
     },
     onTabsChanged: (state) => {
       windowState.activeTabId = state.activeTabId;
+      saver.schedule();
       send('tabs:state', state);
     },
     onNavChanged: (state) => {
@@ -458,6 +499,7 @@ const createWindow = () => {
     windowState.sidebarCollapsed = collapsed;
     hidePeek();
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
+    saver.schedule();
   };
 
   const setSidebarWidth = (requested: number) => {
@@ -472,6 +514,7 @@ const createWindow = () => {
     }
     relayout();
     sendSidebar();
+    saver.schedule();
   };
 
   // While collapsed, reaching the left edge slides the sidebar in over the
@@ -807,7 +850,27 @@ const createWindow = () => {
   const onThemeChange = () => win.setBackgroundColor(frameColor());
   nativeTheme.on('updated', onThemeChange);
 
+  // Save the whole session at once, a moment after anything changes, and
+  // right away when the window closes.
+  const saver = new SaveScheduler(() => {
+    if (win.isDestroyed()) return;
+    saveSession({
+      spaces: SPACES,
+      tabs: tabs.serialize(),
+      window: {
+        ...windowState,
+        bounds: win.getNormalBounds(),
+        maximized: win.isMaximized(),
+      },
+      recentlyClosed: tabs.closedUrls,
+    });
+  });
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
+    win.on(event as 'resize', () => saver.schedule());
+  win.on('close', () => saver.flush());
+
   win.on('closed', () => {
+    saver.cancel();
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
     nativeTheme.removeListener('updated', onThemeChange);
@@ -830,7 +893,24 @@ const createWindow = () => {
     .filter((layer) => layer !== null)
     .map((layer) => layer.webContents);
   startUi(win.webContents);
-  tabs.create(HOME_URL);
+
+  // Restore the saved tabs; only the active one loads right away, the rest
+  // load when first shown. A first run (or an empty session) opens the home
+  // page.
+  const savedTabs = (saved?.tabs ?? []).filter(
+    (tab) => typeof tab.url === 'string' && tab.url,
+  );
+  tabs.closedUrls = saved?.recentlyClosed ?? [];
+  for (const tab of savedTabs)
+    tabs.create(tab.url, { restore: tab, activate: false });
+  if (savedTabs.length) {
+    const activeId = savedTabs.some((t) => t.id === saved?.window.activeTabId)
+      ? saved!.window.activeTabId!
+      : savedTabs[0].id;
+    tabs.activate(activeId);
+  } else {
+    tabs.create(HOME_URL);
+  }
 };
 
 app.whenReady().then(() => {

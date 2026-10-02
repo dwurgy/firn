@@ -33,6 +33,33 @@ export interface WindowState {
   sidebarCollapsed: boolean;
 }
 
+// --- The saved session (src/store.ts) ---------------------------------------
+
+// A tab's back/forward history, including each page's scroll position and
+// form contents (Chromium's "page state"), so a restored tab picks up
+// exactly where it was.
+export interface SavedHistory {
+  entries: { url: string; title: string; pageState?: string }[];
+  index: number;
+}
+
+export interface SavedTab extends Tab {
+  history?: SavedHistory;
+}
+
+export interface SavedWindow extends WindowState {
+  bounds?: { x: number; y: number; width: number; height: number };
+  maximized?: boolean;
+}
+
+export interface SavedSession {
+  version: number;
+  spaces: Space[];
+  tabs: SavedTab[];
+  window: SavedWindow;
+  recentlyClosed: string[];
+}
+
 // --- What the UI is told ----------------------------------------------------
 
 // A tab as the sidebar shows it: the saved record plus live status.

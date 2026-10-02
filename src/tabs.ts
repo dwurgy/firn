@@ -34,26 +34,32 @@ interface TabManagerOptions {
 
 // Calm, Zen-like scrollbars for web pages: a thin rounded thumb with no
 // visible track at rest; hovering the scrollbar darkens the thumb, widens it
-// a little and shows a faint track. Added as "user" styles, so a site that
-// styles its own scrollbars keeps its design.
+// a little and shows a faint track. Every rule is "!important" in the user
+// stylesheet, which outranks a site's own scrollbar styling, so every site
+// gets the same calm scrollbar (as in Zen). Sites that set the newer
+// scrollbar-color / scrollbar-width properties would switch these styles
+// off, so those are reset too.
 const SCROLLBAR_CSS = `
-::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-track:hover { background: rgba(128, 128, 128, 0.12); }
-::-webkit-scrollbar-corner { background: transparent; }
-::-webkit-scrollbar-button { display: none; }
+* { scrollbar-width: auto !important; scrollbar-color: auto !important; }
+::-webkit-scrollbar { width: 12px !important; height: 12px !important; background: transparent !important; }
+::-webkit-scrollbar-track { background: transparent !important; border: none !important; box-shadow: none !important; }
+::-webkit-scrollbar-track:hover { background: rgba(128, 128, 128, 0.12) !important; }
+::-webkit-scrollbar-corner { background: transparent !important; }
+::-webkit-scrollbar-button { display: none !important; }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(128, 128, 128, 0.45);
-  border: 3.5px solid transparent;
-  border-radius: 12px;
-  background-clip: padding-box;
-  min-height: 40px;
-  min-width: 40px;
+  background-color: rgba(128, 128, 128, 0.45) !important;
+  background-image: none !important;
+  border: 3.5px solid transparent !important;
+  border-radius: 12px !important;
+  background-clip: padding-box !important;
+  box-shadow: none !important;
+  min-height: 40px !important;
+  min-width: 40px !important;
 }
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
-  background-color: rgba(110, 110, 110, 0.7);
-  border-width: 2px;
+  background-color: rgba(110, 110, 110, 0.7) !important;
+  border-width: 2px !important;
 }
 `;
 

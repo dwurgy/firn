@@ -48,7 +48,28 @@ export function useSidebarData() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  // The active space's color tints the frame (see "Space tint" in
+  // styles.css); changing it cross-fades.
+  const color = spaces.spaces.find((s) => s.id === spaces.activeSpaceId)?.color;
+  useEffect(() => {
+    const root = document.documentElement;
+    const rgb = color && hexToRgb(color);
+    if (rgb) {
+      root.style.setProperty('--space-rgb', rgb);
+      root.dataset.tinted = '';
+    } else {
+      delete root.dataset.tinted;
+    }
+  }, [color]);
+
   return { nav, tabs, sidebar, spaces };
+}
+
+// "#c9a27e" -> "201 162 126", for use in rgb().
+function hexToRgb(hex: string) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return null;
+  return [0, 2, 4].map((i) => parseInt(match[1].slice(i, i + 2), 16)).join(' ');
 }
 
 // The sidebar's contents: buttons, address bar and tabs. Used both in its

@@ -38,6 +38,7 @@
   --backdrop: rgba(60, 45, 30, 0.08);
   --panel-edge: rgba(60, 40, 20, 0.08);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
+  --space-wash: 0.16; /* how strongly the space's color tints the frame */
   --pin-edge: 0.45;
 
   color-scheme: light dark;
@@ -61,6 +62,7 @@
     --tab-active: rgba(255, 250, 245, 0.14);
     --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
     --pin-wash: 0.24;
+    --space-wash: 0.14;
     --pin-edge: 0.6;
     --tab-dragged-shadow:
       0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
@@ -119,6 +121,22 @@ body,
    solid peeks out around the page's rounded corners. */
 :root.is-glass .page-area:not(.is-empty) {
   background: transparent;
+}
+
+/* Space tint: a soft wash of the active space's color over the frame (and
+   the glass). Switching spaces cross-fades from one color to the next. */
+:root[data-view='main'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgb(var(--space-rgb, 0 0 0) / 0);
+  transition: background-color 300ms ease-out;
+}
+
+:root[data-view='main'][data-tinted] body::before {
+  background-color: rgb(var(--space-rgb) / var(--space-wash));
 }
 
 /* The layers above the page are see-through. */
@@ -1100,6 +1118,10 @@ button {
   padding: 8px;
   border-radius: var(--page-radius);
   background: var(--frame);
+  background-image: linear-gradient(
+    rgb(var(--space-rgb, 0 0 0) / var(--space-wash)),
+    rgb(var(--space-rgb, 0 0 0) / var(--space-wash))
+  );
   box-shadow:
     0 0 0 1px var(--panel-edge),
     0 4px 12px rgba(30, 20, 10, 0.12),

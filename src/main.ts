@@ -4,6 +4,7 @@ import {
   ipcMain,
   dialog,
   Menu,
+  nativeImage,
   nativeTheme,
   screen,
   session,
@@ -175,17 +176,46 @@ const SPACE_ICONS = [
   '⭐',
   '❤️',
 ];
-// Each space's theme color (used for its tint in the next step).
-const SPACE_COLORS = [
-  '#c9a27e',
-  '#7f9cb0',
-  '#8fae8b',
-  '#b88a9e',
-  '#c4a95b',
-  '#8e8fb8',
-  '#b07f6a',
-  '#6fa3a0',
+// Each space's theme color: it softly tints the frame and the glass.
+// Muted, natural tones so the tint stays calm.
+const SPACE_COLOR_CHOICES = [
+  { name: 'Sand', hex: '#c9a27e' },
+  { name: 'Glacier', hex: '#7f9cb0' },
+  { name: 'Sage', hex: '#8fae8b' },
+  { name: 'Heather', hex: '#b88a9e' },
+  { name: 'Ochre', hex: '#c4a95b' },
+  { name: 'Dusk', hex: '#8e8fb8' },
+  { name: 'Clay', hex: '#b07f6a' },
+  { name: 'Lagoon', hex: '#6fa3a0' },
 ];
+const SPACE_COLORS = SPACE_COLOR_CHOICES.map((c) => c.hex);
+
+// A small round swatch of a color, for the "Change color" menu.
+function colorSwatch(hex: string) {
+  const size = 32; // drawn at 2x, shown at 16px
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const pixels = Buffer.alloc(size * size * 4);
+  const center = size / 2;
+  const radius = size / 2 - 3;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const distance = Math.hypot(x + 0.5 - center, y + 0.5 - center);
+      // Soft edge: fully opaque inside, fading over the last pixel.
+      const alpha = Math.max(0, Math.min(1, radius + 0.5 - distance));
+      const i = (y * size + x) * 4;
+      // BGRA, with the color premultiplied by its opacity.
+      pixels[i] = Math.round(b * alpha);
+      pixels[i + 1] = Math.round(g * alpha);
+      pixels[i + 2] = Math.round(r * alpha);
+      pixels[i + 3] = Math.round(255 * alpha);
+    }
+  }
+  return nativeImage.createFromBitmap(pixels, {
+    width: size,
+    height: size,
+    scaleFactor: 2,
+  });
+}
 
 const defaultSpaces = (): Space[] => [
   {
@@ -829,7 +859,10 @@ const createWindow = () => {
       id: randomUUID(),
       name: 'New space',
       icon: SPACE_ICONS.find((icon) => !used.has(icon)) ?? SPACE_ICONS[0],
-      color: SPACE_COLORS[spaces.length % SPACE_COLORS.length],
+      // The first color no other space has yet.
+      color:
+        SPACE_COLORS.find((c) => !spaces.some((s) => s.color === c)) ??
+        SPACE_COLORS[spaces.length % SPACE_COLORS.length],
       order: spaces.length,
     };
     spaces = [...spaces, space];
@@ -839,7 +872,12 @@ const createWindow = () => {
 
   const updateSpace = (
     id: string,
-    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+    changes: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      pinsFolded?: boolean;
+    },
   ) => {
     spaces = spaces.map((s) =>
       s.id === id
@@ -847,6 +885,7 @@ const createWindow = () => {
             ...s,
             name: changes.name?.trim().slice(0, 40) || s.name,
             icon: changes.icon ?? s.icon,
+            color: changes.color ?? s.color,
             pinsFolded: changes.pinsFolded ?? s.pinsFolded,
           }
         : s,
@@ -900,6 +939,16 @@ const createWindow = () => {
           type: 'checkbox' as const,
           checked: icon === space.icon,
           click: () => updateSpace(id, { icon }),
+        })),
+      },
+      {
+        label: 'Change color',
+        submenu: SPACE_COLOR_CHOICES.map(({ name, hex }) => ({
+          label: name,
+          icon: colorSwatch(hex),
+          type: 'checkbox' as const,
+          checked: hex === space.color,
+          click: () => updateSpace(id, { color: hex }),
         })),
       },
       { type: 'separator' },
@@ -1008,12 +1057,19 @@ const createWindow = () => {
     'spaces:update': (_sender, id, changes) => {
       if (typeof id !== 'string' || !changes || typeof changes !== 'object')
         return;
-      const { name, icon, pinsFolded } = changes as Record<string, unknown>;
+      const { name, icon, color, pinsFolded } = changes as Record<
+        string,
+        unknown
+      >;
       updateSpace(id, {
         name: typeof name === 'string' ? name : undefined,
         icon:
           typeof icon === 'string' && SPACE_ICONS.includes(icon)
             ? icon
+            : undefined,
+        color:
+          typeof color === 'string' && SPACE_COLORS.includes(color)
+            ? color
             : undefined,
         pinsFolded: typeof pinsFolded === 'boolean' ? pinsFolded : undefined,
       });

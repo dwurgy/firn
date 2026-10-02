@@ -151,7 +151,12 @@ export interface FirnBridge {
   newSpace(): void;
   updateSpace(
     id: string,
-    changes: { name?: string; icon?: string; pinsFolded?: boolean },
+    changes: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      pinsFolded?: boolean;
+    },
   ): void;
   // Closes the active space's everyday (unpinned) tabs.
   clearTabs(): void;

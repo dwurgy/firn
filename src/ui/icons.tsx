@@ -166,3 +166,30 @@ export const DownIcon = () => (
     <path d="M4 6l4 4 4-4" />
   </svg>
 );
+
+export const DownloadIcon = () => (
+  <svg {...base}>
+    <path d="M8 2.8v7M5 7l3 3 3-3" />
+    <path d="M3 12.8h10" />
+  </svg>
+);
+
+export const FileIcon = () => (
+  <svg {...base}>
+    <path d="M4.5 2.5h4.6l2.9 2.9v7.1a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+    <path d="M9 2.6v2.9h2.9" />
+  </svg>
+);
+
+export const FolderIcon = () => (
+  <svg {...base}>
+    <path d="M2.5 4.5a1 1 0 0 1 1-1h2.6l1.5 1.6h4.9a1 1 0 0 1 1 1v5.9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z" />
+  </svg>
+);
+
+export const RetryIcon = () => (
+  <svg {...base}>
+    <path d="M3.4 8a4.6 4.6 0 1 0 1.35-3.25" />
+    <path d="M3.2 2.8v2.6h2.6" />
+  </svg>
+);

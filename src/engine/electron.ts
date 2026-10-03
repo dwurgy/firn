@@ -10,7 +10,13 @@ import {
 } from '../scrollbar';
 import { ICON_LINKS_SCRIPT, pickIcon, type IconLink } from '../favicon';
 import type { SavedHistory } from '../types';
-import type { Page, PageBounds, PageEngine, PageEvents } from './engine';
+import type {
+  EngineDownload,
+  Page,
+  PageBounds,
+  PageEngine,
+  PageEvents,
+} from './engine';
 
 // Web pages, and the popup windows they open (e.g. "Sign in with Google"),
 // always run with these safe settings.
@@ -18,6 +24,10 @@ const SAFE_WEB_PREFERENCES = {
   contextIsolation: true,
   sandbox: true,
   nodeIntegration: false,
+  // Chromium's built-in PDF viewer, so PDFs open in the tab like in Chrome
+  // instead of downloading. (Old-style browser plugins no longer exist;
+  // this only turns on the PDF viewer.)
+  plugins: true,
 };
 
 // The isolated world where Firn reads a page's icon links (see
@@ -54,6 +64,44 @@ export class ElectronEngine implements PageEngine {
   get closed() {
     return this.win.isDestroyed();
   }
+
+  // Downloads come from the browsing session that every page shares.
+  onDownload(listener: (download: EngineDownload) => void) {
+    const session = this.win.webContents.session;
+    const handler = (_event: Electron.Event, item: Electron.DownloadItem) =>
+      listener(wrapDownload(item));
+    session.on('will-download', handler);
+    this.win.on('closed', () =>
+      session.removeListener('will-download', handler),
+    );
+  }
+
+  download(url: string) {
+    if (!this.win.isDestroyed()) this.win.webContents.session.downloadURL(url);
+  }
+}
+
+function wrapDownload(item: Electron.DownloadItem): EngineDownload {
+  return {
+    url: item.getURL(),
+    suggestedName: item.getFilename(),
+    setSavePath: (path) => item.setSavePath(path),
+    onProgress: (listener) =>
+      item.on('updated', () =>
+        listener(item.getReceivedBytes(), item.getTotalBytes()),
+      ),
+    onDone: (listener) =>
+      item.on('done', (_event, state) =>
+        listener(
+          state === 'completed'
+            ? 'completed'
+            : state === 'cancelled'
+              ? 'cancelled'
+              : 'failed',
+        ),
+      ),
+    cancel: () => item.cancel(),
+  };
 }
 
 class ElectronPage implements Page {

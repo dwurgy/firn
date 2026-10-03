@@ -78,6 +78,21 @@ export interface SavedSession {
   siteZoom?: Record<string, number>;
 }
 
+// A downloaded file (src/downloads.ts). `missing`: it finished, but the
+// file has since been moved or deleted.
+export interface Download {
+  id: string;
+  url: string;
+  name: string;
+  path: string;
+  state: 'progress' | 'done' | 'failed' | 'cancelled';
+  received: number;
+  total: number;
+  startedAt: number;
+  endedAt?: number;
+  missing?: boolean;
+}
+
 // A page in the browsing history (src/history.ts).
 export interface HistoryEntry {
   url: string;
@@ -102,7 +117,8 @@ export type CommandAction =
   | 'find'
   | 'zoom-in'
   | 'zoom-out'
-  | 'zoom-reset';
+  | 'zoom-reset'
+  | 'downloads';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -225,6 +241,13 @@ export interface FirnBridge {
   closeFind(): void;
   // Zoom the page in (1), out (-1) or back to 100% (0).
   zoom(step: 1 | -1 | 0): void;
+  // Downloads (by id): open the file, show it in its folder, stop it, take
+  // it off the list, or try again.
+  openDownload(id: string): void;
+  showDownload(id: string): void;
+  cancelDownload(id: string): void;
+  removeDownload(id: string): void;
+  retryDownload(id: string): void;
   // Split view: drag the gap (`ratio` is the left side's share), or end it.
   resizeSplit(id: string, ratio: number): void;
   separateSplit(tabId: string): void;
@@ -262,6 +285,7 @@ export interface FirnBridge {
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
   onOverlayState(listener: (state: OverlayState) => void): () => void;
   onFindResult(listener: (result: FindResult) => void): () => void;
+  onDownloadsState(listener: (downloads: Download[]) => void): () => void;
   onTopBarState(listener: (shown: boolean) => void): () => void;
   onSidebarState(listener: (state: SidebarState) => void): () => void;
   onFrameState(listener: (state: FrameState) => void): () => void;

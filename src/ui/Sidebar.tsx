@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { NavState, SidebarState, SpacesState, TabsState } from '../types';
+import type {
+  Download,
+  NavState,
+  SidebarState,
+  SpacesState,
+  TabsState,
+} from '../types';
+import { DownloadsShelf } from './Downloads';
 import { AddressBar } from './AddressBar';
 import { Basecamp } from './Basecamp';
 import { SpaceHeader, SpaceIconPicker, SpaceSwitcher } from './Spaces';
@@ -41,9 +48,11 @@ export function useSidebarData() {
     spaces: [],
     activeSpaceId: '',
   });
+  const [downloads, setDownloads] = useState<Download[]>([]);
 
   useEffect(() => {
     const offs = [
+      window.firn.onDownloadsState(setDownloads),
       window.firn.onNavState(setNav),
       window.firn.onTabsState(setTabs),
       window.firn.onSidebarState(setSidebar),
@@ -67,7 +76,7 @@ export function useSidebarData() {
     }
   }, [color]);
 
-  return { nav, tabs, sidebar, spaces };
+  return { nav, tabs, sidebar, spaces, downloads };
 }
 
 // "#c9a27e" -> "201 162 126", for use in rgb().
@@ -83,6 +92,7 @@ export function Sidebar({
   nav,
   tabs,
   spaces,
+  downloads,
   collapsed,
   className = '',
   style,
@@ -90,6 +100,7 @@ export function Sidebar({
   nav: NavState;
   tabs: TabsState;
   spaces: SpacesState;
+  downloads: Download[];
   collapsed: boolean;
   className?: string;
   style?: React.CSSProperties;
@@ -209,6 +220,8 @@ export function Sidebar({
           folded={!!space?.pinsFolded}
         />
       </div>
+
+      <DownloadsShelf downloads={downloads} />
 
       <SpaceSwitcher {...spaces} />
 

@@ -113,6 +113,19 @@ export interface Page {
   destroy(): void;
 }
 
+// A file being downloaded, as the engine hands it over. Its save path must
+// be set right away (before handing control back), or the engine asks.
+export interface EngineDownload {
+  readonly url: string;
+  // The file name the site suggests.
+  readonly suggestedName: string;
+  setSavePath(path: string): void;
+  // Reports progress (bytes so far, and the total, or 0 if unknown).
+  onProgress(listener: (received: number, total: number) => void): void;
+  onDone(listener: (state: 'completed' | 'cancelled' | 'failed') => void): void;
+  cancel(): void;
+}
+
 // What the engine offers the tab model.
 export interface PageEngine {
   createPage(events: PageEvents): Page;
@@ -122,4 +135,7 @@ export interface PageEngine {
   setWindowFullscreen(on: boolean): void;
   // True once the window is gone (late updates are then dropped).
   readonly closed: boolean;
+  // Every download starts here; `download` starts one from a URL.
+  onDownload(listener: (download: EngineDownload) => void): void;
+  download(url: string): void;
 }

@@ -78,10 +78,12 @@ export const SCROLLBAR_SCRIPT = `
   // The full check (can the page scroll at all, how big is the thumb) runs
   // when the page changes size; while scrolling only the thumb moves, so
   // scrolling never makes the page work out its styles again.
+  let measured = { total: -1, view: -1 };
   const measure = () => {
     const el = scroller();
     const view = window.innerHeight;
     const total = el.scrollHeight;
+    measured = { total, view };
     const scrollable = total - view > 1 && !document.fullscreenElement &&
       getComputedStyle(document.documentElement).overflowY !== 'hidden' &&
       getComputedStyle(document.body || document.documentElement).overflowY !== 'hidden';
@@ -164,6 +166,12 @@ export const SCROLLBAR_SCRIPT = `
     else update();
   }).observe(document.documentElement, { childList: true });
   // Content can grow without resizing the window (e.g. infinite scroll).
-  setInterval(update, 1000);
+  // This only compares two sizes; the full check runs if one changed, and
+  // nothing runs while the page isn't on screen.
+  setInterval(() => {
+    if (document.hidden) return;
+    if (scroller().scrollHeight !== measured.total ||
+        window.innerHeight !== measured.view) update();
+  }, 1000);
 })();
 `;

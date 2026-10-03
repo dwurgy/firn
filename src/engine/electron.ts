@@ -8,6 +8,7 @@ import {
   SCROLLBAR_SCRIPT,
   SCROLLBAR_WORLD_ID,
 } from '../scrollbar';
+import { ICON_LINKS_SCRIPT, pickIcon, type IconLink } from '../favicon';
 import type { SavedHistory } from '../types';
 import type { Page, PageBounds, PageEngine, PageEvents } from './engine';
 
@@ -18,6 +19,10 @@ const SAFE_WEB_PREFERENCES = {
   sandbox: true,
   nodeIntegration: false,
 };
+
+// The isolated world where Firn reads a page's icon links (see
+// src/favicon.ts), apart from the page's own scripts.
+const ICON_WORLD_ID = 1998;
 
 export class ElectronEngine implements PageEngine {
   constructor(
@@ -212,9 +217,24 @@ class ElectronPage implements Page {
     web.on('did-navigate', update);
     web.on('did-navigate-in-page', update);
     web.on('page-title-updated', update);
-    web.on('page-favicon-updated', (_event, favicons) =>
-      events().onFavicon(favicons[0] ?? ''),
-    );
+    // Chromium reports the page's first favicon; look at all the icons the
+    // page lists and pass on the best one (src/favicon.ts).
+    let iconCheck = 0;
+    web.on('page-favicon-updated', (_event, favicons) => {
+      const fallback = favicons[0] ?? '';
+      const check = ++iconCheck;
+      const report = (url: string) => {
+        if (check === iconCheck && !web.isDestroyed()) events().onFavicon(url);
+      };
+      web
+        .executeJavaScriptInIsolatedWorld(ICON_WORLD_ID, [
+          { code: ICON_LINKS_SCRIPT },
+        ])
+        .then((links: IconLink[]) =>
+          report(pickIcon(Array.isArray(links) ? links : [], fallback)),
+        )
+        .catch(() => report(fallback));
+    });
     web.on('did-start-navigation', (details) => {
       if (details.isMainFrame && !details.isSameDocument)
         events().onNavigationStart(details.url);

@@ -675,6 +675,8 @@ button {
 .basecamp-icon .tab-favicon {
   width: 18px;
   height: 18px;
+  /* App icons sit on a solid square; round it like a little app tile. */
+  border-radius: 4px;
 }
 
 /* An unloaded pin (not opened yet, or "closed") rests a little quieter. */

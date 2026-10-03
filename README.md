@@ -22,6 +22,16 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 `npm start` runs Firn in development mode: if you change a file in `src/ui/`, the window updates by itself. For changes to `src/main.ts` or `src/preload.ts`, type `rs` in the terminal and press Enter to restart.
 
+### The fast version, for everyday browsing
+
+Development mode is slower than the real thing: Firn's own panels are served piece by piece, and React runs its extra-checking version. For everyday use, build the packaged app:
+
+```
+npm run package
+```
+
+Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
+
 ### Shortcuts (so far)
 
 | Action | Windows / Linux | macOS |

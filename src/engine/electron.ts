@@ -24,6 +24,10 @@ const SAFE_WEB_PREFERENCES = {
   contextIsolation: true,
   sandbox: true,
   nodeIntegration: false,
+  // Chromium's built-in PDF viewer, so PDFs open in the tab like in Chrome
+  // instead of downloading. (Old-style browser plugins no longer exist;
+  // this only turns on the PDF viewer.)
+  plugins: true,
 };
 
 // The isolated world where Firn reads a page's icon links (see

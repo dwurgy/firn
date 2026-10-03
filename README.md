@@ -86,7 +86,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 
 ### Downloads
 
-Downloads save straight to your Downloads folder, like Chrome (a name that's already taken gets " (1)"). While a file downloads, it shows at the bottom of the sidebar with a ring that fills as it arrives; hover it to cancel. Click a finished download to open it, or hover it to show it in its folder or take it off the list (the file stays). A download that was cancelled or didn't finish can be clicked to try again. Finished downloads leave the sidebar on their own after half an hour; "Open downloads folder" in the command bar finds them later.
+Downloads save straight to your Downloads folder, like Chrome (a name that's already taken gets " (1)"). While a file downloads, it shows at the bottom of the sidebar with a ring that fills as it arrives; hover it to cancel. Click a finished download to open it, or hover it to show it in its folder or take it off the list (the file stays). A download that was cancelled or didn't finish can be clicked to try again. PDFs open right in the tab, in Chromium's PDF viewer (its download button saves them like any other download). Finished downloads leave the sidebar on their own after half an hour; "Open downloads folder" in the command bar finds them later.
 
 ### Right-click menu
 

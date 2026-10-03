@@ -242,6 +242,19 @@ button {
     opacity var(--motion);
 }
 
+/* The Firn mark is a solid shape, heavier than the line icons beside it:
+   a touch smaller and softer until hovered. */
+.firn-menu-button svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+  transition: opacity var(--motion);
+}
+
+.firn-menu-button:hover svg {
+  opacity: 1;
+}
+
 .icon-button:hover:not(:disabled) {
   background: var(--hover);
   color: var(--text);

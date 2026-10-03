@@ -13,8 +13,8 @@ import { SpaceHeader, SpaceIconPicker, SpaceSwitcher } from './Spaces';
 import { SpaceTabs } from './SpaceTabs';
 import {
   BackIcon,
+  FirnMarkIcon,
   ForwardIcon,
-  MoreIcon,
   ReloadIcon,
   SidebarIcon,
   StopIcon,
@@ -168,11 +168,11 @@ export function Sidebar({
             <SidebarIcon />
           </button>
           <button
-            className="icon-button"
-            title="History, downloads and settings"
+            className="icon-button firn-menu-button"
+            title="Firn menu: history, downloads, settings"
             onClick={() => window.firn.showFirnMenu()}
           >
-            <MoreIcon />
+            <FirnMarkIcon />
           </button>
         </div>
         <nav className="button-row">

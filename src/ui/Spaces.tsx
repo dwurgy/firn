@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { SPACE_ICON_NAMES } from '../spaceIcons';
 import type { Space, SpacesState } from '../types';
 import { ChevronIcon, MoreIcon, PlusIcon } from './icons';
+import { SpaceIcon } from './SpaceIcon';
 
 // The active space's name above its pinned tabs. Click it to fold the
 // pins away (or bring them back); the ... button (or right-click) has
@@ -31,7 +33,9 @@ export function SpaceHeader({
     >
       {/* The space's icon, which turns into a fold arrow on hover. */}
       <span className="space-header-icon">
-        <span className="space-header-emoji">{space.icon}</span>
+        <span className="space-header-symbol">
+          <SpaceIcon name={space.icon} />
+        </span>
         <span className="space-header-chevron">
           <ChevronIcon />
         </span>
@@ -112,7 +116,7 @@ export function SpaceSwitcher({ spaces, activeSpaceId }: SpacesState) {
             window.firn.showSpaceMenu(space.id);
           }}
         >
-          {space.icon}
+          <SpaceIcon name={space.icon} />
         </button>
       ))}
       <button
@@ -123,5 +127,58 @@ export function SpaceSwitcher({ spaces, activeSpaceId }: SpacesState) {
         <PlusIcon />
       </button>
     </nav>
+  );
+}
+
+// "Change icon…": a small grid of icons under the space's name. Picking one
+// (or Esc, or clicking elsewhere) closes it.
+export function SpaceIconPicker({
+  space,
+  top,
+  onDone,
+}: {
+  space: Space;
+  top: number;
+  onDone: () => void;
+}) {
+  const grid = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    grid.current
+      ?.querySelector<HTMLButtonElement>('.is-current, button')
+      ?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onDone();
+    const onPointer = (e: PointerEvent) => {
+      if (!grid.current?.contains(e.target as Node)) onDone();
+    };
+    addEventListener('keydown', onKey);
+    addEventListener('pointerdown', onPointer, true);
+    return () => {
+      removeEventListener('keydown', onKey);
+      removeEventListener('pointerdown', onPointer, true);
+    };
+  }, [onDone]);
+
+  return (
+    <div
+      ref={grid}
+      className="space-icon-picker"
+      style={{ top }}
+      role="listbox"
+      aria-label="Space icon"
+    >
+      {SPACE_ICON_NAMES.map((name) => (
+        <button
+          key={name}
+          className={`space-icon-choice ${name === space.icon ? 'is-current' : ''}`}
+          title={name[0].toUpperCase() + name.slice(1)}
+          onClick={() => {
+            window.firn.updateSpace(space.id, { icon: name });
+            onDone();
+          }}
+        >
+          <SpaceIcon name={name} />
+        </button>
+      ))}
+    </div>
   );
 }

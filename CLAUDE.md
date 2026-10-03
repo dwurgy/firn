@@ -77,7 +77,7 @@ Light & dark:         both, following the OS setting
 - Optional later: auto-archive unpinned tabs after X hours of inactivity (like Arc).
 
 ### Spaces
-- Groups of pinned + unpinned tabs, each with a name, icon/emoji, and theme color.
+- Groups of pinned + unpinned tabs, each with a name, icon (Firn's own simple line icons, drawn in the space's color — not emoji, which look like site favicons), and theme color.
 - Switch with a row of dots/icons at the bottom of the sidebar, or with a keyboard shortcut / horizontal swipe.
 - Switching spaces gently cross-fades the sidebar tint.
 

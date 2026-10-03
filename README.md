@@ -82,7 +82,17 @@ Both remember the address they were added at as their *home*: right-click for **
 
 ### Spaces
 
-Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them). Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them), and its own icon: one of 16 simple line icons drawn for Firn, shown in the space's color so it never looks like a website's icon. "Change icon…" opens a small grid of them under the space's name. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+
+### Right-click menu
+
+Right-clicking a page shows a short menu with only what fits what you clicked:
+
+- **A link:** open it in a new tab (in the background), open it in Lookout, or copy it. Email links offer "Copy email address".
+- **An image:** save it or copy it.
+- **Selected text:** copy it, or search for it.
+- **A text box:** cut, copy, paste, select all, plus spelling suggestions for a misspelled word.
+- **Anywhere else:** back, forward, reload.
 
 ### Lookout
 

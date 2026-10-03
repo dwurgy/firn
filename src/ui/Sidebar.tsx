@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NavState, SidebarState, SpacesState, TabsState } from '../types';
 import { AddressBar } from './AddressBar';
 import { Basecamp } from './Basecamp';
-import { SpaceHeader, SpaceSwitcher } from './Spaces';
+import { SpaceHeader, SpaceIconPicker, SpaceSwitcher } from './Spaces';
 import { SpaceTabs } from './SpaceTabs';
 import {
   BackIcon,
@@ -99,6 +99,26 @@ export function Sidebar({
   // space).
   const [renamingId, setRenamingId] = useState<string | null>(null);
   useEffect(() => window.firn.onRenameSpace(setRenamingId), []);
+  // The icon picker, shown just below the space's name.
+  const asideRef = useRef<HTMLElement>(null);
+  const [picking, setPicking] = useState<{ id: string; top: number } | null>(
+    null,
+  );
+  useEffect(
+    () =>
+      window.firn.onPickSpaceIcon((id) => {
+        const aside = asideRef.current;
+        const header = aside?.querySelector('.space-header');
+        const top =
+          aside && header
+            ? header.getBoundingClientRect().bottom -
+              aside.getBoundingClientRect().top
+            : 160;
+        setPicking({ id, top: Math.round(top + 6) });
+      }),
+    [],
+  );
+  const closePicker = useCallback(() => setPicking(null), []);
 
   // Switching spaces slides the new space's tabs in from the side it's on.
   const index = spaces.spaces.findIndex((s) => s.id === spaces.activeSpaceId);
@@ -110,6 +130,7 @@ export function Sidebar({
 
   return (
     <aside
+      ref={asideRef}
       className={`sidebar ${className}`}
       style={style}
       // Right-click on empty space: the space's menu (Change color...).
@@ -190,6 +211,10 @@ export function Sidebar({
       </div>
 
       <SpaceSwitcher {...spaces} />
+
+      {space && picking?.id === space.id && (
+        <SpaceIconPicker space={space} top={picking.top} onDone={closePicker} />
+      )}
     </aside>
   );
 }

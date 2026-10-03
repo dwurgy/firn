@@ -9,6 +9,11 @@ export function isSearch(url: string): boolean {
   return url.startsWith(SEARCH_URL);
 }
 
+// A web search for `text`.
+export function searchUrl(text: string): string {
+  return SEARCH_URL + encodeURIComponent(text.trim());
+}
+
 export function toNavigableUrl(input: string): string | null {
   const text = input.trim();
   if (!text) return null;

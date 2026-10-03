@@ -118,7 +118,8 @@ export type CommandAction =
   | 'zoom-in'
   | 'zoom-out'
   | 'zoom-reset'
-  | 'downloads';
+  | 'downloads'
+  | 'history';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -203,6 +204,8 @@ export type OverlayState =
       ask: string;
       kind: string;
     }
+  // The history panel (Ctrl+H).
+  | { mode: 'history'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
   | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
@@ -244,6 +247,12 @@ export interface FirnBridge {
   // quick actions (`arg` is a space id for 'switch-space').
   allTabs(): Promise<(TabView & { spaceId: string })[]>;
   searchHistory(query: string): Promise<HistoryEntry[]>;
+  // The history panel: pages visited (newest first), forgetting one, and
+  // the "Clear history" menu (last hour, today, all time).
+  listHistory(query: string): Promise<HistoryEntry[]>;
+  removeHistory(url: string): void;
+  showClearHistoryMenu(): void;
+  onHistoryChanged(listener: () => void): () => void;
   runAction(action: CommandAction, arg?: string): void;
   // Lookout's "Open as tab".
   expandLookout(): void;

@@ -737,6 +737,11 @@ const createWindow = () => {
     };
   };
 
+  // The history panel: a calm floating sheet over the page.
+  const openHistory = () => {
+    showOverlay({ mode: 'history', openId: ++commandOpenId });
+  };
+
   const openFind = () => {
     if (lookout || !tabs.activeTabId) return;
     findTabId = tabs.activeTabId;
@@ -1628,6 +1633,9 @@ const createWindow = () => {
       case 'downloads':
         void shell.openPath(app.getPath('downloads'));
         break;
+      case 'history':
+        openHistory();
+        break;
     }
   };
 
@@ -1788,6 +1796,26 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'history:remove': (_sender, url) => {
+      if (typeof url !== 'string') return;
+      history.remove(url);
+      send('history:changed');
+    },
+    'history:clear-menu': () => {
+      const clear = (since: number) => () => {
+        history.clear(since);
+        send('history:changed');
+      };
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
+      Menu.buildFromTemplate([
+        { label: 'Clear history from…', enabled: false },
+        { type: 'separator' },
+        { label: 'The last hour', click: clear(Date.now() - 60 * 60 * 1000) },
+        { label: 'Today', click: clear(midnight.getTime()) },
+        { label: 'All time', click: clear(0) },
+      ]).popup({ window: win });
+    },
     'permission:answer': (_sender, answer) => {
       if (answer === 'allow' || answer === 'block' || answer === 'dismiss')
         answerPermission(answer);
@@ -1908,6 +1936,11 @@ const createWindow = () => {
         ? history.search(query.slice(0, 200), 6)
         : [],
   );
+  ipcMain.handle('history:list', (event: IpcMainInvokeEvent, query: unknown) =>
+    uiContents.includes(event.sender) && typeof query === 'string'
+      ? history.list(query.slice(0, 200), 400)
+      : [],
+  );
 
   // Glass turns solid while the window is out of focus.
   const frameState = (): FrameState => ({
@@ -1965,6 +1998,8 @@ const createWindow = () => {
       focusAddress();
     } else if (mod && key === 'f') {
       openFind();
+    } else if (mod && key === 'h') {
+      openHistory();
     } else if (key === 'f3' || (mod && key === 'g')) {
       // Next (or, with Shift, previous) match of the last search.
       if (overlay.mode !== 'find') openFind();
@@ -2089,6 +2124,7 @@ const createWindow = () => {
     ipcMain.removeHandler('icon:data');
     ipcMain.removeHandler('command:tabs');
     ipcMain.removeHandler('history:search');
+    ipcMain.removeHandler('history:list');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();

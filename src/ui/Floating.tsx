@@ -57,6 +57,9 @@ export function Floating() {
   if (overlay.mode === 'permission') {
     return <PermissionPrompt key={overlay.openId} {...overlay} />;
   }
+  if (overlay.mode === 'history') {
+    return <HistoryPanel key={overlay.openId} />;
+  }
   if (overlay.mode === 'find') {
     return <FindBar key={overlay.openId} initialText={overlay.text} />;
   }
@@ -182,6 +185,7 @@ function actionsFor(
       words: 'clear tabs close all',
     },
     { action: 'new-space', label: 'New space', words: 'new space add create' },
+    { action: 'history', label: 'History', words: 'history visited pages' },
     {
       action: 'downloads',
       label: 'Open downloads folder',
@@ -677,4 +681,182 @@ function PermissionPrompt({
       </div>
     </div>
   );
+}
+
+// The history panel (Ctrl+H): pages visited, newest first, grouped by day.
+// Type to search; click a page to open it in a new tab; hover for ✕ to
+// forget one. Esc or a click outside closes it.
+function HistoryPanel() {
+  const [query, setQuery] = useState('');
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [version, setVersion] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    return window.firn.onHistoryChanged(() => setVersion((v) => v + 1));
+  }, []);
+  useEffect(() => {
+    let current = true;
+    window.firn
+      .listHistory(query.trim())
+      .then((list) => current && setEntries(list));
+    return () => {
+      current = false;
+    };
+  }, [query, version]);
+
+  const groups = useMemo(() => groupByDay(entries), [entries]);
+
+  return (
+    <div
+      className="backdrop is-sheet"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) window.firn.closeOverlay();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.closeOverlay();
+      }}
+    >
+      <div
+        className="panel sheet history-sheet"
+        role="dialog"
+        aria-label="History"
+      >
+        <header className="sheet-header">
+          <h2>History</h2>
+          <button
+            className="icon-button"
+            title="Close (Esc)"
+            onClick={() => window.firn.closeOverlay()}
+          >
+            <CloseIcon />
+          </button>
+        </header>
+        <div className="sheet-search">
+          <SearchIcon />
+          <input
+            ref={inputRef}
+            spellCheck={false}
+            placeholder="Search history"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="sheet-body">
+          {groups.length === 0 && (
+            <p className="sheet-empty">
+              {query.trim()
+                ? 'Nothing in your history matches that.'
+                : 'Pages you visit will show up here.'}
+            </p>
+          )}
+          {groups.map(({ label, items }) => (
+            <section key={label} className="history-day">
+              <h3>{label}</h3>
+              {items.map((entry) => (
+                <div
+                  key={entry.url}
+                  className="history-row"
+                  title={entry.url}
+                  onClick={() => window.firn.openUrl(entry.url)}
+                >
+                  <span className="tab-icon">
+                    <HistoryFavicon url={entry.favicon} />
+                  </span>
+                  <span className="history-title">
+                    {entry.title || shortUrl(entry.url)}
+                  </span>
+                  <span className="history-site">{siteName(entry.url)}</span>
+                  <span className="history-time">
+                    {new Date(entry.lastVisit).toLocaleTimeString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <button
+                    className="icon-button history-remove"
+                    title="Remove from history"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.firn.removeHistory(entry.url);
+                    }}
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+        <footer className="sheet-footer">
+          <span>Kept on this computer only.</span>
+          <button
+            className="sheet-button"
+            onClick={() => window.firn.showClearHistoryMenu()}
+          >
+            Clear history…
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function HistoryFavicon({ url }: { url: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) return <GlobeIcon />;
+  return (
+    <img
+      className="tab-favicon"
+      src={url}
+      alt=""
+      draggable={false}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
+function siteName(url: string) {
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+// "Today", "Yesterday", a weekday for the last week, then dates.
+function groupByDay(entries: HistoryEntry[]) {
+  const startOf = (time: number) => {
+    const d = new Date(time);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const today = startOf(Date.now());
+  const DAY = 24 * 60 * 60 * 1000;
+  const labelFor = (day: number) => {
+    const daysAgo = Math.round((today - day) / DAY);
+    if (daysAgo === 0) return 'Today';
+    if (daysAgo === 1) return 'Yesterday';
+    const date = new Date(day);
+    if (daysAgo < 7) return date.toLocaleDateString([], { weekday: 'long' });
+    return date.toLocaleDateString([], {
+      month: 'long',
+      day: 'numeric',
+      ...(date.getFullYear() !== new Date().getFullYear()
+        ? { year: 'numeric' }
+        : {}),
+    });
+  };
+  const groups: { label: string; items: HistoryEntry[] }[] = [];
+  let lastDay = -1;
+  for (const entry of entries) {
+    const day = startOf(entry.lastVisit);
+    if (day !== lastDay) {
+      groups.push({ label: labelFor(day), items: [] });
+      lastDay = day;
+    }
+    groups[groups.length - 1].items.push(entry);
+  }
+  return groups;
 }

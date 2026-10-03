@@ -70,6 +70,30 @@ export class History {
       .map(({ entry }) => entry);
   }
 
+  // The history page's list: newest first, every word typed appearing in
+  // the title or address (all of it when nothing's typed).
+  list(query: string, limit: number): HistoryEntry[] {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const found: HistoryEntry[] = [];
+    for (const entry of this.entries.values()) {
+      if (!entry.lastVisit) continue;
+      const text = `${entry.title} ${entry.url}`.toLowerCase();
+      if (words.every((word) => text.includes(word))) found.push(entry);
+    }
+    return found.sort((a, b) => b.lastVisit - a.lastVisit).slice(0, limit);
+  }
+
+  remove(url: string) {
+    if (this.entries.delete(url)) this.saver.schedule();
+  }
+
+  // Forgets the pages visited since `since` (0: everything).
+  clear(since: number) {
+    for (const [url, entry] of this.entries)
+      if (entry.lastVisit >= since) this.entries.delete(url);
+    this.saver.schedule();
+  }
+
   // Saves right away (when Firn closes).
   flush() {
     this.saver.flush();

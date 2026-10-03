@@ -237,6 +237,7 @@ export class TabManager {
         canGoForward: false,
         isLoading: false,
         zoom: 1,
+        sitePermissions: false,
       };
     }
     const { page } = entry;
@@ -247,6 +248,8 @@ export class TabManager {
       canGoForward: page.canGoForward,
       isLoading: page.isLoading,
       zoom: this.zoomOf(entry.tab.url),
+      // Filled in by the window, which keeps the site permissions.
+      sitePermissions: false,
     };
   }
 
@@ -845,6 +848,16 @@ export class TabManager {
     entry.page.load(url);
     entry.page.focus();
     this.emitTabs();
+  }
+
+  // The tab a page belongs to (null if none), and whether it's on screen.
+  idOfPage(page: Page): string | null {
+    for (const [id, entry] of this.entries) if (entry.page === page) return id;
+    return null;
+  }
+
+  isOnScreen(id: string) {
+    return this.onScreen.includes(id);
   }
 
   // A tab's page (for its right-click menu's Back, Forward and Reload).

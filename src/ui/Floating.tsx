@@ -13,12 +13,18 @@ import type {
 import { TabIcon, tabTitle } from './TabList';
 import {
   ActionIcon,
+  AppIcon,
   ArrowIcon,
+  BellIcon,
+  CameraIcon,
+  ClipboardIcon,
   CloseIcon,
   DownIcon,
   ExpandIcon,
   GlobeIcon,
   HistoryIcon,
+  MicIcon,
+  PinIcon,
   SearchIcon,
   UpIcon,
 } from './icons';
@@ -48,6 +54,9 @@ export function Floating() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  if (overlay.mode === 'permission') {
+    return <PermissionPrompt key={overlay.openId} {...overlay} />;
+  }
   if (overlay.mode === 'find') {
     return <FindBar key={overlay.openId} initialText={overlay.text} />;
   }
@@ -605,6 +614,66 @@ function FindBar({ initialText }: { initialText: string }) {
         >
           <CloseIcon />
         </button>
+      </div>
+    </div>
+  );
+}
+
+const PERMISSION_ICONS: Record<string, () => React.JSX.Element> = {
+  camera: CameraIcon,
+  microphone: MicIcon,
+  location: PinIcon,
+  notifications: BellIcon,
+  clipboard: ClipboardIcon,
+  external: AppIcon,
+};
+
+// A site asking to use something: a small card at the top-left of its page.
+// The answer is remembered for the site; Esc closes it without answering.
+function PermissionPrompt({
+  site,
+  ask,
+  kind,
+}: {
+  site: string;
+  ask: string;
+  kind: string;
+}) {
+  const Icon = PERMISSION_ICONS[kind] ?? ActionIcon;
+  return (
+    <div
+      className="permission-layer"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.answerPermission('dismiss');
+      }}
+    >
+      <div
+        className="panel permission-card"
+        role="dialog"
+        aria-label="Permission"
+      >
+        <div className="permission-text">
+          <span className="permission-icon">
+            <Icon />
+          </span>
+          <p>
+            <strong>{site}</strong> wants to {ask}
+          </p>
+        </div>
+        <div className="permission-buttons">
+          <button
+            className="permission-button"
+            onClick={() => window.firn.answerPermission('block')}
+          >
+            Block
+          </button>
+          <button
+            className="permission-button is-allow"
+            onClick={() => window.firn.answerPermission('allow')}
+          >
+            Allow
+          </button>
+        </div>
       </div>
     </div>
   );

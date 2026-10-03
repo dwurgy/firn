@@ -88,6 +88,14 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 
 Downloads save straight to your Downloads folder, like Chrome (a name that's already taken gets " (1)"). While a file downloads, it shows at the bottom of the sidebar with a ring that fills as it arrives; hover it to cancel. Click a finished download to open it, or hover it to show it in its folder or take it off the list (the file stays). A download that was cancelled or didn't finish can be clicked to try again. PDFs open right in the tab, in Chromium's PDF viewer (its download button saves them like any other download). Finished downloads leave the sidebar on their own after half an hour; "Open downloads folder" in the command bar finds them later.
 
+### Site permissions
+
+Websites have to ask before using your **camera, microphone, location, notifications or clipboard**, or before opening another app from a link (like a Zoom link). A small card at the top-left of the page asks, in plain words ("meet.google.com wants to use your camera and microphone"), with **Block** and **Allow**; Firn remembers the answer for that site. Pressing Esc closes it without answering, so the site can ask again later. A site that isn't on screen waits until you're looking at it. Harmless things (fullscreen, protected video like Netflix) are allowed without asking, and unusual hardware access (USB, serial ports) is refused.
+
+Once a site has answers saved, a small button appears at the left of the address bar: click it to change an answer or choose "Ask again next time". Answers are kept in `permissions.json` next to your session, on your computer only.
+
+(One limit of Electron, the base Firn is built on: before a site has been answered, a site that quietly checks first sees "blocked" rather than "not asked yet". Sites that simply ask, which is most of them, get the prompt as expected.)
+
 ### Right-click menu
 
 Right-clicking a page shows a short menu with only what fits what you clicked:

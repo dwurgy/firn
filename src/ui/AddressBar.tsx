@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { NavState } from '../types';
+import { SiteIcon } from './icons';
 
 // A quieter version of the URL for when the address bar isn't being edited.
 function prettyUrl(url: string): string {
@@ -49,6 +50,17 @@ export function AddressBar({ nav }: { nav: NavState }) {
           if (e.key === 'Escape') e.currentTarget.blur();
         }}
       />
+      {nav.sitePermissions && !editing && (
+        <button
+          type="button"
+          className="site-button"
+          title="What this site may use"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => window.firn.showSitePermissions()}
+        >
+          <SiteIcon />
+        </button>
+      )}
       {nav.zoom !== 1 && !editing && (
         <button
           type="button"

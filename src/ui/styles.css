@@ -269,6 +269,35 @@ button {
   position: relative;
 }
 
+/* The site button (what this site may use), when it has saved answers. */
+.site-button {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.site-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.address:has(.site-button) .address-input {
+  padding-left: 34px;
+}
+
 /* Leave room for the zoom badge, when it shows. */
 .address:has(.zoom-badge) .address-input {
   padding-right: 58px;
@@ -1316,6 +1345,104 @@ button {
 
 .command-bar {
   width: min(640px, calc(100vw - 64px));
+}
+
+/* --- Permission prompt -------------------------------------------------------
+   A small card at the top-left of the page, asking whether a site may use
+   something (camera, location...). The layer is just big enough for it
+   plus its shadow. */
+
+.permission-layer {
+  position: fixed;
+  inset: 0;
+  padding: 20px;
+}
+
+.permission-card {
+  height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 2px 6px rgba(30, 20, 10, 0.1),
+    0 6px 14px rgba(30, 20, 10, 0.12);
+}
+
+.permission-text {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.permission-text p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.permission-text strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.permission-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text-muted);
+}
+
+.permission-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.permission-button {
+  height: 30px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.permission-button:hover {
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+}
+
+.permission-button.is-allow {
+  background: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 72%,
+    var(--text)
+  );
+  color: var(--page);
+}
+
+.permission-button.is-allow:hover {
+  background: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 62%,
+    var(--text)
+  );
+  box-shadow: none;
 }
 
 /* --- Find in page ------------------------------------------------------------

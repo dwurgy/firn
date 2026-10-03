@@ -126,6 +126,26 @@ export interface EngineDownload {
   cancel(): void;
 }
 
+// The things a site has to ask before using (see src/permissions.ts).
+export type PermissionKind =
+  | 'camera'
+  | 'microphone'
+  | 'location'
+  | 'notifications'
+  | 'clipboard'
+  | 'external';
+
+// A site asking to use something. `page` is the page asking (null if it
+// isn't one of Firn's pages), `origin` the site, e.g. "https://meet.google.com".
+// For 'external', `detail` is the kind of link, e.g. "zoommtg".
+export interface PermissionRequest {
+  page: Page | null;
+  origin: string;
+  kinds: PermissionKind[];
+  detail: string;
+  respond(allow: boolean): void;
+}
+
 // What the engine offers the tab model.
 export interface PageEngine {
   createPage(events: PageEvents): Page;
@@ -138,4 +158,16 @@ export interface PageEngine {
   // Every download starts here; `download` starts one from a URL.
   onDownload(listener: (download: EngineDownload) => void): void;
   download(url: string): void;
+  // Sites asking to use the camera, location and so on. Harmless requests
+  // (fullscreen, video DRM...) are allowed without asking, and unusual
+  // ones (USB, serial...) refused, before they get here. `isAllowed`
+  // answers a site quietly checking whether it already may.
+  onPermissionRequest(
+    listener: (request: PermissionRequest) => void,
+    isAllowed: (
+      origin: string,
+      kind: PermissionKind,
+      detail: string,
+    ) => boolean,
+  ): void;
 }

@@ -25,6 +25,8 @@ import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
+import type { PermissionKind, PermissionRequest } from './engine/engine';
+import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
 import { searchUrl } from './url';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
@@ -449,6 +451,8 @@ const createWindow = () => {
       };
     }
     if (layer === floating && overlay.mode === 'find') return findBarBounds();
+    if (layer === floating && overlay.mode === 'permission')
+      return permissionBounds();
     if (layer === peek) {
       // A little wider than the sidebar, so its soft shadow has room.
       const peekWidth = Math.min(width, windowState.sidebarWidth + 32);
@@ -510,10 +514,20 @@ const createWindow = () => {
     // Something else (the command bar, the switcher) replaces Lookout.
     if (state.mode !== 'lookout') dropLookout();
     if (overlay.mode === 'find' && state.mode !== 'find') tabs.stopFind();
+    // Something else replaces a permission prompt: it waits its turn.
+    if (overlay.mode === 'permission' && shownPermission) {
+      pendingPermissions.unshift(shownPermission);
+      shownPermission = null;
+    }
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
-    if (state.mode !== 'hidden' && state.mode !== 'lookout')
+    // A permission prompt doesn't take the keyboard from the page.
+    if (
+      state.mode !== 'hidden' &&
+      state.mode !== 'lookout' &&
+      state.mode !== 'permission'
+    )
       floating.webContents.focus();
     return true;
   };
@@ -522,10 +536,182 @@ const createWindow = () => {
     if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
     if (overlay.mode === 'find') tabs.stopFind();
+    const wasPermission = overlay.mode === 'permission';
+    if (wasPermission && shownPermission) {
+      pendingPermissions.unshift(shownPermission);
+      shownPermission = null;
+    }
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
     hideLayer(floating);
-    tabs.focusActive();
+    if (!wasPermission) tabs.focusActive();
+    // A site that was waiting to ask can now.
+    setImmediate(() => showNextPermission());
+  };
+
+  // --- Site permissions ------------------------------------------------------
+  // Camera, microphone, location, notifications, clipboard and other apps:
+  // a site has to ask, in a small prompt at the top-left of its page, and
+  // the answer is remembered for that site (src/permissions.ts). A site
+  // that isn't on screen waits until it is; one closed meanwhile is refused.
+  const sitePermissions = new SitePermissions(
+    path.join(app.getPath('userData'), 'permissions.json'),
+  );
+  type PendingPermission = {
+    request: PermissionRequest;
+    tabId: string;
+    // The kinds still to ask about (others were allowed before).
+    ask: PermissionKind[];
+  };
+  let pendingPermissions: PendingPermission[] = [];
+  let shownPermission: PendingPermission | null = null;
+  const PROMPT_WIDTH = 380;
+  const PROMPT_HEIGHT = 112;
+  const PROMPT_MARGIN = 20; // room for its shadow
+
+  const permissionBounds = () => {
+    const area = shownPermission
+      ? tabs.boundsOf(shownPermission.tabId)
+      : tabs.pageBoundsFor(pageTop);
+    const width = Math.min(PROMPT_WIDTH, Math.max(0, area.width - 24));
+    return {
+      x: Math.round(area.x + 12 - PROMPT_MARGIN),
+      y: Math.round(area.y + 12 - PROMPT_MARGIN),
+      width: width + PROMPT_MARGIN * 2,
+      height: PROMPT_HEIGHT + PROMPT_MARGIN * 2,
+    };
+  };
+
+  const hostOf = (origin: string) => {
+    try {
+      return new URL(origin).host.replace(/^www\./, '');
+    } catch {
+      return origin;
+    }
+  };
+
+  const askPhrase = ({ ask, request }: PendingPermission) => {
+    const parts = ask.map((kind) =>
+      PERMISSION_WORDING[kind].ask(request.detail),
+    );
+    // "use your camera and use your microphone" reads better shared.
+    if (
+      parts.length === 2 &&
+      ask.includes('camera') &&
+      ask.includes('microphone')
+    )
+      return 'use your camera and microphone';
+    return parts.join(' and ');
+  };
+
+  const showNextPermission = () => {
+    // Requests from tabs that have closed are refused.
+    pendingPermissions = pendingPermissions.filter((p) => {
+      const open = tabs.idOfPage(p.request.page!) === p.tabId;
+      if (!open) p.request.respond(false);
+      return open;
+    });
+    // The prompt's tab went off screen (another tab, another space): it
+    // waits until it's back.
+    if (shownPermission && !tabs.isOnScreen(shownPermission.tabId)) {
+      hideOverlay();
+      return;
+    }
+    if (shownPermission || overlay.mode !== 'hidden' || lookout) return;
+    const next = pendingPermissions.find((p) => tabs.isOnScreen(p.tabId));
+    if (!next) return;
+    pendingPermissions = pendingPermissions.filter((p) => p !== next);
+    shownPermission = next;
+    showOverlay({
+      mode: 'permission',
+      openId: ++commandOpenId,
+      site: hostOf(next.request.origin),
+      ask: askPhrase(next),
+      kind: next.ask[0],
+    });
+  };
+
+  const answerPermission = (answer: 'allow' | 'block' | 'dismiss') => {
+    const shown = shownPermission;
+    if (!shown || overlay.mode !== 'permission') return;
+    shownPermission = null;
+    const { request, ask } = shown;
+    if (answer !== 'dismiss')
+      for (const kind of ask)
+        sitePermissions.set(request.origin, kind, request.detail, answer);
+    request.respond(answer === 'allow');
+    hideOverlay();
+    sendNav();
+  };
+
+  // The address bar's state, plus whether the site has saved answers.
+  const navState = () => {
+    const state = tabs.navState();
+    let origin = '';
+    try {
+      origin = new URL(state.url).origin;
+    } catch {
+      // No page (or not a web address).
+    }
+    return {
+      ...state,
+      sitePermissions:
+        !!origin && Object.keys(sitePermissions.of(origin)).length > 0,
+    };
+  };
+  const sendNav = () => send('nav:state', navState());
+
+  // The address bar's site button: change or forget what this site may use.
+  const showSiteMenu = () => {
+    let origin = '';
+    try {
+      origin = new URL(tabs.navState().url).origin;
+    } catch {
+      return;
+    }
+    const decided = Object.entries(sitePermissions.of(origin));
+    const items: Electron.MenuItemConstructorOptions[] = decided.map(
+      ([key, decision]) => {
+        const { kind, detail } = parseKey(key);
+        const choose = (value: 'allow' | 'block') => () => {
+          sitePermissions.set(origin, kind, detail, value);
+          sendNav();
+        };
+        return {
+          label: PERMISSION_WORDING[kind]?.label(detail) ?? key,
+          submenu: [
+            {
+              label: 'Allow',
+              type: 'radio' as const,
+              checked: decision === 'allow',
+              click: choose('allow'),
+            },
+            {
+              label: 'Block',
+              type: 'radio' as const,
+              checked: decision === 'block',
+              click: choose('block'),
+            },
+          ],
+        };
+      },
+    );
+    if (!items.length) return;
+    items.unshift(
+      { label: hostOf(origin), enabled: false },
+      { type: 'separator' },
+    );
+    items.push(
+      { type: 'separator' },
+      {
+        label: 'Ask again next time',
+        click: () => {
+          sitePermissions.forget(origin);
+          sendNav();
+        },
+      },
+    );
+    Menu.buildFromTemplate(items).popup({ window: win });
   };
 
   // --- Find in page ---------------------------------------------------------
@@ -668,6 +854,28 @@ const createWindow = () => {
     (list) => send('downloads:state', list),
   );
   engine.onDownload((item) => downloads.add(item));
+  // A site asking for the camera and so on: answered from what was decided
+  // before, or asked (see "Site permissions" above).
+  engine.onPermissionRequest(
+    (request) => {
+      const decisions = request.kinds.map((kind) =>
+        sitePermissions.get(request.origin, kind, request.detail),
+      );
+      if (decisions.includes('block')) return request.respond(false);
+      if (decisions.every((d) => d === 'allow')) return request.respond(true);
+      // Only tabs ask (not Lookout previews or popups).
+      const tabId = request.page ? tabs.idOfPage(request.page) : null;
+      if (!tabId || !request.origin) return request.respond(false);
+      pendingPermissions.push({
+        request,
+        tabId,
+        ask: request.kinds.filter((_, i) => decisions[i] !== 'allow'),
+      });
+      showNextPermission();
+    },
+    (origin, kind, detail) =>
+      sitePermissions.get(origin, kind, detail) === 'allow',
+  );
   // Coming back to Firn (perhaps from moving or deleting a downloaded
   // file): check the list again.
   win.on('focus', () => send('downloads:state', downloads.all()));
@@ -692,11 +900,12 @@ const createWindow = () => {
       // Find in page belongs to the tab it was opened on.
       if (overlay.mode === 'find' && state.activeTabId !== findTabId)
         hideOverlay();
+      showNextPermission();
     },
     onNavChanged: (state) => {
       if (!win.isDestroyed())
         win.setTitle(state.title ? `${state.title} — Firn` : 'Firn');
-      send('nav:state', state);
+      sendNav();
     },
     onEmpty: () => openCommandBar(),
     onLookout: (url) => openLookout(url),
@@ -1579,6 +1788,11 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'permission:answer': (_sender, answer) => {
+      if (answer === 'allow' || answer === 'block' || answer === 'dismiss')
+        answerPermission(answer);
+    },
+    'site:menu': () => showSiteMenu(),
     // A finished download opens with its usual app; "show" points to it in
     // the folder (or opens the folder, if the file is gone).
     'downloads:open': (_sender, id) => {
@@ -1648,7 +1862,7 @@ const createWindow = () => {
     'ui:ready': (sender) => {
       onUiReady(sender);
       sender.send('tabs:state', tabs.state());
-      sender.send('nav:state', tabs.navState());
+      sender.send('nav:state', navState());
       sender.send('window:maximized', win.isMaximized());
       sender.send('window:frame', frameState());
       sender.send('spaces:state', {
@@ -1865,6 +2079,7 @@ const createWindow = () => {
     saver.flush();
     history.flush();
     downloads.flush();
+    sitePermissions.flush();
   });
 
   win.on('closed', () => {

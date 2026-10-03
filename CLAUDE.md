@@ -25,6 +25,7 @@ Zen and Arc are beautiful, but they're built for power users. Firn brings their 
 - **Short menus.** No giant right-click menus (Zen's tab menu is the anti-example). A menu shows the few things you'd actually reach for, in plain words.
 - **Discoverable, not memorized.** Anything important can be found by looking or right-clicking; keyboard shortcuts are a bonus, never the only way.
 - **Privacy by default.** Data stays on the device unless the person chooses otherwise. No tracking, no telemetry, and privacy claims are only made when they're true.
+- **Names: plain words win.** Keep a familiar word when it's already plain English (Spaces, Pins). Give something our own name when the other browsers' word is their brand coinage or unclear (Basecamp instead of Essentials, Lookout instead of Glance).
 - **Calm over clever.** When a choice is between more options and less to think about, pick less to think about.
 
 We're not removing features now; this is the lens for everything from here on.

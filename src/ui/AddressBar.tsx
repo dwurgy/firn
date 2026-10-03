@@ -49,6 +49,17 @@ export function AddressBar({ nav }: { nav: NavState }) {
           if (e.key === 'Escape') e.currentTarget.blur();
         }}
       />
+      {nav.zoom !== 1 && !editing && (
+        <button
+          type="button"
+          className="zoom-badge"
+          title="Zoom for this site. Click to reset to 100%"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => window.firn.zoom(0)}
+        >
+          {Math.round(nav.zoom * 100)}%
+        </button>
+      )}
       <span className="loading-track">
         <span className={`loading-line ${nav.isLoading ? 'is-loading' : ''}`} />
       </span>

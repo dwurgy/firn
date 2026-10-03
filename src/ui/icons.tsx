@@ -154,3 +154,15 @@ export const MoreIcon = () => (
     <circle cx="12" cy="8" r="1.15" />
   </svg>
 );
+
+export const UpIcon = () => (
+  <svg {...base}>
+    <path d="M4 10l4-4 4 4" />
+  </svg>
+);
+
+export const DownIcon = () => (
+  <svg {...base}>
+    <path d="M4 6l4 4 4-4" />
+  </svg>
+);

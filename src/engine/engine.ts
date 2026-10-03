@@ -3,7 +3,7 @@
 // (src/tabs.ts) works the same on any engine. Today the only engine is
 // Electron (src/engine/electron.ts); a Chromium fork would provide its own.
 
-import type { SavedHistory } from '../types';
+import type { FindResult, SavedHistory } from '../types';
 
 export interface PageBounds {
   x: number;
@@ -30,6 +30,10 @@ export interface PageEvents {
   onFullscreen(on: boolean): void;
   // The mouse was pressed inside the page (the person is working in it).
   onFocus(): void;
+  // How a find in page (see Page.find) went.
+  onFindResult(result: FindResult): void;
+  // The person asked to zoom with the mouse (Ctrl+wheel or a pinch).
+  onZoomRequest(direction: 'in' | 'out'): void;
 }
 
 // One web page: the content of a tab.
@@ -54,6 +58,15 @@ export interface Page {
   stop(): void;
   focus(): void;
   toggleDevTools(): void;
+
+  // Highlights `text` on the page: a new search, or the next (or previous)
+  // match of the current one. Results come back through onFindResult.
+  find(text: string, options: { forward: boolean; newSearch: boolean }): void;
+  // Ends the search; the current match stays selected.
+  stopFind(): void;
+  // The page's zoom (1 = 100%).
+  readonly zoom: number;
+  setZoom(factor: number): void;
 
   // Where the page sits in the window, and how round its corners are.
   place(bounds: PageBounds, cornerRadius: number): void;

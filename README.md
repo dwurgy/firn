@@ -42,6 +42,8 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
 | Preview a link in Lookout | Shift+click | Shift+click |
+| Find in page (Enter / Shift+Enter: next / previous, Esc: close) | Ctrl+F (then F3 or Ctrl+G for next) | Cmd+F (then Cmd+G) |
+| Zoom in / out / back to 100% (each site remembers its zoom) | Ctrl+= / Ctrl+- / Ctrl+0, or Ctrl+mouse wheel | Cmd+= / Cmd+- / Cmd+0 |
 | Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
 | Reopen closed tab | Ctrl+Shift+T | Cmd+Shift+T |
 | Last-used tab (hold Ctrl and keep tapping Tab for the switcher) | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
@@ -58,7 +60,7 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 - `src/engine/` — the browser engine: `engine.ts` describes what a web page can do, and `electron.ts` is Electron's version of it (the one place web pages are created).
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar and tab switcher that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
 
@@ -85,6 +87,8 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 ### Lookout
 
 **Shift+click** a link to preview it in Lookout: a rounded panel floating over the page, with the page dimmed behind it. Press **Esc** or click outside to close it, or use the button beside it to **open it as a tab** (the panel grows into the page and keeps everything, scroll position included). Links that open real popup windows, like "Sign in with Google", still open as windows.
+
+Lookout also opens by itself in one case: in a **Basecamp or pinned tab**, a link that would open a new tab and goes to **another site** (say, a link in an email) opens in Lookout instead. Your pinned tab stays where it was and no stray tabs pile up; if you want to keep the page, use "open as tab". Middle-click or Ctrl+click such a link to open it as a background tab instead. Everyday tabs open links as usual.
 
 ### Split view
 

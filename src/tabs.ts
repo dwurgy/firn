@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, PageBounds, PageEngine, PageEvents } from './engine/engine';
 import { toNavigableUrl } from './url';
 import type {
+  FindResult,
   NavCommand,
   NavState,
   SavedHistory,
@@ -86,6 +87,25 @@ interface TabManagerOptions {
     favicon: string,
     newVisit: boolean,
   ) => void;
+  // How a find in page on the current tab went.
+  onFindResult: (result: FindResult) => void;
+  // A site's zoom changed (to save it).
+  onSiteZoomChanged: () => void;
+}
+
+// Zoom steps, the same as Chrome's.
+const ZOOM_LEVELS = [
+  0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4,
+  5,
+];
+
+// Ctrl+wheel zooms at most one step per this many milliseconds.
+const ZOOM_STEP_MS = 100;
+
+// The next zoom step up (1) or down (-1) from `zoom`.
+export function nextZoom(zoom: number, step: 1 | -1) {
+  if (step > 0) return ZOOM_LEVELS.find((z) => z > zoom + 0.001) ?? zoom;
+  return ZOOM_LEVELS.findLast((z) => z < zoom - 0.001) ?? zoom;
 }
 
 export class TabManager {
@@ -101,6 +121,10 @@ export class TabManager {
   private onScreen: string[] = [];
   private recentlyClosed: string[] = [];
   private fullscreen = false;
+  // Zoom remembered per site (host → zoom; 100% isn't stored), and the tab
+  // a find in page is running on.
+  private siteZoom = new Map<string, number>();
+  private findId: string | null = null;
 
   constructor(
     private engine: PageEngine,
@@ -204,6 +228,7 @@ export class TabManager {
         canGoBack: false,
         canGoForward: false,
         isLoading: false,
+        zoom: 1,
       };
     }
     const { page } = entry;
@@ -213,6 +238,7 @@ export class TabManager {
       canGoBack: page.canGoBack,
       canGoForward: page.canGoForward,
       isLoading: page.isLoading,
+      zoom: this.zoomOf(entry.tab.url),
     };
   }
 
@@ -830,6 +856,64 @@ export class TabManager {
     this.active?.page.toggleDevTools();
   }
 
+  // --- Find in page -----------------------------------------------------------
+
+  // Searches the current tab (see Page.find).
+  find(text: string, forward: boolean, newSearch: boolean) {
+    const entry = this.active;
+    if (!entry) return;
+    if (this.findId && this.findId !== entry.tab.id) this.stopFind();
+    this.findId = entry.tab.id;
+    entry.page.find(text, { forward, newSearch });
+    if (!text) this.options.onFindResult({ active: 0, total: 0 });
+  }
+
+  stopFind() {
+    if (this.findId) this.entries.get(this.findId)?.page.stopFind();
+    this.findId = null;
+  }
+
+  // --- Zoom ------------------------------------------------------------------
+
+  // Zooms the current tab's site in (1), out (-1) or back to 100% (0). Every
+  // tab on that site follows, and the site keeps its zoom next time.
+  zoom(step: 1 | -1 | 0, id = this.activeId) {
+    const entry = id ? this.entries.get(id) : undefined;
+    const host = entry ? safeHost(entry.tab.url) : '';
+    if (!entry || !host) return;
+    const zoom = step === 0 ? 1 : nextZoom(this.zoomOf(entry.tab.url), step);
+    if (zoom === 1) this.siteZoom.delete(host);
+    else this.siteZoom.set(host, zoom);
+    for (const other of this.entries.values())
+      if (safeHost(other.tab.url) === host) other.page.setZoom(zoom);
+    this.options.onSiteZoomChanged();
+    this.emitNav();
+  }
+
+  private zoomOf(url: string) {
+    return this.siteZoom.get(safeHost(url)) ?? 1;
+  }
+
+  get siteZooms(): Record<string, number> {
+    return Object.fromEntries(this.siteZoom);
+  }
+
+  restoreSiteZoom(saved: unknown) {
+    if (!saved || typeof saved !== 'object') return;
+    for (const [host, zoom] of Object.entries(saved))
+      if (typeof zoom === 'number' && zoom >= 0.25 && zoom <= 5 && zoom !== 1)
+        this.siteZoom.set(host, zoom);
+  }
+
+  // Where a tab's page sits in the window right now (its side, in split
+  // view).
+  boundsOf(id: string) {
+    const area = this.options.pageBounds();
+    const split = this.splitOf(id);
+    if (!split) return area;
+    return splitRects(area, split.sizes)[split.tabIds.indexOf(id)] ?? area;
+  }
+
   // --- Layout ---------------------------------------------------------------
 
   layout() {
@@ -935,6 +1019,7 @@ export class TabManager {
     };
     // The last page recorded in the history for this tab.
     let visited = { url: '', title: '' };
+    let lastZoomAt = 0;
     return {
       onUpdate: () => {
         const entry = entryOf();
@@ -951,6 +1036,10 @@ export class TabManager {
         }
         if (url) entry.tab.url = url;
         entry.tab.title = title;
+        // A page arriving on a site takes that site's zoom.
+        const zoom = this.zoomOf(entry.tab.url);
+        if (url && Math.abs(entry.page.zoom - zoom) > 0.001)
+          entry.page.setZoom(zoom);
         this.emitTabs();
         if (id === this.activeId) this.emitNav();
       },
@@ -967,14 +1056,37 @@ export class TabManager {
         if (entry && safeHost(url) !== safeHost(entry.tab.url))
           entry.tab.favicon = '';
       },
-      // Links that ask for a new tab open one right below this tab.
-      onOpenTab: (url, background) =>
-        void this.create(url, { after: id, activate: !background }),
+      // Links that ask for a new tab open one right below this tab. From a
+      // Basecamp or pinned tab, a link to another site opens in Lookout
+      // instead, so the pinned tab stays put and no stray tabs pile up
+      // (middle- or Ctrl+click still opens a background tab).
+      onOpenTab: (url, background) => {
+        const tab = entryOf()?.tab;
+        if (
+          tab &&
+          !background &&
+          (tab.basecamp || tab.pinned) &&
+          siteOf(url) !== siteOf(tab.url)
+        )
+          return this.options.onLookout(url);
+        void this.create(url, { after: id, activate: !background });
+      },
       onLookout: (url) => this.options.onLookout(url),
       onFocus: () => {
         if (entryOf()) this.focused(id);
       },
       onFullscreen: (on) => this.setFullscreen(on),
+      onFindResult: (result) => {
+        if (entryOf() && id === this.findId) this.options.onFindResult(result);
+      },
+      // One step at a time: a wheel notch can be reported twice, and a
+      // touchpad sends a stream of tiny scrolls.
+      onZoomRequest: (direction) => {
+        const now = Date.now();
+        if (!entryOf() || now - lastZoomAt < ZOOM_STEP_MS) return;
+        lastZoomAt = now;
+        this.zoom(direction === 'in' ? 1 : -1, id);
+      },
     };
   }
 
@@ -1014,6 +1126,19 @@ export class TabManager {
     }
     this.layout();
   }
+}
+
+// The site a page belongs to: its domain without subdomains (mail.google.com
+// and accounts.google.com are both google.com; bbc.co.uk keeps its three
+// parts). Good enough to tell "a link to another site" apart.
+export function siteOf(url: string) {
+  const host = safeHost(url).replace(/:\d+$/, '').toLowerCase();
+  if (!host || /^[\d.]+$/.test(host) || host.startsWith('[')) return host;
+  const labels = host.split('.');
+  if (labels.length <= 2) return host;
+  const [second, top] = labels.slice(-2);
+  const keep = top.length === 2 && second.length <= 3 ? 3 : 2;
+  return labels.slice(-keep).join('.');
 }
 
 function safeHost(url: string) {

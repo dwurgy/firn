@@ -18,6 +18,7 @@ const EMPTY_NAV: NavState = {
   canGoBack: false,
   canGoForward: false,
   isLoading: false,
+  zoom: 1,
 };
 
 export const DEFAULT_SIDEBAR: SidebarState = {

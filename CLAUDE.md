@@ -26,6 +26,7 @@ Zen and Arc are beautiful, but they're built for power users. Firn brings their 
 - **Discoverable, not memorized.** Anything important can be found by looking or right-clicking; keyboard shortcuts are a bonus, never the only way.
 - **Privacy by default.** Data stays on the device unless the person chooses otherwise. No tracking, no telemetry, and privacy claims are only made when they're true.
 - **Names: plain words win.** Keep a familiar word when it's already plain English (Spaces, Pins). Give something our own name when the other browsers' word is their brand coinage or unclear (Basecamp instead of Essentials, Lookout instead of Glance).
+- **Opinionated: one layout, done beautifully.** Firn picks the layout for people, the way mainstream browsers did for decades: vertical tabs in the sidebar with the address bar, the page as the star. No top-bar tabs, no "address bar on top" or icon-only sidebar options; every layout option would split the care each feature gets. Wanting more room is answered by hiding the sidebar (Ctrl+S, peeks at the left edge), not by more layouts.
 - **Calm over clever.** When a choice is between more options and less to think about, pick less to think about.
 
 We're not removing features now; this is the lens for everything from here on.

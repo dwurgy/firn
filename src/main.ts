@@ -9,6 +9,7 @@ import {
   nativeTheme,
   screen,
   session,
+  shell,
   WebContentsView,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
@@ -23,6 +24,7 @@ import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
+import { Downloads } from './downloads';
 import { History } from './history';
 import { searchUrl } from './url';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
@@ -658,6 +660,17 @@ const createWindow = () => {
     watchShortcuts(web);
     raiseLayers();
   });
+
+  // Downloads go straight to the Downloads folder; the sidebar shows them.
+  const downloads = new Downloads(
+    path.join(app.getPath('userData'), 'downloads.json'),
+    () => app.getPath('downloads'),
+    (list) => send('downloads:state', list),
+  );
+  engine.onDownload((item) => downloads.add(item));
+  // Coming back to Firn (perhaps from moving or deleting a downloaded
+  // file): check the list again.
+  win.on('focus', () => send('downloads:state', downloads.all()));
   const tabs = new TabManager(engine, {
     spaceId: windowState.activeSpaceId,
     pageRadius: PAGE_RADIUS,
@@ -1058,7 +1071,7 @@ const createWindow = () => {
 
     if (menu.imageUrl)
       section([
-        { label: 'Save image…', click: () => menu.saveImage() },
+        { label: 'Save image', click: () => menu.saveImage() },
         { label: 'Copy image', click: () => menu.copyImage() },
       ]);
 
@@ -1403,6 +1416,9 @@ const createWindow = () => {
       case 'zoom-reset':
         tabs.zoom(0);
         break;
+      case 'downloads':
+        void shell.openPath(app.getPath('downloads'));
+        break;
     }
   };
 
@@ -1563,6 +1579,33 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    // A finished download opens with its usual app; "show" points to it in
+    // the folder (or opens the folder, if the file is gone).
+    'downloads:open': (_sender, id) => {
+      const download = typeof id === 'string' ? downloads.get(id) : undefined;
+      if (download?.state === 'done' && fs.existsSync(download.path))
+        void shell.openPath(download.path);
+      // Gone since (moved or deleted): show that instead.
+      else send('downloads:state', downloads.all());
+    },
+    'downloads:show': (_sender, id) => {
+      const download = typeof id === 'string' ? downloads.get(id) : undefined;
+      if (download && fs.existsSync(download.path))
+        shell.showItemInFolder(download.path);
+      else void shell.openPath(app.getPath('downloads'));
+    },
+    'downloads:cancel': (_sender, id) => {
+      if (typeof id === 'string') downloads.cancel(id);
+    },
+    'downloads:remove': (_sender, id) => {
+      if (typeof id === 'string') downloads.remove(id);
+    },
+    'downloads:retry': (_sender, id) => {
+      const download = typeof id === 'string' ? downloads.get(id) : undefined;
+      if (!download || download.state === 'progress') return;
+      downloads.remove(download.id);
+      engine.download(download.url);
+    },
     'find:search': (_sender, text, forward, newSearch) => {
       if (overlay.mode !== 'find' || typeof text !== 'string') return;
       lastFindText = text.slice(0, 500);
@@ -1613,6 +1656,7 @@ const createWindow = () => {
         activeSpaceId: windowState.activeSpaceId,
       });
       sender.send('overlay:state', overlay);
+      sender.send('downloads:state', downloads.all());
       sender.send('sidebar:state', {
         width: windowState.sidebarWidth,
         collapsed: windowState.sidebarCollapsed,
@@ -1820,6 +1864,7 @@ const createWindow = () => {
   win.on('close', () => {
     saver.flush();
     history.flush();
+    downloads.flush();
   });
 
   win.on('closed', () => {

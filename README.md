@@ -70,7 +70,7 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 
 ### Your session
 
-Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh. Your browsing history (for the command bar) is kept next to it in `history.json`, on your computer only.
+Firn saves your tabs (with their back/forward history and scroll position), the sidebar's width and collapsed state, and the window's size and position, and brings them back next time. Only the tab you were on loads right away; the others load when you click them. The file lives in `%APPDATA%\Firn\session.json` on Windows; deleting it starts Firn fresh. Your browsing history (for the command bar) is kept next to it in `history.json`, and your recent downloads in `downloads.json`, both on your computer only.
 
 ### Basecamp and pinned tabs
 
@@ -83,6 +83,10 @@ Both remember the address they were added at as their *home*: right-click for **
 ### Spaces
 
 Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them), and its own icon: one of 16 simple line icons drawn for Firn, shown in the space's color so it never looks like a website's icon. "Change icon…" opens a small grid of them under the space's name. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+
+### Downloads
+
+Downloads save straight to your Downloads folder, like Chrome (a name that's already taken gets " (1)"). While a file downloads, it shows at the bottom of the sidebar with a ring that fills as it arrives; hover it to cancel. Click a finished download to open it, or hover it to show it in its folder or take it off the list (the file stays). A download that was cancelled or didn't finish can be clicked to try again. Finished downloads leave the sidebar on their own after half an hour; "Open downloads folder" in the command bar finds them later.
 
 ### Right-click menu
 

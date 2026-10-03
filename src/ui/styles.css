@@ -584,6 +584,151 @@ button {
 }
 
 /* The row of space icons at the bottom of the sidebar. */
+/* --- Downloads shelf ----------------------------------------------------------
+   Files downloading now and the last few finished ones, just above the
+   space switcher. */
+
+.downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-edge);
+}
+
+.download {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 10px;
+  cursor: default;
+  animation: rise 200ms ease-out;
+  transition: background var(--motion);
+}
+
+.download:hover {
+  background: var(--hover);
+}
+
+.download-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.download.is-failed .download-icon,
+.download.is-cancelled .download-icon {
+  color: var(--text-faint);
+}
+
+.download-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.download-name,
+.download-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.download-name {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.download:hover .download-name {
+  color: var(--text);
+}
+
+.download-detail {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Show in folder and remove/cancel: only while hovering. */
+.download-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.download:hover .download-actions,
+.download:focus-within .download-actions {
+  opacity: 1;
+}
+
+.download-actions .icon-button {
+  width: 26px;
+  height: 26px;
+}
+
+/* The ring fills as the file arrives (in the space's color); while the
+   size is unknown, a short arc turns gently. */
+.download-ring {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.download-ring > svg:first-child {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.download-ring > svg:last-child {
+  width: 10px;
+  height: 10px;
+}
+
+.ring-track,
+.ring-fill {
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.ring-track {
+  stroke: var(--panel-edge);
+}
+
+.ring-fill {
+  stroke: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 72%,
+    var(--text)
+  );
+  stroke-linecap: round;
+  transition: stroke-dashoffset 250ms ease-out;
+}
+
+.download-ring.is-unknown > svg:first-child {
+  animation: ring-turn 1.2s linear infinite;
+}
+
+@keyframes ring-turn {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+
 .space-switcher {
   display: flex;
   align-items: center;

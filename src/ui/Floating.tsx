@@ -173,6 +173,11 @@ function actionsFor(
       words: 'clear tabs close all',
     },
     { action: 'new-space', label: 'New space', words: 'new space add create' },
+    {
+      action: 'downloads',
+      label: 'Open downloads folder',
+      words: 'downloads folder files',
+    },
   );
   for (const space of spaces.spaces)
     if (space.id !== spaces.activeSpaceId)

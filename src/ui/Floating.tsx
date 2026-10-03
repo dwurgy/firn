@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isSearch, toNavigableUrl } from '../url';
 import type {
   CommandAction,
+  FindResult,
   HistoryEntry,
   OverlayState,
   Rect,
@@ -14,10 +15,12 @@ import {
   ActionIcon,
   ArrowIcon,
   CloseIcon,
+  DownIcon,
   ExpandIcon,
   GlobeIcon,
   HistoryIcon,
   SearchIcon,
+  UpIcon,
 } from './icons';
 
 // The layer that floats above the web page: the command bar (new tab), the
@@ -45,6 +48,9 @@ export function Floating() {
     return () => offs.forEach((off) => off());
   }, []);
 
+  if (overlay.mode === 'find') {
+    return <FindBar key={overlay.openId} initialText={overlay.text} />;
+  }
   if (overlay.mode === 'lookout') {
     return <Lookout key={overlay.openId} {...overlay} />;
   }
@@ -124,6 +130,14 @@ function actionsFor(
     });
   if (active)
     actions.push(
+      { action: 'find', label: 'Find in page', words: 'find search page text' },
+      { action: 'zoom-in', label: 'Zoom in', words: 'zoom in bigger larger' },
+      { action: 'zoom-out', label: 'Zoom out', words: 'zoom out smaller' },
+      {
+        action: 'zoom-reset',
+        label: 'Reset zoom',
+        words: 'zoom reset actual size',
+      },
       {
         action: 'basecamp',
         label: active.basecamp ? 'Remove from Basecamp' : 'Add to Basecamp',
@@ -499,6 +513,92 @@ function Lookout({
           onClick={() => window.firn.expandLookout()}
         >
           <ExpandIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Find in page: a small bar in the page's top-right corner. Enter goes to
+// the next match, Shift+Enter to the previous one, Esc closes it. The
+// layer is only as big as the bar, so the page stays usable around it.
+function FindBar({ initialText }: { initialText: string }) {
+  const [text, setText] = useState(initialText);
+  const [result, setResult] = useState<FindResult | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const off = window.firn.onFindResult(setResult);
+    const input = inputRef.current;
+    input?.focus();
+    input?.select();
+    // Opening again with the last search shows its matches right away.
+    if (initialText) window.firn.find(initialText, true, true);
+    return off;
+  }, [initialText]);
+
+  const search = (value: string) => {
+    setText(value);
+    if (!value) setResult(null);
+    window.firn.find(value, true, true);
+  };
+  const step = (forward: boolean) => {
+    if (text) window.firn.find(text, forward, false);
+    inputRef.current?.focus();
+  };
+
+  const count =
+    !text || !result
+      ? ''
+      : result.total === 0
+        ? 'No matches'
+        : `${result.active} of ${result.total}`;
+
+  return (
+    <div className="find-layer">
+      <div className="panel find-bar">
+        <input
+          ref={inputRef}
+          className="find-input"
+          spellCheck={false}
+          placeholder="Find in page"
+          value={text}
+          onChange={(e) => search(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') window.firn.closeFind();
+            else if (e.key === 'Enter') {
+              e.preventDefault();
+              step(!e.shiftKey);
+            }
+          }}
+        />
+        <span
+          className={`find-count ${result?.total === 0 && text ? 'is-none' : ''}`}
+        >
+          {count}
+        </span>
+        <button
+          className="icon-button"
+          title="Previous match (Shift+Enter)"
+          disabled={!result?.total}
+          onClick={() => step(false)}
+        >
+          <UpIcon />
+        </button>
+        <button
+          className="icon-button"
+          title="Next match (Enter)"
+          disabled={!result?.total}
+          onClick={() => step(true)}
+        >
+          <DownIcon />
+        </button>
+        <button
+          className="icon-button"
+          title="Close (Esc)"
+          onClick={() => window.firn.closeFind()}
+        >
+          <CloseIcon />
         </button>
       </div>
     </div>

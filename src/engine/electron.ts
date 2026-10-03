@@ -147,6 +147,28 @@ class ElectronPage implements Page {
     this.web.toggleDevTools();
   }
 
+  find(
+    text: string,
+    { forward, newSearch }: { forward: boolean; newSearch: boolean },
+  ) {
+    if (!text) return this.stopFind();
+    // Electron's `findNext` means "start a new search".
+    this.web.findInPage(text, { forward, findNext: newSearch });
+  }
+
+  stopFind() {
+    if (!this.web.isDestroyed()) this.web.stopFindInPage('keepSelection');
+  }
+
+  get zoom() {
+    return this.web.getZoomFactor();
+  }
+
+  // Chromium shares a zoom between pages of the same site, like Chrome.
+  setZoom(factor: number) {
+    if (!this.web.isDestroyed()) this.web.setZoomFactor(factor);
+  }
+
   place(bounds: PageBounds, cornerRadius: number) {
     this.view.setBorderRadius(cornerRadius);
     this.view.setBounds(bounds);
@@ -268,6 +290,15 @@ class ElectronPage implements Page {
     web.on('before-mouse-event', (_event, mouse) => {
       if (mouse.type === 'mouseDown') events().onFocus();
     });
+    web.on('found-in-page', (_event, result) =>
+      events().onFindResult({
+        active: result.activeMatchOrdinal,
+        total: result.matches,
+      }),
+    );
+    web.on('zoom-changed', (_event, direction) =>
+      events().onZoomRequest(direction),
+    );
     web.on('enter-html-full-screen', () => events().onFullscreen(true));
     web.on('leave-html-full-screen', () => events().onFullscreen(false));
   }

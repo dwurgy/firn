@@ -74,6 +74,8 @@ export interface SavedSession {
   splits?: SplitGroup[];
   window: SavedWindow;
   recentlyClosed: string[];
+  // Zoom remembered per site (host → zoom factor; 1 = 100% isn't stored).
+  siteZoom?: Record<string, number>;
 }
 
 // A page in the browsing history (src/history.ts).
@@ -96,7 +98,11 @@ export type CommandAction =
   | 'new-space'
   | 'clear'
   | 'copy-link'
-  | 'switch-space';
+  | 'switch-space'
+  | 'find'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'zoom-reset';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -138,6 +144,8 @@ export interface NavState {
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  // The page's zoom (1 = 100%).
+  zoom: number;
 }
 
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
@@ -167,6 +175,8 @@ export type OverlayState =
   // `beside`: what's picked opens in split view beside this tab (its
   // title).
   | { mode: 'command'; openId: number; beside?: string }
+  // Find in page (Ctrl+F): `text` is the last search, to start from.
+  | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
   // `revealed` turns false-to-true once Ctrl has been held a moment.
   | { mode: 'switcher'; tabIds: string[]; index: number; revealed: boolean }
@@ -179,6 +189,13 @@ export type OverlayState =
       area: Rect;
       panel: Rect;
     };
+
+// How a find in page went: the match that's highlighted (1-based; 0 when
+// there's none) and how many there are.
+export interface FindResult {
+  active: number;
+  total: number;
+}
 
 export interface Rect {
   x: number;
@@ -202,6 +219,12 @@ export interface FirnBridge {
   runAction(action: CommandAction, arg?: string): void;
   // Lookout's "Open as tab".
   expandLookout(): void;
+  // Find in page: search for `text` (`newSearch` when it changed; otherwise
+  // the next or, with `forward` false, the previous match), or close it.
+  find(text: string, forward: boolean, newSearch: boolean): void;
+  closeFind(): void;
+  // Zoom the page in (1), out (-1) or back to 100% (0).
+  zoom(step: 1 | -1 | 0): void;
   // Split view: drag the gap (`ratio` is the left side's share), or end it.
   resizeSplit(id: string, ratio: number): void;
   separateSplit(tabId: string): void;
@@ -238,6 +261,7 @@ export interface FirnBridge {
   onFocusAddress(listener: (url: string) => void): () => void;
   onMaximizedChange(listener: (maximized: boolean) => void): () => void;
   onOverlayState(listener: (state: OverlayState) => void): () => void;
+  onFindResult(listener: (result: FindResult) => void): () => void;
   onTopBarState(listener: (shown: boolean) => void): () => void;
   onSidebarState(listener: (state: SidebarState) => void): () => void;
   onFrameState(listener: (state: FrameState) => void): () => void;

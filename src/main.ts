@@ -460,6 +460,7 @@ const createWindow = () => {
         height: Math.min(pageTop, TOP_BAR_HEIGHT),
       };
     }
+    if (layer === floating && overlay.mode === 'find') return findBarBounds();
     if (layer === peek) {
       // A little wider than the sidebar, so its soft shadow has room.
       const peekWidth = Math.min(width, windowState.sidebarWidth + 32);
@@ -520,6 +521,7 @@ const createWindow = () => {
     if (!readyUi.has(floating.webContents)) return false;
     // Something else (the command bar, the switcher) replaces Lookout.
     if (state.mode !== 'lookout') dropLookout();
+    if (overlay.mode === 'find' && state.mode !== 'find') tabs.stopFind();
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
@@ -531,10 +533,40 @@ const createWindow = () => {
     splitBeside = null;
     if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
+    if (overlay.mode === 'find') tabs.stopFind();
     overlay = { mode: 'hidden' };
     send('overlay:state', overlay);
     hideLayer(floating);
     tabs.focusActive();
+  };
+
+  // --- Find in page ---------------------------------------------------------
+  // A small bar in the top-right corner of the page (its side, in split
+  // view). The floating layer shrinks to just the bar, so the page stays
+  // usable around it.
+  let findTabId: string | null = null;
+  let lastFindText = '';
+  const FIND_BAR_WIDTH = 340;
+  const FIND_BAR_HEIGHT = 48;
+  const FIND_BAR_MARGIN = 20; // room for its soft shadow
+
+  const findBarBounds = () => {
+    const area = findTabId
+      ? tabs.boundsOf(findTabId)
+      : tabs.pageBoundsFor(pageTop);
+    const width = Math.min(FIND_BAR_WIDTH, Math.max(0, area.width - 24));
+    return {
+      x: Math.round(area.x + area.width - 12 - width - FIND_BAR_MARGIN),
+      y: Math.round(area.y + 12 - FIND_BAR_MARGIN),
+      width: width + FIND_BAR_MARGIN * 2,
+      height: FIND_BAR_HEIGHT + FIND_BAR_MARGIN * 2,
+    };
+  };
+
+  const openFind = () => {
+    if (lookout || !tabs.activeTabId) return;
+    findTabId = tabs.activeTabId;
+    showOverlay({ mode: 'find', openId: ++commandOpenId, text: lastFindText });
   };
 
   // --- The top bar with the window buttons -------------------------------
@@ -572,8 +604,9 @@ const createWindow = () => {
         clearInterval(topGlide);
         tabs.holdLayout(null);
       }
-      if (topBar && shownLayers.has(topBar))
-        topBar.setBounds(boundsFor(topBar));
+      // The top bar's height follows the page edge (and the find bar, if
+      // open, moves with the page).
+      layoutLayers();
     }, 8);
   };
 
@@ -657,6 +690,9 @@ const createWindow = () => {
       windowState.activeTabId = state.activeTabId;
       saver.schedule();
       send('tabs:state', state);
+      // Find in page belongs to the tab it was opened on.
+      if (overlay.mode === 'find' && state.activeTabId !== findTabId)
+        hideOverlay();
     },
     onNavChanged: (state) => {
       if (!win.isDestroyed())
@@ -667,7 +703,13 @@ const createWindow = () => {
     onLookout: (url) => openLookout(url),
     onVisit: (url, title, favicon, newVisit) =>
       history.visit(url, title, favicon, newVisit),
+    onFindResult: (result) => {
+      if (!floating.webContents.isDestroyed())
+        floating.webContents.send('find:result', result);
+    },
+    onSiteZoomChanged: () => saver.schedule(),
   });
+  tabs.restoreSiteZoom(saved?.siteZoom);
 
   const relayout = () => {
     tabs.layout();
@@ -734,6 +776,8 @@ const createWindow = () => {
       onLookout: (link) => page.load(link),
       onFullscreen: () => {},
       onFocus: () => {},
+      onFindResult: () => {},
+      onZoomRequest: () => {},
     });
     lookout = { page, favicon: '', openId: ++commandOpenId, shown: false };
     page.load(url);
@@ -1256,6 +1300,18 @@ const createWindow = () => {
       case 'switch-space':
         switchSpace(arg);
         break;
+      case 'find':
+        openFind();
+        break;
+      case 'zoom-in':
+        tabs.zoom(1);
+        break;
+      case 'zoom-out':
+        tabs.zoom(-1);
+        break;
+      case 'zoom-reset':
+        tabs.zoom(0);
+        break;
     }
   };
 
@@ -1419,13 +1475,26 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'find:search': (_sender, text, forward, newSearch) => {
+      if (overlay.mode !== 'find' || typeof text !== 'string') return;
+      lastFindText = text.slice(0, 500);
+      tabs.find(lastFindText, forward !== false, newSearch === true);
+    },
+    'find:close': () => {
+      if (overlay.mode === 'find') hideOverlay();
+    },
+    'page:zoom': (_sender, step) => {
+      if (step === 1 || step === -1 || step === 0) tabs.zoom(step);
+    },
     'command:run': (_sender, action, arg) => {
       if (typeof action === 'string')
         runAction(action as CommandAction, typeof arg === 'string' ? arg : '');
     },
     'split:resize': (_sender, id, ratio) => {
-      if (typeof id === 'string' && typeof ratio === 'number')
+      if (typeof id === 'string' && typeof ratio === 'number') {
         tabs.resizeSplit(id, ratio);
+        if (overlay.mode === 'find') layoutLayers();
+      }
     },
     'split:separate': (_sender, tabId) => {
       if (typeof tabId === 'string') tabs.unsplit(tabId);
@@ -1548,6 +1617,18 @@ const createWindow = () => {
       setSidebarCollapsed(!windowState.sidebarCollapsed);
     } else if (mod && key === 'l') {
       focusAddress();
+    } else if (mod && key === 'f') {
+      openFind();
+    } else if (key === 'f3' || (mod && key === 'g')) {
+      // Next (or, with Shift, previous) match of the last search.
+      if (overlay.mode !== 'find') openFind();
+      else if (lastFindText) tabs.find(lastFindText, !input.shift, false);
+    } else if (mod && (key === '=' || key === '+')) {
+      tabs.zoom(1);
+    } else if (mod && (key === '-' || key === '_')) {
+      tabs.zoom(-1);
+    } else if (mod && key === '0') {
+      tabs.zoom(0);
     } else if (mod && input.shift && key === 't') {
       tabs.reopenClosed();
     } else if (mod && key === 't') {
@@ -1643,6 +1724,7 @@ const createWindow = () => {
       },
       recentlyClosed: tabs.closedUrls,
       splits: tabs.splitGroups,
+      siteZoom: tabs.siteZooms,
     });
   });
   for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)

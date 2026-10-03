@@ -1056,9 +1056,21 @@ export class TabManager {
         if (entry && safeHost(url) !== safeHost(entry.tab.url))
           entry.tab.favicon = '';
       },
-      // Links that ask for a new tab open one right below this tab.
-      onOpenTab: (url, background) =>
-        void this.create(url, { after: id, activate: !background }),
+      // Links that ask for a new tab open one right below this tab. From a
+      // Basecamp or pinned tab, a link to another site opens in Lookout
+      // instead, so the pinned tab stays put and no stray tabs pile up
+      // (middle- or Ctrl+click still opens a background tab).
+      onOpenTab: (url, background) => {
+        const tab = entryOf()?.tab;
+        if (
+          tab &&
+          !background &&
+          (tab.basecamp || tab.pinned) &&
+          siteOf(url) !== siteOf(tab.url)
+        )
+          return this.options.onLookout(url);
+        void this.create(url, { after: id, activate: !background });
+      },
       onLookout: (url) => this.options.onLookout(url),
       onFocus: () => {
         if (entryOf()) this.focused(id);
@@ -1114,6 +1126,19 @@ export class TabManager {
     }
     this.layout();
   }
+}
+
+// The site a page belongs to: its domain without subdomains (mail.google.com
+// and accounts.google.com are both google.com; bbc.co.uk keeps its three
+// parts). Good enough to tell "a link to another site" apart.
+export function siteOf(url: string) {
+  const host = safeHost(url).replace(/:\d+$/, '').toLowerCase();
+  if (!host || /^[\d.]+$/.test(host) || host.startsWith('[')) return host;
+  const labels = host.split('.');
+  if (labels.length <= 2) return host;
+  const [second, top] = labels.slice(-2);
+  const keep = top.length === 2 && second.length <= 3 ? 3 : 2;
+  return labels.slice(-keep).join('.');
 }
 
 function safeHost(url: string) {

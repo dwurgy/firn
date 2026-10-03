@@ -12,6 +12,31 @@ export interface PageBounds {
   height: number;
 }
 
+// What was right-clicked on a page, and what can be done with it there.
+export interface PageContextMenu {
+  // A link that was clicked on (and its text), or ''.
+  linkUrl: string;
+  // An image that was clicked on, or ''.
+  imageUrl: string;
+  // Selected text, or ''.
+  selectionText: string;
+  // Clicked inside a text box.
+  isEditable: boolean;
+  canCut: boolean;
+  canCopy: boolean;
+  canPaste: boolean;
+  // A misspelled word under the click, and suggested corrections.
+  misspelledWord: string;
+  suggestions: string[];
+  cut(): void;
+  copy(): void;
+  paste(): void;
+  selectAll(): void;
+  copyImage(): void;
+  saveImage(): void;
+  replaceMisspelling(word: string): void;
+}
+
 // What a page reports back as it loads and changes.
 export interface PageEvents {
   // The address, title or loading state may have changed.
@@ -30,6 +55,8 @@ export interface PageEvents {
   onFullscreen(on: boolean): void;
   // The mouse was pressed inside the page (the person is working in it).
   onFocus(): void;
+  // The page was right-clicked.
+  onContextMenu(menu: PageContextMenu): void;
   // How a find in page (see Page.find) went.
   onFindResult(result: FindResult): void;
   // The person asked to zoom with the mouse (Ctrl+wheel or a pinch).

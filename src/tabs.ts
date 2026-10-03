@@ -13,7 +13,13 @@
 // then everyday tabs.
 
 import { randomUUID } from 'node:crypto';
-import type { Page, PageBounds, PageEngine, PageEvents } from './engine/engine';
+import type {
+  Page,
+  PageBounds,
+  PageContextMenu,
+  PageEngine,
+  PageEvents,
+} from './engine/engine';
 import { toNavigableUrl } from './url';
 import type {
   FindResult,
@@ -87,6 +93,8 @@ interface TabManagerOptions {
     favicon: string,
     newVisit: boolean,
   ) => void;
+  // A tab's page was right-clicked.
+  onContextMenu: (id: string, menu: PageContextMenu) => void;
   // How a find in page on the current tab went.
   onFindResult: (result: FindResult) => void;
   // A site's zoom changed (to save it).
@@ -839,6 +847,11 @@ export class TabManager {
     this.emitTabs();
   }
 
+  // A tab's page (for its right-click menu's Back, Forward and Reload).
+  pageOf(id: string): Page | undefined {
+    return this.entries.get(id)?.page;
+  }
+
   command(command: NavCommand) {
     const page = this.active?.page;
     if (!page) return;
@@ -1076,6 +1089,9 @@ export class TabManager {
         if (entryOf()) this.focused(id);
       },
       onFullscreen: (on) => this.setFullscreen(on),
+      onContextMenu: (menu) => {
+        if (entryOf()) this.options.onContextMenu(id, menu);
+      },
       onFindResult: (result) => {
         if (entryOf() && id === this.findId) this.options.onFindResult(result);
       },

@@ -290,6 +290,27 @@ class ElectronPage implements Page {
     web.on('before-mouse-event', (_event, mouse) => {
       if (mouse.type === 'mouseDown') events().onFocus();
     });
+    web.on('context-menu', (_event, params) =>
+      events().onContextMenu({
+        linkUrl: params.linkURL,
+        imageUrl: params.mediaType === 'image' ? params.srcURL : '',
+        selectionText: params.selectionText,
+        isEditable: params.isEditable,
+        canCut: params.editFlags.canCut,
+        canCopy: params.editFlags.canCopy,
+        canPaste: params.editFlags.canPaste,
+        misspelledWord: params.misspelledWord,
+        suggestions: params.dictionarySuggestions,
+        cut: () => web.cut(),
+        copy: () => web.copy(),
+        paste: () => web.paste(),
+        selectAll: () => web.selectAll(),
+        copyImage: () => web.copyImageAt(params.x, params.y),
+        // With no download handler yet, Chromium asks where to save it.
+        saveImage: () => web.downloadURL(params.srcURL),
+        replaceMisspelling: (word) => web.replaceMisspelling(word),
+      }),
+    );
     web.on('found-in-page', (_event, result) =>
       events().onFindResult({
         active: result.activeMatchOrdinal,

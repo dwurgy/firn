@@ -47,37 +47,42 @@
   color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Warm mid-grey, not black, so dark pages still read as lifted. */
-    --frame: #3a3734;
-    --frame-glow: rgba(150, 178, 192, 0.1);
-    --frame-glass: rgba(58, 55, 52, 0.4);
-    --page: #2b2826;
-    --text: #f5f1ec;
-    --text-muted: #d4cdc5;
-    --text-faint: #958d85;
-    --field: rgba(255, 250, 245, 0.08);
-    --field-hover: rgba(255, 250, 245, 0.12);
-    --field-focus: rgba(255, 250, 245, 0.15);
-    --hover: rgba(255, 250, 245, 0.07);
-    --press: rgba(255, 250, 245, 0.13);
-    --tab-active: rgba(255, 250, 245, 0.14);
-    --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-    --pin-wash: 0.24;
-    --space-wash: 0.14;
-    --pin-edge: 0.6;
-    --tab-dragged-shadow:
-      0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
-    --frost: rgba(160, 196, 214, 0.45);
-    --frost-strong: rgba(176, 208, 224, 0.8);
-    --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
-    --backdrop: rgba(0, 0, 0, 0.18);
-    --lookout-dim: rgba(0, 0, 0, 0.42);
-    --lookout-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
-    --panel-edge: rgba(255, 250, 245, 0.08);
-  }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Dark: Firn's main process says which (following the system, or the
+   Light/Dark choice in settings); see src/ui/index.tsx. */
+:root[data-theme='dark'] {
+  /* Warm mid-grey, not black, so dark pages still read as lifted. */
+  --frame: #3a3734;
+  --frame-glow: rgba(150, 178, 192, 0.1);
+  --frame-glass: rgba(58, 55, 52, 0.4);
+  --page: #2b2826;
+  --text: #f5f1ec;
+  --text-muted: #d4cdc5;
+  --text-faint: #958d85;
+  --field: rgba(255, 250, 245, 0.08);
+  --field-hover: rgba(255, 250, 245, 0.12);
+  --field-focus: rgba(255, 250, 245, 0.15);
+  --hover: rgba(255, 250, 245, 0.07);
+  --press: rgba(255, 250, 245, 0.13);
+  --tab-active: rgba(255, 250, 245, 0.14);
+  --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --pin-wash: 0.24;
+  --space-wash: 0.14;
+  --pin-edge: 0.6;
+  --tab-dragged-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
+  --frost: rgba(160, 196, 214, 0.45);
+  --frost-strong: rgba(176, 208, 224, 0.8);
+  --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
+  --backdrop: rgba(0, 0, 0, 0.18);
+  --lookout-dim: rgba(0, 0, 0, 0.42);
+  --lookout-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
+  --panel-edge: rgba(255, 250, 245, 0.08);
+  color-scheme: dark;
 }
 
 * {
@@ -1424,6 +1429,102 @@ button {
 .sheet-button:hover {
   background: var(--field);
   box-shadow: inset 0 0 0 1px var(--panel-edge);
+}
+
+.settings-body {
+  padding: 4px 24px 16px;
+}
+
+.settings-group {
+  padding: 14px 0 6px;
+}
+
+.settings-group + .settings-group {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.settings-group h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 52px;
+}
+
+.settings-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-label small {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-select {
+  height: 30px;
+  min-width: 150px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.sheet-button:disabled {
+  color: var(--text-faint);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* A row of choices where one is on (e.g. the theme). */
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--hover);
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.segmented button.is-on {
+  background: var(--page);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(30, 20, 10, 0.12);
 }
 
 .history-day h3 {

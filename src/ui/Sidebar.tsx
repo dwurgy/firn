@@ -14,6 +14,7 @@ import { SpaceTabs } from './SpaceTabs';
 import {
   BackIcon,
   ForwardIcon,
+  MoreIcon,
   ReloadIcon,
   SidebarIcon,
   StopIcon,
@@ -165,6 +166,13 @@ export function Sidebar({
             onClick={() => window.firn.toggleSidebar()}
           >
             <SidebarIcon />
+          </button>
+          <button
+            className="icon-button"
+            title="History, downloads and settings"
+            onClick={() => window.firn.showFirnMenu()}
+          >
+            <MoreIcon />
           </button>
         </div>
         <nav className="button-row">

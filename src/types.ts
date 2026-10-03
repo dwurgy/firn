@@ -78,6 +78,22 @@ export interface SavedSession {
   siteZoom?: Record<string, number>;
 }
 
+// Firn's settings (src/settings.ts). `downloadsFolder` '' means the
+// system's Downloads folder.
+export interface Settings {
+  searchEngine: 'duckduckgo' | 'google' | 'bing' | 'ecosia' | 'startpage';
+  theme: 'system' | 'light' | 'dark';
+  downloadsFolder: string;
+}
+
+// What the settings panel shows: the settings, plus the downloads folder
+// actually used and Firn's version.
+export interface SettingsState {
+  settings: Settings;
+  downloadsFolder: string;
+  version: string;
+}
+
 // A downloaded file (src/downloads.ts). `missing`: it finished, but the
 // file has since been moved or deleted.
 export interface Download {
@@ -119,7 +135,8 @@ export type CommandAction =
   | 'zoom-out'
   | 'zoom-reset'
   | 'downloads'
-  | 'history';
+  | 'history'
+  | 'settings';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -182,6 +199,8 @@ export interface SidebarState {
 export interface FrameState {
   glass: boolean;
   focused: boolean;
+  // Firn's own panels are dark (following the system, or settings).
+  dark: boolean;
 }
 
 export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
@@ -204,8 +223,9 @@ export type OverlayState =
       ask: string;
       kind: string;
     }
-  // The history panel (Ctrl+H).
+  // The history panel (Ctrl+H) and the settings panel (Ctrl+,).
   | { mode: 'history'; openId: number }
+  | { mode: 'settings'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
   | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
@@ -253,6 +273,15 @@ export interface FirnBridge {
   removeHistory(url: string): void;
   showClearHistoryMenu(): void;
   onHistoryChanged(listener: () => void): () => void;
+  // Settings: change some, pick the downloads folder, clear cookies and
+  // site data (asks first), forget every site's permission answers.
+  updateSettings(changes: Partial<Settings>): void;
+  chooseDownloadsFolder(): void;
+  clearSiteData(): void;
+  resetAllPermissions(): void;
+  onSettingsState(listener: (state: SettingsState) => void): () => void;
+  // The sidebar's ⋯ menu (new tab, history, downloads, settings).
+  showFirnMenu(): void;
   runAction(action: CommandAction, arg?: string): void;
   // Lookout's "Open as tab".
   expandLookout(): void;

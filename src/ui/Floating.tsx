@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { isSearch, toNavigableUrl } from '../url';
+import { isSearch, SEARCH_ENGINES, toNavigableUrl } from '../url';
 import type {
   CommandAction,
   FindResult,
@@ -7,6 +7,8 @@ import type {
   OverlayState,
   Rect,
   Space,
+  Settings,
+  SettingsState,
   SpacesState,
   TabView,
 } from '../types';
@@ -40,6 +42,7 @@ export function Floating() {
     spaces: [],
     activeSpaceId: '',
   });
+  const [settings, setSettings] = useState<SettingsState | null>(null);
 
   useEffect(() => {
     const offs = [
@@ -49,6 +52,7 @@ export function Floating() {
         setActiveTabId(state.activeTabId);
       }),
       window.firn.onSpacesState(setSpaces),
+      window.firn.onSettingsState(setSettings),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
@@ -56,6 +60,9 @@ export function Floating() {
 
   if (overlay.mode === 'permission') {
     return <PermissionPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'settings') {
+    return <SettingsPanel key={overlay.openId} state={settings} />;
   }
   if (overlay.mode === 'history') {
     return <HistoryPanel key={overlay.openId} />;
@@ -186,6 +193,11 @@ function actionsFor(
     },
     { action: 'new-space', label: 'New space', words: 'new space add create' },
     { action: 'history', label: 'History', words: 'history visited pages' },
+    {
+      action: 'settings',
+      label: 'Settings',
+      words: 'settings preferences options search engine theme',
+    },
     {
       action: 'downloads',
       label: 'Open downloads folder',
@@ -859,4 +871,169 @@ function groupByDay(entries: HistoryEntry[]) {
     groups[groups.length - 1].items.push(entry);
   }
   return groups;
+}
+
+// The settings panel (Ctrl+, or the sidebar's ⋯ menu): only the few things
+// a person might want to change. Changes apply right away.
+function SettingsPanel({ state }: { state: SettingsState | null }) {
+  const [permissionsReset, setPermissionsReset] = useState(false);
+  const change = (changes: Partial<Settings>) =>
+    window.firn.updateSettings(changes);
+
+  return (
+    <div
+      className="backdrop is-sheet"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) window.firn.closeOverlay();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.closeOverlay();
+      }}
+    >
+      <div
+        className="panel sheet settings-sheet"
+        role="dialog"
+        aria-label="Settings"
+        tabIndex={-1}
+        ref={(el) => el?.focus()}
+      >
+        <header className="sheet-header">
+          <h2>Settings</h2>
+          <button
+            className="icon-button"
+            title="Close (Esc)"
+            onClick={() => window.firn.closeOverlay()}
+          >
+            <CloseIcon />
+          </button>
+        </header>
+        {state && (
+          <div className="sheet-body settings-body">
+            <section className="settings-group">
+              <h3>Search</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Search engine</span>
+                  <small>
+                    Used when you type something that isn't an address.
+                  </small>
+                </div>
+                <select
+                  className="settings-select"
+                  value={state.settings.searchEngine}
+                  onChange={(e) =>
+                    change({
+                      searchEngine: e.target.value as Settings['searchEngine'],
+                    })
+                  }
+                >
+                  {Object.entries(SEARCH_ENGINES).map(([id, engine]) => (
+                    <option key={id} value={id}>
+                      {engine.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Appearance</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Theme</span>
+                </div>
+                <div className="segmented" role="radiogroup">
+                  {(
+                    [
+                      ['system', 'Match system'],
+                      ['light', 'Light'],
+                      ['dark', 'Dark'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      role="radio"
+                      aria-checked={state.settings.theme === value}
+                      className={state.settings.theme === value ? 'is-on' : ''}
+                      onClick={() => change({ theme: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Downloads</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Save files to</span>
+                  <small title={state.downloadsFolder}>
+                    {state.downloadsFolder}
+                  </small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.chooseDownloadsFolder()}
+                >
+                  Change…
+                </button>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Privacy</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>History</span>
+                  <small>The pages you've visited.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.showClearHistoryMenu()}
+                >
+                  Clear history…
+                </button>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Cookies and site data</span>
+                  <small>Clearing signs you out of websites.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.clearSiteData()}
+                >
+                  Clear…
+                </button>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Site permissions</span>
+                  <small>
+                    Camera, location, notifications… Sites will ask again.
+                  </small>
+                </div>
+                <button
+                  className="sheet-button"
+                  disabled={permissionsReset}
+                  onClick={() => {
+                    window.firn.resetAllPermissions();
+                    setPermissionsReset(true);
+                  }}
+                >
+                  {permissionsReset ? 'Reset' : 'Reset all'}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+        <footer className="sheet-footer">
+          <span>Firn {state?.version}</span>
+          <span>Everything stays on this computer.</span>
+        </footer>
+      </div>
+    </div>
+  );
 }

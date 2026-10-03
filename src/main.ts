@@ -28,7 +28,8 @@ import { Downloads } from './downloads';
 import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
-import { searchUrl } from './url';
+import { searchUrl, setSearchEngine } from './url';
+import { cleanSettings, loadSettings, saveSettings } from './settings';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
@@ -742,6 +743,10 @@ const createWindow = () => {
     showOverlay({ mode: 'history', openId: ++commandOpenId });
   };
 
+  const openSettings = () => {
+    showOverlay({ mode: 'settings', openId: ++commandOpenId });
+  };
+
   const openFind = () => {
     if (lookout || !tabs.activeTabId) return;
     findTabId = tabs.activeTabId;
@@ -852,10 +857,38 @@ const createWindow = () => {
     raiseLayers();
   });
 
+  // --- Settings ---------------------------------------------------------------
+  // The few things a person can change (src/settings.ts), applied right
+  // away and saved in settings.json.
+  const settingsFile = path.join(app.getPath('userData'), 'settings.json');
+  let settings = loadSettings(settingsFile);
+  const applySettings = () => {
+    setSearchEngine(settings.searchEngine);
+    nativeTheme.themeSource = settings.theme;
+  };
+  applySettings();
+  // The folder downloads go to (the system's Downloads folder unless one
+  // was chosen, and it still exists).
+  const downloadsFolder = () =>
+    settings.downloadsFolder && fs.existsSync(settings.downloadsFolder)
+      ? settings.downloadsFolder
+      : app.getPath('downloads');
+  const settingsState = () => ({
+    settings,
+    downloadsFolder: downloadsFolder(),
+    version: app.getVersion(),
+  });
+  const changeSettings = (changes: unknown) => {
+    settings = cleanSettings(changes, settings);
+    applySettings();
+    saveSettings(settingsFile, settings);
+    send('settings:state', settingsState());
+  };
+
   // Downloads go straight to the Downloads folder; the sidebar shows them.
   const downloads = new Downloads(
     path.join(app.getPath('userData'), 'downloads.json'),
-    () => app.getPath('downloads'),
+    downloadsFolder,
     (list) => send('downloads:state', list),
   );
   engine.onDownload((item) => downloads.add(item));
@@ -1631,7 +1664,10 @@ const createWindow = () => {
         tabs.zoom(0);
         break;
       case 'downloads':
-        void shell.openPath(app.getPath('downloads'));
+        void shell.openPath(downloadsFolder());
+        break;
+      case 'settings':
+        openSettings();
         break;
       case 'history':
         openHistory();
@@ -1796,6 +1832,59 @@ const createWindow = () => {
       tabs.activate(id);
     },
     'lookout:expand': () => expandLookout(),
+    'settings:update': (_sender, changes) => changeSettings(changes),
+    'settings:downloads-folder': async () => {
+      const result = await dialog.showOpenDialog(win, {
+        title: 'Save downloads to',
+        defaultPath: downloadsFolder(),
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (!result.canceled && result.filePaths[0])
+        changeSettings({ downloadsFolder: result.filePaths[0] });
+    },
+    'settings:clear-site-data': async () => {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['Clear', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: 'Clear cookies and site data?',
+        detail:
+          "This signs you out of websites and clears what they've saved on this computer. Your tabs, history and downloads stay.",
+      });
+      if (response !== 0) return;
+      await session.defaultSession.clearStorageData();
+      await session.defaultSession.clearCache();
+    },
+    'settings:reset-permissions': () => {
+      sitePermissions.forgetAll();
+      sendNav();
+    },
+    'firn:menu': () =>
+      Menu.buildFromTemplate([
+        {
+          label: 'New tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => openCommandBar(),
+        },
+        { label: 'New space', click: () => newSpace() },
+        { type: 'separator' },
+        {
+          label: 'History',
+          accelerator: 'CmdOrCtrl+H',
+          click: () => openHistory(),
+        },
+        {
+          label: 'Downloads',
+          click: () => void shell.openPath(downloadsFolder()),
+        },
+        { type: 'separator' },
+        {
+          label: 'Settings',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => openSettings(),
+        },
+      ]).popup({ window: win }),
     'history:remove': (_sender, url) => {
       if (typeof url !== 'string') return;
       history.remove(url);
@@ -1834,7 +1923,7 @@ const createWindow = () => {
       const download = typeof id === 'string' ? downloads.get(id) : undefined;
       if (download && fs.existsSync(download.path))
         shell.showItemInFolder(download.path);
-      else void shell.openPath(app.getPath('downloads'));
+      else void shell.openPath(downloadsFolder());
     },
     'downloads:cancel': (_sender, id) => {
       if (typeof id === 'string') downloads.cancel(id);
@@ -1899,6 +1988,7 @@ const createWindow = () => {
       });
       sender.send('overlay:state', overlay);
       sender.send('downloads:state', downloads.all());
+      sender.send('settings:state', settingsState());
       sender.send('sidebar:state', {
         width: windowState.sidebarWidth,
         collapsed: windowState.sidebarCollapsed,
@@ -1946,6 +2036,7 @@ const createWindow = () => {
   const frameState = (): FrameState => ({
     glass: GLASS,
     focused: win.isFocused(),
+    dark: nativeTheme.shouldUseDarkColors,
   });
   win.on('focus', () => send('window:frame', frameState()));
   win.on('blur', () => send('window:frame', frameState()));
@@ -2000,6 +2091,8 @@ const createWindow = () => {
       openFind();
     } else if (mod && key === 'h') {
       openHistory();
+    } else if (mod && key === ',') {
+      openSettings();
     } else if (key === 'f3' || (mod && key === 'g')) {
       // Next (or, with Shift, previous) match of the last search.
       if (overlay.mode !== 'find') openFind();
@@ -2088,6 +2181,7 @@ const createWindow = () => {
 
   const onThemeChange = () => {
     if (!GLASS) win.setBackgroundColor(frameColor());
+    send('window:frame', frameState());
   };
   nativeTheme.on('updated', onThemeChange);
 

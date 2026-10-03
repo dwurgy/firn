@@ -18,13 +18,21 @@ const LAYERS: Record<string, () => React.JSX.Element | null> = {
 };
 const Root = LAYERS[view] ?? App;
 
-// Frosted glass behind the main window, solid while it's out of focus.
-if (view === 'main') {
-  window.firn.onFrameState(({ glass, focused }) => {
+// Light or dark, as the main process says (the system's setting, or the
+// choice in settings); until it does, the system's.
+document.documentElement.dataset.theme = matchMedia(
+  '(prefers-color-scheme: dark)',
+).matches
+  ? 'dark'
+  : 'light';
+window.firn.onFrameState(({ glass, focused, dark }) => {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // Frosted glass behind the main window, solid while it's out of focus.
+  if (view === 'main') {
     document.documentElement.classList.toggle('is-glass', glass);
     document.documentElement.classList.toggle('is-inactive', !focused);
-  });
-}
+  }
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

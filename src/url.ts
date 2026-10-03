@@ -1,12 +1,31 @@
 // Turns whatever was typed in the address bar into a URL to load.
 
-const SEARCH_URL = 'https://duckduckgo.com/?q=';
+// The search engines to choose from in settings (DuckDuckGo by default:
+// it doesn't track you).
+export const SEARCH_ENGINES = {
+  duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+  google: { name: 'Google', url: 'https://www.google.com/search?q=' },
+  bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
+  ecosia: { name: 'Ecosia', url: 'https://www.ecosia.org/search?q=' },
+  startpage: {
+    name: 'Startpage',
+    url: 'https://www.startpage.com/do/search?q=',
+  },
+} as const;
+export type SearchEngine = keyof typeof SEARCH_ENGINES;
+
+let SEARCH_URL: string = SEARCH_ENGINES.duckduckgo.url;
+
+// Which engine searches use (see src/settings.ts).
+export function setSearchEngine(engine: SearchEngine) {
+  SEARCH_URL = SEARCH_ENGINES[engine]?.url ?? SEARCH_ENGINES.duckduckgo.url;
+}
 
 const ALLOWED_SCHEMES = /^(https?|file|about|view-source):/i;
 
 // Whether typed text will run a search or open an address.
 export function isSearch(url: string): boolean {
-  return url.startsWith(SEARCH_URL);
+  return Object.values(SEARCH_ENGINES).some((e) => url.startsWith(e.url));
 }
 
 // A web search for `text`.

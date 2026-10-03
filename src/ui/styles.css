@@ -425,7 +425,7 @@ button {
   flex-shrink: 0;
 }
 
-.space-header-emoji,
+.space-header-symbol,
 .space-header-chevron {
   position: absolute;
   inset: 0;
@@ -436,16 +436,21 @@ button {
     transform var(--motion);
 }
 
-.space-header-emoji {
-  font-size: 14px;
-  line-height: 1;
+/* Space icons are drawn in the space's color, a little deepened so they
+   stay easy to see on the light frame. */
+.space-header-symbol {
+  color: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 72%,
+    var(--text)
+  );
 }
 
 .space-header-chevron {
   opacity: 0;
 }
 
-.space-header:hover .space-header-emoji {
+.space-header:hover .space-header-symbol {
   opacity: 0;
 }
 
@@ -596,12 +601,10 @@ button {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  font-size: 15px;
-  line-height: 1;
+  color: var(--text-muted);
   cursor: default;
   /* Other spaces sit back a little. */
-  filter: saturate(0.6);
-  opacity: 0.7;
+  opacity: 0.8;
   transition:
     background var(--motion),
     box-shadow var(--motion),
@@ -618,8 +621,62 @@ button {
 .space-dot.is-active {
   background: var(--tab-active);
   box-shadow: var(--tab-active-shadow);
+  color: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 72%,
+    var(--text)
+  );
   opacity: 1;
   filter: none;
+}
+
+/* "Change icon…": a small grid under the space's name. */
+.space-icon-picker {
+  position: absolute;
+  left: calc(var(--page-inset) + 4px);
+  right: calc(var(--page-inset) + 4px);
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--page);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 16px 36px rgba(30, 20, 10, 0.16);
+  animation: rise 160ms ease-out;
+}
+
+.space-icon-choice {
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.space-icon-choice:hover,
+.space-icon-choice:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.space-icon-choice.is-current {
+  background: rgb(var(--space-rgb, 128 120 110) / 0.18);
+  color: color-mix(
+    in srgb,
+    rgb(var(--space-rgb, 128 120 110)) 72%,
+    var(--text)
+  );
 }
 
 .space-add {

@@ -268,4 +268,6 @@ export interface FirnBridge {
   onSpacesState(listener: (state: SpacesState) => void): () => void;
   // The main process asks the sidebar to start renaming a space.
   onRenameSpace(listener: (id: string) => void): () => void;
+  // ...or to show the icon picker for a space.
+  onPickSpaceIcon(listener: (id: string) => void): () => void;
 }

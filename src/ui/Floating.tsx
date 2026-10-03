@@ -178,7 +178,7 @@ function actionsFor(
     if (space.id !== spaces.activeSpaceId)
       actions.push({
         action: 'switch-space',
-        label: `Go to ${space.icon} ${space.name}`,
+        label: `Go to ${space.name}`,
         words: `switch space go ${space.name}`,
         arg: space.id,
       });
@@ -396,7 +396,7 @@ function ResultRow({
           <span className="result-detail"> — {shortUrl(tab.url)}</span>
         </span>
         <span className="result-action">
-          {space ? `${space.icon} ${space.name}` : 'Switch to tab'}
+          {space ? `In ${space.name}` : 'Switch to tab'}
           <ArrowIcon />
         </span>
       </>

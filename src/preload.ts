@@ -56,6 +56,7 @@ const bridge: FirnBridge = {
   onFrameState: (listener) => listen('window:frame', listener),
   onSpacesState: (listener) => listen('spaces:state', listener),
   onRenameSpace: (listener) => listen('spaces:rename', listener),
+  onPickSpaceIcon: (listener) => listen('spaces:pick-icon', listener),
 };
 
 contextBridge.exposeInMainWorld('firn', bridge);

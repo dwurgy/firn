@@ -25,6 +25,7 @@ import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { History } from './history';
 import { searchUrl } from './url';
+import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import type {
   CommandAction,
@@ -174,24 +175,7 @@ async function iconAsDataUrl(url: string): Promise<string | null> {
 // --- Spaces ---------------------------------------------------------------
 
 // Icons to choose from for a space (a new space takes the next unused one).
-const SPACE_ICONS = [
-  '🏠',
-  '💼',
-  '🌿',
-  '📚',
-  '🎨',
-  '🎵',
-  '🎮',
-  '✈️',
-  '☕',
-  '🛒',
-  '💡',
-  '🧪',
-  '🏔️',
-  '🌊',
-  '⭐',
-  '❤️',
-];
+const SPACE_ICONS = SPACE_ICON_NAMES;
 // Each space's theme color: it softly tints the frame and the glass.
 // Muted, natural tones so the tint stays calm.
 const SPACE_COLOR_CHOICES = [
@@ -254,7 +238,8 @@ function usableSpaces(saved: Space[] | undefined): Space[] {
     .sort((a, b) => a.order - b.order)
     .map((s, i) => ({
       ...s,
-      icon: s.icon || SPACE_ICONS[i % SPACE_ICONS.length],
+      // Older sessions saved an emoji (or nothing): use the matching icon.
+      icon: toSpaceIcon(s.icon) ?? SPACE_ICONS[i % SPACE_ICONS.length],
       color: s.color || SPACE_COLORS[i % SPACE_COLORS.length],
       order: i,
     }));
@@ -1128,7 +1113,8 @@ const createWindow = () => {
           {
             label: 'Move to space',
             submenu: others.map((space) => ({
-              label: `${space.icon}  ${space.name}`,
+              label: space.name,
+              icon: colorSwatch(space.color),
               click: () => tabs.moveToSpace(id, space.id),
             })),
           },
@@ -1302,7 +1288,10 @@ const createWindow = () => {
 
   // Right-click menu for a space's icon.
   // The space's own menu items, shared by its menu and the sidebar's.
-  const spaceItems = (space: Space): Electron.MenuItemConstructorOptions[] => [
+  const spaceItems = (
+    space: Space,
+    target: WebContents,
+  ): Electron.MenuItemConstructorOptions[] => [
     {
       label: 'Change color',
       submenu: SPACE_COLOR_CHOICES.map(({ name, hex }) => ({
@@ -1313,14 +1302,14 @@ const createWindow = () => {
         click: () => updateSpace(space.id, { color: hex }),
       })),
     },
+    // A grid of icons in the sidebar (where the menu was opened); a
+    // system menu can't show Firn's own icons.
     {
-      label: 'Change icon',
-      submenu: SPACE_ICONS.map((icon) => ({
-        label: icon,
-        type: 'checkbox' as const,
-        checked: icon === space.icon,
-        click: () => updateSpace(space.id, { icon }),
-      })),
+      label: 'Change icon…',
+      click: () => {
+        switchSpace(space.id);
+        if (!target.isDestroyed()) target.send('spaces:pick-icon', space.id);
+      },
     },
     {
       label: 'Rename space',
@@ -1333,11 +1322,11 @@ const createWindow = () => {
 
   // Right-click on empty space in the sidebar: the active space's options,
   // plus a new tab or space.
-  const showSidebarMenu = () => {
+  const showSidebarMenu = (target: WebContents) => {
     const space = spaces.find((s) => s.id === windowState.activeSpaceId);
     if (!space) return;
     Menu.buildFromTemplate([
-      ...spaceItems(space),
+      ...spaceItems(space, target),
       { type: 'separator' },
       {
         label: 'New tab',
@@ -1348,11 +1337,11 @@ const createWindow = () => {
     ]).popup({ window: win });
   };
 
-  const showSpaceMenu = (id: string) => {
+  const showSpaceMenu = (id: string, target: WebContents) => {
     const space = spaces.find((s) => s.id === id);
     if (!space) return;
     Menu.buildFromTemplate([
-      ...spaceItems(space),
+      ...spaceItems(space, target),
       { type: 'separator' },
       {
         label: 'Delete space…',
@@ -1535,10 +1524,7 @@ const createWindow = () => {
       >;
       updateSpace(id, {
         name: typeof name === 'string' ? name : undefined,
-        icon:
-          typeof icon === 'string' && SPACE_ICONS.includes(icon)
-            ? icon
-            : undefined,
+        icon: isSpaceIcon(icon) ? icon : undefined,
         color:
           typeof color === 'string' && SPACE_COLORS.includes(color)
             ? color
@@ -1547,9 +1533,9 @@ const createWindow = () => {
       });
     },
     'tabs:clear': () => tabs.clearEveryday(),
-    'sidebar:menu': () => showSidebarMenu(),
-    'spaces:menu': (_sender, id) => {
-      if (typeof id === 'string') showSpaceMenu(id);
+    'sidebar:menu': (sender) => showSidebarMenu(sender),
+    'spaces:menu': (sender, id) => {
+      if (typeof id === 'string') showSpaceMenu(id, sender);
     },
     'tabs:menu': (_sender, id) => {
       if (typeof id === 'string') showTabMenu(id);

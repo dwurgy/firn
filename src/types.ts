@@ -162,6 +162,9 @@ export interface NavState {
   isLoading: boolean;
   // The page's zoom (1 = 100%).
   zoom: number;
+  // The site has camera, location... answers saved (shows a button in the
+  // address bar to change them).
+  sitePermissions: boolean;
 }
 
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
@@ -191,6 +194,15 @@ export type OverlayState =
   // `beside`: what's picked opens in split view beside this tab (its
   // title).
   | { mode: 'command'; openId: number; beside?: string }
+  // A site asking to use something: `site` (e.g. "meet.google.com") wants
+  // to `ask` (e.g. "use your camera and microphone"); `kind` picks the icon.
+  | {
+      mode: 'permission';
+      openId: number;
+      site: string;
+      ask: string;
+      kind: string;
+    }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
   | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.
@@ -243,6 +255,11 @@ export interface FirnBridge {
   zoom(step: 1 | -1 | 0): void;
   // Downloads (by id): open the file, show it in its folder, stop it, take
   // it off the list, or try again.
+  // The answer to a site's permission prompt ('dismiss': closed without
+  // answering, so it asks again next time).
+  answerPermission(answer: 'allow' | 'block' | 'dismiss'): void;
+  // The address bar's site button: what the current site may use.
+  showSitePermissions(): void;
   openDownload(id: string): void;
   showDownload(id: string): void;
   cancelDownload(id: string): void;

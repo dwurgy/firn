@@ -193,3 +193,54 @@ export const RetryIcon = () => (
     <path d="M3.2 2.8v2.6h2.6" />
   </svg>
 );
+
+export const MicIcon = () => (
+  <svg {...base}>
+    <rect x="5.8" y="2.3" width="4.4" height="7.4" rx="2.2" />
+    <path d="M3.6 7.8a4.4 4.4 0 0 0 8.8 0M8 12.2v1.6" />
+  </svg>
+);
+
+export const PinIcon = () => (
+  <svg {...base}>
+    <path d="M8 14s4.5-4.1 4.5-7.6a4.5 4.5 0 0 0-9 0C3.5 9.9 8 14 8 14Z" />
+    <circle cx="8" cy="6.4" r="1.6" />
+  </svg>
+);
+
+export const BellIcon = () => (
+  <svg {...base}>
+    <path d="M4 10.8V7.2a4 4 0 0 1 8 0v3.6l1 1.4H3Z" />
+    <path d="M6.6 13.6a1.5 1.5 0 0 0 2.8 0" />
+  </svg>
+);
+
+export const ClipboardIcon = () => (
+  <svg {...base}>
+    <rect x="3.5" y="3.2" width="9" height="10.5" rx="1.4" />
+    <path d="M6 3.2a2 2 0 0 1 4 0" />
+    <path d="M6 7.5h4M6 10h2.6" />
+  </svg>
+);
+
+export const AppIcon = () => (
+  <svg {...base}>
+    <path d="M9 2.8h4.2V7M13.2 2.8 7.4 8.6" />
+    <path d="M11.5 9.6v2.6a1 1 0 0 1-1 1h-6.7a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1h2.6" />
+  </svg>
+);
+
+export const CameraIcon = () => (
+  <svg {...base}>
+    <rect x="2" y="4.2" width="8.6" height="7.6" rx="1.6" />
+    <path d="m10.6 7 3.4-2v6l-3.4-2" />
+  </svg>
+);
+
+export const SiteIcon = () => (
+  <svg {...base}>
+    <path d="M3 5h5.5M11.5 5H13M3 11h1.5M7.5 11H13" />
+    <circle cx="10" cy="5" r="1.5" />
+    <circle cx="6" cy="11" r="1.5" />
+  </svg>
+);

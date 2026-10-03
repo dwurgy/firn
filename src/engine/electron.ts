@@ -13,6 +13,8 @@ import type { SavedHistory } from '../types';
 import type {
   EngineDownload,
   Page,
+  PermissionKind,
+  PermissionRequest,
   PageBounds,
   PageEngine,
   PageEvents,
@@ -34,7 +36,69 @@ const SAFE_WEB_PREFERENCES = {
 // src/favicon.ts), apart from the page's own scripts.
 const ICON_WORLD_ID = 1998;
 
+// Permissions that are fine without asking, as in Chrome.
+const HARMLESS_PERMISSIONS = new Set([
+  'fullscreen',
+  'pointerLock',
+  'keyboardLock',
+  'clipboard-sanitized-write',
+  // Protected video (Netflix and the like).
+  'mediaKeySystem',
+  'persistent-storage',
+  'background-sync',
+  'background-fetch',
+  'periodic-background-sync',
+  'screen-wake-lock',
+  'speaker-selection',
+  'storage-access',
+  'top-level-storage-access',
+  'sensors',
+  'payment-handler',
+]);
+
+// What a request asks for, in Firn's terms (null: nothing Firn asks about,
+// so it's refused).
+function kindsOf(
+  permission: string,
+  mediaTypes: string[] = [],
+): PermissionKind[] | null {
+  switch (permission) {
+    case 'media': {
+      const kinds: PermissionKind[] = [];
+      if (mediaTypes.includes('video')) kinds.push('camera');
+      if (mediaTypes.includes('audio')) kinds.push('microphone');
+      return kinds.length ? kinds : null;
+    }
+    case 'geolocation':
+    case 'geolocation-approximate':
+      return ['location'];
+    case 'notifications':
+      return ['notifications'];
+    case 'clipboard-read':
+      return ['clipboard'];
+    case 'openExternal':
+      return ['external'];
+    default:
+      return null;
+  }
+}
+
+function originOf(url: string | undefined) {
+  try {
+    return url ? new URL(url).origin : '';
+  } catch {
+    return '';
+  }
+}
+
+// The kind of link an app opens, e.g. "zoommtg" for "zoommtg://...".
+function schemeOf(url: string | undefined) {
+  return /^([a-z][a-z0-9+.-]*):/i.exec(url ?? '')?.[1].toLowerCase() ?? '';
+}
+
 export class ElectronEngine implements PageEngine {
+  private pages = new WeakMap<WebContents, ElectronPage>();
+
   constructor(
     private win: BrowserWindow,
     // Lets the window attach keyboard shortcuts to every page and keep its
@@ -44,6 +108,7 @@ export class ElectronEngine implements PageEngine {
 
   createPage(events: PageEvents): Page {
     const page = new ElectronPage(this.win, events);
+    this.pages.set(page.web, page);
     this.onPageCreated(page.web);
     return page;
   }
@@ -74,6 +139,58 @@ export class ElectronEngine implements PageEngine {
     this.win.on('closed', () =>
       session.removeListener('will-download', handler),
     );
+  }
+
+  onPermissionRequest(
+    listener: (request: PermissionRequest) => void,
+    isAllowed: (
+      origin: string,
+      kind: PermissionKind,
+      detail: string,
+    ) => boolean,
+  ) {
+    const session = this.win.webContents.session;
+    session.setPermissionRequestHandler(
+      (web, permission, callback, details) => {
+        if (HARMLESS_PERMISSIONS.has(permission)) return callback(true);
+        const media = 'mediaTypes' in details ? details.mediaTypes : undefined;
+        const kinds = kindsOf(permission, media);
+        const page = web ? (this.pages.get(web) ?? null) : null;
+        if (!kinds || !page) return callback(false);
+        const external =
+          'externalURL' in details ? details.externalURL : undefined;
+        let answered = false;
+        listener({
+          page,
+          origin: originOf(details.requestingUrl),
+          kinds,
+          detail: permission === 'openExternal' ? schemeOf(external) : '',
+          respond: (allow) => {
+            if (answered) return;
+            answered = true;
+            callback(allow);
+          },
+        });
+      },
+    );
+    session.setPermissionCheckHandler(
+      (_web, permission, requestingOrigin, details) => {
+        if (HARMLESS_PERMISSIONS.has(permission)) return true;
+        const media =
+          'mediaType' in details && details.mediaType
+            ? [details.mediaType]
+            : [];
+        const kinds = kindsOf(permission, media);
+        return (
+          !!kinds &&
+          kinds.every((kind) => isAllowed(originOf(requestingOrigin), kind, ''))
+        );
+      },
+    );
+    this.win.on('closed', () => {
+      session.setPermissionRequestHandler(null);
+      session.setPermissionCheckHandler(null);
+    });
   }
 
   download(url: string) {

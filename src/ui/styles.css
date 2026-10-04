@@ -2622,8 +2622,8 @@ button {
 /* Basecamp: Firn's own letter tiles. */
 .welcome-sites {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 16px 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px 8px;
 }
 
 .welcome-site {

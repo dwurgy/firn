@@ -1,21 +1,19 @@
 // What the welcome (shown the first time Firn opens) offers, shared by the
 // window code and the UI.
 
-// Everyday sites to start Basecamp with. The welcome shows them as Firn's
+// Everyday sites to start Basecamp with: the calm essentials (mail,
+// calendar, files, photos, maps, video and music), no shopping or social
+// feeds. The welcome shows them as Firn's
 // own letter tiles, so nothing is fetched from them until they're chosen.
 export const BASECAMP_SUGGESTIONS = [
   { name: 'Gmail', url: 'https://mail.google.com/' },
   { name: 'Outlook', url: 'https://outlook.live.com/mail/' },
   { name: 'Calendar', url: 'https://calendar.google.com/' },
   { name: 'Drive', url: 'https://drive.google.com/' },
+  { name: 'Photos', url: 'https://photos.google.com/' },
+  { name: 'Maps', url: 'https://www.google.com/maps' },
   { name: 'YouTube', url: 'https://www.youtube.com/' },
-  { name: 'Netflix', url: 'https://www.netflix.com/' },
   { name: 'Spotify', url: 'https://open.spotify.com/' },
-  { name: 'WhatsApp', url: 'https://web.whatsapp.com/' },
-  { name: 'Facebook', url: 'https://www.facebook.com/' },
-  { name: 'Instagram', url: 'https://www.instagram.com/' },
-  { name: 'Amazon', url: 'https://www.amazon.com/' },
-  { name: 'Wikipedia', url: 'https://www.wikipedia.org/' },
 ];
 
 // Each space's theme color: it softly tints the frame and the glass.

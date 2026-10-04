@@ -75,7 +75,7 @@ The first time Firn opens, a short welcome sets things up, one card at a time. E
 
 1. **Where the address bar goes:** in the sidebar, or at the top.
 2. **Your first space:** its name, color and icon.
-3. **Your everyday sites:** tick a few (Gmail, YouTube, Calendar…) to start Basecamp. They're shown as Firn's own letter tiles, so nothing is fetched from those sites until you pick them.
+3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. They're shown as Firn's own letter tiles, so nothing is fetched from those sites until you pick them.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
 Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces, the typeface of Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.

@@ -28,6 +28,7 @@ import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
 import { PasswordStore } from './passwords';
 import { SafeBrowsing, type Threat } from './safebrowsing';
+import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from './welcome';
 import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
@@ -188,18 +189,7 @@ async function iconAsDataUrl(url: string): Promise<string | null> {
 
 // Icons to choose from for a space (a new space takes the next unused one).
 const SPACE_ICONS = SPACE_ICON_NAMES;
-// Each space's theme color: it softly tints the frame and the glass.
-// Muted, natural tones so the tint stays calm.
-const SPACE_COLOR_CHOICES = [
-  { name: 'Sand', hex: '#c9a27e' },
-  { name: 'Glacier', hex: '#7f9cb0' },
-  { name: 'Sage', hex: '#8fae8b' },
-  { name: 'Heather', hex: '#b88a9e' },
-  { name: 'Ochre', hex: '#c4a95b' },
-  { name: 'Dusk', hex: '#8e8fb8' },
-  { name: 'Clay', hex: '#b07f6a' },
-  { name: 'Lagoon', hex: '#6fa3a0' },
-];
+// Each space's theme color (src/welcome.ts).
 const SPACE_COLORS = SPACE_COLOR_CHOICES.map((c) => c.hex);
 
 // A small round swatch of a color, for the "Change color" menu.
@@ -362,6 +352,7 @@ const createWindow = () => {
     if (layersToStart[0] === web) layersToStart.shift();
     // The top bar may need to be there from the start.
     if (web === topBar.webContents) syncTopBar(false);
+    if (web === floating.webContents && welcomePending) openWelcome();
     if (web === win.webContents || !layersToStart.includes(web)) {
       const next = layersToStart[0];
       if (next && !startTimers.has(next)) startUi(next);
@@ -857,6 +848,35 @@ const createWindow = () => {
     showOverlay({ mode: 'passwords', openId: ++commandOpenId });
   };
 
+  // --- Welcome ------------------------------------------------------------------
+  // The first time Firn opens (no session yet), a few short steps: where the
+  // address bar sits, the first space, Basecamp sites and a few tips. Each
+  // choice applies right away (through the usual settings and space
+  // messages), so it shows live behind the card. "Welcome" in the command
+  // bar brings it back.
+  let welcomePending = false;
+  const openWelcome = () => {
+    welcomePending = false;
+    showOverlay({ mode: 'welcome', openId: ++commandOpenId });
+  };
+  const finishWelcome = (urls: unknown) => {
+    if (overlay.mode !== 'welcome') return;
+    const chosen = Array.isArray(urls)
+      ? BASECAMP_SUGGESTIONS.filter((site) => urls.includes(site.url))
+      : [];
+    const inBasecamp = tabs
+      .allTabs()
+      .filter((t) => t.basecamp)
+      .map((t) => hostOf(t.url));
+    for (const site of chosen) {
+      // Already there (the welcome was opened again).
+      if (inBasecamp.includes(hostOf(site.url))) continue;
+      tabs.addToBasecamp(tabs.create(site.url, { activate: false }));
+    }
+    changeSettings({ onboarded: true });
+    hideOverlay();
+  };
+
   // --- Scam and malware warnings ---------------------------------------------
   // Every page is checked against Google Safe Browsing before it loads, the
   // private way (see src/safebrowsing.ts). A dangerous one is stopped, and a
@@ -1141,6 +1161,14 @@ const createWindow = () => {
   // away and saved in settings.json.
   const settingsFile = path.join(app.getPath('userData'), 'settings.json');
   let settings = loadSettings(settingsFile);
+  // The welcome shows on a first run; someone who used Firn before it
+  // existed has set things up already.
+  if (!settings.onboarded) {
+    if (saved) {
+      settings = { ...settings, onboarded: true };
+      saveSettings(settingsFile, settings);
+    } else welcomePending = true;
+  }
   const applySettings = () => {
     setSearchEngine(settings.searchEngine);
     nativeTheme.themeSource = settings.theme;
@@ -1987,6 +2015,9 @@ const createWindow = () => {
       case 'passwords':
         openPasswords();
         break;
+      case 'welcome':
+        openWelcome();
+        break;
     }
   };
 
@@ -2227,6 +2258,7 @@ const createWindow = () => {
         { label: 'All time', click: clear(0) },
       ]).popup({ window: win });
     },
+    'welcome:finish': (_sender, urls) => finishWelcome(urls),
     'danger:answer': (_sender, answer) => {
       if (answer === 'back' || answer === 'visit') answerDanger(answer);
     },

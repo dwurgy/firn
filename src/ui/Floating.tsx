@@ -14,6 +14,7 @@ import type {
   TabView,
 } from '../types';
 import { TabIcon, tabTitle } from './TabList';
+import { Welcome } from './Welcome';
 import {
   ActionIcon,
   AppIcon,
@@ -69,6 +70,15 @@ export function Floating() {
   }
   if (overlay.mode === 'password') {
     return <SavePasswordPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'welcome') {
+    return (
+      <Welcome
+        key={overlay.openId}
+        settings={settings?.settings ?? null}
+        spaces={spaces}
+      />
+    );
   }
   if (overlay.mode === 'danger') {
     return <DangerWarning key={overlay.openId} {...overlay} />;
@@ -222,6 +232,11 @@ function actionsFor(
       action: 'downloads',
       label: 'Open downloads folder',
       words: 'downloads folder files',
+    },
+    {
+      action: 'welcome',
+      label: 'Welcome to Firn (setup)',
+      words: 'welcome setup start tour onboarding',
     },
   );
   for (const space of spaces.spaces)

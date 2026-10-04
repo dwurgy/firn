@@ -65,8 +65,20 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
+- `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.
 - `src/safebrowsing.ts` — scam and malware warnings (Google Safe Browsing, checked on this computer).
 - `src/passwords.ts` — saved passwords, encrypted on disk; `src/page-preload.ts` is the small helper inside web pages that spots sign-ins and fills saved ones.
+
+### Welcome
+
+The first time Firn opens, a short welcome sets things up, one card at a time. Each choice shows right away behind the card, and you can skip it at any point (Esc or "Skip setup"):
+
+1. **Where the address bar goes:** in the sidebar, or at the top.
+2. **Your first space:** its name, color and icon.
+3. **Your everyday sites:** tick a few (Gmail, YouTube, Calendar…) to start Basecamp. They're shown as Firn's own letter tiles, so nothing is fetched from those sites until you pick them.
+4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
+
+Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces, the typeface of Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
 
 ### Command bar
 

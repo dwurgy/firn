@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   downloadsFolder: '',
   addressBar: 'sidebar',
   safeBrowsing: true,
+  onboarded: false,
 };
 
 export function loadSettings(file: string): Settings {
@@ -50,6 +51,8 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
       typeof c.safeBrowsing === 'boolean'
         ? c.safeBrowsing
         : current.safeBrowsing,
+    onboarded:
+      typeof c.onboarded === 'boolean' ? c.onboarded : current.onboarded,
   };
 }
 

@@ -2303,3 +2303,439 @@ button {
   outline: 2px solid var(--frost-strong);
   outline-offset: 2px;
 }
+
+/* --- Welcome (the first time Firn opens) --------------------------------- */
+
+/* Fraunces, the face of Firn's wordmark, with its soft corners on and its
+   "wonky" letters off, as in the brand. Built into Firn (never fetched).
+   SIL Open Font License: fonts/Fraunces-OFL.txt. */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('./fonts/fraunces.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: block;
+}
+
+.welcome-backdrop {
+  align-items: center;
+  padding: 24px;
+  background: rgba(60, 45, 30, 0.14);
+}
+
+:root[data-theme='dark'] .welcome-backdrop {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.welcome {
+  width: min(600px, 100%);
+  min-height: min(500px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  outline: none;
+}
+
+.welcome-body {
+  flex: 1;
+  overflow: auto;
+  padding: 44px 48px 12px;
+  animation: welcome-step 220ms ease-out;
+}
+
+@keyframes welcome-step {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.welcome h1 {
+  margin: 0 0 10px;
+  font-family: 'Fraunces', Georgia, serif;
+  font-variation-settings:
+    'SOFT' 100,
+    'WONK' 0;
+  font-optical-sizing: auto;
+  font-size: 30px;
+  font-weight: 380;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.welcome h1.welcome-hello {
+  margin-top: 20px;
+  font-size: 44px;
+  font-weight: 340;
+  letter-spacing: -0.01em;
+}
+
+.welcome-body > p {
+  margin: 0 0 24px;
+  max-width: 440px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.welcome-body.is-hello {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-bottom: 32px;
+}
+
+.welcome-mark {
+  width: 56px;
+  height: 56px;
+}
+
+.welcome-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px 24px 48px;
+}
+
+.welcome-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.welcome-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--press);
+  transition:
+    width var(--motion),
+    background var(--motion);
+}
+
+.welcome-dots span.is-on {
+  width: 18px;
+  background: var(--text-faint);
+}
+
+.welcome-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-next,
+.welcome-quiet {
+  height: 38px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  cursor: default;
+  transition:
+    background var(--motion),
+    opacity var(--motion),
+    color var(--motion);
+}
+
+.welcome-next {
+  background: var(--text);
+  color: var(--page);
+  font-weight: 500;
+}
+
+.welcome-next:hover {
+  opacity: 0.88;
+}
+
+.welcome-quiet {
+  padding: 0 14px;
+  background: none;
+  color: var(--text-faint);
+}
+
+.welcome-quiet:hover {
+  background: var(--hover);
+  color: var(--text-muted);
+}
+
+.welcome button:focus-visible,
+.welcome input:focus-visible {
+  outline: 2px solid var(--frost-strong);
+  outline-offset: 2px;
+}
+
+/* Address bar: two little pictures of the window. */
+.welcome-looks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.welcome-look {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  box-shadow: 0 0 0 2px transparent;
+  transition:
+    box-shadow var(--motion),
+    background var(--motion);
+}
+
+.welcome-look:hover {
+  background: var(--press);
+}
+
+.welcome-look.is-on {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.welcome-look strong {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.welcome-look small {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.look-picture {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.look-frame {
+  fill: var(--frame);
+}
+
+.look-page {
+  fill: var(--page);
+}
+
+.look-pill {
+  fill: var(--press);
+}
+
+.look-pill.is-address {
+  fill: var(--page);
+  stroke: var(--panel-edge);
+}
+
+/* First space: name, color, icon. */
+.welcome-space {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.welcome-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--hover);
+}
+
+.welcome-name-icon {
+  display: grid;
+  transition: color var(--motion);
+}
+
+.welcome-name input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.welcome-colors {
+  display: flex;
+  gap: 12px;
+}
+
+.welcome-color {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: default;
+  box-shadow:
+    0 0 0 3px var(--page),
+    0 0 0 5px transparent;
+  transition: box-shadow var(--motion);
+}
+
+.welcome-color.is-on {
+  box-shadow:
+    0 0 0 3px var(--page),
+    0 0 0 5px var(--swatch);
+}
+
+.welcome-icons {
+  display: grid;
+  grid-template-columns: repeat(8, 40px);
+  gap: 6px;
+}
+
+.welcome-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.welcome-icon:hover {
+  background: var(--hover);
+}
+
+.welcome-icon.is-on {
+  background: var(--press);
+}
+
+/* Basecamp: Firn's own letter tiles. */
+.welcome-sites {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px 8px;
+}
+
+.welcome-site {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+
+.welcome-site-tile {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--hover);
+  font-family: 'Fraunces', Georgia, serif;
+  font-variation-settings:
+    'SOFT' 100,
+    'WONK' 0;
+  font-size: 22px;
+  font-weight: 420;
+  color: var(--text-muted);
+  box-shadow: 0 0 0 2px transparent;
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    color var(--motion);
+}
+
+.welcome-site:hover .welcome-site-tile {
+  background: var(--press);
+}
+
+.welcome-site.is-on .welcome-site-tile {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
+  color: var(--text);
+}
+
+.welcome-site-check {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--page);
+  animation: fade-in 150ms ease-out;
+}
+
+.welcome-site-check svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--page);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.welcome-site-name {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Tips. */
+.welcome-tips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.welcome-tips li {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.welcome-keys {
+  display: flex;
+  gap: 4px;
+}
+
+.welcome-keys kbd {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--hover);
+  box-shadow: inset 0 -1px 0 var(--panel-edge);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}

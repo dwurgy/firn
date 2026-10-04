@@ -39,6 +39,8 @@ const bridge: FirnBridge = {
   onHistoryChanged: (listener) => listen('history:changed', () => listener()),
   answerSavePassword: (answer) => ipcRenderer.send('password:answer', answer),
   answerDanger: (answer) => ipcRenderer.send('danger:answer', answer),
+  finishWelcome: (basecampUrls) =>
+    ipcRenderer.send('welcome:finish', basecampUrls),
   listPasswords: () => ipcRenderer.invoke('passwords:list'),
   revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
   copyPassword: (id) => ipcRenderer.send('passwords:copy', id),

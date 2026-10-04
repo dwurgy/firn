@@ -26,6 +26,10 @@ export function TopBar() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
   const [addressOnTop, setAddressOnTop] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  // Where the peeking sidebar reaches into the bar (0 when it isn't out):
+  // that part mustn't drag the window, or it would swallow the sidebar's
+  // clicks.
+  const [peekCover, setPeekCover] = useState(0);
 
   useEffect(() => {
     const offs = [
@@ -35,7 +39,10 @@ export function TopBar() {
       window.firn.onSettingsState(({ settings }) =>
         setAddressOnTop(settings.addressBar === 'top'),
       ),
-      window.firn.onSidebarState(({ width }) => setSidebarWidth(width)),
+      window.firn.onSidebarState(({ width, peeking, pageLeft }) => {
+        setSidebarWidth(width);
+        setPeekCover(peeking ? Math.max(0, width + 32 - pageLeft) : 0);
+      }),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
@@ -45,7 +52,7 @@ export function TopBar() {
     <div className={`top-bar ${shown ? 'is-shown' : ''}`}>
       {/* Empty bar space is a real title bar (drag, snap to screen edges,
           double-click to maximize). See the drag rules in styles.css. */}
-      <div className="top-bar-drag" />
+      <div className="top-bar-drag" style={{ left: peekCover }} />
       {addressOnTop && (
         <div
           className="top-bar-address"

@@ -60,17 +60,17 @@ const SIDEBAR_WIDTH = 260;
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 360;
 const GLIDE_MS = 200; // matches --motion in styles.css
-// Once the mouse leaves the peeking sidebar, wait this long before it tucks
-// away, so an overshoot doesn't make it vanish.
-const PEEK_LINGER_MS = 450;
-// How far to the right of the peeking sidebar the mouse can stray and still
-// count as "on it". Anywhere to its left (even off the window) also counts.
-const PEEK_RIGHT_SLACK = 24;
+// The peeking sidebar is forgiving to the left and quick to the right:
+// anywhere to its left (even off the window, onto another screen) counts as
+// "on it", but once the mouse is this far past its right edge, back over the
+// page, it tucks away after this short pause.
+const PEEK_RIGHT_SLACK = 8;
+const PEEK_LINGER_MS = 120;
 // A UI panel that hasn't reported it started within this long is reloaded.
 const UI_START_TIMEOUT_MS = 5000;
 
 // How often the cursor's position is checked for the edge reveals.
-const EDGE_CHECK_MS = 50;
+const EDGE_CHECK_MS = 30;
 // How generous the left-edge zone that brings out the peeking sidebar is:
 // a little past the window's edge, and a little way into the page. (Just
 // the thin frame strip proved far too easy to miss.)
@@ -475,7 +475,9 @@ const createWindow = () => {
   };
 
   // Stacking order, bottom to top.
-  const layerOrder = [peek, topBar, floating];
+  // The peeking sidebar slides in over the top bar, so its top row stays
+  // clickable.
+  const layerOrder = [topBar, peek, floating];
 
   // Lookout: a link previewed in a floating panel over the page (see the
   // Lookout section below). Its page floats above every layer.
@@ -1232,12 +1234,17 @@ const createWindow = () => {
   // position, like the top bar, since its top row moves the window).
   const mouseIsOverPeek = () => {
     const { x, y, height } = cursorInWindow();
+    // Off the window to the left: stay, wherever the mouse is.
+    if (x < 0) return true;
     return (
       x <= windowState.sidebarWidth + PEEK_RIGHT_SLACK &&
-      y >= -40 &&
-      y <= height + 40
+      y >= -200 &&
+      y <= height + 200
     );
   };
+
+  // Typing in the peeking sidebar (it says so; see src/ui/Peek.tsx).
+  let peekTyping = false;
 
   const showPeek = () => {
     if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
@@ -1249,9 +1256,9 @@ const createWindow = () => {
     let lastOver = Date.now();
     peekWatch = setInterval(() => {
       if (win.isDestroyed()) return;
-      // Stay while the mouse is over it, or while typing in it.
-      if (mouseIsOverPeek() || peek.webContents.isFocused())
-        lastOver = Date.now();
+      // Stay while the mouse is over it, or while typing in it (its address
+      // bar or a space's name).
+      if (mouseIsOverPeek() || peekTyping) lastOver = Date.now();
       else if (Date.now() - lastOver > PEEK_LINGER_MS) hidePeek();
     }, 50);
   };
@@ -1259,6 +1266,7 @@ const createWindow = () => {
   const hidePeek = () => {
     if (!peeking) return;
     peeking = false;
+    peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
     // Let it slide away before the layer goes.
@@ -2016,6 +2024,9 @@ const createWindow = () => {
       hideOverlay();
     },
     'sidebar:toggle': () => setSidebarCollapsed(!windowState.sidebarCollapsed),
+    'peek:typing': (sender, typing) => {
+      if (sender === peek.webContents) peekTyping = typing === true;
+    },
     'sidebar:width': (_sender, width) => {
       if (typeof width === 'number' && Number.isFinite(width))
         setSidebarWidth(width);

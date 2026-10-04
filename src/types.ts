@@ -310,6 +310,8 @@ export interface FirnBridge {
   resizeSplit(id: string, ratio: number): void;
   separateSplit(tabId: string): void;
   toggleSidebar(): void;
+  // The peeking sidebar has a text field focused (so it stays open).
+  setPeekTyping(typing: boolean): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;

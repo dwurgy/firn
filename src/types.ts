@@ -87,6 +87,8 @@ export interface Settings {
   // Where the address bar sits: in the sidebar (the default) or in a top
   // bar that's always there. See "Opinionated: two looks" in CLAUDE.md.
   addressBar: 'sidebar' | 'top';
+  // Warn before opening scam and malware sites (Google Safe Browsing).
+  safeBrowsing: boolean;
 }
 
 // What the settings panel shows: the settings, plus the downloads folder
@@ -95,6 +97,9 @@ export interface SettingsState {
   settings: Settings;
   downloadsFolder: string;
   version: string;
+  // Whether this copy of Firn can warn about dangerous sites (it needs a
+  // key for Google's service, added when Firn is built).
+  safeBrowsingAvailable: boolean;
 }
 
 // A saved login, as the passwords panel lists it (never with the password).
@@ -245,6 +250,14 @@ export type OverlayState =
       update: boolean;
     }
   | { mode: 'passwords'; openId: number }
+  // A dangerous site was stopped before it loaded: a warning covers its tab.
+  | {
+      mode: 'danger';
+      openId: number;
+      site: string;
+      url: string;
+      threat: 'SOCIAL_ENGINEERING' | 'MALWARE' | 'UNWANTED_SOFTWARE';
+    }
   // The history panel (Ctrl+H) and the settings panel (Ctrl+,).
   | { mode: 'history'; openId: number }
   | { mode: 'settings'; openId: number }
@@ -298,6 +311,8 @@ export interface FirnBridge {
   // Saved passwords: the answer to "save password?", and the passwords
   // panel (the list never includes passwords; showing one asks for it).
   answerSavePassword(answer: 'save' | 'dismiss'): void;
+  // The warning about a dangerous site: go back, or visit it anyway.
+  answerDanger(answer: 'back' | 'visit'): void;
   listPasswords(): Promise<{ logins: SavedLogin[]; canSave: boolean }>;
   revealPassword(id: string): Promise<string | null>;
   copyPassword(id: string): void;

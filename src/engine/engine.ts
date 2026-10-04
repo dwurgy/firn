@@ -163,6 +163,14 @@ export interface PageEngine {
   setSavedLoginProvider(
     provider: (origin: string) => { username: string; password: string } | null,
   ): void;
+  // Every page about to load (in a tab, Lookout or a popup window) is
+  // checked first: `check` says what's dangerous about the address, if
+  // anything. A dangerous page is stopped before it loads, and reported to
+  // `onBlocked` (`page` is null for a popup window).
+  setNavigationGuard(
+    check: (url: string) => Promise<string | null> | string | null,
+    onBlocked: (page: Page | null, url: string, threat: string) => void,
+  ): void;
   // Every download starts here; `download` starts one from a URL.
   onDownload(listener: (download: EngineDownload) => void): void;
   download(url: string): void;

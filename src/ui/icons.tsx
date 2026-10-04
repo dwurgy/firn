@@ -33,6 +33,15 @@ export const ReloadIcon = () => (
 
 // Window buttons (Windows and Linux), drawn with the same stroke as above.
 
+// A shield with a warning mark (scam and malware warnings).
+export const ShieldIcon = () => (
+  <svg {...base}>
+    <path d="M8 1.9 13 3.8v3.7c0 3.1-2.1 5.6-5 6.6-2.9-1-5-3.5-5-6.6V3.8L8 1.9Z" />
+    <path d="M8 5.2v3.1" />
+    <path d="M8 10.6h.01" />
+  </svg>
+);
+
 export const MinimizeIcon = () => (
   <svg {...base}>
     <path d="M3.5 8h9" />

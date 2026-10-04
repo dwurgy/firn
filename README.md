@@ -65,6 +65,7 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
+- `src/safebrowsing.ts` — scam and malware warnings (Google Safe Browsing, checked on this computer).
 - `src/passwords.ts` — saved passwords, encrypted on disk; `src/page-preload.ts` is the small helper inside web pages that spots sign-ins and fills saved ones.
 
 ### Command bar
@@ -92,7 +93,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 The **Firn mark** button at the top of the sidebar (next to the sidebar toggle) opens the Firn menu: New tab, New space, History, Passwords, Downloads and Settings.
 
 - **History** (Ctrl+H) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
-- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Saved passwords
 
@@ -103,6 +104,22 @@ Next time, click into the site's sign-in form and Firn fills in your username an
 **Passwords** in the Firn menu (or Settings → Privacy → Manage…, or "saved passwords" in the command bar) lists them: search, **Show**, **Copy** or **Delete** each one. They're encrypted with your computer's own protection (on Windows, the same lock your Windows account uses) and kept in `passwords.json` next to your session, on this computer only. If the computer has no such protection available, Firn doesn't save passwords at all rather than keep them unprotected.
 
 To do this, Firn adds a tiny helper to each web page that notices sign-in forms. It's walled off from the page: the site can't see it or talk to it, and it only reports a sign-in from the page's own main frame.
+
+### Scam and malware warnings
+
+Before any page opens, Firn checks its address against **Google Safe Browsing**, the same list of scam (phishing) and malware sites that Chrome, Firefox and Safari use. A dangerous page is stopped before it loads, and a calm warning covers the tab ("This site may be a scam", "This site may harm your computer" or "This site may install unwanted software") with **Go back** (or close the tab, if there's nothing to go back to) and a quiet **Visit anyway**, which lets that address through until Firn closes. A dangerous link previewed in Lookout closes the preview and shows the same warning.
+
+It's done the private way. Firn downloads Google's lists about every half hour; they hold only the first few bytes of a code made from each dangerous address, not the addresses. Every page is checked against them on this computer. Only when the start of a code matches, which is rare, does Firn ask Google for the full codes that start that way. It sends just those 4 bytes, which many addresses share, never the address. The lists live in a `safe-browsing` folder next to your session. To turn it off: Settings → Privacy → Scam and malware warnings → Off.
+
+**Setting it up (once).** Google's service needs a free key, which gets built into your copy of Firn:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), sign in, and create a project (call it "Firn").
+2. In **APIs & Services → Library**, search for **Safe Browsing API** and click **Enable**.
+3. In **APIs & Services → Credentials**, click **Create credentials → API key**. Then open the key and, under **API restrictions**, choose **Restrict key → Safe Browsing API**, and save.
+4. Copy the key into a file named `safe-browsing-key.txt` in the `firn` folder (just the key, on one line). It's never uploaded to GitHub (`.gitignore` skips it).
+5. Run `npm start` or `npm run package` again.
+
+Without a key, Firn works the same but doesn't warn, and Settings says "Not set up in this copy of Firn". Google's free key is for non-commercial use; if Firn is ever sold, it should move to Google's paid version (Web Risk).
 
 ### Downloads
 

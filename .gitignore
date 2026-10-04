@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Electron-Forge
 out/
+
+# Firn's Google Safe Browsing key (see vite.main.config.mts)
+safe-browsing-key.txt

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   downloadsFolder: '',
   addressBar: 'sidebar',
+  safeBrowsing: true,
 };
 
 export function loadSettings(file: string): Settings {
@@ -45,6 +46,10 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
       c.addressBar === 'sidebar' || c.addressBar === 'top'
         ? c.addressBar
         : current.addressBar,
+    safeBrowsing:
+      typeof c.safeBrowsing === 'boolean'
+        ? c.safeBrowsing
+        : current.safeBrowsing,
   };
 }
 

@@ -40,6 +40,8 @@
   --lookout-shadow:
     0 2px 8px rgba(40, 28, 16, 0.14), 0 18px 48px rgba(40, 28, 16, 0.22);
   --panel-edge: rgba(60, 40, 20, 0.08);
+  --danger: #b0503a; /* scam and malware warnings: a muted terracotta */
+  --danger-wash: rgba(176, 80, 58, 0.11);
   --pin-wash: 0.16; /* active pinned tile, tinted by its icon */
   --space-wash: 0.16; /* how strongly the space's color tints the frame */
   --pin-edge: 0.45;
@@ -92,6 +94,8 @@
   --lookout-shadow:
     0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
   --panel-edge: rgba(255, 250, 245, 0.08);
+  --danger: #e3907a;
+  --danger-wash: rgba(227, 144, 122, 0.14);
   color-scheme: dark;
 }
 
@@ -2181,4 +2185,121 @@ button {
   to {
     opacity: 0;
   }
+}
+
+/* A dangerous site was stopped: a calm warning fills its page area. */
+.danger-layer {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  border-radius: var(--page-radius);
+  background: var(--page);
+  overflow: auto;
+  animation: danger-in 200ms ease-out;
+}
+
+@keyframes danger-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.danger-card {
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  outline: none;
+}
+
+.danger-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.danger-icon svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.4;
+}
+
+.danger-card h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.danger-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.danger-card strong {
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.danger-buttons {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 12px;
+}
+
+.danger-back {
+  height: 36px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--page);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: default;
+  transition: opacity var(--motion);
+}
+
+.danger-back:hover {
+  opacity: 0.88;
+}
+
+.danger-visit {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+  transition: color var(--motion);
+}
+
+.danger-visit:hover {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+.danger-source {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.danger-back:focus-visible {
+  outline: 2px solid var(--frost-strong);
+  outline-offset: 2px;
 }

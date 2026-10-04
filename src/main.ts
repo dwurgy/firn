@@ -27,6 +27,7 @@ import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
 import { PasswordStore } from './passwords';
+import { SafeBrowsing, type Threat } from './safebrowsing';
 import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
@@ -471,6 +472,8 @@ const createWindow = () => {
       (overlay.mode === 'permission' || overlay.mode === 'password')
     )
       return permissionBounds();
+    if (layer === floating && overlay.mode === 'danger' && shownDanger)
+      return tabs.boundsOf(shownDanger.tabId);
     if (layer === peek) {
       // A little wider than the sidebar, so its soft shadow has room.
       const peekWidth = Math.min(width, windowState.sidebarWidth + 32);
@@ -539,6 +542,12 @@ const createWindow = () => {
       pendingPermissions.unshift(shownPermission);
       shownPermission = null;
     }
+    // A "save password?" card that's replaced is dropped; a warning waits
+    // and comes back.
+    if (overlay.mode === 'password' && state.mode !== 'password')
+      shownLogin = null;
+    if (overlay.mode === 'danger' && state.mode !== 'danger')
+      shownDanger = null;
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
@@ -560,6 +569,7 @@ const createWindow = () => {
     // A "save password?" card closed by something else is dropped (it only
     // makes sense right after signing in).
     if (overlay.mode === 'password') shownLogin = null;
+    if (overlay.mode === 'danger') shownDanger = null;
     const wasPermission =
       overlay.mode === 'permission' || overlay.mode === 'password';
     if (wasPermission && shownPermission) {
@@ -572,6 +582,7 @@ const createWindow = () => {
     if (!wasPermission) tabs.focusActive();
     // A site that was waiting to ask can now.
     setImmediate(() => {
+      showDanger();
       showNextPermission();
       showLoginPrompt();
     });
@@ -846,6 +857,104 @@ const createWindow = () => {
     showOverlay({ mode: 'passwords', openId: ++commandOpenId });
   };
 
+  // --- Scam and malware warnings ---------------------------------------------
+  // Every page is checked against Google Safe Browsing before it loads, the
+  // private way (see src/safebrowsing.ts). A dangerous one is stopped, and a
+  // calm warning covers its tab: "Go back", or (small) "Visit anyway", which
+  // lets that address through until Firn closes.
+  const safeBrowsing = new SafeBrowsing({
+    key: process.env.FIRN_SAFE_BROWSING_KEY || __FIRN_SAFE_BROWSING_KEY__,
+    folder: path.join(app.getPath('userData'), 'safe-browsing'),
+    clientVersion: app.getVersion(),
+    // Automated tests only: a stand-in for Google's server.
+    api: process.env.FIRN_SAFE_BROWSING_API || undefined,
+    log: (message) => debug(`safe browsing: ${message}`),
+  });
+  const visitAnyway = new Set<string>();
+  type Danger = {
+    tabId: string;
+    url: string;
+    threat: Threat;
+    // Found in a Lookout preview (which closes): the tab underneath is fine.
+    fromLookout: boolean;
+  };
+  const dangers = new Map<string, Danger>();
+  let shownDanger: Danger | null = null;
+
+  const showDanger = () => {
+    for (const id of dangers.keys()) if (!tabs.pageOf(id)) dangers.delete(id);
+    // Its tab went off screen: the warning waits until it's back.
+    if (
+      shownDanger &&
+      (!tabs.isOnScreen(shownDanger.tabId) ||
+        dangers.get(shownDanger.tabId) !== shownDanger)
+    ) {
+      shownDanger = null;
+      if (overlay.mode === 'danger') hideOverlay();
+    }
+    if (shownDanger) return;
+    // A warning comes before a permission card or "save password?".
+    if (
+      overlay.mode !== 'hidden' &&
+      overlay.mode !== 'permission' &&
+      overlay.mode !== 'password'
+    )
+      return;
+    if (lookout) return;
+    const next = [...dangers.values()].find((d) => tabs.isOnScreen(d.tabId));
+    if (!next) return;
+    shownDanger = next;
+    showOverlay({
+      mode: 'danger',
+      openId: ++commandOpenId,
+      site: hostOf(next.url),
+      url: next.url,
+      threat: next.threat,
+    });
+  };
+
+  const onDangerFound = (page: Page | null, url: string, threat: string) => {
+    let tabId = page ? tabs.idOfPage(page) : null;
+    let fromLookout = false;
+    if (!tabId && page && lookout?.page === page) {
+      closeLookout();
+      tabId = tabs.activeTabId;
+      fromLookout = true;
+    }
+    if (!tabId) return;
+    dangers.set(tabId, { tabId, url, threat: threat as Threat, fromLookout });
+    if (shownDanger?.tabId === tabId) shownDanger = null;
+    setImmediate(showDanger);
+  };
+
+  // The tab went somewhere else: its warning no longer applies.
+  const dangerNavigated = (tabId: string) => {
+    const danger = dangers.get(tabId);
+    if (!danger || danger.fromLookout) return;
+    if (tabs.pageOf(tabId)?.url !== danger.url) {
+      dangers.delete(tabId);
+      showDanger();
+    }
+  };
+
+  const answerDanger = (answer: 'back' | 'visit') => {
+    const danger = shownDanger;
+    if (!danger || overlay.mode !== 'danger') return;
+    dangers.delete(danger.tabId);
+    shownDanger = null;
+    hideOverlay();
+    const page = tabs.pageOf(danger.tabId);
+    if (answer === 'visit') {
+      visitAnyway.add(danger.url);
+      if (danger.fromLookout) openLookout(danger.url);
+      else page?.load(danger.url);
+    } else if (!danger.fromLookout) {
+      // Back to the page before, or close the tab if there's none.
+      if (page?.canGoBack) page.back();
+      else tabs.close(danger.tabId);
+    }
+  };
+
   // --- Find in page ---------------------------------------------------------
   // A small bar in the top-right corner of the page (its side, in split
   // view). The floating layer shrinks to just the bar, so the page stays
@@ -1035,6 +1144,8 @@ const createWindow = () => {
   const applySettings = () => {
     setSearchEngine(settings.searchEngine);
     nativeTheme.themeSource = settings.theme;
+    if (settings.safeBrowsing) safeBrowsing.start();
+    else safeBrowsing.stop();
   };
   applySettings();
   // The folder downloads go to (the system's Downloads folder unless one
@@ -1047,6 +1158,7 @@ const createWindow = () => {
     settings,
     downloadsFolder: downloadsFolder(),
     version: app.getVersion(),
+    safeBrowsingAvailable: safeBrowsing.available,
   });
   const changeSettings = (changes: unknown) => {
     settings = cleanSettings(changes, settings);
@@ -1064,6 +1176,10 @@ const createWindow = () => {
   );
   engine.onDownload((item) => downloads.add(item));
   engine.setSavedLoginProvider((origin) => passwords.loginFor(origin));
+  engine.setNavigationGuard(
+    (url) => (visitAnyway.has(url) ? null : safeBrowsing.check(url)),
+    onDangerFound,
+  );
   // A site asking for the camera and so on: answered from what was decided
   // before, or asked (see "Site permissions" above).
   engine.onPermissionRequest(
@@ -1110,6 +1226,7 @@ const createWindow = () => {
       // Find in page belongs to the tab it was opened on.
       if (overlay.mode === 'find' && state.activeTabId !== findTabId)
         hideOverlay();
+      showDanger();
       showNextPermission();
       showLoginPrompt();
     },
@@ -1130,7 +1247,10 @@ const createWindow = () => {
     onFullscreenChange: () => syncTopBar(),
     onLogin: (id, origin, username, password) =>
       onLogin(id, origin, username, password),
-    onPageNavigated: (id) => onPageNavigated(id),
+    onPageNavigated: (id) => {
+      onPageNavigated(id);
+      dangerNavigated(id);
+    },
     onContextMenu: (id, menu) => {
       const page = tabs.pageOf(id);
       if (page) showPageMenu(menu, page, id);
@@ -1244,6 +1364,8 @@ const createWindow = () => {
       overlay = { mode: 'hidden' };
       send('overlay:state', overlay);
       hideLayer(floating);
+      // A warning about the previewed site can show now.
+      showDanger();
     }, GLIDE_MS);
     tabs.focusActive();
   };
@@ -2105,6 +2227,9 @@ const createWindow = () => {
         { label: 'All time', click: clear(0) },
       ]).popup({ window: win });
     },
+    'danger:answer': (_sender, answer) => {
+      if (answer === 'back' || answer === 'visit') answerDanger(answer);
+    },
     'password:answer': (_sender, answer) => {
       if (answer === 'save' || answer === 'dismiss') answerLogin(answer);
     },
@@ -2453,6 +2578,7 @@ const createWindow = () => {
     downloads.flush();
     sitePermissions.flush();
     passwords.flush();
+    safeBrowsing.stop();
   });
 
   win.on('closed', () => {

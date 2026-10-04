@@ -270,6 +270,41 @@ export class ElectronEngine implements PageEngine {
     });
   }
 
+  setNavigationGuard(
+    check: (url: string) => Promise<string | null> | string | null,
+    onBlocked: (page: Page | null, url: string, threat: string) => void,
+  ) {
+    const session = this.win.webContents.session;
+    session.webRequest.onBeforeRequest(
+      { urls: ['http://*/*', 'https://*/*'] },
+      (details, callback) => {
+        // Only whole pages (a frame inside a page is part of it).
+        if (details.resourceType !== 'mainFrame') return callback({});
+        const web = details.webContents;
+        // Firn's own panels aren't checked.
+        if (web && !this.pages.has(web) && this.isOwnUi(web))
+          return callback({});
+        Promise.resolve(check(details.url))
+          .catch(() => null)
+          .then((threat) => {
+            if (!threat) return callback({});
+            callback({ cancel: true });
+            const page = web ? (this.pages.get(web) ?? null) : null;
+            onBlocked(page, details.url, threat);
+          });
+      },
+    );
+    this.win.on('closed', () => session.webRequest.onBeforeRequest(null));
+  }
+
+  // The window's own web contents and its child views that aren't pages.
+  private isOwnUi(web: WebContents) {
+    if (web === this.win.webContents) return true;
+    return this.win.contentView.children.some(
+      (view) => view instanceof WebContentsView && view.webContents === web,
+    );
+  }
+
   download(url: string) {
     if (!this.win.isDestroyed()) this.win.webContents.session.downloadURL(url);
   }

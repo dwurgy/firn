@@ -33,6 +33,7 @@ import {
   MicIcon,
   PinIcon,
   SearchIcon,
+  ShieldIcon,
   UpIcon,
 } from './icons';
 
@@ -68,6 +69,9 @@ export function Floating() {
   }
   if (overlay.mode === 'password') {
     return <SavePasswordPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'danger') {
+    return <DangerWarning key={overlay.openId} {...overlay} />;
   }
   if (overlay.mode === 'passwords') {
     return <PasswordsPanel key={overlay.openId} />;
@@ -711,6 +715,67 @@ function PermissionPrompt({
   );
 }
 
+const DANGER_WORDING = {
+  SOCIAL_ENGINEERING: {
+    title: 'This site may be a scam',
+    text: 'It may try to trick you into giving away passwords, card numbers or other personal details, often by looking like a site you trust.',
+  },
+  MALWARE: {
+    title: 'This site may harm your computer',
+    text: 'It may try to install harmful software that steals your information or damages your files.',
+  },
+  UNWANTED_SOFTWARE: {
+    title: 'This site may install unwanted software',
+    text: "Programs from it may change your settings, slow your computer down or show ads you didn't ask for.",
+  },
+};
+
+// A dangerous site was stopped before it loaded: this fills its page area.
+// "Go back" is the easy choice; "Visit anyway" is there, but quiet.
+function DangerWarning({
+  site,
+  threat,
+}: {
+  site: string;
+  url: string;
+  threat: keyof typeof DANGER_WORDING;
+}) {
+  const wording = DANGER_WORDING[threat] ?? DANGER_WORDING.MALWARE;
+  return (
+    <div className="danger-layer">
+      <div
+        className="danger-card"
+        role="alertdialog"
+        aria-label={wording.title}
+      >
+        <span className="danger-icon">
+          <ShieldIcon />
+        </span>
+        <h1>{wording.title}</h1>
+        <p>
+          Firn stopped <strong>{site}</strong> from opening. {wording.text}
+        </p>
+        <div className="danger-buttons">
+          <button
+            className="danger-back"
+            autoFocus
+            onClick={() => window.firn.answerDanger('back')}
+          >
+            Go back
+          </button>
+          <button
+            className="danger-visit"
+            onClick={() => window.firn.answerDanger('visit')}
+          >
+            Visit anyway
+          </button>
+        </div>
+        <span className="danger-source">Advisory provided by Google</span>
+      </div>
+    </div>
+  );
+}
+
 // The history panel (Ctrl+H): pages visited, newest first, grouped by day.
 // Type to search; click a page to open it in a new tab; hover for ✕ to
 // forget one. Esc or a click outside closes it.
@@ -1048,6 +1113,38 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
               </div>
               <div className="settings-row">
                 <div className="settings-label">
+                  <span>Scam and malware warnings</span>
+                  <small>
+                    {state.safeBrowsingAvailable
+                      ? 'Checked on this computer, with Google Safe Browsing.'
+                      : 'Not set up in this copy of Firn.'}
+                  </small>
+                </div>
+                {state.safeBrowsingAvailable && (
+                  <div className="segmented" role="radiogroup">
+                    {(
+                      [
+                        [true, 'On'],
+                        [false, 'Off'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={label}
+                        role="radio"
+                        aria-checked={state.settings.safeBrowsing === value}
+                        className={
+                          state.settings.safeBrowsing === value ? 'is-on' : ''
+                        }
+                        onClick={() => change({ safeBrowsing: value })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
                   <span>Cookies and site data</span>
                   <small>Clearing signs you out of websites.</small>
                 </div>
@@ -1081,7 +1178,7 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
         )}
         <footer className="sheet-footer">
           <span>Firn {state?.version}</span>
-          <span>Everything stays on this computer.</span>
+          <span>Your history, passwords and data stay on this computer.</span>
         </footer>
       </div>
     </div>

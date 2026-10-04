@@ -66,6 +66,10 @@ const GLIDE_MS = 200; // matches --motion in styles.css
 // page, it tucks away after this short pause.
 const PEEK_RIGHT_SLACK = 8;
 const PEEK_LINGER_MS = 120;
+// ...and to the left, past the window's edge, it stays out for this far
+// (and a little longer once the mouse goes beyond it).
+const PEEK_LEFT_SLACK = 200;
+const PEEK_LEFT_LINGER_MS = 400;
 // A UI panel that hasn't reported it started within this long is reloaded.
 const UI_START_TIMEOUT_MS = 5000;
 
@@ -828,8 +832,12 @@ const createWindow = () => {
   };
 
   // With the address bar at the top, the bar stays (except in fullscreen).
-  const addressOnTop = () =>
-    settings.addressBar === 'top' && !win.isFullScreen();
+  // Fullscreen, as the window's own events say (they can arrive before
+  // isFullScreen() catches up), or a video filling the window.
+  let windowFullscreen = false;
+  const isFullscreen = () =>
+    windowFullscreen || win.isFullScreen() || tabs.isFullscreen;
+  const addressOnTop = () => settings.addressBar === 'top' && !isFullscreen();
 
   // Shows the top bar for good, or takes it away, to match the address bar
   // setting and fullscreen.
@@ -850,7 +858,7 @@ const createWindow = () => {
     } else if (topBarShown) {
       topBarShown = false;
       send('top-bar:state', false);
-      if (win.isFullScreen()) {
+      if (isFullscreen()) {
         // A fullscreen video fills the window right away.
         pageTop = PAGE_INSET;
         hideLayer(topBar);
@@ -864,7 +872,7 @@ const createWindow = () => {
 
   const revealTopBar = (reveal: boolean) => {
     if (addressOnTop()) return;
-    if (reveal && !win.isFullScreen()) {
+    if (reveal && !isFullscreen()) {
       if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;
       clearTimeout(topBarHideTimer);
@@ -1000,6 +1008,7 @@ const createWindow = () => {
         floating.webContents.send('find:result', result);
     },
     onSiteZoomChanged: () => saver.schedule(),
+    onFullscreenChange: () => syncTopBar(),
     onContextMenu: (id, menu) => {
       const page = tabs.pageOf(id);
       if (page) showPageMenu(menu, page, id);
@@ -1234,9 +1243,8 @@ const createWindow = () => {
   // position, like the top bar, since its top row moves the window).
   const mouseIsOverPeek = () => {
     const { x, y, height } = cursorInWindow();
-    // Off the window to the left: stay, wherever the mouse is.
-    if (x < 0) return true;
     return (
+      x >= -PEEK_LEFT_SLACK &&
       x <= windowState.sidebarWidth + PEEK_RIGHT_SLACK &&
       y >= -200 &&
       y <= height + 200
@@ -1247,7 +1255,7 @@ const createWindow = () => {
   let peekTyping = false;
 
   const showPeek = () => {
-    if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
+    if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
     if (!readyUi.has(peek.webContents)) return;
     peeking = true;
     clearTimeout(peekHideTimer);
@@ -1259,7 +1267,13 @@ const createWindow = () => {
       // Stay while the mouse is over it, or while typing in it (its address
       // bar or a space's name).
       if (mouseIsOverPeek() || peekTyping) lastOver = Date.now();
-      else if (Date.now() - lastOver > PEEK_LINGER_MS) hidePeek();
+      else {
+        // Gone far off to the left: a little more patience than when
+        // coming back over the page.
+        const linger =
+          cursorInWindow().x < 0 ? PEEK_LEFT_LINGER_MS : PEEK_LINGER_MS;
+        if (Date.now() - lastOver > linger) hidePeek();
+      }
     }, 50);
   };
 
@@ -1282,7 +1296,7 @@ const createWindow = () => {
   // stays pressed against the screen's edge (e.g. a maximized window).
   const edgeWatch = setInterval(() => {
     if (win.isDestroyed() || !win.isVisible() || win.isMinimized()) return;
-    if (win.isFullScreen()) return;
+    if (isFullscreen()) return;
     const cursor = screen.getCursorScreenPoint();
     const content = win.getContentBounds();
     // Measure from the part of the window that's actually on screen: a
@@ -2109,8 +2123,14 @@ const createWindow = () => {
 
   // If the window loses focus mid-switch, Ctrl's release never arrives.
   win.on('blur', () => endSwitcher(true));
-  win.on('enter-full-screen', () => syncTopBar());
-  win.on('leave-full-screen', () => syncTopBar());
+  win.on('enter-full-screen', () => {
+    windowFullscreen = true;
+    syncTopBar();
+  });
+  win.on('leave-full-screen', () => {
+    windowFullscreen = false;
+    syncTopBar();
+  });
 
   // --- Keyboard shortcuts (work wherever focus is) -------------------------
 

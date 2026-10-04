@@ -3,14 +3,24 @@
 
 // Everyday sites to start Basecamp with: the calm essentials (mail,
 // calendar, files, an assistant, messages, video and music), no shopping or
-// social feeds. The welcome shows each with its own icon, fetched from the
-// site itself when the welcome opens (the first of `icons` that works;
-// a public image, so nothing about the person is sent). If none can be
-// fetched, Firn's own letter tile shows instead.
-export const BASECAMP_SUGGESTIONS = [
+// social feeds. The welcome shows each with its own icon (see welcomeIcon
+// in src/main.ts): the first of `prefer` that works, else the one Basecamp
+// would pick from the site's page, else the first of `icons` that works,
+// else Firn's own letter tile.
+export const BASECAMP_SUGGESTIONS: {
+  name: string;
+  url: string;
+  prefer?: string[];
+  icons: string[];
+}[] = [
   {
     name: 'Gmail',
     url: 'https://mail.google.com/',
+    // Google's 2026 icons (newer than what its signed-out pages list).
+    prefer: [
+      'https://www.gstatic.com/images/branding/productlogos/gmail_2026/v2/web-64dp/logo_gmail_2026_color_2x_web_64dp.png',
+      'https://ssl.gstatic.com/images/branding/productlogos/gmail_2026/v2/ico/gmail_2026_256dp.ico',
+    ],
     icons: [
       'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
       'https://mail.google.com/favicon.ico',
@@ -27,6 +37,11 @@ export const BASECAMP_SUGGESTIONS = [
   {
     name: 'Calendar',
     url: 'https://calendar.google.com/',
+    // Google's 2026 icons (newer than what its signed-out pages list).
+    prefer: [
+      'https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-64dp/logo_calendar_2026_color_2x_web_64dp.png',
+      'https://ssl.gstatic.com/images/branding/productlogos/calendar_2026/v2/ico/calendar_2026_256dp.ico',
+    ],
     icons: [
       'https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png',
       'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_31.ico',
@@ -35,6 +50,11 @@ export const BASECAMP_SUGGESTIONS = [
   {
     name: 'Drive',
     url: 'https://drive.google.com/',
+    // Google's 2026 icons (newer than what its signed-out pages list).
+    prefer: [
+      'https://www.gstatic.com/images/branding/productlogos/drive_2026/v2/web-64dp/logo_drive_2026_color_2x_web_64dp.png',
+      'https://ssl.gstatic.com/images/branding/productlogos/drive_2026/v2/ico/drive_2026_256dp.ico',
+    ],
     icons: [
       'https://ssl.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png',
       'https://drive.google.com/favicon.ico',

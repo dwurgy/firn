@@ -186,10 +186,10 @@ async function iconAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-// A site's icon for the welcome, picked the way Basecamp picks it once the
-// site is open (src/favicon.ts), from its front page: the page is read
-// without cookies, and nothing on it runs. If it can't be read, the
-// fallbacks listed with the site are tried (see src/welcome.ts).
+// A site's icon for the welcome: a known-current one if listed, else the
+// one Basecamp would pick once the site is open (src/favicon.ts), from its
+// front page (read without cookies; nothing on it runs), else the
+// fallbacks listed with the site (see src/welcome.ts).
 const PAGE_MAX_CHARS = 2 * 1024 * 1024;
 const welcomeIcons = new Map<string, Promise<string | null>>();
 function welcomeIcon(siteUrl: string): Promise<string | null> {
@@ -200,6 +200,10 @@ function welcomeIcon(siteUrl: string): Promise<string | null> {
   let icon = welcomeIcons.get(key);
   if (!icon) {
     icon = (async () => {
+      for (const url of site.prefer ?? []) {
+        const data = await iconAsDataUrl(url);
+        if (data) return data;
+      }
       try {
         const response = await session.defaultSession.fetch(site.url, {
           credentials: 'omit',

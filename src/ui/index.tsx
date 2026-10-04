@@ -25,6 +25,11 @@ document.documentElement.dataset.theme = matchMedia(
 ).matches
   ? 'dark'
   : 'light';
+// Where the address bar sits (in the sidebar, or at the top): every panel
+// adjusts (see data-address in styles.css).
+window.firn.onSettingsState(({ settings }) => {
+  document.documentElement.dataset.address = settings.addressBar;
+});
 window.firn.onFrameState(({ glass, focused, dark }) => {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   // Frosted glass behind the main window, solid while it's out of focus.

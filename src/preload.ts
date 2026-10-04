@@ -47,6 +47,7 @@ const bridge: FirnBridge = {
   resizeSplit: (id, ratio) => ipcRenderer.send('split:resize', id, ratio),
   separateSplit: (tabId) => ipcRenderer.send('split:separate', tabId),
   toggleSidebar: () => ipcRenderer.send('sidebar:toggle'),
+  setPeekTyping: (typing) => ipcRenderer.send('peek:typing', typing),
   setSidebarWidth: (width) => ipcRenderer.send('sidebar:width', width),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),

@@ -84,6 +84,9 @@ export interface Settings {
   searchEngine: 'duckduckgo' | 'google' | 'bing' | 'ecosia' | 'startpage';
   theme: 'system' | 'light' | 'dark';
   downloadsFolder: string;
+  // Where the address bar sits: in the sidebar (the default) or in a top
+  // bar that's always there. See "Opinionated: two looks" in CLAUDE.md.
+  addressBar: 'sidebar' | 'top';
 }
 
 // What the settings panel shows: the settings, plus the downloads folder
@@ -307,6 +310,8 @@ export interface FirnBridge {
   resizeSplit(id: string, ratio: number): void;
   separateSplit(tabId: string): void;
   toggleSidebar(): void;
+  // The peeking sidebar has a text field focused (so it stays open).
+  setPeekTyping(typing: boolean): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;

@@ -47,6 +47,16 @@
   color-scheme: light dark;
 }
 
+/* The address bar at the top (a setting): the top bar is always there and
+   a little taller, and the sidebar's own address bar steps aside. */
+:root[data-address='top'] {
+  --top-bar-height: 48px;
+}
+
+:root[data-address='top'] .sidebar .address {
+  display: none;
+}
+
 :root[data-theme='light'] {
   color-scheme: light;
 }
@@ -1326,6 +1336,21 @@ button {
   height: var(--top-bar-height);
 }
 
+/* The address bar at the top: as wide as in the sidebar, centered over the
+   page (the bar starts where the page does; the page ends an inset before
+   the window's edge), and never under the window buttons. */
+.top-bar-address {
+  position: absolute;
+  top: calc((var(--top-bar-height) - 36px) / 2);
+  left: calc((100% - var(--page-inset)) / 2);
+  max-width: calc(100% - 240px);
+  transform: translateX(-50%);
+}
+
+:root[data-view='topbar'] .top-bar-address {
+  -webkit-app-region: no-drag;
+}
+
 .top-bar .button-row {
   position: absolute;
   top: calc((var(--top-bar-height) - 32px) / 2);
@@ -1995,8 +2020,10 @@ button {
   transition: transform var(--motion);
 }
 
+/* Out quickly, back a touch slower. */
 .peek.is-shown .sidebar {
   transform: none;
+  transition-duration: 140ms;
 }
 
 /* --- Lookout: a link previewed over the page -------------------------------- */

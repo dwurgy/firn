@@ -93,6 +93,8 @@ interface TabManagerOptions {
     favicon: string,
     newVisit: boolean,
   ) => void;
+  // A page went into or out of fullscreen (e.g. a video).
+  onFullscreenChange: (on: boolean) => void;
   // A tab's page was right-clicked.
   onContextMenu: (id: string, menu: PageContextMenu) => void;
   // How a find in page on the current tab went.
@@ -1145,8 +1147,14 @@ export class TabManager {
   // so leaving video fullscreen puts things back exactly as they were.
   private wasWindowFullscreen = false;
 
+  // A page (e.g. a video) is filling the window.
+  get isFullscreen() {
+    return this.fullscreen;
+  }
+
   private setFullscreen(on: boolean) {
     this.fullscreen = on;
+    this.options.onFullscreenChange(on);
     if (on) {
       this.wasWindowFullscreen = this.engine.isWindowFullscreen();
       if (!this.wasWindowFullscreen) this.engine.setWindowFullscreen(true);

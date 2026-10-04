@@ -91,7 +91,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 The **Firn mark** button at the top of the sidebar (next to the sidebar toggle) opens the Firn menu: New tab, New space, History, Downloads and Settings.
 
 - **History** (Ctrl+H) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
-- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where downloads are saved**, and **privacy**: clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Downloads
 

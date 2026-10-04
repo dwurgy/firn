@@ -60,17 +60,21 @@ const SIDEBAR_WIDTH = 260;
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 360;
 const GLIDE_MS = 200; // matches --motion in styles.css
-// Once the mouse leaves the peeking sidebar, wait this long before it tucks
-// away, so an overshoot doesn't make it vanish.
-const PEEK_LINGER_MS = 450;
-// How far to the right of the peeking sidebar the mouse can stray and still
-// count as "on it". Anywhere to its left (even off the window) also counts.
-const PEEK_RIGHT_SLACK = 24;
+// The peeking sidebar is forgiving to the left and quick to the right:
+// anywhere to its left (even off the window, onto another screen) counts as
+// "on it", but once the mouse is this far past its right edge, back over the
+// page, it tucks away after this short pause.
+const PEEK_RIGHT_SLACK = 8;
+const PEEK_LINGER_MS = 120;
+// ...and to the left, past the window's edge, it stays out for this far
+// (and a little longer once the mouse goes beyond it).
+const PEEK_LEFT_SLACK = 200;
+const PEEK_LEFT_LINGER_MS = 400;
 // A UI panel that hasn't reported it started within this long is reloaded.
 const UI_START_TIMEOUT_MS = 5000;
 
 // How often the cursor's position is checked for the edge reveals.
-const EDGE_CHECK_MS = 50;
+const EDGE_CHECK_MS = 30;
 // How generous the left-edge zone that brings out the peeking sidebar is:
 // a little past the window's edge, and a little way into the page. (Just
 // the thin frame strip proved far too easy to miss.)
@@ -83,6 +87,9 @@ const PAGE_RADIUS = 12;
 // Hovering the top edge lowers the page to make room for a bar with the
 // window buttons above it (Windows / Linux).
 const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
+// With the address bar at the top, the bar is always there and a little
+// taller, so the address bar has room around it.
+const TOP_ADDRESS_HEIGHT = 48;
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
 const TOP_BAR_LINGER_MS = 250;
@@ -111,9 +118,6 @@ const frameColor = () =>
 const DEFAULT_SPACE_ID = 'space-default';
 
 const NAV_COMMANDS: NavCommand[] = ['back', 'forward', 'reload', 'stop'];
-
-// macOS keeps its own traffic lights; elsewhere Firn draws window buttons.
-const OWN_WINDOW_BUTTONS = process.platform !== 'darwin';
 
 // Same safe settings as web pages, plus the narrow preload bridge.
 const UI_WEB_PREFERENCES = {
@@ -353,6 +357,8 @@ const createWindow = () => {
     debug(`${uiNames.get(web)} started`);
     // Start the next layer once the previous one is up.
     if (layersToStart[0] === web) layersToStart.shift();
+    // The top bar may need to be there from the start.
+    if (web === topBar.webContents) syncTopBar(false);
     if (web === win.webContents || !layersToStart.includes(web)) {
       const next = layersToStart[0];
       if (next && !startTimers.has(next)) startUi(next);
@@ -385,7 +391,10 @@ const createWindow = () => {
   };
   const peek = makeLayer('peek');
   const floating = makeLayer('floating');
-  const topBar = OWN_WINDOW_BUTTONS ? makeLayer('topbar') : null;
+  // The top bar exists everywhere: window buttons on Windows and Linux (on
+  // macOS it's a strip to grab the window by), and the address bar when
+  // it's set to sit at the top.
+  const topBar = makeLayer('topbar');
   const uiContents = [win.webContents, floating.webContents, peek.webContents];
   if (topBar) uiContents.push(topBar.webContents);
 
@@ -448,7 +457,10 @@ const createWindow = () => {
         x: pageLeft,
         y: 0,
         width: Math.max(0, width - pageLeft),
-        height: Math.min(pageTop, TOP_BAR_HEIGHT),
+        height: Math.min(
+          pageTop,
+          addressOnTop() ? TOP_ADDRESS_HEIGHT : TOP_BAR_HEIGHT,
+        ),
       };
     }
     if (layer === floating && overlay.mode === 'find') return findBarBounds();
@@ -467,7 +479,9 @@ const createWindow = () => {
   };
 
   // Stacking order, bottom to top.
-  const layerOrder = [peek, topBar, floating];
+  // The peeking sidebar slides in over the top bar, so its top row stays
+  // clickable.
+  const layerOrder = [topBar, peek, floating];
 
   // Lookout: a link previewed in a floating panel over the page (see the
   // Lookout section below). Its page floats above every layer.
@@ -817,9 +831,48 @@ const createWindow = () => {
     );
   };
 
+  // With the address bar at the top, the bar stays (except in fullscreen).
+  // Fullscreen, as the window's own events say (they can arrive before
+  // isFullScreen() catches up), or a video filling the window.
+  let windowFullscreen = false;
+  const isFullscreen = () =>
+    windowFullscreen || win.isFullScreen() || tabs.isFullscreen;
+  const addressOnTop = () => settings.addressBar === 'top' && !isFullscreen();
+
+  // Shows the top bar for good, or takes it away, to match the address bar
+  // setting and fullscreen.
+  const syncTopBar = (animate = true) => {
+    if (!readyUi.has(topBar.webContents)) return;
+    clearInterval(topBarWatch);
+    clearTimeout(topBarHideTimer);
+    if (addressOnTop()) {
+      topBarShown = true;
+      showLayer(topBar);
+      send('top-bar:state', true);
+      if (pageTop === TOP_ADDRESS_HEIGHT) return;
+      if (animate) glidePageTop(TOP_ADDRESS_HEIGHT);
+      else {
+        pageTop = TOP_ADDRESS_HEIGHT;
+        relayout();
+      }
+    } else if (topBarShown) {
+      topBarShown = false;
+      send('top-bar:state', false);
+      if (isFullscreen()) {
+        // A fullscreen video fills the window right away.
+        pageTop = PAGE_INSET;
+        hideLayer(topBar);
+        relayout();
+        return;
+      }
+      glidePageTop(PAGE_INSET);
+      topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
+    }
+  };
+
   const revealTopBar = (reveal: boolean) => {
-    if (!topBar) return;
-    if (reveal && !win.isFullScreen()) {
+    if (addressOnTop()) return;
+    if (reveal && !isFullscreen()) {
       if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;
       clearTimeout(topBarHideTimer);
@@ -883,6 +936,7 @@ const createWindow = () => {
     applySettings();
     saveSettings(settingsFile, settings);
     send('settings:state', settingsState());
+    syncTopBar();
   };
 
   // Downloads go straight to the Downloads folder; the sidebar shows them.
@@ -954,6 +1008,7 @@ const createWindow = () => {
         floating.webContents.send('find:result', result);
     },
     onSiteZoomChanged: () => saver.schedule(),
+    onFullscreenChange: () => syncTopBar(),
     onContextMenu: (id, menu) => {
       const page = tabs.pageOf(id);
       if (page) showPageMenu(menu, page, id);
@@ -1189,14 +1244,18 @@ const createWindow = () => {
   const mouseIsOverPeek = () => {
     const { x, y, height } = cursorInWindow();
     return (
+      x >= -PEEK_LEFT_SLACK &&
       x <= windowState.sidebarWidth + PEEK_RIGHT_SLACK &&
-      y >= -40 &&
-      y <= height + 40
+      y >= -200 &&
+      y <= height + 200
     );
   };
 
+  // Typing in the peeking sidebar (it says so; see src/ui/Peek.tsx).
+  let peekTyping = false;
+
   const showPeek = () => {
-    if (!windowState.sidebarCollapsed || peeking || win.isFullScreen()) return;
+    if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
     if (!readyUi.has(peek.webContents)) return;
     peeking = true;
     clearTimeout(peekHideTimer);
@@ -1205,16 +1264,23 @@ const createWindow = () => {
     let lastOver = Date.now();
     peekWatch = setInterval(() => {
       if (win.isDestroyed()) return;
-      // Stay while the mouse is over it, or while typing in it.
-      if (mouseIsOverPeek() || peek.webContents.isFocused())
-        lastOver = Date.now();
-      else if (Date.now() - lastOver > PEEK_LINGER_MS) hidePeek();
+      // Stay while the mouse is over it, or while typing in it (its address
+      // bar or a space's name).
+      if (mouseIsOverPeek() || peekTyping) lastOver = Date.now();
+      else {
+        // Gone far off to the left: a little more patience than when
+        // coming back over the page.
+        const linger =
+          cursorInWindow().x < 0 ? PEEK_LEFT_LINGER_MS : PEEK_LINGER_MS;
+        if (Date.now() - lastOver > linger) hidePeek();
+      }
     }, 50);
   };
 
   const hidePeek = () => {
     if (!peeking) return;
     peeking = false;
+    peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
     // Let it slide away before the layer goes.
@@ -1230,7 +1296,7 @@ const createWindow = () => {
   // stays pressed against the screen's edge (e.g. a maximized window).
   const edgeWatch = setInterval(() => {
     if (win.isDestroyed() || !win.isVisible() || win.isMinimized()) return;
-    if (win.isFullScreen()) return;
+    if (isFullscreen()) return;
     const cursor = screen.getCursorScreenPoint();
     const content = win.getContentBounds();
     // Measure from the part of the window that's actually on screen: a
@@ -1691,6 +1757,12 @@ const createWindow = () => {
 
   const focusAddress = () => {
     hideOverlay();
+    // The address bar at the top.
+    if (addressOnTop()) {
+      topBar.webContents.focus();
+      topBar.webContents.send('ui:focus-address', tabs.navState().url);
+      return;
+    }
     // With the sidebar collapsed, its address bar is in the peek layer.
     if (windowState.sidebarCollapsed) showPeek();
     const target = windowState.sidebarCollapsed
@@ -1966,6 +2038,9 @@ const createWindow = () => {
       hideOverlay();
     },
     'sidebar:toggle': () => setSidebarCollapsed(!windowState.sidebarCollapsed),
+    'peek:typing': (sender, typing) => {
+      if (sender === peek.webContents) peekTyping = typing === true;
+    },
     'sidebar:width': (_sender, width) => {
       if (typeof width === 'number' && Number.isFinite(width))
         setSidebarWidth(width);
@@ -2048,7 +2123,14 @@ const createWindow = () => {
 
   // If the window loses focus mid-switch, Ctrl's release never arrives.
   win.on('blur', () => endSwitcher(true));
-  win.on('enter-full-screen', () => revealTopBar(false));
+  win.on('enter-full-screen', () => {
+    windowFullscreen = true;
+    syncTopBar();
+  });
+  win.on('leave-full-screen', () => {
+    windowFullscreen = false;
+    syncTopBar();
+  });
 
   // --- Keyboard shortcuts (work wherever focus is) -------------------------
 

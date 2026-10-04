@@ -2,7 +2,7 @@
 // window code and the UI.
 
 // Everyday sites to start Basecamp with: the calm essentials (mail,
-// calendar, files, notes, messages, video and music), no shopping or
+// calendar, files, an assistant, messages, video and music), no shopping or
 // social feeds. The welcome shows each with its own icon, fetched from the
 // site itself when the welcome opens (the first of `icons` that works;
 // a public image, so nothing about the person is sent). If none can be
@@ -41,11 +41,11 @@ export const BASECAMP_SUGGESTIONS = [
     ],
   },
   {
-    name: 'Notion',
-    url: 'https://www.notion.so/',
+    name: 'Claude',
+    url: 'https://claude.ai/',
     icons: [
-      'https://www.notion.so/images/favicon.ico',
-      'https://www.notion.so/favicon.ico',
+      'https://claude.ai/apple-touch-icon.png',
+      'https://claude.ai/favicon.ico',
     ],
   },
   {

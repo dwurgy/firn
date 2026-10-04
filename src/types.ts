@@ -84,6 +84,9 @@ export interface Settings {
   searchEngine: 'duckduckgo' | 'google' | 'bing' | 'ecosia' | 'startpage';
   theme: 'system' | 'light' | 'dark';
   downloadsFolder: string;
+  // Where the address bar sits: in the sidebar (the default) or in a top
+  // bar that's always there. See "Opinionated: two looks" in CLAUDE.md.
+  addressBar: 'sidebar' | 'top';
 }
 
 // What the settings panel shows: the settings, plus the downloads folder

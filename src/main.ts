@@ -83,6 +83,9 @@ const PAGE_RADIUS = 12;
 // Hovering the top edge lowers the page to make room for a bar with the
 // window buttons above it (Windows / Linux).
 const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
+// With the address bar at the top, the bar is always there and a little
+// taller, so the address bar has room around it.
+const TOP_ADDRESS_HEIGHT = 48;
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
 const TOP_BAR_LINGER_MS = 250;
@@ -111,9 +114,6 @@ const frameColor = () =>
 const DEFAULT_SPACE_ID = 'space-default';
 
 const NAV_COMMANDS: NavCommand[] = ['back', 'forward', 'reload', 'stop'];
-
-// macOS keeps its own traffic lights; elsewhere Firn draws window buttons.
-const OWN_WINDOW_BUTTONS = process.platform !== 'darwin';
 
 // Same safe settings as web pages, plus the narrow preload bridge.
 const UI_WEB_PREFERENCES = {
@@ -353,6 +353,8 @@ const createWindow = () => {
     debug(`${uiNames.get(web)} started`);
     // Start the next layer once the previous one is up.
     if (layersToStart[0] === web) layersToStart.shift();
+    // The top bar may need to be there from the start.
+    if (web === topBar.webContents) syncTopBar(false);
     if (web === win.webContents || !layersToStart.includes(web)) {
       const next = layersToStart[0];
       if (next && !startTimers.has(next)) startUi(next);
@@ -385,7 +387,10 @@ const createWindow = () => {
   };
   const peek = makeLayer('peek');
   const floating = makeLayer('floating');
-  const topBar = OWN_WINDOW_BUTTONS ? makeLayer('topbar') : null;
+  // The top bar exists everywhere: window buttons on Windows and Linux (on
+  // macOS it's a strip to grab the window by), and the address bar when
+  // it's set to sit at the top.
+  const topBar = makeLayer('topbar');
   const uiContents = [win.webContents, floating.webContents, peek.webContents];
   if (topBar) uiContents.push(topBar.webContents);
 
@@ -448,7 +453,10 @@ const createWindow = () => {
         x: pageLeft,
         y: 0,
         width: Math.max(0, width - pageLeft),
-        height: Math.min(pageTop, TOP_BAR_HEIGHT),
+        height: Math.min(
+          pageTop,
+          addressOnTop() ? TOP_ADDRESS_HEIGHT : TOP_BAR_HEIGHT,
+        ),
       };
     }
     if (layer === floating && overlay.mode === 'find') return findBarBounds();
@@ -817,8 +825,43 @@ const createWindow = () => {
     );
   };
 
+  // With the address bar at the top, the bar stays (except in fullscreen).
+  const addressOnTop = () =>
+    settings.addressBar === 'top' && !win.isFullScreen();
+
+  // Shows the top bar for good, or takes it away, to match the address bar
+  // setting and fullscreen.
+  const syncTopBar = (animate = true) => {
+    if (!readyUi.has(topBar.webContents)) return;
+    clearInterval(topBarWatch);
+    clearTimeout(topBarHideTimer);
+    if (addressOnTop()) {
+      topBarShown = true;
+      showLayer(topBar);
+      send('top-bar:state', true);
+      if (pageTop === TOP_ADDRESS_HEIGHT) return;
+      if (animate) glidePageTop(TOP_ADDRESS_HEIGHT);
+      else {
+        pageTop = TOP_ADDRESS_HEIGHT;
+        relayout();
+      }
+    } else if (topBarShown) {
+      topBarShown = false;
+      send('top-bar:state', false);
+      if (win.isFullScreen()) {
+        // A fullscreen video fills the window right away.
+        pageTop = PAGE_INSET;
+        hideLayer(topBar);
+        relayout();
+        return;
+      }
+      glidePageTop(PAGE_INSET);
+      topBarHideTimer = setTimeout(() => hideLayer(topBar), 260);
+    }
+  };
+
   const revealTopBar = (reveal: boolean) => {
-    if (!topBar) return;
+    if (addressOnTop()) return;
     if (reveal && !win.isFullScreen()) {
       if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;
@@ -883,6 +926,7 @@ const createWindow = () => {
     applySettings();
     saveSettings(settingsFile, settings);
     send('settings:state', settingsState());
+    syncTopBar();
   };
 
   // Downloads go straight to the Downloads folder; the sidebar shows them.
@@ -1691,6 +1735,12 @@ const createWindow = () => {
 
   const focusAddress = () => {
     hideOverlay();
+    // The address bar at the top.
+    if (addressOnTop()) {
+      topBar.webContents.focus();
+      topBar.webContents.send('ui:focus-address', tabs.navState().url);
+      return;
+    }
     // With the sidebar collapsed, its address bar is in the peek layer.
     if (windowState.sidebarCollapsed) showPeek();
     const target = windowState.sidebarCollapsed
@@ -2048,7 +2098,8 @@ const createWindow = () => {
 
   // If the window loses focus mid-switch, Ctrl's release never arrives.
   win.on('blur', () => endSwitcher(true));
-  win.on('enter-full-screen', () => revealTopBar(false));
+  win.on('enter-full-screen', () => syncTopBar());
+  win.on('leave-full-screen', () => syncTopBar());
 
   // --- Keyboard shortcuts (work wherever focus is) -------------------------
 

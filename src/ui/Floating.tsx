@@ -959,6 +959,32 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
                   ))}
                 </div>
               </div>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Address bar</span>
+                  <small>Where the address bar sits.</small>
+                </div>
+                <div className="segmented" role="radiogroup">
+                  {(
+                    [
+                      ['sidebar', 'In the sidebar'],
+                      ['top', 'At the top'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      role="radio"
+                      aria-checked={state.settings.addressBar === value}
+                      className={
+                        state.settings.addressBar === value ? 'is-on' : ''
+                      }
+                      onClick={() => change({ addressBar: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </section>
 
             <section className="settings-group">

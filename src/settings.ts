@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'duckduckgo',
   theme: 'system',
   downloadsFolder: '',
+  addressBar: 'sidebar',
 };
 
 export function loadSettings(file: string): Settings {
@@ -40,6 +41,10 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
       typeof c.downloadsFolder === 'string'
         ? c.downloadsFolder
         : current.downloadsFolder,
+    addressBar:
+      c.addressBar === 'sidebar' || c.addressBar === 'top'
+        ? c.addressBar
+        : current.addressBar,
   };
 }
 

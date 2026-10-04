@@ -387,6 +387,8 @@ export interface FirnBridge {
   showSidebarMenu(): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;
+  // A suggested site's icon for the welcome (see BASECAMP_SUGGESTIONS).
+  welcomeIcon(siteUrl: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;

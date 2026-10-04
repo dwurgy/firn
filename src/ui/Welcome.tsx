@@ -22,20 +22,19 @@ export function Welcome({
   // which would pull it out of the name box after each letter).
   const card = useRef<HTMLDivElement>(null);
   useEffect(() => card.current?.focus(), []);
-  // The sites' own icons, fetched while the welcome is open (see
-  // BASECAMP_SUGGESTIONS); until one arrives (or if it can't), its letter.
+  // The sites' own icons, picked the way Basecamp picks them (see
+  // welcomeIcon in src/main.ts); until one arrives (or if none can), its
+  // letter.
   const [icons, setIcons] = useState<Record<string, string>>({});
   useEffect(() => {
     let live = true;
     for (const site of BASECAMP_SUGGESTIONS)
-      void (async () => {
-        for (const url of site.icons) {
-          const data = await window.firn.iconData(url).catch(() => null);
-          if (!data) continue;
-          if (live) setIcons((all) => ({ ...all, [site.url]: data }));
-          return;
-        }
-      })();
+      void window.firn
+        .welcomeIcon(site.url)
+        .catch(() => null)
+        .then((data) => {
+          if (data && live) setIcons((all) => ({ ...all, [site.url]: data }));
+        });
     return () => {
       live = false;
     };

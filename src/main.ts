@@ -29,6 +29,7 @@ import { Downloads } from './downloads';
 import { PasswordStore } from './passwords';
 import { SafeBrowsing, type Threat } from './safebrowsing';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from './welcome';
+import { iconLinksFromHtml, pickIcon } from './favicon';
 import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
@@ -183,6 +184,49 @@ async function iconAsDataUrl(url: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// A site's icon for the welcome, picked the way Basecamp picks it once the
+// site is open (src/favicon.ts), from its front page: the page is read
+// without cookies, and nothing on it runs. If it can't be read, the
+// fallbacks listed with the site are tried (see src/welcome.ts).
+const PAGE_MAX_CHARS = 2 * 1024 * 1024;
+const welcomeIcons = new Map<string, Promise<string | null>>();
+function welcomeIcon(siteUrl: string): Promise<string | null> {
+  const site = BASECAMP_SUGGESTIONS.find((s) => s.url === siteUrl);
+  if (!site) return Promise.resolve(null);
+  const dark = nativeTheme.shouldUseDarkColors;
+  const key = `${siteUrl} ${dark ? 'dark' : 'light'}`;
+  let icon = welcomeIcons.get(key);
+  if (!icon) {
+    icon = (async () => {
+      try {
+        const response = await session.defaultSession.fetch(site.url, {
+          credentials: 'omit',
+          signal: AbortSignal.timeout(8000),
+        });
+        if (response.ok) {
+          const html = (await response.text()).slice(0, PAGE_MAX_CHARS);
+          const base = response.url || site.url;
+          const best = pickIcon(
+            iconLinksFromHtml(html, base, dark),
+            new URL('/favicon.ico', base).href,
+          );
+          const data = await iconAsDataUrl(best);
+          if (data) return data;
+        }
+      } catch {
+        // Couldn't read the page: try the fallbacks.
+      }
+      for (const url of site.icons) {
+        const data = await iconAsDataUrl(url);
+        if (data) return data;
+      }
+      return null;
+    })();
+    welcomeIcons.set(key, icon);
+  }
+  return icon;
 }
 
 // --- Spaces ---------------------------------------------------------------
@@ -2392,6 +2436,11 @@ const createWindow = () => {
   // The UI asks for a favicon's bytes so it can pick out the icon's main
   // color (for tinting the active pin). Fetching here, rather than in the
   // UI, sidesteps the browser rule that hides other sites' images' pixels.
+  ipcMain.handle('welcome:icon', (event: IpcMainInvokeEvent, url: unknown) =>
+    uiContents.includes(event.sender) && typeof url === 'string'
+      ? welcomeIcon(url)
+      : null,
+  );
   ipcMain.handle('icon:data', (event: IpcMainInvokeEvent, url: unknown) =>
     uiContents.includes(event.sender) && typeof url === 'string'
       ? iconAsDataUrl(url)
@@ -2618,6 +2667,7 @@ const createWindow = () => {
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
     ipcMain.removeHandler('icon:data');
+    ipcMain.removeHandler('welcome:icon');
     ipcMain.removeHandler('command:tabs');
     ipcMain.removeHandler('history:search');
     ipcMain.removeHandler('history:list');

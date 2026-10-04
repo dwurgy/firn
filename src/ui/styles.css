@@ -2661,17 +2661,12 @@ button {
     color var(--motion);
 }
 
-.welcome-site-tile.has-icon {
-  background: var(--field-focus);
-  box-shadow:
-    0 0 0 1px var(--panel-edge),
-    0 0 0 2px transparent;
-}
-
 .welcome-site-tile img {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
+  /* App icons sit on a solid square; rounded like Basecamp's. */
+  border-radius: 6px;
   animation: fade-in 200ms ease-out;
 }
 
@@ -2679,8 +2674,7 @@ button {
   background: var(--press);
 }
 
-.welcome-site.is-on .welcome-site-tile,
-.welcome-site.is-on .welcome-site-tile.has-icon {
+.welcome-site.is-on .welcome-site-tile {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   box-shadow: 0 0 0 2px var(--accent);
   color: var(--text);

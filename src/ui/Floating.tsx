@@ -18,6 +18,7 @@ import {
   AppIcon,
   ArrowIcon,
   BellIcon,
+  ChevronIcon,
   CameraIcon,
   ClipboardIcon,
   CloseIcon,
@@ -918,21 +919,17 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
                     Used when you type something that isn't an address.
                   </small>
                 </div>
-                <select
-                  className="settings-select"
+                <Dropdown
+                  label="Search engine"
                   value={state.settings.searchEngine}
-                  onChange={(e) =>
-                    change({
-                      searchEngine: e.target.value as Settings['searchEngine'],
-                    })
+                  options={Object.entries(SEARCH_ENGINES).map(([id, e]) => ({
+                    value: id,
+                    label: e.name,
+                  }))}
+                  onChange={(value) =>
+                    change({ searchEngine: value as Settings['searchEngine'] })
                   }
-                >
-                  {Object.entries(SEARCH_ENGINES).map(([id, engine]) => (
-                    <option key={id} value={id}>
-                      {engine.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </section>
 
@@ -1034,6 +1031,78 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
           <span>Everything stays on this computer.</span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// A dropdown in Firn's own colors (the system's dropdown list ignores
+// Firn's light/dark setting on Windows). Click to open, pick one; Esc or a
+// click elsewhere closes it.
+function Dropdown({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    box.current
+      ?.querySelector<HTMLButtonElement>('[aria-selected=true]')
+      ?.focus();
+    const onPointer = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    addEventListener('pointerdown', onPointer, true);
+    return () => removeEventListener('pointerdown', onPointer, true);
+  }, [open]);
+  const current = options.find((o) => o.value === value);
+  return (
+    <div
+      ref={box}
+      className="dropdown"
+      onKeyDown={(e) => {
+        // Esc closes the list (not the whole panel).
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        className="dropdown-button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{current?.label}</span>
+        <ChevronIcon />
+      </button>
+      {open && (
+        <div className="dropdown-list" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              role="option"
+              aria-selected={option.value === value}
+              className="dropdown-option"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

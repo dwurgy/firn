@@ -7,6 +7,7 @@ import type {
   OverlayState,
   Rect,
   Space,
+  SavedLogin,
   Settings,
   SettingsState,
   SpacesState,
@@ -21,6 +22,9 @@ import {
   ChevronIcon,
   CameraIcon,
   ClipboardIcon,
+  CopyIcon,
+  EyeIcon,
+  KeyIcon,
   CloseIcon,
   DownIcon,
   ExpandIcon,
@@ -61,6 +65,12 @@ export function Floating() {
 
   if (overlay.mode === 'permission') {
     return <PermissionPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'password') {
+    return <SavePasswordPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'passwords') {
+    return <PasswordsPanel key={overlay.openId} />;
   }
   if (overlay.mode === 'settings') {
     return <SettingsPanel key={overlay.openId} state={settings} />;
@@ -194,6 +204,11 @@ function actionsFor(
     },
     { action: 'new-space', label: 'New space', words: 'new space add create' },
     { action: 'history', label: 'History', words: 'history visited pages' },
+    {
+      action: 'passwords',
+      label: 'Saved passwords',
+      words: 'passwords saved logins',
+    },
     {
       action: 'settings',
       label: 'Settings',
@@ -1021,6 +1036,18 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
               </div>
               <div className="settings-row">
                 <div className="settings-label">
+                  <span>Saved passwords</span>
+                  <small>Encrypted, on this computer only.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.runAction('passwords')}
+                >
+                  Manage…
+                </button>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
                   <span>Cookies and site data</span>
                   <small>Clearing signs you out of websites.</small>
                 </div>
@@ -1129,6 +1156,193 @@ function Dropdown({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// "Save password for github.com?" after signing in: a small card at the
+// top-left of the page, like the permission prompt. Esc or "Not now"
+// closes it.
+function SavePasswordPrompt({
+  site,
+  username,
+  update,
+}: {
+  site: string;
+  username: string;
+  update: boolean;
+}) {
+  return (
+    <div
+      className="permission-layer"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.answerSavePassword('dismiss');
+      }}
+    >
+      <div
+        className="panel permission-card"
+        role="dialog"
+        aria-label="Save password"
+      >
+        <div className="permission-text">
+          <span className="permission-icon">
+            <KeyIcon />
+          </span>
+          <p>
+            {update ? 'Update the password for ' : 'Save password for '}
+            <strong>{site}</strong>?
+            <br />
+            <span className="password-user">{username || 'No username'}</span>
+          </p>
+        </div>
+        <div className="permission-buttons">
+          <button
+            className="permission-button"
+            onClick={() => window.firn.answerSavePassword('dismiss')}
+          >
+            Not now
+          </button>
+          <button
+            className="permission-button is-allow"
+            onClick={() => window.firn.answerSavePassword('save')}
+          >
+            {update ? 'Update' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Saved passwords (Settings, the Firn menu, or the command bar): sites and
+// usernames, with the passwords hidden until you choose to see one.
+function PasswordsPanel() {
+  const [query, setQuery] = useState('');
+  const [logins, setLogins] = useState<SavedLogin[]>([]);
+  const [canSave, setCanSave] = useState(true);
+  const [shown, setShown] = useState<Record<string, string>>({});
+  const [version, setVersion] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    return window.firn.onPasswordsChanged(() => setVersion((v) => v + 1));
+  }, []);
+  useEffect(() => {
+    let current = true;
+    window.firn.listPasswords().then((result) => {
+      if (!current) return;
+      setLogins(result.logins);
+      setCanSave(result.canSave);
+    });
+    return () => {
+      current = false;
+    };
+  }, [version]);
+
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const visible = logins.filter((l) =>
+    words.every((w) => `${l.origin} ${l.username}`.toLowerCase().includes(w)),
+  );
+  const toggle = async (id: string) => {
+    if (shown[id] !== undefined) {
+      const { [id]: _, ...rest } = shown;
+      setShown(rest);
+      return;
+    }
+    const password = await window.firn.revealPassword(id);
+    if (password !== null) setShown({ ...shown, [id]: password });
+  };
+
+  return (
+    <div
+      className="backdrop is-sheet"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) window.firn.closeOverlay();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.closeOverlay();
+      }}
+    >
+      <div
+        className="panel sheet passwords-sheet"
+        role="dialog"
+        aria-label="Saved passwords"
+      >
+        <header className="sheet-header">
+          <h2>Saved passwords</h2>
+          <button
+            className="icon-button"
+            title="Close (Esc)"
+            onClick={() => window.firn.closeOverlay()}
+          >
+            <CloseIcon />
+          </button>
+        </header>
+        <div className="sheet-search">
+          <SearchIcon />
+          <input
+            ref={inputRef}
+            spellCheck={false}
+            placeholder="Search passwords"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="sheet-body">
+          {!canSave && (
+            <p className="sheet-empty">
+              Firn can't safely protect passwords on this computer, so it
+              doesn't save them here.
+            </p>
+          )}
+          {canSave && visible.length === 0 && (
+            <p className="sheet-empty">
+              {query.trim()
+                ? 'No saved passwords match that.'
+                : 'When you sign in to a site, Firn offers to save the password here.'}
+            </p>
+          )}
+          {visible.map((login) => (
+            <div key={login.id} className="password-row">
+              <span className="password-site" title={login.origin}>
+                {login.origin.replace(/^https?:\/\/(www\.)?/, '')}
+              </span>
+              <span className="password-username">
+                {login.username || 'No username'}
+              </span>
+              <span className="password-secret">
+                {shown[login.id] ?? '••••••••'}
+              </span>
+              <button
+                className="icon-button"
+                title={shown[login.id] !== undefined ? 'Hide' : 'Show'}
+                onClick={() => toggle(login.id)}
+              >
+                <EyeIcon />
+              </button>
+              <button
+                className="icon-button"
+                title="Copy password"
+                onClick={() => window.firn.copyPassword(login.id)}
+              >
+                <CopyIcon />
+              </button>
+              <button
+                className="icon-button"
+                title="Delete"
+                onClick={() => window.firn.deletePassword(login.id)}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          ))}
+        </div>
+        <footer className="sheet-footer">
+          <span>Encrypted with your computer's own protection.</span>
+          <span>Kept on this computer only.</span>
+        </footer>
+      </div>
     </div>
   );
 }

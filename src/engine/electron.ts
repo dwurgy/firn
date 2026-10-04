@@ -2,7 +2,15 @@
 // Everything Electron-specific about web pages lives here (see
 // src/engine/engine.ts for what the rest of Firn expects).
 
-import { BrowserWindow, WebContentsView, type WebContents } from 'electron';
+import path from 'node:path';
+import {
+  BrowserWindow,
+  ipcMain,
+  WebContentsView,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from 'electron';
 import {
   SCROLLBAR_CSS,
   SCROLLBAR_SCRIPT,
@@ -30,7 +38,24 @@ const SAFE_WEB_PREFERENCES = {
   // instead of downloading. (Old-style browser plugins no longer exist;
   // this only turns on the PDF viewer.)
   plugins: true,
+  // Firn's helper for saved passwords (src/page-preload.ts). It runs in
+  // its own isolated world: the page can't see or call it.
+  preload: path.join(__dirname, 'page-preload.cjs'),
 };
+
+// Saved passwords are only saved and filled on secure sites (and on this
+// computer, for testing).
+function loginOrigin(url: string) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'https:') return u.origin;
+    if (u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname))
+      return u.origin;
+  } catch {
+    // Not a web address.
+  }
+  return null;
+}
 
 // The isolated world where Firn reads a page's icon links (see
 // src/favicon.ts), apart from the page's own scripts.
@@ -190,6 +215,58 @@ export class ElectronEngine implements PageEngine {
     this.win.on('closed', () => {
       session.setPermissionRequestHandler(null);
       session.setPermissionCheckHandler(null);
+    });
+  }
+
+  // The page helper's messages. Only Firn's own tab and Lookout pages, and
+  // only their top frame, are listened to; the site is taken from the
+  // frame's real address, never from the message.
+  private loginProvider:
+    | ((origin: string) => { username: string; password: string } | null)
+    | null = null;
+  private loginListening = false;
+
+  private senderOrigin(event: IpcMainEvent | IpcMainInvokeEvent) {
+    const page = this.pages.get(event.sender);
+    const frame = event.senderFrame;
+    // The top frame only (a frame inside the page could be another site).
+    if (
+      !page ||
+      !frame ||
+      frame.parent ||
+      frame.frameTreeNodeId !== event.sender.mainFrame.frameTreeNodeId
+    )
+      return null;
+    const origin = loginOrigin(frame.url);
+    return origin ? { page, origin } : null;
+  }
+
+  setSavedLoginProvider(
+    provider: (origin: string) => { username: string; password: string } | null,
+  ) {
+    this.loginProvider = provider;
+    if (this.loginListening) return;
+    this.loginListening = true;
+    const onLogin = (event: IpcMainEvent, login: unknown) => {
+      const from = this.senderOrigin(event);
+      if (!from || !login || typeof login !== 'object') return;
+      const { username, password } = login as Record<string, unknown>;
+      if (typeof password !== 'string' || !password) return;
+      from.page.reportLogin(
+        from.origin,
+        typeof username === 'string' ? username.slice(0, 200) : '',
+        password.slice(0, 500),
+      );
+    };
+    const onSavedLogin = (event: IpcMainInvokeEvent) => {
+      const from = this.senderOrigin(event);
+      return from ? (this.loginProvider?.(from.origin) ?? null) : null;
+    };
+    ipcMain.on('firn-page:login', onLogin);
+    ipcMain.handle('firn-page:saved-login', onSavedLogin);
+    this.win.on('closed', () => {
+      ipcMain.removeListener('firn-page:login', onLogin);
+      ipcMain.removeHandler('firn-page:saved-login');
     });
   }
 
@@ -374,6 +451,10 @@ class ElectronPage implements Page {
 
   listen(events: PageEvents) {
     this.events = events;
+  }
+
+  reportLogin(origin: string, username: string, password: string) {
+    this.events.onLogin(origin, username, password);
   }
 
   destroy() {

@@ -97,6 +97,14 @@ export interface SettingsState {
   version: string;
 }
 
+// A saved login, as the passwords panel lists it (never with the password).
+export interface SavedLogin {
+  id: string;
+  origin: string;
+  username: string;
+  lastUsedAt: number;
+}
+
 // A downloaded file (src/downloads.ts). `missing`: it finished, but the
 // file has since been moved or deleted.
 export interface Download {
@@ -139,7 +147,8 @@ export type CommandAction =
   | 'zoom-reset'
   | 'downloads'
   | 'history'
-  | 'settings';
+  | 'settings'
+  | 'passwords';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -226,6 +235,16 @@ export type OverlayState =
       ask: string;
       kind: string;
     }
+  // "Save password for site?" after signing in (`update`: a new password
+  // for a login saved before), and the saved passwords panel.
+  | {
+      mode: 'password';
+      openId: number;
+      site: string;
+      username: string;
+      update: boolean;
+    }
+  | { mode: 'passwords'; openId: number }
   // The history panel (Ctrl+H) and the settings panel (Ctrl+,).
   | { mode: 'history'; openId: number }
   | { mode: 'settings'; openId: number }
@@ -276,6 +295,14 @@ export interface FirnBridge {
   removeHistory(url: string): void;
   showClearHistoryMenu(): void;
   onHistoryChanged(listener: () => void): () => void;
+  // Saved passwords: the answer to "save password?", and the passwords
+  // panel (the list never includes passwords; showing one asks for it).
+  answerSavePassword(answer: 'save' | 'dismiss'): void;
+  listPasswords(): Promise<{ logins: SavedLogin[]; canSave: boolean }>;
+  revealPassword(id: string): Promise<string | null>;
+  copyPassword(id: string): void;
+  deletePassword(id: string): void;
+  onPasswordsChanged(listener: () => void): () => void;
   // Settings: change some, pick the downloads folder, clear cookies and
   // site data (asks first), forget every site's permission answers.
   updateSettings(changes: Partial<Settings>): void;

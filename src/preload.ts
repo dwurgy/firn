@@ -37,6 +37,13 @@ const bridge: FirnBridge = {
   removeHistory: (url) => ipcRenderer.send('history:remove', url),
   showClearHistoryMenu: () => ipcRenderer.send('history:clear-menu'),
   onHistoryChanged: (listener) => listen('history:changed', () => listener()),
+  answerSavePassword: (answer) => ipcRenderer.send('password:answer', answer),
+  listPasswords: () => ipcRenderer.invoke('passwords:list'),
+  revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
+  copyPassword: (id) => ipcRenderer.send('passwords:copy', id),
+  deletePassword: (id) => ipcRenderer.send('passwords:delete', id),
+  onPasswordsChanged: (listener) =>
+    listen('passwords:changed', () => listener()),
   updateSettings: (changes) => ipcRenderer.send('settings:update', changes),
   chooseDownloadsFolder: () => ipcRenderer.send('settings:downloads-folder'),
   clearSiteData: () => ipcRenderer.send('settings:clear-site-data'),

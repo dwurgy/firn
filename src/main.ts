@@ -8,6 +8,7 @@ import {
   nativeImage,
   nativeTheme,
   screen,
+  safeStorage,
   session,
   shell,
   WebContentsView,
@@ -25,6 +26,7 @@ import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
+import { PasswordStore } from './passwords';
 import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
@@ -464,7 +466,10 @@ const createWindow = () => {
       };
     }
     if (layer === floating && overlay.mode === 'find') return findBarBounds();
-    if (layer === floating && overlay.mode === 'permission')
+    if (
+      layer === floating &&
+      (overlay.mode === 'permission' || overlay.mode === 'password')
+    )
       return permissionBounds();
     if (layer === peek) {
       // A little wider than the sidebar, so its soft shadow has room.
@@ -541,7 +546,8 @@ const createWindow = () => {
     if (
       state.mode !== 'hidden' &&
       state.mode !== 'lookout' &&
-      state.mode !== 'permission'
+      state.mode !== 'permission' &&
+      state.mode !== 'password'
     )
       floating.webContents.focus();
     return true;
@@ -551,7 +557,11 @@ const createWindow = () => {
     if (overlay.mode === 'lookout') return closeLookout();
     if (overlay.mode === 'hidden') return;
     if (overlay.mode === 'find') tabs.stopFind();
-    const wasPermission = overlay.mode === 'permission';
+    // A "save password?" card closed by something else is dropped (it only
+    // makes sense right after signing in).
+    if (overlay.mode === 'password') shownLogin = null;
+    const wasPermission =
+      overlay.mode === 'permission' || overlay.mode === 'password';
     if (wasPermission && shownPermission) {
       pendingPermissions.unshift(shownPermission);
       shownPermission = null;
@@ -561,7 +571,10 @@ const createWindow = () => {
     hideLayer(floating);
     if (!wasPermission) tabs.focusActive();
     // A site that was waiting to ask can now.
-    setImmediate(() => showNextPermission());
+    setImmediate(() => {
+      showNextPermission();
+      showLoginPrompt();
+    });
   };
 
   // --- Site permissions ------------------------------------------------------
@@ -585,9 +598,9 @@ const createWindow = () => {
   const PROMPT_MARGIN = 20; // room for its shadow
 
   const permissionBounds = () => {
-    const area = shownPermission
-      ? tabs.boundsOf(shownPermission.tabId)
-      : tabs.pageBoundsFor(pageTop);
+    const tabId =
+      overlay.mode === 'password' ? shownLogin?.tabId : shownPermission?.tabId;
+    const area = tabId ? tabs.boundsOf(tabId) : tabs.pageBoundsFor(pageTop);
     const width = Math.min(PROMPT_WIDTH, Math.max(0, area.width - 24));
     return {
       x: Math.round(area.x + 12 - PROMPT_MARGIN),
@@ -727,6 +740,110 @@ const createWindow = () => {
       },
     );
     Menu.buildFromTemplate(items).popup({ window: win });
+  };
+
+  // --- Saved passwords ---------------------------------------------------------
+  // After you sign in on a site (and the page moves on, as it does when a
+  // sign-in works), a small card offers to save the login, or to update the
+  // password; clicking into that site's login form later fills it in (the
+  // page helper asks; see src/page-preload.ts). Passwords are encrypted with
+  // the system's protection (src/passwords.ts).
+  const passwords = new PasswordStore(
+    path.join(app.getPath('userData'), 'passwords.json'),
+    process.env.FIRN_INSECURE_TEST_PASSWORDS === '1'
+      ? // Automated tests only, on machines without a keyring: NOT
+        // encrypted. Never set this for real use.
+        {
+          available: () => true,
+          encrypt: (text) => `test:${Buffer.from(text).toString('base64')}`,
+          decrypt: (secret) =>
+            Buffer.from(secret.replace(/^test:/, ''), 'base64').toString(),
+        }
+      : {
+          // On Linux without a keyring, Chromium's "encryption" is plain
+          // obfuscation; that's not good enough, so nothing is saved there.
+          available: () =>
+            safeStorage.isEncryptionAvailable() &&
+            (process.platform !== 'linux' ||
+              safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+          encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+          decrypt: (secret) =>
+            safeStorage.decryptString(Buffer.from(secret, 'base64')),
+        },
+  );
+  type PendingLogin = {
+    tabId: string;
+    origin: string;
+    username: string;
+    password: string;
+    update: boolean;
+    at: number;
+    // The page has moved on since (the sign-in worked).
+    ready: boolean;
+  };
+  let pendingLogin: PendingLogin | null = null;
+  let shownLogin: PendingLogin | null = null;
+  // How long after signing in the page may take to move on.
+  const LOGIN_PROMPT_WINDOW_MS = 60 * 1000;
+
+  const onLogin = (
+    tabId: string,
+    origin: string,
+    username: string,
+    password: string,
+  ) => {
+    if (!passwords.canSave) return;
+    const status = passwords.compare(origin, username, password);
+    if (status === 'same') return;
+    pendingLogin = {
+      tabId,
+      origin,
+      username,
+      password,
+      update: status === 'changed',
+      at: Date.now(),
+      ready: false,
+    };
+  };
+
+  const onPageNavigated = (tabId: string) => {
+    if (!pendingLogin || pendingLogin.tabId !== tabId) return;
+    if (Date.now() - pendingLogin.at > LOGIN_PROMPT_WINDOW_MS) {
+      pendingLogin = null;
+      return;
+    }
+    pendingLogin.ready = true;
+    showLoginPrompt();
+  };
+
+  const showLoginPrompt = () => {
+    const login = pendingLogin;
+    if (!login?.ready || shownLogin || overlay.mode !== 'hidden' || lookout)
+      return;
+    if (!tabs.isOnScreen(login.tabId)) return;
+    pendingLogin = null;
+    shownLogin = login;
+    showOverlay({
+      mode: 'password',
+      openId: ++commandOpenId,
+      site: hostOf(login.origin),
+      username: login.username,
+      update: login.update,
+    });
+  };
+
+  const answerLogin = (answer: 'save' | 'dismiss') => {
+    const login = shownLogin;
+    if (!login || overlay.mode !== 'password') return;
+    if (answer === 'save')
+      passwords.save(login.origin, login.username, login.password);
+    shownLogin = null;
+    hideOverlay();
+    send('passwords:changed');
+  };
+
+  const openPasswords = () => {
+    showOverlay({ mode: 'passwords', openId: ++commandOpenId });
   };
 
   // --- Find in page ---------------------------------------------------------
@@ -946,6 +1063,7 @@ const createWindow = () => {
     (list) => send('downloads:state', list),
   );
   engine.onDownload((item) => downloads.add(item));
+  engine.setSavedLoginProvider((origin) => passwords.loginFor(origin));
   // A site asking for the camera and so on: answered from what was decided
   // before, or asked (see "Site permissions" above).
   engine.onPermissionRequest(
@@ -993,6 +1111,7 @@ const createWindow = () => {
       if (overlay.mode === 'find' && state.activeTabId !== findTabId)
         hideOverlay();
       showNextPermission();
+      showLoginPrompt();
     },
     onNavChanged: (state) => {
       if (!win.isDestroyed())
@@ -1009,6 +1128,9 @@ const createWindow = () => {
     },
     onSiteZoomChanged: () => saver.schedule(),
     onFullscreenChange: () => syncTopBar(),
+    onLogin: (id, origin, username, password) =>
+      onLogin(id, origin, username, password),
+    onPageNavigated: (id) => onPageNavigated(id),
     onContextMenu: (id, menu) => {
       const page = tabs.pageOf(id);
       if (page) showPageMenu(menu, page, id);
@@ -1084,6 +1206,8 @@ const createWindow = () => {
       onFindResult: () => {},
       onZoomRequest: () => {},
       onContextMenu: (menu) => showPageMenu(menu, page, null),
+      // Signing in inside a preview isn't saved (it's not a tab).
+      onLogin: () => {},
     });
     lookout = { page, favicon: '', openId: ++commandOpenId, shown: false };
     page.load(url);
@@ -1738,6 +1862,9 @@ const createWindow = () => {
       case 'history':
         openHistory();
         break;
+      case 'passwords':
+        openPasswords();
+        break;
     }
   };
 
@@ -1946,6 +2073,7 @@ const createWindow = () => {
           accelerator: 'CmdOrCtrl+H',
           click: () => openHistory(),
         },
+        { label: 'Passwords', click: () => openPasswords() },
         {
           label: 'Downloads',
           click: () => void shell.openPath(downloadsFolder()),
@@ -1976,6 +2104,29 @@ const createWindow = () => {
         { label: 'Today', click: clear(midnight.getTime()) },
         { label: 'All time', click: clear(0) },
       ]).popup({ window: win });
+    },
+    'password:answer': (_sender, answer) => {
+      if (answer === 'save' || answer === 'dismiss') answerLogin(answer);
+    },
+    'passwords:copy': (_sender, id) => {
+      const password = typeof id === 'string' ? passwords.reveal(id) : null;
+      if (password !== null) void clipboard.writeText(password);
+    },
+    'passwords:delete': async (_sender, id) => {
+      if (typeof id !== 'string') return;
+      const login = passwords.list().find((l) => l.id === id);
+      if (!login) return;
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['Delete', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: 'Delete this saved password?',
+        detail: `${login.username || '(no username)'} on ${hostOf(login.origin)}`,
+      });
+      if (response !== 0) return;
+      passwords.remove(id);
+      send('passwords:changed');
     },
     'permission:answer': (_sender, answer) => {
       if (answer === 'allow' || answer === 'block' || answer === 'dismiss')
@@ -2100,6 +2251,16 @@ const createWindow = () => {
       uiContents.includes(event.sender) && typeof query === 'string'
         ? history.search(query.slice(0, 200), 6)
         : [],
+  );
+  ipcMain.handle('passwords:list', (event: IpcMainInvokeEvent) =>
+    uiContents.includes(event.sender)
+      ? { logins: passwords.list(), canSave: passwords.canSave }
+      : { logins: [], canSave: false },
+  );
+  ipcMain.handle('passwords:reveal', (event: IpcMainInvokeEvent, id: unknown) =>
+    uiContents.includes(event.sender) && typeof id === 'string'
+      ? passwords.reveal(id)
+      : null,
   );
   ipcMain.handle('history:list', (event: IpcMainInvokeEvent, query: unknown) =>
     uiContents.includes(event.sender) && typeof query === 'string'
@@ -2291,6 +2452,7 @@ const createWindow = () => {
     history.flush();
     downloads.flush();
     sitePermissions.flush();
+    passwords.flush();
   });
 
   win.on('closed', () => {
@@ -2301,6 +2463,8 @@ const createWindow = () => {
     ipcMain.removeHandler('command:tabs');
     ipcMain.removeHandler('history:search');
     ipcMain.removeHandler('history:list');
+    ipcMain.removeHandler('passwords:list');
+    ipcMain.removeHandler('passwords:reveal');
     nativeTheme.removeListener('updated', onThemeChange);
     if (switcher) clearTimeout(switcher.timer);
     tabs.destroy();

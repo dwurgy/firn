@@ -39,6 +39,8 @@ const bridge: FirnBridge = {
   onHistoryChanged: (listener) => listen('history:changed', () => listener()),
   answerSavePassword: (answer) => ipcRenderer.send('password:answer', answer),
   answerDanger: (answer) => ipcRenderer.send('danger:answer', answer),
+  finishWelcome: (basecampUrls) =>
+    ipcRenderer.send('welcome:finish', basecampUrls),
   listPasswords: () => ipcRenderer.invoke('passwords:list'),
   revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
   copyPassword: (id) => ipcRenderer.send('passwords:copy', id),
@@ -69,6 +71,7 @@ const bridge: FirnBridge = {
   showSidebarMenu: () => ipcRenderer.send('sidebar:menu'),
   clearTabs: () => ipcRenderer.send('tabs:clear'),
   iconData: (url) => ipcRenderer.invoke('icon:data', url),
+  welcomeIcon: (siteUrl) => ipcRenderer.invoke('welcome:icon', siteUrl),
   windowCommand: (command) => ipcRenderer.send('window:command', command),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => listen('nav:state', listener),

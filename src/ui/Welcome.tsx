@@ -1,0 +1,408 @@
+import { useEffect, useRef, useState } from 'react';
+import { SPACE_ICON_NAMES } from '../spaceIcons';
+import type { Settings, SpacesState } from '../types';
+import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from '../welcome';
+import firnMark from './firn-mark.svg';
+import { SpaceIcon } from './SpaceIcon';
+
+const STEPS = ['hello', 'address', 'space', 'basecamp', 'tips'] as const;
+
+// The welcome, the first time Firn opens: a card in the middle of the
+// window, a few short steps. Every choice applies right away, so it shows
+// behind the card as you pick. Esc (or "Skip setup") leaves it at any point.
+export function Welcome({
+  settings,
+  spaces,
+}: {
+  settings: Settings | null;
+  spaces: SpacesState;
+}) {
+  const [step, setStep] = useState(0);
+  // The card takes the keyboard once, when it opens (not on every redraw,
+  // which would pull it out of the name box after each letter).
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => card.current?.focus(), []);
+  // The sites' own icons, picked the way Basecamp picks them (see
+  // welcomeIcon in src/main.ts); until one arrives (or if none can), its
+  // letter.
+  const [icons, setIcons] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    for (const site of BASECAMP_SUGGESTIONS)
+      void window.firn
+        .welcomeIcon(site.url)
+        .catch(() => null)
+        .then((data) => {
+          if (data && live) setIcons((all) => ({ ...all, [site.url]: data }));
+        });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const [picked, setPicked] = useState<string[]>([]);
+  const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
+  const [name, setName] = useState(space?.name ?? 'Personal');
+  const mac = window.firn.platform === 'darwin';
+  const key = mac ? 'Cmd' : 'Ctrl';
+
+  const saveName = () => {
+    if (space && name.trim() && name.trim() !== space.name)
+      window.firn.updateSpace(space.id, { name: name.trim() });
+  };
+  const finish = () => {
+    saveName();
+    window.firn.finishWelcome(picked);
+  };
+  const next = () => {
+    if (STEPS[step] === 'space') saveName();
+    if (step === STEPS.length - 1) finish();
+    else setStep(step + 1);
+  };
+  const back = () => setStep(Math.max(0, step - 1));
+  const accent = space?.color ?? SPACE_COLOR_CHOICES[0].hex;
+
+  let body: React.JSX.Element;
+  switch (STEPS[step]) {
+    case 'hello':
+      body = (
+        <>
+          <img className="welcome-mark" src={firnMark} alt="" />
+          <h1 className="welcome-hello">Welcome to Firn</h1>
+          <p>
+            A calm place for the web. Let's set up a few things; it takes a
+            minute, and you can change any of it later.
+          </p>
+        </>
+      );
+      break;
+    case 'address':
+      body = (
+        <>
+          <h1>Where should the address bar go?</h1>
+          <p>You can change this anytime in Settings.</p>
+          <div className="welcome-looks" role="radiogroup">
+            {(
+              [
+                ['sidebar', 'In the sidebar', 'More room for the page.'],
+                ['top', 'At the top', 'Where most browsers have it.'],
+              ] as const
+            ).map(([value, label, note]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={settings?.addressBar === value}
+                className={`welcome-look${settings?.addressBar === value ? ' is-on' : ''}`}
+                style={{ '--accent': accent } as React.CSSProperties}
+                onClick={() =>
+                  window.firn.updateSettings({ addressBar: value })
+                }
+              >
+                <LookPicture top={value === 'top'} />
+                <strong>{label}</strong>
+                <small>{note}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      );
+      break;
+    case 'space':
+      body = (
+        <>
+          <h1>Make your first space</h1>
+          <p>
+            Spaces keep things apart, like Work and Personal: each has its own
+            tabs, color and icon. You can add more later.
+          </p>
+          {space && (
+            <div className="welcome-space">
+              <label className="welcome-name">
+                <span
+                  className="welcome-name-icon"
+                  style={{ color: space.color }}
+                >
+                  <SpaceIcon name={space.icon} size={18} />
+                </span>
+                <input
+                  value={name}
+                  maxLength={40}
+                  aria-label="Space name"
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={saveName}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') next();
+                  }}
+                />
+              </label>
+              <div className="welcome-colors" role="radiogroup">
+                {SPACE_COLOR_CHOICES.map((c) => (
+                  <button
+                    key={c.hex}
+                    role="radio"
+                    title={c.name}
+                    aria-label={c.name}
+                    aria-checked={space.color === c.hex}
+                    className={`welcome-color${space.color === c.hex ? ' is-on' : ''}`}
+                    style={{ '--swatch': c.hex } as React.CSSProperties}
+                    onClick={() =>
+                      window.firn.updateSpace(space.id, { color: c.hex })
+                    }
+                  />
+                ))}
+              </div>
+              <div className="welcome-icons" role="radiogroup">
+                {SPACE_ICON_NAMES.map((icon) => (
+                  <button
+                    key={icon}
+                    role="radio"
+                    aria-label={icon}
+                    aria-checked={space.icon === icon}
+                    className={`welcome-icon${space.icon === icon ? ' is-on' : ''}`}
+                    style={{ color: space.color }}
+                    onClick={() => window.firn.updateSpace(space.id, { icon })}
+                  >
+                    <SpaceIcon name={icon} size={18} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      );
+      break;
+    case 'basecamp':
+      body = (
+        <>
+          <h1>Pick your everyday sites</h1>
+          <p>
+            They stay at the top of the sidebar in every space, one click away.
+            Choose a few, or none.
+          </p>
+          <div className="welcome-sites">
+            {BASECAMP_SUGGESTIONS.map((site) => {
+              const on = picked.includes(site.url);
+              return (
+                <button
+                  key={site.url}
+                  aria-pressed={on}
+                  className={`welcome-site${on ? ' is-on' : ''}`}
+                  style={{ '--accent': accent } as React.CSSProperties}
+                  onClick={() =>
+                    setPicked(
+                      on
+                        ? picked.filter((u) => u !== site.url)
+                        : [...picked, site.url],
+                    )
+                  }
+                >
+                  <span
+                    className={`welcome-site-tile${icons[site.url] ? ' has-icon' : ''}`}
+                  >
+                    {icons[site.url] ? (
+                      <img src={icons[site.url]} alt="" />
+                    ) : (
+                      site.name[0]
+                    )}
+                    {on && (
+                      <span className="welcome-site-check">
+                        <svg viewBox="0 0 16 16" aria-hidden>
+                          <path d="M4 8.4 6.8 11 12 5.2" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                  <span className="welcome-site-name">{site.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      );
+      break;
+    case 'tips':
+      body = (
+        <>
+          <h1>You're all set</h1>
+          <p>Three things worth knowing:</p>
+          <ul className="welcome-tips">
+            <li>
+              <span className="welcome-keys">
+                <kbd>{key}</kbd>
+                <kbd>T</kbd>
+              </span>
+              <span>Open a new tab, or find any tab, page or setting.</span>
+            </li>
+            <li>
+              <span className="welcome-keys">
+                <kbd>Right-click</kbd>
+              </span>
+              <span>Tabs, links and spaces each have a short menu.</span>
+            </li>
+            <li>
+              <span className="welcome-keys">
+                <kbd>{key}</kbd>
+                <kbd>S</kbd>
+              </span>
+              <span>
+                Hide the sidebar for more room. It peeks back at the left edge.
+              </span>
+            </li>
+          </ul>
+        </>
+      );
+      break;
+  }
+
+  return (
+    <div
+      className="backdrop welcome-backdrop"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') finish();
+      }}
+    >
+      <div
+        className="panel welcome"
+        role="dialog"
+        aria-label="Welcome to Firn"
+        tabIndex={-1}
+        ref={card}
+      >
+        <div
+          className={`welcome-body${step === 0 ? ' is-hello' : ''}`}
+          key={step}
+        >
+          {body}
+        </div>
+        <footer className="welcome-footer">
+          <div className="welcome-dots" aria-hidden>
+            {STEPS.map((s, i) => (
+              <span key={s} className={i === step ? 'is-on' : ''} />
+            ))}
+          </div>
+          <div className="welcome-buttons">
+            {step === 0 ? (
+              <button className="welcome-quiet" onClick={finish}>
+                Skip setup
+              </button>
+            ) : (
+              <button className="welcome-quiet" onClick={back}>
+                Back
+              </button>
+            )}
+            <button className="welcome-next" onClick={next} autoFocus>
+              {step === 0
+                ? 'Get started'
+                : step === STEPS.length - 1
+                  ? 'Start browsing'
+                  : 'Continue'}
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// A small drawing of Firn's window: the address bar in the sidebar, or in
+// a bar along the top.
+function LookPicture({ top }: { top: boolean }) {
+  return (
+    <svg className="look-picture" viewBox="0 0 200 120" aria-hidden>
+      <rect
+        className="look-frame"
+        x="0"
+        y="0"
+        width="200"
+        height="120"
+        rx="10"
+      />
+      {top ? (
+        <>
+          <rect
+            className="look-pill is-address"
+            x="92"
+            y="7"
+            width="64"
+            height="11"
+            rx="5.5"
+          />
+          <rect
+            className="look-page"
+            x="54"
+            y="25"
+            width="140"
+            height="89"
+            rx="6"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="30"
+            width="38"
+            height="7"
+            rx="3.5"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="42"
+            width="30"
+            height="7"
+            rx="3.5"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="54"
+            width="34"
+            height="7"
+            rx="3.5"
+          />
+        </>
+      ) : (
+        <>
+          <rect
+            className="look-pill is-address"
+            x="8"
+            y="10"
+            width="40"
+            height="11"
+            rx="5.5"
+          />
+          <rect
+            className="look-page"
+            x="54"
+            y="6"
+            width="140"
+            height="108"
+            rx="6"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="30"
+            width="38"
+            height="7"
+            rx="3.5"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="42"
+            width="30"
+            height="7"
+            rx="3.5"
+          />
+          <rect
+            className="look-pill"
+            x="8"
+            y="54"
+            width="34"
+            height="7"
+            rx="3.5"
+          />
+        </>
+      )}
+    </svg>
+  );
+}

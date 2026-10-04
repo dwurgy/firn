@@ -89,6 +89,8 @@ export interface Settings {
   addressBar: 'sidebar' | 'top';
   // Warn before opening scam and malware sites (Google Safe Browsing).
   safeBrowsing: boolean;
+  // The welcome (shown the first time Firn opens) has been seen.
+  onboarded: boolean;
 }
 
 // What the settings panel shows: the settings, plus the downloads folder
@@ -153,7 +155,8 @@ export type CommandAction =
   | 'downloads'
   | 'history'
   | 'settings'
-  | 'passwords';
+  | 'passwords'
+  | 'welcome';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -250,6 +253,8 @@ export type OverlayState =
       update: boolean;
     }
   | { mode: 'passwords'; openId: number }
+  // The welcome, the first time Firn opens: a few short setup steps.
+  | { mode: 'welcome'; openId: number }
   // A dangerous site was stopped before it loaded: a warning covers its tab.
   | {
       mode: 'danger';
@@ -313,6 +318,9 @@ export interface FirnBridge {
   answerSavePassword(answer: 'save' | 'dismiss'): void;
   // The warning about a dangerous site: go back, or visit it anyway.
   answerDanger(answer: 'back' | 'visit'): void;
+  // The welcome is done: start Basecamp with these sites (from
+  // BASECAMP_SUGGESTIONS in src/welcome.ts).
+  finishWelcome(basecampUrls: string[]): void;
   listPasswords(): Promise<{ logins: SavedLogin[]; canSave: boolean }>;
   revealPassword(id: string): Promise<string | null>;
   copyPassword(id: string): void;
@@ -379,6 +387,8 @@ export interface FirnBridge {
   showSidebarMenu(): void;
   // A favicon as a data: URL, so the UI can read its colors.
   iconData(url: string): Promise<string | null>;
+  // A suggested site's icon for the welcome (see BASECAMP_SUGGESTIONS).
+  welcomeIcon(siteUrl: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;

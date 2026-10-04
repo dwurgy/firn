@@ -64,3 +64,43 @@ export const ICON_LINKS_SCRIPT = `
   .filter((l) => !l.media || matchMedia(l.media).matches)
   .map((l) => ({ rel: l.rel, href: l.href, sizes: l.getAttribute('sizes') || '', type: l.type || '' }))
 `;
+
+// The same icon links, read from a page's HTML instead of the live page
+// (for the welcome, which shows sites' icons without opening them).
+// `dark`: links meant only for the other color scheme are left out.
+export function iconLinksFromHtml(
+  html: string,
+  baseUrl: string,
+  dark: boolean,
+): IconLink[] {
+  const links: IconLink[] = [];
+  for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
+    const attrs: Record<string, string> = {};
+    for (const m of tag.matchAll(
+      /([a-zA-Z:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g,
+    ))
+      attrs[m[1].toLowerCase()] = (m[2] ?? m[3] ?? m[4] ?? '').replace(
+        /&amp;/g,
+        '&',
+      );
+    const rel = attrs.rel ?? '';
+    if (
+      !/(^|\s)(icon|apple-touch-icon|apple-touch-icon-precomposed)(\s|$)/i.test(
+        rel,
+      ) ||
+      !attrs.href
+    )
+      continue;
+    const media = attrs.media ?? '';
+    if (/prefers-color-scheme:\s*dark/i.test(media) && !dark) continue;
+    if (/prefers-color-scheme:\s*light/i.test(media) && dark) continue;
+    let href: string;
+    try {
+      href = new URL(attrs.href, baseUrl).href;
+    } catch {
+      continue;
+    }
+    links.push({ rel, href, sizes: attrs.sizes ?? '', type: attrs.type ?? '' });
+  }
+  return links;
+}

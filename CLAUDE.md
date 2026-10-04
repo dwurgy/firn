@@ -55,7 +55,8 @@ Section spacing:      20px
 Corner radius:        10px (tabs), 14px (panels/overlays)
 Window content inset: 8px around the web view, radius 12px (page floats in the frame)
 Font:                 system UI font, 13px tabs, 12px labels; brand moments
-                      (the welcome) use Fraunces, soft, for headlines
+                      (big headings only: the welcome, panel titles, the
+                      empty page, the scam warning) use Fraunces, soft
 Motion:               200ms, ease-out
 Neutrals:             warm grays (slight brown/sand undertone), not blue-gray
 Light & dark:         both, following the OS setting

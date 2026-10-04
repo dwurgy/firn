@@ -1,5 +1,5 @@
 # firn
-A calm, minimalist desktop browser built on Electron and Chromium. Vertical tabs with room to breathe, Basecamp for your favorite sites, pinned tabs, spaces, Lookout link previews, and split view. Inspired by Arc and Zen, named after settled alpine snow. firnbrowser.com
+A calm, minimal browser that's easy for everyone: vertical tabs, spaces, split view, and link previews, without the learning curve. No telemetry; your data stays on your device. Built on Chromium. firnbrowser.com
 
 ## Running Firn on your computer
 
@@ -42,6 +42,8 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
 | Preview a link in Lookout | Shift+click | Shift+click |
+| History | Ctrl+H | Cmd+H |
+| Settings | Ctrl+, | Cmd+, |
 | Find in page (Enter / Shift+Enter: next / previous, Esc: close) | Ctrl+F (then F3 or Ctrl+G for next) | Cmd+F (then Cmd+G) |
 | Zoom in / out / back to 100% (each site remembers its zoom) | Ctrl+= / Ctrl+- / Ctrl+0, or Ctrl+mouse wheel | Cmd+= / Cmd+- / Cmd+0 |
 | Switch to space 1–9 | Ctrl+Shift+1…9 | Cmd+Shift+1…9 |
@@ -83,6 +85,13 @@ Both remember the address they were added at as their *home*: right-click for **
 ### Spaces
 
 Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them), and its own icon: one of 16 simple line icons drawn for Firn, shown in the space's color so it never looks like a website's icon. "Change icon…" opens a small grid of them under the space's name. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+
+### History and settings
+
+The **Firn mark** button at the top of the sidebar (next to the sidebar toggle) opens the Firn menu: New tab, New space, History, Downloads and Settings.
+
+- **History** (Ctrl+H) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where downloads are saved**, and **privacy**: clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Downloads
 

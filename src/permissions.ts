@@ -74,6 +74,11 @@ export class SitePermissions {
     return { ...this.sites.get(origin) };
   }
 
+  forgetAll() {
+    this.sites.clear();
+    this.saver.schedule();
+  }
+
   forget(origin: string) {
     if (this.sites.delete(origin)) this.saver.schedule();
   }

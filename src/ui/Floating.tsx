@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { isSearch, toNavigableUrl } from '../url';
+import { isSearch, SEARCH_ENGINES, toNavigableUrl } from '../url';
 import type {
   CommandAction,
   FindResult,
@@ -7,6 +7,8 @@ import type {
   OverlayState,
   Rect,
   Space,
+  Settings,
+  SettingsState,
   SpacesState,
   TabView,
 } from '../types';
@@ -16,6 +18,7 @@ import {
   AppIcon,
   ArrowIcon,
   BellIcon,
+  ChevronIcon,
   CameraIcon,
   ClipboardIcon,
   CloseIcon,
@@ -40,6 +43,7 @@ export function Floating() {
     spaces: [],
     activeSpaceId: '',
   });
+  const [settings, setSettings] = useState<SettingsState | null>(null);
 
   useEffect(() => {
     const offs = [
@@ -49,6 +53,7 @@ export function Floating() {
         setActiveTabId(state.activeTabId);
       }),
       window.firn.onSpacesState(setSpaces),
+      window.firn.onSettingsState(setSettings),
     ];
     window.firn.ready();
     return () => offs.forEach((off) => off());
@@ -56,6 +61,12 @@ export function Floating() {
 
   if (overlay.mode === 'permission') {
     return <PermissionPrompt key={overlay.openId} {...overlay} />;
+  }
+  if (overlay.mode === 'settings') {
+    return <SettingsPanel key={overlay.openId} state={settings} />;
+  }
+  if (overlay.mode === 'history') {
+    return <HistoryPanel key={overlay.openId} />;
   }
   if (overlay.mode === 'find') {
     return <FindBar key={overlay.openId} initialText={overlay.text} />;
@@ -182,6 +193,12 @@ function actionsFor(
       words: 'clear tabs close all',
     },
     { action: 'new-space', label: 'New space', words: 'new space add create' },
+    { action: 'history', label: 'History', words: 'history visited pages' },
+    {
+      action: 'settings',
+      label: 'Settings',
+      words: 'settings preferences options search engine theme',
+    },
     {
       action: 'downloads',
       label: 'Open downloads folder',
@@ -675,6 +692,417 @@ function PermissionPrompt({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// The history panel (Ctrl+H): pages visited, newest first, grouped by day.
+// Type to search; click a page to open it in a new tab; hover for ✕ to
+// forget one. Esc or a click outside closes it.
+function HistoryPanel() {
+  const [query, setQuery] = useState('');
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [version, setVersion] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    return window.firn.onHistoryChanged(() => setVersion((v) => v + 1));
+  }, []);
+  useEffect(() => {
+    let current = true;
+    window.firn
+      .listHistory(query.trim())
+      .then((list) => current && setEntries(list));
+    return () => {
+      current = false;
+    };
+  }, [query, version]);
+
+  const groups = useMemo(() => groupByDay(entries), [entries]);
+
+  return (
+    <div
+      className="backdrop is-sheet"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) window.firn.closeOverlay();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.closeOverlay();
+      }}
+    >
+      <div
+        className="panel sheet history-sheet"
+        role="dialog"
+        aria-label="History"
+      >
+        <header className="sheet-header">
+          <h2>History</h2>
+          <button
+            className="icon-button"
+            title="Close (Esc)"
+            onClick={() => window.firn.closeOverlay()}
+          >
+            <CloseIcon />
+          </button>
+        </header>
+        <div className="sheet-search">
+          <SearchIcon />
+          <input
+            ref={inputRef}
+            spellCheck={false}
+            placeholder="Search history"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="sheet-body">
+          {groups.length === 0 && (
+            <p className="sheet-empty">
+              {query.trim()
+                ? 'Nothing in your history matches that.'
+                : 'Pages you visit will show up here.'}
+            </p>
+          )}
+          {groups.map(({ label, items }) => (
+            <section key={label} className="history-day">
+              <h3>{label}</h3>
+              {items.map((entry) => (
+                <div
+                  key={entry.url}
+                  className="history-row"
+                  title={entry.url}
+                  onClick={() => window.firn.openUrl(entry.url)}
+                >
+                  <span className="tab-icon">
+                    <HistoryFavicon url={entry.favicon} />
+                  </span>
+                  <span className="history-title">
+                    {entry.title || shortUrl(entry.url)}
+                  </span>
+                  <span className="history-site">{siteName(entry.url)}</span>
+                  <span className="history-time">
+                    {new Date(entry.lastVisit).toLocaleTimeString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <button
+                    className="icon-button history-remove"
+                    title="Remove from history"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.firn.removeHistory(entry.url);
+                    }}
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+        <footer className="sheet-footer">
+          <span>Kept on this computer only.</span>
+          <button
+            className="sheet-button"
+            onClick={() => window.firn.showClearHistoryMenu()}
+          >
+            Clear history…
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function HistoryFavicon({ url }: { url: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) return <GlobeIcon />;
+  return (
+    <img
+      className="tab-favicon"
+      src={url}
+      alt=""
+      draggable={false}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
+function siteName(url: string) {
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+// "Today", "Yesterday", a weekday for the last week, then dates.
+function groupByDay(entries: HistoryEntry[]) {
+  const startOf = (time: number) => {
+    const d = new Date(time);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const today = startOf(Date.now());
+  const DAY = 24 * 60 * 60 * 1000;
+  const labelFor = (day: number) => {
+    const daysAgo = Math.round((today - day) / DAY);
+    if (daysAgo === 0) return 'Today';
+    if (daysAgo === 1) return 'Yesterday';
+    const date = new Date(day);
+    if (daysAgo < 7) return date.toLocaleDateString([], { weekday: 'long' });
+    return date.toLocaleDateString([], {
+      month: 'long',
+      day: 'numeric',
+      ...(date.getFullYear() !== new Date().getFullYear()
+        ? { year: 'numeric' }
+        : {}),
+    });
+  };
+  const groups: { label: string; items: HistoryEntry[] }[] = [];
+  let lastDay = -1;
+  for (const entry of entries) {
+    const day = startOf(entry.lastVisit);
+    if (day !== lastDay) {
+      groups.push({ label: labelFor(day), items: [] });
+      lastDay = day;
+    }
+    groups[groups.length - 1].items.push(entry);
+  }
+  return groups;
+}
+
+// The settings panel (Ctrl+, or the sidebar's ⋯ menu): only the few things
+// a person might want to change. Changes apply right away.
+function SettingsPanel({ state }: { state: SettingsState | null }) {
+  const [permissionsReset, setPermissionsReset] = useState(false);
+  const change = (changes: Partial<Settings>) =>
+    window.firn.updateSettings(changes);
+
+  return (
+    <div
+      className="backdrop is-sheet"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) window.firn.closeOverlay();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') window.firn.closeOverlay();
+      }}
+    >
+      <div
+        className="panel sheet settings-sheet"
+        role="dialog"
+        aria-label="Settings"
+        tabIndex={-1}
+        ref={(el) => el?.focus()}
+      >
+        <header className="sheet-header">
+          <h2>Settings</h2>
+          <button
+            className="icon-button"
+            title="Close (Esc)"
+            onClick={() => window.firn.closeOverlay()}
+          >
+            <CloseIcon />
+          </button>
+        </header>
+        {state && (
+          <div className="sheet-body settings-body">
+            <section className="settings-group">
+              <h3>Search</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Search engine</span>
+                  <small>
+                    Used when you type something that isn't an address.
+                  </small>
+                </div>
+                <Dropdown
+                  label="Search engine"
+                  value={state.settings.searchEngine}
+                  options={Object.entries(SEARCH_ENGINES).map(([id, e]) => ({
+                    value: id,
+                    label: e.name,
+                  }))}
+                  onChange={(value) =>
+                    change({ searchEngine: value as Settings['searchEngine'] })
+                  }
+                />
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Appearance</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Theme</span>
+                </div>
+                <div className="segmented" role="radiogroup">
+                  {(
+                    [
+                      ['system', 'Match system'],
+                      ['light', 'Light'],
+                      ['dark', 'Dark'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      role="radio"
+                      aria-checked={state.settings.theme === value}
+                      className={state.settings.theme === value ? 'is-on' : ''}
+                      onClick={() => change({ theme: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Downloads</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Save files to</span>
+                  <small title={state.downloadsFolder}>
+                    {state.downloadsFolder}
+                  </small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.chooseDownloadsFolder()}
+                >
+                  Change…
+                </button>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3>Privacy</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>History</span>
+                  <small>The pages you've visited.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.showClearHistoryMenu()}
+                >
+                  Clear history…
+                </button>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Cookies and site data</span>
+                  <small>Clearing signs you out of websites.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  onClick={() => window.firn.clearSiteData()}
+                >
+                  Clear…
+                </button>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Site permissions</span>
+                  <small>
+                    Camera, location, notifications… Sites will ask again.
+                  </small>
+                </div>
+                <button
+                  className="sheet-button"
+                  disabled={permissionsReset}
+                  onClick={() => {
+                    window.firn.resetAllPermissions();
+                    setPermissionsReset(true);
+                  }}
+                >
+                  {permissionsReset ? 'Reset' : 'Reset all'}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+        <footer className="sheet-footer">
+          <span>Firn {state?.version}</span>
+          <span>Everything stays on this computer.</span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// A dropdown in Firn's own colors (the system's dropdown list ignores
+// Firn's light/dark setting on Windows). Click to open, pick one; Esc or a
+// click elsewhere closes it.
+function Dropdown({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    box.current
+      ?.querySelector<HTMLButtonElement>('[aria-selected=true]')
+      ?.focus();
+    const onPointer = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    addEventListener('pointerdown', onPointer, true);
+    return () => removeEventListener('pointerdown', onPointer, true);
+  }, [open]);
+  const current = options.find((o) => o.value === value);
+  return (
+    <div
+      ref={box}
+      className="dropdown"
+      onKeyDown={(e) => {
+        // Esc closes the list (not the whole panel).
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        className="dropdown-button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{current?.label}</span>
+        <ChevronIcon />
+      </button>
+      {open && (
+        <div className="dropdown-list" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              role="option"
+              aria-selected={option.value === value}
+              className="dropdown-option"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

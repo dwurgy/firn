@@ -47,37 +47,42 @@
   color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Warm mid-grey, not black, so dark pages still read as lifted. */
-    --frame: #3a3734;
-    --frame-glow: rgba(150, 178, 192, 0.1);
-    --frame-glass: rgba(58, 55, 52, 0.4);
-    --page: #2b2826;
-    --text: #f5f1ec;
-    --text-muted: #d4cdc5;
-    --text-faint: #958d85;
-    --field: rgba(255, 250, 245, 0.08);
-    --field-hover: rgba(255, 250, 245, 0.12);
-    --field-focus: rgba(255, 250, 245, 0.15);
-    --hover: rgba(255, 250, 245, 0.07);
-    --press: rgba(255, 250, 245, 0.13);
-    --tab-active: rgba(255, 250, 245, 0.14);
-    --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-    --pin-wash: 0.24;
-    --space-wash: 0.14;
-    --pin-edge: 0.6;
-    --tab-dragged-shadow:
-      0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
-    --frost: rgba(160, 196, 214, 0.45);
-    --frost-strong: rgba(176, 208, 224, 0.8);
-    --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
-    --backdrop: rgba(0, 0, 0, 0.18);
-    --lookout-dim: rgba(0, 0, 0, 0.42);
-    --lookout-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
-    --panel-edge: rgba(255, 250, 245, 0.08);
-  }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Dark: Firn's main process says which (following the system, or the
+   Light/Dark choice in settings); see src/ui/index.tsx. */
+:root[data-theme='dark'] {
+  /* Warm mid-grey, not black, so dark pages still read as lifted. */
+  --frame: #3a3734;
+  --frame-glow: rgba(150, 178, 192, 0.1);
+  --frame-glass: rgba(58, 55, 52, 0.4);
+  --page: #2b2826;
+  --text: #f5f1ec;
+  --text-muted: #d4cdc5;
+  --text-faint: #958d85;
+  --field: rgba(255, 250, 245, 0.08);
+  --field-hover: rgba(255, 250, 245, 0.12);
+  --field-focus: rgba(255, 250, 245, 0.15);
+  --hover: rgba(255, 250, 245, 0.07);
+  --press: rgba(255, 250, 245, 0.13);
+  --tab-active: rgba(255, 250, 245, 0.14);
+  --tab-active-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --pin-wash: 0.24;
+  --space-wash: 0.14;
+  --pin-edge: 0.6;
+  --tab-dragged-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 20px rgba(0, 0, 0, 0.25);
+  --frost: rgba(160, 196, 214, 0.45);
+  --frost-strong: rgba(176, 208, 224, 0.8);
+  --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 22px rgba(0, 0, 0, 0.35);
+  --backdrop: rgba(0, 0, 0, 0.18);
+  --lookout-dim: rgba(0, 0, 0, 0.42);
+  --lookout-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.4);
+  --panel-edge: rgba(255, 250, 245, 0.08);
+  color-scheme: dark;
 }
 
 * {
@@ -235,6 +240,19 @@ button {
     background var(--motion),
     color var(--motion),
     opacity var(--motion);
+}
+
+/* The Firn mark is a solid shape, heavier than the line icons beside it:
+   a touch smaller and softer until hovered. */
+.firn-menu-button svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+  transition: opacity var(--motion);
+}
+
+.firn-menu-button:hover svg {
+  opacity: 1;
 }
 
 .icon-button:hover:not(:disabled) {
@@ -1325,6 +1343,321 @@ button {
   padding-top: 18vh;
   background: var(--backdrop);
   animation: fade-in 180ms ease-out;
+}
+
+/* A sheet (history, settings): a larger panel, centered a little high. */
+.backdrop.is-sheet {
+  align-items: flex-start;
+  padding-top: 8vh;
+}
+
+.sheet {
+  width: min(680px, calc(100vw - 64px));
+  height: min(680px, calc(100vh - 16vh));
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px 8px 24px;
+}
+
+.sheet-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sheet-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 20px 8px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text-muted);
+}
+
+.sheet-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  user-select: text;
+}
+
+.sheet-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+}
+
+.sheet-empty {
+  margin: 48px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sheet-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px 14px 24px;
+  border-top: 1px solid var(--panel-edge);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.sheet-button {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.sheet-button:hover {
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+}
+
+.settings-body {
+  padding: 4px 24px 16px;
+}
+
+.settings-group {
+  padding: 14px 0 6px;
+}
+
+.settings-group + .settings-group {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.settings-group h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 52px;
+}
+
+.settings-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-label small {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-button {
+  height: 30px;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.dropdown-button:hover,
+.dropdown-button[aria-expanded='true'] {
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--panel-edge);
+}
+
+.dropdown-button svg {
+  color: var(--text-muted);
+}
+
+.dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--page);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.14),
+    0 12px 28px rgba(30, 20, 10, 0.16);
+  animation: rise 150ms ease-out;
+}
+
+.dropdown-option {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+  outline: none;
+}
+
+.dropdown-option:hover,
+.dropdown-option:focus-visible {
+  background: var(--hover);
+}
+
+.dropdown-option[aria-selected='true'] {
+  background: rgb(var(--space-rgb, 128 120 110) / 0.18);
+}
+
+.sheet-button:disabled {
+  color: var(--text-faint);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* A row of choices where one is on (e.g. the theme). */
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--hover);
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.segmented button.is-on {
+  background: var(--page);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(30, 20, 10, 0.12);
+}
+
+.history-day h3 {
+  margin: 16px 12px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 6px 0 12px;
+  border-radius: 10px;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.history-row:hover {
+  background: var(--hover);
+}
+
+.history-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.history-site {
+  max-width: 30%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.history-time {
+  width: 64px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-remove {
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.history-row:hover .history-remove {
+  opacity: 1;
 }
 
 .backdrop.is-switcher {

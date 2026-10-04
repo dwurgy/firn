@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SPACE_ICON_NAMES } from '../spaceIcons';
 import type { Settings, SpacesState } from '../types';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from '../welcome';
@@ -18,6 +18,28 @@ export function Welcome({
   spaces: SpacesState;
 }) {
   const [step, setStep] = useState(0);
+  // The card takes the keyboard once, when it opens (not on every redraw,
+  // which would pull it out of the name box after each letter).
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => card.current?.focus(), []);
+  // The sites' own icons, fetched while the welcome is open (see
+  // BASECAMP_SUGGESTIONS); until one arrives (or if it can't), its letter.
+  const [icons, setIcons] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    for (const site of BASECAMP_SUGGESTIONS)
+      void (async () => {
+        for (const url of site.icons) {
+          const data = await window.firn.iconData(url).catch(() => null);
+          if (!data) continue;
+          if (live) setIcons((all) => ({ ...all, [site.url]: data }));
+          return;
+        }
+      })();
+    return () => {
+      live = false;
+    };
+  }, []);
   const [picked, setPicked] = useState<string[]>([]);
   const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
   const [name, setName] = useState(space?.name ?? 'Personal');
@@ -174,8 +196,14 @@ export function Welcome({
                     )
                   }
                 >
-                  <span className="welcome-site-tile">
-                    {site.name[0]}
+                  <span
+                    className={`welcome-site-tile${icons[site.url] ? ' has-icon' : ''}`}
+                  >
+                    {icons[site.url] ? (
+                      <img src={icons[site.url]} alt="" />
+                    ) : (
+                      site.name[0]
+                    )}
                     {on && (
                       <span className="welcome-site-check">
                         <svg viewBox="0 0 16 16" aria-hidden>
@@ -238,7 +266,7 @@ export function Welcome({
         role="dialog"
         aria-label="Welcome to Firn"
         tabIndex={-1}
-        ref={(el) => el?.focus()}
+        ref={card}
       >
         <div
           className={`welcome-body${step === 0 ? ' is-hello' : ''}`}

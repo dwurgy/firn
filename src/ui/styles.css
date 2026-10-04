@@ -2661,11 +2661,26 @@ button {
     color var(--motion);
 }
 
+.welcome-site-tile.has-icon {
+  background: var(--field-focus);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 0 0 2px transparent;
+}
+
+.welcome-site-tile img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  animation: fade-in 200ms ease-out;
+}
+
 .welcome-site:hover .welcome-site-tile {
   background: var(--press);
 }
 
-.welcome-site.is-on .welcome-site-tile {
+.welcome-site.is-on .welcome-site-tile,
+.welcome-site.is-on .welcome-site-tile.has-icon {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   box-shadow: 0 0 0 2px var(--accent);
   color: var(--text);

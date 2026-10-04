@@ -973,6 +973,9 @@ function groupByDay(entries: HistoryEntry[]) {
 // a person might want to change. Changes apply right away.
 function SettingsPanel({ state }: { state: SettingsState | null }) {
   const [permissionsReset, setPermissionsReset] = useState(false);
+  // Takes the keyboard once, when it opens (not on every redraw).
+  const sheet = useRef<HTMLDivElement>(null);
+  useEffect(() => sheet.current?.focus(), []);
   const change = (changes: Partial<Settings>) =>
     window.firn.updateSettings(changes);
 
@@ -991,7 +994,7 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
         role="dialog"
         aria-label="Settings"
         tabIndex={-1}
-        ref={(el) => el?.focus()}
+        ref={sheet}
       >
         <header className="sheet-header">
           <h2>Settings</h2>
@@ -1216,6 +1219,13 @@ function Dropdown({
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  // Closing the list hands the keyboard back to the button (so Esc then
+  // closes the panel, as anywhere else in it).
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
   useEffect(() => {
     if (!open) return;
     box.current
@@ -1236,11 +1246,12 @@ function Dropdown({
         // Esc closes the list (not the whole panel).
         if (e.key === 'Escape' && open) {
           e.stopPropagation();
-          setOpen(false);
+          close();
         }
       }}
     >
       <button
+        ref={button}
         className="dropdown-button"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -1260,7 +1271,7 @@ function Dropdown({
               className="dropdown-option"
               onClick={() => {
                 onChange(option.value);
-                setOpen(false);
+                close();
               }}
             >
               {option.label}

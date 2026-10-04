@@ -111,6 +111,7 @@ Light & dark:         both, following the OS setting
 - **Electron + TypeScript.** UI built with React + Vite (via Electron Forge's Vite template) unless there's a strong reason otherwise.
 - **Web pages** render in `WebContentsView`s managed by the main process (not the deprecated `BrowserView`, and avoid the `<webview>` tag). The sidebar and overlays are the app's own UI layer.
 - **Security defaults, always:** `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` for any web content. Only a narrow preload bridge between UI and main process.
+  - The one exception, for saved passwords: a tiny helper inside web pages (`src/page-preload.ts`), in its own isolated world, that exposes nothing to the page. It only reports a sign-in and asks for a login to fill. The main process trusts nothing it says about which site it is: it only accepts Firn's own pages' top frames, takes the site from the frame's real address, and only on https (or this computer). Passwords are encrypted with the system's protection (`safeStorage`) or not saved at all.
 - **Engine layer:** keep Firn able to move to a Chromium fork later. Two rules for all code:
   1. The UI (`src/ui/`) never touches Electron; it only talks through the preload bridge (`window.firn`).
   2. App logic (tabs, spaces, Basecamp, pins, session) never touches Electron's page views directly; it uses the engine interface in `src/engine/engine.ts`. Electron's version lives in `src/engine/electron.ts`.

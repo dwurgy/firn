@@ -65,6 +65,7 @@ Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`)
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
+- `src/passwords.ts` — saved passwords, encrypted on disk; `src/page-preload.ts` is the small helper inside web pages that spots sign-ins and fills saved ones.
 
 ### Command bar
 
@@ -88,10 +89,20 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 
 ### History and settings
 
-The **Firn mark** button at the top of the sidebar (next to the sidebar toggle) opens the Firn menu: New tab, New space, History, Downloads and Settings.
+The **Firn mark** button at the top of the sidebar (next to the sidebar toggle) opens the Firn menu: New tab, New space, History, Passwords, Downloads and Settings.
 
 - **History** (Ctrl+H) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
-- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+
+### Saved passwords
+
+After you sign in to a site, a small card asks **Save password for example.com?** with **Not now** and **Save**. Firn only asks once the sign-in worked (the page moved on), so a mistyped password isn't offered. If you sign in with a new password for a login Firn already has, it offers to **Update** it instead.
+
+Next time, click into the site's sign-in form and Firn fills in your username and password. Nothing is filled until you click, and only on the very same site (and only over a secure https connection), so a look-alike site gets nothing.
+
+**Passwords** in the Firn menu (or Settings → Privacy → Manage…, or "saved passwords" in the command bar) lists them: search, **Show**, **Copy** or **Delete** each one. They're encrypted with your computer's own protection (on Windows, the same lock your Windows account uses) and kept in `passwords.json` next to your session, on this computer only. If the computer has no such protection available, Firn doesn't save passwords at all rather than keep them unprotected.
+
+To do this, Firn adds a tiny helper to each web page that notices sign-in forms. It's walled off from the page: the site can't see it or talk to it, and it only reports a sign-in from the page's own main frame.
 
 ### Downloads
 

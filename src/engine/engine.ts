@@ -55,6 +55,9 @@ export interface PageEvents {
   onFullscreen(on: boolean): void;
   // The mouse was pressed inside the page (the person is working in it).
   onFocus(): void;
+  // You signed in on the page: the username and password typed, and the
+  // site (its real address, checked by the engine). See src/passwords.ts.
+  onLogin(origin: string, username: string, password: string): void;
   // The page was right-clicked.
   onContextMenu(menu: PageContextMenu): void;
   // How a find in page (see Page.find) went.
@@ -155,6 +158,11 @@ export interface PageEngine {
   setWindowFullscreen(on: boolean): void;
   // True once the window is gone (late updates are then dropped).
   readonly closed: boolean;
+  // A page's login form was clicked into: the saved login to fill for that
+  // site, if any (asked only for secure sites).
+  setSavedLoginProvider(
+    provider: (origin: string) => { username: string; password: string } | null,
+  ): void;
   // Every download starts here; `download` starts one from a URL.
   onDownload(listener: (download: EngineDownload) => void): void;
   download(url: string): void;

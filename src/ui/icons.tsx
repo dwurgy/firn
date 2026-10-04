@@ -255,3 +255,24 @@ export const FirnMarkIcon = () => (
     />
   </svg>
 );
+
+export const KeyIcon = () => (
+  <svg {...base}>
+    <circle cx="5.5" cy="10.5" r="2.8" />
+    <path d="M7.5 8.5 13 3M11 5l1.6 1.6M9.6 6.4l1.4 1.4" />
+  </svg>
+);
+
+export const EyeIcon = () => (
+  <svg {...base}>
+    <path d="M1.8 8S4 3.8 8 3.8 14.2 8 14.2 8 12 12.2 8 12.2 1.8 8 1.8 8Z" />
+    <circle cx="8" cy="8" r="2" />
+  </svg>
+);
+
+export const CopyIcon = () => (
+  <svg {...base}>
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.6" />
+    <path d="M10.5 3.6V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.1" />
+  </svg>
+);

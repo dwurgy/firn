@@ -93,6 +93,15 @@ interface TabManagerOptions {
     favicon: string,
     newVisit: boolean,
   ) => void;
+  // You signed in on a tab's page (see src/passwords.ts), and a tab's page
+  // went to another address (a sign-in that worked usually does).
+  onLogin: (
+    id: string,
+    origin: string,
+    username: string,
+    password: string,
+  ) => void;
+  onPageNavigated: (id: string) => void;
   // A page went into or out of fullscreen (e.g. a video).
   onFullscreenChange: (on: boolean) => void;
   // A tab's page was right-clicked.
@@ -1053,6 +1062,7 @@ export class TabManager {
         const entry = entryOf();
         if (!entry) return;
         const { url, title } = entry.page;
+        if (url && url !== visited.url) this.options.onPageNavigated(id);
         if (url && (url !== visited.url || title !== visited.title)) {
           this.options.onVisit(
             url,
@@ -1104,6 +1114,9 @@ export class TabManager {
         if (entryOf()) this.focused(id);
       },
       onFullscreen: (on) => this.setFullscreen(on),
+      onLogin: (origin, username, password) => {
+        if (entryOf()) this.options.onLogin(id, origin, username, password);
+      },
       onContextMenu: (menu) => {
         if (entryOf()) this.options.onContextMenu(id, menu);
       },

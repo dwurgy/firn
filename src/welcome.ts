@@ -2,16 +2,16 @@
 // window code and the UI.
 
 // Everyday sites to start Basecamp with: the calm essentials (mail,
-// calendar, files, photos, maps, video and music), no shopping or social
-// feeds. The welcome shows them as Firn's
+// calendar, files, notes, messages, video and music), no shopping or
+// social feeds. The welcome shows them as Firn's
 // own letter tiles, so nothing is fetched from them until they're chosen.
 export const BASECAMP_SUGGESTIONS = [
   { name: 'Gmail', url: 'https://mail.google.com/' },
   { name: 'Outlook', url: 'https://outlook.live.com/mail/' },
   { name: 'Calendar', url: 'https://calendar.google.com/' },
   { name: 'Drive', url: 'https://drive.google.com/' },
-  { name: 'Photos', url: 'https://photos.google.com/' },
-  { name: 'Maps', url: 'https://www.google.com/maps' },
+  { name: 'Notion', url: 'https://www.notion.so/' },
+  { name: 'WhatsApp', url: 'https://web.whatsapp.com/' },
   { name: 'YouTube', url: 'https://www.youtube.com/' },
   { name: 'Spotify', url: 'https://open.spotify.com/' },
 ];

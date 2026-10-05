@@ -2,8 +2,8 @@
 // window code and the UI.
 
 // Everyday sites to start Basecamp with: the calm essentials (mail,
-// calendar, files, an assistant, messages, video and music), no shopping or
-// social feeds. The welcome shows each with its own icon (see welcomeIcon
+// calendar, files, an assistant, shopping, video and music), no social
+// feeds. The welcome shows each with its own icon (see welcomeIcon
 // in src/main.ts): the first of `prefer` that works, else the one Basecamp
 // would pick from the site's page, else the first of `icons` that works,
 // else Firn's own letter tile.
@@ -69,12 +69,9 @@ export const BASECAMP_SUGGESTIONS: {
     ],
   },
   {
-    name: 'WhatsApp',
-    url: 'https://web.whatsapp.com/',
-    icons: [
-      'https://web.whatsapp.com/favicon.ico',
-      'https://www.whatsapp.com/favicon.ico',
-    ],
+    name: 'Amazon',
+    url: 'https://www.amazon.com/',
+    icons: ['https://www.amazon.com/favicon.ico'],
   },
   {
     name: 'YouTube',

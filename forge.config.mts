@@ -24,6 +24,10 @@ const config: ForgeConfig = {
     // Settings > Apps. (No .msi: that's for company-wide installs.)
     new MakerSquirrel({
       setupIcon: './assets/icon.ico',
+      // The icon Windows' installed-apps list shows: the installer fetches
+      // it once, while installing (from Firn's public repository).
+      iconUrl:
+        'https://raw.githubusercontent.com/dwurgy/firn/main/assets/icon.ico',
       setupExe: 'Firn Setup.exe',
       loadingGif: './assets/installing.gif',
       noMsi: true,

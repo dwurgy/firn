@@ -55,9 +55,10 @@ if (started) {
 
 // Windows: Firn's taskbar button and pins belong with the Start menu and
 // desktop shortcuts the installer makes (the installer's own name for
-// Firn). And once installed, Windows' list of installed apps shows Firn's
-// own icon: the installer would otherwise show Electron's (it can only
-// fetch one from the web, and Firn's isn't published there).
+// Firn). And Windows' list of installed apps shows Firn's own icon: the
+// installer fetches it from the web while installing (see
+// forge.config.mts), and in case that failed, Firn also points the list
+// at its own app file.
 if (process.platform === 'win32' && !started) {
   app.setAppUserModelId('com.squirrel.firn.Firn');
   const installRoot = path.dirname(path.dirname(process.execPath));

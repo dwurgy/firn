@@ -32,6 +32,20 @@ npm run package
 
 Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
 
+### Making the installer (to share Firn)
+
+To give Firn to someone on Windows, build its installer:
+
+```
+npm run make
+```
+
+It takes a few minutes. The installer appears as `out\make\squirrel.windows\x64\Firn Setup.exe`: that one file is all you send. (Make sure `safe-browsing-key.txt` is in place first, so their copy warns about scam sites too.)
+
+What happens when they open it: no wizard and no questions. A small window shows the Firn mark for a few seconds while it installs, then Firn opens with its welcome. It's added to the Start menu and the desktop, and can be removed like any app in Windows' **Settings > Apps**. Firn installs just for that person (in `%LOCALAPPDATA%\firn`), so it doesn't need administrator rights. Uninstalling keeps their tabs, history and passwords (in `%APPDATA%\Firn`), so reinstalling brings everything back.
+
+**Until Firn is code-signed**, Windows will say "Windows protected your PC" the first time: click **More info**, then **Run anyway**. Signing (a paid certificate) removes that; it's a later step.
+
 ### Shortcuts (so far)
 
 | Action | Windows / Linux | macOS |

@@ -1,0 +1,109 @@
+# Builds Firn for Windows and macOS on GitHub's own computers.
+#
+# - Every push (to main, and to a pull request's branch): checks the code,
+#   then builds "Firn Setup.exe" (Windows) and a .zip with Firn.app (macOS,
+#   one app for Apple-silicon and Intel Macs). Download them from the run's page under
+#   "Artifacts" (kept for 30 days).
+# - Publishing a release on GitHub (tag "v" + the version in package.json,
+#   e.g. v0.1.0): builds both and attaches them to the release's page, the
+#   public download page to share.
+#
+# The Safe Browsing key comes from the repository secret
+# FIRN_SAFE_BROWSING_KEY (Settings > Secrets and variables > Actions).
+# Without it, the builds simply don't warn about scam sites.
+
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces an older run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  build:
+    name: Build for ${{ matrix.name }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            make: npm run make
+          - name: macOS
+            os: macos-latest
+            make: npm run make -- --arch=universal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the release's tag matches package.json's version
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::The release tag is $GITHUB_REF_NAME, but package.json says $version. Name the release's tag v$version."
+            exit 1
+          fi
+      - name: Build
+        run: ${{ matrix.make }}
+        env:
+          FIRN_SAFE_BROWSING_KEY: ${{ secrets.FIRN_SAFE_BROWSING_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Firn for ${{ matrix.name }}
+          path: |
+            out/make/**/*.exe
+            out/make/**/*.nupkg
+            out/make/**/RELEASES
+            out/make/**/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach to the release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload the installers to the release page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find dist -type f -print
+          find dist -type f -print0 |
+            xargs -0 gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber

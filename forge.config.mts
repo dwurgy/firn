@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
@@ -17,6 +20,26 @@ const config: ForgeConfig = {
     icon: './assets/icon',
   },
   rebuildConfig: {},
+  hooks: {
+    // macOS: give the finished app a basic ("ad-hoc") signature. Apple
+    // Silicon Macs refuse to open an app whose signature doesn't cover the
+    // whole app ("damaged"). This isn't Apple's paid approval: until Firn is
+    // notarized, people still confirm it once in System Settings > Privacy
+    // & Security > Open Anyway. (Needs macOS: only the Mac build runs it.)
+    postPackage: async (_config, { platform, outputPaths }) => {
+      if (platform !== 'darwin' || process.platform !== 'darwin') return;
+      for (const folder of outputPaths)
+        for (const name of fs.readdirSync(folder))
+          if (name.endsWith('.app'))
+            execFileSync('codesign', [
+              '--force',
+              '--deep',
+              '--sign',
+              '-',
+              path.join(folder, name),
+            ]);
+    },
+  },
   makers: [
     // The Windows installer: "Firn Setup.exe". No wizard: it installs in a
     // few seconds (showing Firn's mark while it does), adds Firn to the

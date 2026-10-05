@@ -102,7 +102,7 @@ The first time Firn opens, a short welcome sets things up, one card at a time. E
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
-Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces, the typeface of Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
+Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces with its soft (rounded) corners on and its quirky "wonky" letters off, the same as Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
 
 ### Command bar
 

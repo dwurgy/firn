@@ -153,6 +153,26 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 
 ---
 
+## Decided: coming later
+
+Agreed with David; not started yet. Build them one at a time, in small steps like everything else.
+
+- **Make Firn the default browser:** a plain option in Settings and in the welcome, so links clicked in other apps open in Firn (the normal browser window, no special mini-window).
+- **Sound in tabs:** first a small speaker icon on any tab playing sound (click to mute); then a mini player at the bottom of the sidebar, above the Firn button, shown only while audio plays in a tab that isn't on screen (title, play/pause, click to go to the tab).
+- **Archiving old tabs:** everyday tabs not looked at for a while tidy themselves away. Options in Settings: 1 day, 7 days, **30 days (default)**, Never. Never archived: pinned and Basecamp tabs, the tab on screen, a tab playing sound, a tab in split view. Archived isn't deleted: an Archive list (Firn menu, command bar) brings any of them back, and they stay in History. Count days Firn was used, not calendar days (a vacation doesn't empty the sidebar).
+- **Extension support:** many people rely on one or two (password managers, ad blockers). Electron only partly supports Chrome extensions: research what works before promising anything.
+- **A full-window welcome:** the welcome fills the whole window (calm background, big Fraunces headlines, choices reflected live), then glides away to reveal the browser. Do it before sharing Firn widely.
+
+## Deliberately not doing
+
+The "guts to say no" list. Don't add these without David asking again.
+
+- **A separate mini-window for links from other apps** (Arc's "Little Arc"): links open in the normal window, as people expect.
+- **Easels** (Arc's canvases of clippings): niche.
+- **Boosts** (restyling websites, forcing dark mode): bloat; even tinkerers rarely use them.
+- **A developer mode:** F12 already opens the developer tools; that's enough.
+- **Tab folders:** not now. Spaces, pins and Basecamp already organize tabs, and folders would add a fourth layer to explain. If testers ask (e.g. "my pinned list is too long"), consider simple one-level folders inside a space's pinned tabs only.
+
 ## How to work on this project (instructions for Claude)
 
 - Work in **small steps**: one feature at a time, then stop so David can run the app and look at it.

@@ -101,7 +101,10 @@ export function App() {
           <div className="empty-page">
             <img className="empty-mark" src={firnMark} alt="" />
             <p className="empty-title">No open tabs</p>
-            <p className="empty-hint">Press Ctrl+T to open one.</p>
+            <p className="empty-hint">
+              Press {window.firn.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+T to
+              open one.
+            </p>
           </div>
         )}
         {split && <SplitFrame split={split} activeTabId={tabs.activeTabId} />}

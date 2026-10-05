@@ -5,10 +5,10 @@
   "private": true,
   "description": "A calm, minimalist desktop browser.",
   "keywords": [],
-  "license": "MIT",
+  "license": "MPL-2.0",
   "author": {
     "name": "David Wurgy",
-    "email": "davidwurgy@gmail.com"
+    "url": "https://firnbrowser.com"
   },
   "main": ".vite/build/main.cjs",
   "scripts": {

@@ -188,3 +188,11 @@ On Windows 11 (22H2 or later) and macOS, the frame around the page is frosted gl
 - **Ctrl+Shift+D** prints a snapshot of the window's layers, the cursor and the screen to the terminal.
 - If the window ever shows black or flickers behind the sidebar, try turning frosted glass off (above) and tell Claude.
 - To log what the layers do as you use Firn, start it with debug logging. In PowerShell: `$env:FIRN_DEBUG=1; npm start` (close and reopen PowerShell to turn it off again).
+
+## License
+
+Firn's code is open source under the [Mozilla Public License 2.0](LICENSE), the license Firefox uses. Anyone can read it, check what Firn does with their data, and build on it; changes to Firn's own files have to stay open under the same license.
+
+**The Firn name, logo and app icons are not covered by the license.** They identify Firn itself, so please don't use them for your own version or anything that could be mistaken for Firn; give a version you share its own name and look. (That covers `brand/`, `assets/` and `src/ui/firn-mark.svg`.)
+
+Fraunces, the typeface in `src/ui/fonts/`, has its own license: the SIL Open Font License (`src/ui/fonts/Fraunces-OFL.txt`).

@@ -18,7 +18,20 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({ setupIcon: './assets/icon.ico' }),
+    // The Windows installer: "Firn Setup.exe". No wizard: it installs in a
+    // few seconds (showing Firn's mark while it does), adds Firn to the
+    // Start menu and the desktop, and opens it. Uninstall from Windows'
+    // Settings > Apps. (No .msi: that's for company-wide installs.)
+    new MakerSquirrel({
+      setupIcon: './assets/icon.ico',
+      // The icon Windows' installed-apps list shows: the installer fetches
+      // it once, while installing (from Firn's public repository).
+      iconUrl:
+        'https://raw.githubusercontent.com/dwurgy/firn/main/assets/icon.ico',
+      setupExe: 'Firn Setup.exe',
+      loadingGif: './assets/installing.gif',
+      noMsi: true,
+    }),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),

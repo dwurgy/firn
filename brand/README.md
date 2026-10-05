@@ -24,3 +24,6 @@ Windows taskbar.
 
 Colors: Glacier `#6E98B2` (mark) on frame sand `#E9E3DA`, page white
 `#FBFAF8`, ink `#241F1B`, dark frame `#3A3734`.
+
+These files are Firn's name and logo: they aren't covered by the code's
+open-source license (see "License" in the main README).

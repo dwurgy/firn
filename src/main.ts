@@ -17,6 +17,7 @@ import {
   type Input,
   type WebContents,
 } from 'electron';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -50,6 +51,36 @@ import type {
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+// Windows: Firn's taskbar button and pins belong with the Start menu and
+// desktop shortcuts the installer makes (the installer's own name for
+// Firn). And Windows' list of installed apps shows Firn's own icon: the
+// installer fetches it from the web while installing (see
+// forge.config.mts), and in case that failed, Firn also points the list
+// at its own app file.
+if (process.platform === 'win32' && !started) {
+  app.setAppUserModelId('com.squirrel.firn.Firn');
+  const installRoot = path.dirname(path.dirname(process.execPath));
+  const launcher = path.join(installRoot, 'Firn.exe');
+  if (
+    app.isPackaged &&
+    fs.existsSync(path.join(installRoot, 'Update.exe')) &&
+    fs.existsSync(launcher)
+  )
+    execFile(
+      'reg',
+      [
+        'add',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\firn',
+        '/v',
+        'DisplayIcon',
+        '/d',
+        `${launcher},0`,
+        '/f',
+      ],
+      () => {},
+    );
 }
 
 const HOME_URL = 'https://duckduckgo.com';

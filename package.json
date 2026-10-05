@@ -1,14 +1,14 @@
 {
   "name": "firn",
   "productName": "Firn",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "A calm, minimalist desktop browser.",
   "keywords": [],
-  "license": "MIT",
+  "license": "MPL-2.0",
   "author": {
-    "name": "David Wurgy",
-    "email": "davidwurgy@gmail.com"
+    "name": "Firn",
+    "url": "https://firnbrowser.com"
   },
   "main": ".vite/build/main.cjs",
   "scripts": {

@@ -93,6 +93,10 @@ const config: ForgeConfig = {
     // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
+      // Don't sign the Apple-silicon half of the Mac app on its own: the Mac
+      // build joins it with the Intel half, which must match, and the joined
+      // app is signed as a whole afterwards (see hooks.postPackage).
+      resetAdHocDarwinSignature: false,
       [FuseV1Options.RunAsNode]: false,
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,

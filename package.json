@@ -7,7 +7,7 @@
   "keywords": [],
   "license": "MPL-2.0",
   "author": {
-    "name": "David Wurgy",
+    "name": "Firn",
     "url": "https://firnbrowser.com"
   },
   "main": ".vite/build/main.cjs",

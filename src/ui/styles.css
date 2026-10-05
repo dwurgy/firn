@@ -790,13 +790,27 @@ button {
   }
 }
 
+/* The sidebar's last row: the Firn menu, then the spaces. */
+.sidebar-bottom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0 2px;
+}
+
+.sidebar-bottom-balance {
+  width: 32px;
+  flex-shrink: 0;
+}
+
 .space-switcher {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 8px 0 2px;
 }
 
 .space-dot {

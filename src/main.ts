@@ -93,7 +93,9 @@ const debug = (message: string) => {
 
 // Layout of the window frame (keep in sync with the CSS in src/ui/styles.css).
 const SIDEBAR_WIDTH = 260;
-const SIDEBAR_MIN = 200;
+// On macOS the sidebar's top row also holds the window's traffic lights, so
+// it can't get quite as narrow.
+const SIDEBAR_MIN = process.platform === 'darwin' ? 224 : 200;
 const SIDEBAR_MAX = 360;
 const GLIDE_MS = 200; // matches --motion in styles.css
 // The peeking sidebar is forgiving to the left and quick to the right:

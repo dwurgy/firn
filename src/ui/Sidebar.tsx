@@ -167,13 +167,6 @@ export function Sidebar({
           >
             <SidebarIcon />
           </button>
-          <button
-            className="icon-button firn-menu-button"
-            title="Firn menu: history, downloads, settings"
-            onClick={() => window.firn.showFirnMenu()}
-          >
-            <FirnMarkIcon />
-          </button>
         </div>
         <nav className="button-row">
           <button
@@ -232,7 +225,19 @@ export function Sidebar({
 
       <DownloadsShelf downloads={downloads} />
 
-      <SpaceSwitcher {...spaces} />
+      {/* The Firn menu at the left, the spaces centered beside it (the
+          same room is kept free on the right, so they stay centered). */}
+      <div className="sidebar-bottom">
+        <button
+          className="icon-button firn-menu-button"
+          title="Firn menu: history, passwords, downloads, settings"
+          onClick={() => window.firn.showFirnMenu()}
+        >
+          <FirnMarkIcon />
+        </button>
+        <SpaceSwitcher {...spaces} />
+        <span className="sidebar-bottom-balance" aria-hidden />
+      </div>
 
       {space && picking?.id === space.id && (
         <SpaceIconPicker space={space} top={picking.top} onDone={closePicker} />

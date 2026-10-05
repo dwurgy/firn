@@ -32,6 +32,16 @@ npm run package
 
 Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
 
+### Downloads built by GitHub (Windows and Mac)
+
+GitHub builds Firn by itself, on its own Windows and Mac computers, every time changes are pushed (see `.github/workflows/build.yml`). Nothing to run on your computer:
+
+- **To try a change:** open the repository's **Actions** tab, click the latest **Build** run, and scroll to **Artifacts**: "Firn for Windows" holds `Firn Setup.exe`, and "Firn for macOS" holds a `.zip` with `Firn.app` (one app for every Mac, Apple chip or Intel). You need to be signed in to GitHub to download them; they're kept for 30 days.
+- **To share a version:** on GitHub, open **Releases > Draft a new release**, create a tag named `v` plus the version in `package.json` (for example `v0.1.0`), give it a title and a few words about what's new, and click **Publish release**. In about 15 minutes, GitHub attaches the Windows installer and the Mac zip to that release's page: the link to send to friends (anyone can download, no account needed). To publish the next version, raise `version` in `package.json` first.
+- **The Safe Browsing key:** add it once as a repository secret named `FIRN_SAFE_BROWSING_KEY` (**Settings > Secrets and variables > Actions > New repository secret**), so GitHub's builds warn about scam sites too.
+
+**Opening Firn on a Mac the first time.** Until Firn is notarized by Apple (an Apple Developer account, $99 a year), macOS can't vouch for it: unzip the download, drag **Firn** into **Applications**, and open it. macOS says it "can't be opened" or "can't verify" it: click **Done**, then open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to the note about Firn. After that it opens normally.
+
 ### Making the installer (to share Firn)
 
 To give Firn to someone on Windows, build its installer:

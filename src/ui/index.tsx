@@ -10,6 +10,10 @@ import './styles.css';
 const view = new URLSearchParams(location.search).get('view') ?? 'main';
 document.documentElement.dataset.platform = window.firn.platform;
 document.documentElement.dataset.view = view;
+document.documentElement.style.setProperty(
+  '--page-radius',
+  `${window.firn.pageRadius}px`,
+);
 
 const LAYERS: Record<string, () => React.JSX.Element | null> = {
   floating: Floating,

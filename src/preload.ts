@@ -1,6 +1,7 @@
 // The only bridge between Firn's UI and the main process. Keep it narrow:
 // the UI can ask for navigation and tab changes, and listen for state.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { pageRadius } from './frame';
 import type { FirnBridge } from './types';
 
 // Subscribes to a channel and returns a function that unsubscribes.
@@ -14,6 +15,7 @@ function listen<T>(channel: string, listener: (value: T) => void) {
 
 const bridge: FirnBridge = {
   platform: process.platform,
+  pageRadius: pageRadius(process.platform, process.getSystemVersion()),
   navigate: (input) => ipcRenderer.send('nav:navigate', input),
   command: (command) => ipcRenderer.send('nav:command', command),
   newTab: () => ipcRenderer.send('tabs:new'),

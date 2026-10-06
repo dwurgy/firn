@@ -230,9 +230,9 @@ button {
   height: 36px;
 }
 
-/* Leave room for the macOS traffic lights. */
+/* Leave room for the macOS traffic lights, and a little air after them. */
 :root[data-platform='darwin'] .sidebar-top {
-  padding-left: 68px;
+  padding-left: 76px;
 }
 
 .button-row {

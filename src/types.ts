@@ -298,6 +298,8 @@ export interface Rect {
 // The narrow API the preload script exposes to Firn's UI as `window.firn`.
 export interface FirnBridge {
   platform: string;
+  // The page's corner radius (rounder windows on newer macOS change it).
+  pageRadius: number;
   navigate(input: string): void;
   command(command: NavCommand): void;
   newTab(): void;

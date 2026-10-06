@@ -128,6 +128,14 @@ const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
 // With the address bar at the top, the bar is always there and a little
 // taller, so the address bar has room around it.
 const TOP_ADDRESS_HEIGHT = 48;
+
+// macOS: where the window's traffic lights sit (their top-left corner). In
+// the sidebar's top row (its middle is 26pt down: the sidebar's 8pt padding
+// plus half the 36pt row); in the peeking sidebar, which floats 8pt further
+// in and down; and at the left of the "At the top" bar (48pt tall).
+const LIGHTS_IN_SIDEBAR = { x: 16, y: 17 };
+const LIGHTS_IN_PEEK = { x: 24, y: 25 };
+const LIGHTS_IN_TOP_BAR = { x: 16, y: 15 };
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
 const TOP_BAR_LINGER_MS = 250;
@@ -374,7 +382,7 @@ const createWindow = () => {
     // Hide the OS title bar. macOS keeps its traffic lights; on Windows and
     // Linux Firn draws its own window buttons, hidden in the top-right corner.
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 16, y: 16 },
+    trafficLightPosition: LIGHTS_IN_SIDEBAR,
     webPreferences: UI_WEB_PREFERENCES,
   });
 
@@ -1169,6 +1177,7 @@ const createWindow = () => {
   // Shows the top bar for good, or takes it away, to match the address bar
   // setting and fullscreen.
   const syncTopBar = (animate = true) => {
+    syncTrafficLights();
     if (!readyUi.has(topBar.webContents)) return;
     clearInterval(topBarWatch);
     clearTimeout(topBarHideTimer);
@@ -1569,12 +1578,35 @@ const createWindow = () => {
     }, 16);
   };
 
+  // macOS: the traffic lights belong to the sidebar's top row, so they
+  // follow it: hidden while it's collapsed, in the floating sidebar while it
+  // peeks, and at the left of the top bar when the address bar is "At the
+  // top" (the top bar that slides down in the sidebar look only moves the
+  // window).
+  let lightsTimer: ReturnType<typeof setTimeout> | undefined;
+  const syncTrafficLights = () => {
+    if (process.platform !== 'darwin' || win.isDestroyed()) return;
+    clearTimeout(lightsTimer);
+    const place = !windowState.sidebarCollapsed
+      ? LIGHTS_IN_SIDEBAR
+      : peeking
+        ? LIGHTS_IN_PEEK
+        : addressOnTop()
+          ? LIGHTS_IN_TOP_BAR
+          : null;
+    if (place) win.setWindowButtonPosition(place);
+    win.setWindowButtonVisibility(!!place);
+  };
+
   const setSidebarCollapsed = (collapsed: boolean) => {
     if (windowState.sidebarCollapsed === collapsed) return;
     windowState.sidebarCollapsed = collapsed;
     hidePeek();
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
     saver.schedule();
+    // Gone at once when the sidebar leaves; back once it has glided in.
+    if (collapsed) syncTrafficLights();
+    else lightsTimer = setTimeout(syncTrafficLights, GLIDE_MS);
   };
 
   const setSidebarWidth = (requested: number) => {
@@ -1616,6 +1648,7 @@ const createWindow = () => {
     clearTimeout(peekHideTimer);
     showLayer(peek);
     sendSidebar();
+    syncTrafficLights();
     let lastOver = Date.now();
     peekWatch = setInterval(() => {
       if (win.isDestroyed()) return;
@@ -1638,6 +1671,7 @@ const createWindow = () => {
     peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
+    syncTrafficLights();
     // Let it slide away before the layer goes.
     peekHideTimer = setTimeout(() => {
       if (!peeking) hideLayer(peek);

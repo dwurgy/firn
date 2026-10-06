@@ -48,6 +48,7 @@ export function App() {
         } as React.CSSProperties
       }
     >
+      <div className="window-grip" />
       <Sidebar
         nav={nav}
         tabs={tabs}

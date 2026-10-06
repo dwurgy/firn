@@ -1218,8 +1218,10 @@ const createWindow = () => {
     }
   };
 
+  // On macOS the window's top edge moves it by itself (.window-grip in
+  // styles.css), and its window buttons stay in the sidebar, so no bar.
   const revealTopBar = (reveal: boolean) => {
-    if (addressOnTop()) return;
+    if (addressOnTop() || process.platform === 'darwin') return;
     if (reveal && !isFullscreen()) {
       if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;

@@ -118,10 +118,21 @@ body,
    - the main window's sidebar top row, and
    - the top bar layer's empty band, which only counts while the bar is
      showing (hidden layers are skipped).
+   On macOS, which has no such trouble, the thin frame strip along the
+   window's top edge moves it too (instead of the top bar sliding down).
    No other layer declares any drag setting at all. */
 :root[data-view='main'] .sidebar-top,
-:root[data-view='topbar'] .top-bar-drag {
+:root[data-view='topbar'] .top-bar-drag,
+:root[data-view='main'][data-platform='darwin'] .window-grip {
   -webkit-app-region: drag;
+}
+
+.window-grip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--page-inset);
 }
 
 :root[data-view='main'] .sidebar-top .icon-button,

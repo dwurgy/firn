@@ -191,5 +191,6 @@ The "guts to say no" list. Don't add these without David asking again.
 - **Design is half the job.** When building UI, follow the design principles and tokens above. If something would look cramped or loud, flag it.
 - Ask before adding new dependencies; prefer few, well-maintained ones.
 - Never weaken the security defaults above.
+- Before committing, run `npm run lint`, `npm run typecheck` and the end-to-end checks (`bash tests/e2e/run.sh`, see `tests/e2e/README.md`); add or update a check for what changed.
 - Commit to Git after each working step with a clear message.
 - Primary platform for now: **Windows**. Keep code cross-platform anyway.

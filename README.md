@@ -87,6 +87,7 @@ What happens when they open it: no wizard and no questions. A small window shows
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `tests/e2e/` — checks that start Firn and click through it (see `tests/e2e/README.md`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
 - `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.

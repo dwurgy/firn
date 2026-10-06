@@ -133,9 +133,16 @@ const TOP_ADDRESS_HEIGHT = 48;
 // the sidebar's top row (its middle is 26pt down: the sidebar's 8pt padding
 // plus half the 36pt row); in the peeking sidebar, which floats 8pt further
 // in and down; and at the left of the "At the top" bar (48pt tall).
-const LIGHTS_IN_SIDEBAR = { x: 16, y: 17 };
-const LIGHTS_IN_PEEK = { x: 24, y: 25 };
-const LIGHTS_IN_TOP_BAR = { x: 16, y: 15 };
+const LIGHTS_IN_SIDEBAR = { x: 16, y: 18 };
+const LIGHTS_IN_PEEK = { x: 24, y: 26 };
+const LIGHTS_IN_TOP_BAR = { x: 16, y: 16 };
+// macOS can't draw them partly past the window's left edge: closer than
+// this, they're hidden.
+const LIGHTS_MIN_X = 6;
+// The peeking sidebar's slide (src/ui/styles.css, ".peek .sidebar"): out in
+// 140ms, away in 200ms, both easing out.
+const PEEK_IN_MS = 140;
+const PEEK_OUT_MS = 200;
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
 const TOP_BAR_LINGER_MS = 250;
@@ -1571,6 +1578,7 @@ const createWindow = () => {
       pageLeft = Math.round(from + (to - from) * eased);
       relayout();
       sendSidebar();
+      syncTrafficLights();
       if (t === 1) {
         clearInterval(glide);
         tabs.holdLayout(null);
@@ -1579,23 +1587,53 @@ const createWindow = () => {
   };
 
   // macOS: the traffic lights belong to the sidebar's top row, so they
-  // follow it: hidden while it's collapsed, in the floating sidebar while it
-  // peeks, and at the left of the top bar when the address bar is "At the
-  // top" (the top bar that slides down in the sidebar look only moves the
-  // window).
-  let lightsTimer: ReturnType<typeof setTimeout> | undefined;
+  // move with it: they slide out and back in with the sidebar (following
+  // the page's left edge as it glides), ride along with the sidebar while
+  // it peeks, and sit at the left of the top bar when the address bar is
+  // "At the top" and the sidebar is hidden. Otherwise, while the sidebar is
+  // hidden, there are none (the top bar that slides down only moves the
+  // window). macOS draws them itself, so Firn moves them a step at a time.
+  // How far out the peeking sidebar is: 0 = away, 1 = all the way out.
+  let peekOut = 0;
+  let peekLightsGlide: ReturnType<typeof setInterval> | undefined;
+  let lightsShown: string | null = null;
   const syncTrafficLights = () => {
     if (process.platform !== 'darwin' || win.isDestroyed()) return;
-    clearTimeout(lightsTimer);
-    const place = !windowState.sidebarCollapsed
-      ? LIGHTS_IN_SIDEBAR
-      : peeking
-        ? LIGHTS_IN_PEEK
-        : addressOnTop()
-          ? LIGHTS_IN_TOP_BAR
-          : null;
-    if (place) win.setWindowButtonPosition(place);
+    let place: { x: number; y: number } | null = null;
+    if (pageLeft > PAGE_INSET) {
+      // The sidebar is out, or gliding (it moves with the page's edge).
+      const x = LIGHTS_IN_SIDEBAR.x + pageLeft - windowState.sidebarWidth;
+      place = { x, y: LIGHTS_IN_SIDEBAR.y };
+    } else if (peekOut > 0) {
+      const x =
+        LIGHTS_IN_PEEK.x -
+        (1 - peekOut) * (windowState.sidebarWidth + PAGE_INSET);
+      place = { x, y: LIGHTS_IN_PEEK.y };
+    } else if (addressOnTop()) place = LIGHTS_IN_TOP_BAR;
+    if (place && place.x < LIGHTS_MIN_X) place = null;
+    const key = place ? `${Math.round(place.x)},${place.y}` : null;
+    if (key === lightsShown) return;
+    lightsShown = key;
+    if (place)
+      win.setWindowButtonPosition({ x: Math.round(place.x), y: place.y });
     win.setWindowButtonVisibility(!!place);
+  };
+  // Slides the lights with the peeking sidebar, in step with its own slide.
+  const glidePeekLights = (out: boolean) => {
+    if (process.platform !== 'darwin') return;
+    clearInterval(peekLightsGlide);
+    const from = peekOut;
+    const to = out ? 1 : 0;
+    const duration = (out ? PEEK_IN_MS : PEEK_OUT_MS) * Math.abs(to - from);
+    const start = Date.now();
+    peekLightsGlide = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(peekLightsGlide);
+      const t = duration ? Math.min(1, (Date.now() - start) / duration) : 1;
+      const eased = 1 - Math.pow(1 - t, 2); // ease-out, like the CSS
+      peekOut = from + (to - from) * eased;
+      syncTrafficLights();
+      if (t === 1) clearInterval(peekLightsGlide);
+    }, 16);
   };
 
   const setSidebarCollapsed = (collapsed: boolean) => {
@@ -1604,9 +1642,6 @@ const createWindow = () => {
     hidePeek();
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
     saver.schedule();
-    // Gone at once when the sidebar leaves; back once it has glided in.
-    if (collapsed) syncTrafficLights();
-    else lightsTimer = setTimeout(syncTrafficLights, GLIDE_MS);
   };
 
   const setSidebarWidth = (requested: number) => {
@@ -1648,7 +1683,7 @@ const createWindow = () => {
     clearTimeout(peekHideTimer);
     showLayer(peek);
     sendSidebar();
-    syncTrafficLights();
+    glidePeekLights(true);
     let lastOver = Date.now();
     peekWatch = setInterval(() => {
       if (win.isDestroyed()) return;
@@ -1671,7 +1706,7 @@ const createWindow = () => {
     peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
-    syncTrafficLights();
+    glidePeekLights(false);
     // Let it slide away before the layer goes.
     peekHideTimer = setTimeout(() => {
       if (!peeking) hideLayer(peek);

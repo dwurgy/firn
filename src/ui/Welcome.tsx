@@ -286,8 +286,11 @@ export function Welcome({
         if (e.key === 'Escape') finish();
       }}
     >
-      <Scene tint={tint}>{finishing && <BrowserRising />}</Scene>
-      {finishing && <p className="welcome-in">Welcome in.</p>}
+      <Scene tint={tint}>
+        {/* "Welcome in." sits in the sky; the browser rises over it. */}
+        {finishing && <p className="welcome-in">Welcome in.</p>}
+        {finishing && <BrowserRising />}
+      </Scene>
       <div className="welcome-stage">
         {step === 0 ? (
           <div className="welcome-hello-screen">{body}</div>

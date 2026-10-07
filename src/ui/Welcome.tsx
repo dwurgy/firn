@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { SPACE_ICON_NAMES } from '../spaceIcons';
 import type { Settings, SpacesState } from '../types';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from '../welcome';
-import firnMark from './firn-mark.svg';
+import { Scene } from './FirstLight';
 import { SpaceIcon } from './SpaceIcon';
 
 const STEPS = ['hello', 'address', 'space', 'basecamp', 'tips'] as const;
 
-// The welcome, the first time Firn opens: a card in the middle of the
-// window, a few short steps. Every choice applies right away, so it shows
-// behind the card as you pick. Esc (or "Skip setup") leaves it at any point.
+// The welcome, the first time Firn opens: a full-window "First light"
+// scene (see FirstLight.tsx) and a few short steps. Every choice applies
+// right away; from the space step on, the snow takes the space's color, so
+// choices show live. Esc (or "Skip setup") leaves it at any point.
 export function Welcome({
   settings,
   spaces,
@@ -66,12 +67,15 @@ export function Welcome({
     case 'hello':
       body = (
         <>
-          <img className="welcome-mark" src={firnMark} alt="" />
+          <span className="welcome-mark" />
           <h1 className="welcome-hello">Welcome to Firn</h1>
           <p>
             A calm place for the web. Let's set up a few things; it takes a
             minute, and you can change any of it later.
           </p>
+          <button className="welcome-next" onClick={next} autoFocus>
+            Let's begin
+          </button>
         </>
       );
       break;
@@ -253,52 +257,50 @@ export function Welcome({
       break;
   }
 
+  // The snow follows the space's color from the space step on.
+  const tint = step >= STEPS.indexOf('space') ? accent : null;
+
   return (
     <div
-      className="backdrop welcome-backdrop"
+      className="welcome"
+      role="dialog"
+      aria-label="Welcome to Firn"
+      tabIndex={-1}
+      ref={card}
       onKeyDown={(e) => {
         if (e.key === 'Escape') finish();
       }}
     >
-      <div
-        className="panel welcome"
-        role="dialog"
-        aria-label="Welcome to Firn"
-        tabIndex={-1}
-        ref={card}
-      >
-        <div
-          className={`welcome-body${step === 0 ? ' is-hello' : ''}`}
-          key={step}
-        >
-          {body}
-        </div>
-        <footer className="welcome-footer">
-          <div className="welcome-dots" aria-hidden>
-            {STEPS.map((s, i) => (
-              <span key={s} className={i === step ? 'is-on' : ''} />
-            ))}
-          </div>
-          <div className="welcome-buttons">
-            {step === 0 ? (
-              <button className="welcome-quiet" onClick={finish}>
-                Skip setup
-              </button>
-            ) : (
-              <button className="welcome-quiet" onClick={back}>
-                Back
-              </button>
-            )}
-            <button className="welcome-next" onClick={next} autoFocus>
-              {step === 0
-                ? 'Get started'
-                : step === STEPS.length - 1
-                  ? 'Start browsing'
-                  : 'Continue'}
-            </button>
-          </div>
-        </footer>
+      <Scene tint={tint} />
+      <div className="welcome-stage">
+        {step === 0 ? (
+          <div className="welcome-hello-screen">{body}</div>
+        ) : (
+          <>
+            <div className="welcome-dots" aria-hidden>
+              {STEPS.map((s, i) => (
+                <span key={s} className={i === step ? 'is-on' : ''} />
+              ))}
+            </div>
+            <div className="welcome-card">
+              <div className="welcome-body" key={step}>
+                {body}
+              </div>
+              <footer className="welcome-footer">
+                <button className="welcome-quiet" onClick={back}>
+                  Back
+                </button>
+                <button className="welcome-next" onClick={next} autoFocus>
+                  {step === STEPS.length - 1 ? 'Start browsing' : 'Continue'}
+                </button>
+              </footer>
+            </div>
+          </>
+        )}
       </div>
+      <button className="welcome-skip" onClick={finish}>
+        Skip setup
+      </button>
     </div>
   );
 }

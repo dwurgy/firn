@@ -2358,8 +2358,6 @@ button {
   outline-offset: 2px;
 }
 
-/* --- Welcome (the first time Firn opens) --------------------------------- */
-
 /* Fraunces, the face of Firn's wordmark, with its soft corners on and its
    "wonky" letters off, as in the brand. Built into Firn (never fetched).
    SIL Open Font License: fonts/Fraunces-OFL.txt. */
@@ -2385,29 +2383,267 @@ button {
   font-optical-sizing: auto;
 }
 
-.welcome-backdrop {
-  align-items: center;
-  padding: 24px;
-  background: rgba(60, 45, 30, 0.14);
+/* --- First light ------------------------------------------------------------
+   Sunrise in a snowy cabin: cool glacier sky high, warm sunrise low, snow at
+   the bottom. The welcome is the whole scene; the empty page borrows the
+   snow (src/ui/FirstLight.tsx). Rules (CLAUDE.md): no backdrop-filter on
+   large surfaces, the grain sits under the content, glows are plain
+   gradients, motion is transform and opacity only, and none of it moves
+   with reduced motion. */
+
+:root {
+  --fl-skytop: #f2f5f6;
+  --fl-cool: rgba(157, 183, 200, 0.34);
+  --fl-warm: rgba(242, 196, 160, 0.42);
+  --fl-warm2: rgba(236, 206, 186, 0.28);
+  --fl-sun: rgba(244, 194, 152, 0.62);
+  --fl-sunmid: rgba(244, 194, 152, 0.22);
+  --fl-flake: #7f9cb0;
+  --fl-grain-opacity: 0.13;
+  --fl-grain-blend: multiply;
+  --fl-card: rgba(251, 250, 248, 0.74);
+  --fl-edge: rgba(255, 255, 255, 0.7);
+  --fl-card-shadow:
+    0 1px 2px rgba(40, 60, 80, 0.08), 0 18px 48px rgba(40, 60, 80, 0.14);
+  --fl-mark-shadow: rgba(60, 90, 110, 0.22);
+  /* The snow: glacier blues, or a space's color mixed into the page. */
+  --fl-snow-1: #dce5eb;
+  --fl-snow-2: #c3d3de;
+  --fl-snow-3: #a6bfcf;
+  --fl-snow-4: #8aabc0;
+  --fl-snow-5: #6e98b2;
+  --fl-snow-base: #fbfaf8;
+  --fl-mix-1: 20%;
+  --fl-mix-2: 33%;
+  --fl-mix-3: 47%;
+  --fl-mix-4: 62%;
+  --fl-mix-5: 78%;
 }
 
-:root[data-theme='dark'] .welcome-backdrop {
-  background: rgba(0, 0, 0, 0.28);
+/* Dark: "blue hour". */
+:root[data-theme='dark'] {
+  --fl-skytop: #2e2f31;
+  --fl-cool: rgba(110, 152, 178, 0.24);
+  --fl-warm: rgba(214, 146, 104, 0.16);
+  --fl-warm2: rgba(160, 120, 110, 0.1);
+  --fl-sun: rgba(214, 140, 96, 0.32);
+  --fl-sunmid: rgba(214, 140, 96, 0.1);
+  --fl-grain-opacity: 0.5;
+  --fl-grain-blend: soft-light;
+  --fl-card: rgba(43, 40, 38, 0.66);
+  --fl-edge: rgba(255, 250, 245, 0.1);
+  --fl-card-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25), 0 18px 48px rgba(0, 0, 0, 0.35);
+  --fl-mark-shadow: rgba(0, 0, 0, 0.35);
+  --fl-snow-1: #34353a;
+  --fl-snow-2: #3a3f46;
+  --fl-snow-3: #414b55;
+  --fl-snow-4: #495865;
+  --fl-snow-5: #536777;
+  --fl-snow-base: #2b2826;
+  --fl-mix-1: 12%;
+  --fl-mix-2: 20%;
+  --fl-mix-3: 29%;
+  --fl-mix-4: 38%;
+  --fl-mix-5: 48%;
 }
 
+.fl-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--page);
+}
+
+.fl-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70vw 58vh at 50% -12%, var(--fl-cool), transparent 70%),
+    radial-gradient(56vw 60vh at 86% 62%, var(--fl-warm), transparent 68%),
+    radial-gradient(44vw 50vh at 10% 56%, var(--fl-warm2), transparent 70%),
+    linear-gradient(var(--fl-skytop), var(--page) 70%);
+}
+
+/* The sun: a glow just behind the snowline. */
+.fl-sun {
+  position: absolute;
+  left: 50%;
+  bottom: -7.5vh;
+  width: min(1200px, 94vw);
+  height: 52vh;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    var(--fl-sun),
+    var(--fl-sunmid) 50%,
+    transparent
+  );
+}
+
+/* Small Firn marks drifting very slowly in the sky. */
+.fl-flake {
+  position: absolute;
+  background: var(--fl-flake);
+  opacity: 0.22;
+  mask: url('./firn-mark.svg') center / contain no-repeat;
+  transform: rotate(var(--turn));
+  animation: fl-drift 20s ease-in-out infinite alternate;
+}
+
+@keyframes fl-drift {
+  to {
+    transform: rotate(var(--turn)) translateY(6px);
+  }
+}
+
+/* The five snow bands, one SVG each; a new color fades in on top. */
+.fl-snow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 25%;
+}
+
+.fl-snow-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fl-snow-layer.is-fresh {
+  animation: fade-in 400ms ease-out;
+}
+
+.fl-snow-layer path:nth-child(1) {
+  fill: var(--fl-snow-1);
+}
+.fl-snow-layer path:nth-child(2) {
+  fill: var(--fl-snow-2);
+}
+.fl-snow-layer path:nth-child(3) {
+  fill: var(--fl-snow-3);
+}
+.fl-snow-layer path:nth-child(4) {
+  fill: var(--fl-snow-4);
+}
+.fl-snow-layer path:nth-child(5) {
+  fill: var(--fl-snow-5);
+}
+.fl-snow-layer.is-tinted path:nth-child(1) {
+  fill: color-mix(in srgb, var(--tint) var(--fl-mix-1), var(--fl-snow-base));
+}
+.fl-snow-layer.is-tinted path:nth-child(2) {
+  fill: color-mix(in srgb, var(--tint) var(--fl-mix-2), var(--fl-snow-base));
+}
+.fl-snow-layer.is-tinted path:nth-child(3) {
+  fill: color-mix(in srgb, var(--tint) var(--fl-mix-3), var(--fl-snow-base));
+}
+.fl-snow-layer.is-tinted path:nth-child(4) {
+  fill: color-mix(in srgb, var(--tint) var(--fl-mix-4), var(--fl-snow-base));
+}
+.fl-snow-layer.is-tinted path:nth-child(5) {
+  fill: color-mix(in srgb, var(--tint) var(--fl-mix-5), var(--fl-snow-base));
+}
+
+/* Fine paper grain, under the content (never over anything blurred). */
+.fl-grain {
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .28 0 0 0 0 .2 0 0 0 0 .13 0 0 0 .55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: var(--fl-grain-opacity);
+  mix-blend-mode: var(--fl-grain-blend);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fl-flake,
+  .fl-snow-layer.is-fresh {
+    animation: none;
+  }
+}
+
+/* --- Welcome (the first time Firn opens) ----------------------------------- */
+
+/* The whole window: the scene, and the step on top of it. */
 .welcome {
-  width: min(600px, 100%);
-  min-height: min(500px, calc(100vh - 48px));
-  max-height: calc(100vh - 48px);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  color: var(--text);
+  animation: fade-in 300ms ease-out;
+  --fl-ink: var(--text);
+}
+
+.welcome-stage {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Centred a little above the middle, clear of the snow. */
+  padding: 24px 24px 134px;
+}
+
+/* Step 1: no card, just the flake and the words. */
+.welcome-hello-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: welcome-step 300ms ease-out;
+}
+
+.welcome-mark {
+  width: 86px;
+  height: 86px;
+  margin-bottom: 26px;
+  background: linear-gradient(160deg, #9db7c8, #6e98b2);
+  mask: url('./firn-mark.svg') center / contain no-repeat;
+  filter: drop-shadow(0 10px 24px var(--fl-mark-shadow));
+}
+
+.welcome h1.welcome-hello {
+  margin: 0;
+  font-size: 72px;
+  font-weight: 360;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+}
+
+.welcome-hello-screen p {
+  max-width: 520px;
+  margin: 20px 0 34px;
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.welcome-hello-screen .welcome-next {
+  height: 50px;
+  padding: 0 26px;
+  font-size: 16px;
+}
+
+/* Steps 2–5: a card (styled in the next step). */
+.welcome-card {
+  width: min(620px, 100%);
   display: flex;
   flex-direction: column;
   border-radius: 20px;
-  outline: none;
+  background: var(--page);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 4px 12px rgba(30, 20, 10, 0.12),
+    0 24px 60px rgba(30, 20, 10, 0.22);
 }
 
 .welcome-body {
-  flex: 1;
-  overflow: auto;
   padding: 44px 48px 12px;
   animation: welcome-step 220ms ease-out;
 }
@@ -2428,13 +2664,6 @@ button {
   color: var(--text);
 }
 
-.welcome h1.welcome-hello {
-  margin-top: 20px;
-  font-size: 44px;
-  font-weight: 340;
-  letter-spacing: -0.01em;
-}
-
 .welcome-body > p {
   margin: 0 0 24px;
   max-width: 440px;
@@ -2443,55 +2672,40 @@ button {
   color: var(--text-muted);
 }
 
-.welcome-body.is-hello {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding-bottom: 32px;
-}
-
-.welcome-mark {
-  width: 56px;
-  height: 56px;
-}
-
 .welcome-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px 24px 48px;
+  padding: 20px 28px 24px 34px;
 }
 
 .welcome-dots {
   display: flex;
   gap: 8px;
+  margin-bottom: 22px;
 }
 
 .welcome-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--press);
+  width: 7px;
+  height: 7px;
+  border-radius: 9px;
+  background: var(--text-faint);
+  opacity: 0.45;
   transition:
     width var(--motion),
-    background var(--motion);
+    opacity var(--motion);
 }
 
 .welcome-dots span.is-on {
-  width: 18px;
-  background: var(--text-faint);
-}
-
-.welcome-buttons {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  width: 22px;
+  background: var(--text);
+  opacity: 0.75;
 }
 
 .welcome-next,
 .welcome-quiet {
-  height: 38px;
-  padding: 0 22px;
+  height: 42px;
+  padding: 0 20px;
   border: 0;
   border-radius: 10px;
   font: inherit;
@@ -2503,6 +2717,7 @@ button {
     color var(--motion);
 }
 
+/* The ink button: dark on light, light on dark. */
 .welcome-next {
   background: var(--text);
   color: var(--page);
@@ -2516,18 +2731,45 @@ button {
 .welcome-quiet {
   padding: 0 14px;
   background: none;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .welcome-quiet:hover {
   background: var(--hover);
-  color: var(--text-muted);
+}
+
+/* "Skip setup": a small frosted pill, bottom left, on every step. */
+.welcome-skip {
+  position: absolute;
+  left: 28px;
+  bottom: 24px;
+  padding: 8px 14px;
+  border: 1px solid var(--fl-edge);
+  border-radius: 999px;
+  background: var(--fl-card);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+  transition: opacity var(--motion);
+}
+
+.welcome-skip:hover {
+  opacity: 0.85;
 }
 
 .welcome button:focus-visible,
 .welcome input:focus-visible {
   outline: 2px solid var(--frost-strong);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome,
+  .welcome-hello-screen,
+  .welcome-body {
+    animation: none;
+  }
 }
 
 /* Address bar: two little pictures of the window. */

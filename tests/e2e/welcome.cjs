@@ -87,6 +87,31 @@ const settings = () => {
     font[0].startsWith('Fraunces') && font[1] === true,
     JSON.stringify(font),
   );
+  // First light: the welcome covers the whole window with its scene.
+  const scene = () =>
+    fl.evaluate(() => {
+      const w = document.querySelector('.welcome').getBoundingClientRect();
+      const layers = document.querySelectorAll('.fl-snow-layer');
+      const top = layers[layers.length - 1];
+      return {
+        full: w.width === innerWidth && w.height === innerHeight,
+        snow: getComputedStyle(top.querySelector('path:nth-child(5)')).fill,
+        tinted: top.classList.contains('is-tinted'),
+        skip: !!document.querySelector('.welcome-skip'),
+        grainUnder: !!document.querySelector('.fl-scene .fl-grain'),
+      };
+    });
+  const hello = await scene();
+  check(
+    'the welcome fills the window with the First light scene',
+    hello.full && hello.grainUnder && hello.skip,
+    JSON.stringify(hello),
+  );
+  check(
+    '...with glacier snow at first',
+    !hello.tinted && hello.snow === 'rgb(110, 152, 178)',
+    hello.snow,
+  );
   shot('welcome-1');
   await ui.evaluate(() => window.firn.updateSettings({ theme: 'dark' }));
   await wait(800);
@@ -128,7 +153,13 @@ const settings = () => {
     JSON.stringify(typed),
   );
   await fl.click('.welcome-color[aria-label="Sage"]');
-  await wait(300);
+  await wait(600);
+  const sage = await scene();
+  check(
+    "from the space step, the snow takes the space's color",
+    sage.tinted && sage.snow !== hello.snow,
+    sage.snow,
+  );
   await fl.click('.welcome-icon:nth-child(5)');
   await wait(300);
   shot('welcome-3');

@@ -37,6 +37,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `welcome`      | The welcome, the first time Firn opens                                |
 | `brand`        | The Fraunces headings                                                 |
 | `bottom`       | The bottom row of the sidebar (the Firn button, spaces)               |
+| `updates`      | Automatic updates stay off on a copy that isn't installed on Windows  |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

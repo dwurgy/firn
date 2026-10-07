@@ -39,6 +39,7 @@ import { isLiquidGlass, pageRadius } from './frame';
 import { cleanSettings, loadSettings, saveSettings } from './settings';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
+import { startUpdates } from './updates';
 import type {
   CommandAction,
   FrameState,
@@ -2896,6 +2897,7 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   if (!isFirstInstance) return;
   createWindow();
+  startUpdates(debug);
 
   // On macOS, re-create a window when the dock icon is clicked and none are open.
   app.on('activate', () => {

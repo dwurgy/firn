@@ -160,7 +160,8 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 - **Phases 1–5: done.** Firn browses, has the sidebar with vertical tabs, pins, Basecamp, spaces, session restore, Lookout, split view and the command bar.
 - **Phase 6 (polish & shipping): in progress.**
   - Done: find in page, zoom, right-click menus, downloads, PDF viewer, site permissions, history, settings (including the address bar's two looks), saved passwords, scam and malware warnings (Google Safe Browsing), the welcome, Fraunces brand headings, the Firn menu at the bottom-left, the Windows installer ("Firn Setup.exe"), version 0.1.0, the MPL 2.0 license, and automatic Windows and Mac builds on GitHub (releases attach the downloads), and the first round of testing on real Macs (traffic lights that move with the sidebar, page corners matching macOS 26+, the window's top edge to grab it).
-  - Next: auto-updates, and Apple notarization early on ($99/year; David will pay for it so even early Mac testers get an easy install, and Mac auto-updates need it). Later: Windows code signing (optional).
+  - Auto-updates: Windows built, to be tested on a real install (an installed copy checks GitHub releases through update.electronjs.org and updates on the next start); Mac follows notarization.
+  - Next: Apple notarization early on ($99/year; David will pay for it so even early Mac testers get an easy install), then Mac auto-updates. Later: Windows code signing (optional).
 - **Not shared yet:** personal use and a few friends first. See "Decided: coming later" below for what's queued.
 
 ## Decided: coming later

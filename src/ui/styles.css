@@ -2766,12 +2766,13 @@ button {
 
 /* The finish, about 1.6s, transform and opacity only:
    0-250ms the step fades; 0-900ms the sun brightens and rises;
-   from 250ms "Welcome in." fades in and holds; 600-1250ms the browser
-   rises from behind the snow into the real browser's place, and from
-   1050ms the whole scene fades away to the real browser underneath. */
+   from 200ms "Welcome in." fades in and holds; 650-1300ms the browser
+   rises from behind the snow, over the words, into the real browser's
+   place, and from 1100ms the whole scene fades away to the real browser
+   underneath. */
 .welcome.is-finishing {
   pointer-events: none;
-  animation: fl-out 550ms ease-in 1050ms forwards;
+  animation: fl-out 500ms ease-in 1100ms forwards;
 }
 
 .welcome.is-finishing .welcome-stage,
@@ -2812,7 +2813,7 @@ button {
   font-weight: 360;
   color: var(--text);
   opacity: 0;
-  animation: fl-in 400ms ease-out 250ms forwards;
+  animation: fl-in 300ms ease-out 200ms forwards;
 }
 
 /* The browser, drawn simply, rising into the window. */
@@ -2829,7 +2830,7 @@ button {
     0 18px 48px rgba(40, 28, 16, 0.22);
   transform: translateY(96%) scale(0.86);
   transform-origin: 50% 0;
-  animation: fl-browser-rise 650ms cubic-bezier(0.22, 0.8, 0.3, 1) 600ms
+  animation: fl-browser-rise 650ms cubic-bezier(0.22, 0.8, 0.3, 1) 650ms
     forwards;
 }
 

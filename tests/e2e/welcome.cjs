@@ -184,6 +184,17 @@ const settings = () => {
   const finale = await fl.evaluate(() => ({
     words: document.querySelector('.welcome-in')?.textContent ?? null,
     rising: !!document.querySelector('.welcome-browser'),
+    // The browser comes up in front of the words, covering them.
+    over: (() => {
+      const words = document.querySelector('.welcome-in');
+      const browser = document.querySelector('.welcome-browser');
+      return (
+        !!words &&
+        !!browser &&
+        words.parentElement === browser.parentElement &&
+        !!(words.compareDocumentPosition(browser) & 4)
+      );
+    })(),
     // Only transform and opacity are animated.
     props: [
       ...new Set(
@@ -208,8 +219,8 @@ const settings = () => {
     ],
   }));
   check(
-    '"Start browsing": "Welcome in." and the browser rising',
-    finale.words === 'Welcome in.' && finale.rising,
+    '"Start browsing": "Welcome in.", then the browser rises over it',
+    finale.words === 'Welcome in.' && finale.rising && finale.over,
     JSON.stringify(finale),
   );
   check(

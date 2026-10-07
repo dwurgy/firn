@@ -180,8 +180,45 @@ const settings = () => {
   check('step 5: tips', (await title()) === "You're all set");
   shot('welcome-5');
   await fl.click('.welcome-next');
+  await wait(700);
+  const finale = await fl.evaluate(() => ({
+    words: document.querySelector('.welcome-in')?.textContent ?? null,
+    rising: !!document.querySelector('.welcome-browser'),
+    // Only transform and opacity are animated.
+    props: [
+      ...new Set(
+        document
+          .getAnimations()
+          .flatMap((a) =>
+            a.effect
+              .getKeyframes()
+              .flatMap((k) =>
+                Object.keys(k).filter(
+                  (p) =>
+                    ![
+                      'offset',
+                      'computedOffset',
+                      'easing',
+                      'composite',
+                    ].includes(p),
+                ),
+              ),
+          ),
+      ),
+    ],
+  }));
+  check(
+    '"Start browsing": "Welcome in." and the browser rising',
+    finale.words === 'Welcome in.' && finale.rising,
+    JSON.stringify(finale),
+  );
+  check(
+    '...moving only with transform and opacity',
+    finale.props.every((p) => p === 'transform' || p === 'opacity'),
+    finale.props.join(','),
+  );
   await wait(1500);
-  check('"Start browsing" closes it', (await title()) === null);
+  check('...then the welcome is gone', (await title()) === null);
   const tiles = await ui.evaluate(
     () => document.querySelectorAll('.basecamp-grid > *').length,
   );
@@ -201,7 +238,7 @@ const settings = () => {
   );
   // icons: the test machine is offline, so a stand-in answers icon fetches
   await fl.keyboard.press('Escape');
-  await wait(500);
+  await wait(2000);
   await app.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('welcome:icon');
     ipcMain.handle('welcome:icon', (_e, url) =>
@@ -227,10 +264,17 @@ const settings = () => {
     imgs.join(','),
   );
   shot('welcome-icons');
+  // With "reduce motion" on: nothing drifts, and leaving is a short fade.
+  await fl.emulateMedia({ reducedMotion: 'reduce' });
+  const still = await fl.evaluate(
+    () => getComputedStyle(document.querySelector('.fl-flake')).animationName,
+  );
+  check('with reduced motion, the flakes stay still', still === 'none', still);
   await fl.keyboard.press('Escape');
-  await wait(800);
+  await wait(700);
+  await fl.emulateMedia({ reducedMotion: 'no-preference' });
   check(
-    'Esc leaves it',
+    'Esc leaves it (a plain fade with reduced motion)',
     (await title()) === null &&
       (await ui.evaluate(
         () => document.querySelectorAll('.basecamp-grid > *').length,

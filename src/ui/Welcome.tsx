@@ -50,9 +50,24 @@ export function Welcome({
     if (space && name.trim() && name.trim() !== space.name)
       window.firn.updateSpace(space.id, { name: name.trim() });
   };
+  // The finish ("Start browsing", Skip or Esc): the card fades, the sun
+  // rises, "Welcome in.", and the browser comes up from behind the snow
+  // (about 1.6s; a plain 300ms fade with reduced motion). Firn's own
+  // welcome closes once it's over.
+  const [finishing, setFinishing] = useState(false);
+  const finishTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // If the welcome is closed or opened again meanwhile, this one's finish
+  // doesn't close the new one.
+  useEffect(() => () => clearTimeout(finishTimer.current), []);
   const finish = () => {
+    if (finishing) return;
     saveName();
-    window.firn.finishWelcome(picked);
+    setFinishing(true);
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    finishTimer.current = setTimeout(
+      () => window.firn.finishWelcome(picked),
+      calm ? 300 : 1600,
+    );
   };
   const next = () => {
     if (STEPS[step] === 'space') saveName();
@@ -262,7 +277,7 @@ export function Welcome({
 
   return (
     <div
-      className="welcome"
+      className={`welcome${finishing ? ' is-finishing' : ''}`}
       role="dialog"
       aria-label="Welcome to Firn"
       tabIndex={-1}
@@ -271,7 +286,8 @@ export function Welcome({
         if (e.key === 'Escape') finish();
       }}
     >
-      <Scene tint={tint} />
+      <Scene tint={tint}>{finishing && <BrowserRising />}</Scene>
+      {finishing && <p className="welcome-in">Welcome in.</p>}
       <div className="welcome-stage">
         {step === 0 ? (
           <div className="welcome-hello-screen">{body}</div>
@@ -301,6 +317,26 @@ export function Welcome({
       <button className="welcome-skip" onClick={finish}>
         Skip setup
       </button>
+    </div>
+  );
+}
+
+// The browser, drawn simply (frame, address, Basecamp, page), rising
+// into place from behind the snow as the welcome ends. The real browser
+// is underneath; the scene fades away to it.
+function BrowserRising() {
+  return (
+    <div className="welcome-browser">
+      <div className="welcome-browser-side">
+        <i className="is-address" />
+        <span>
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+      </div>
+      <div className="welcome-browser-page" />
     </div>
   );
 }

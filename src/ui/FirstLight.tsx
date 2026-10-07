@@ -67,9 +67,16 @@ const FLAKES = [
   { left: 17.2, top: 52.5, size: 14, turn: 40, delay: -3 },
 ];
 
-// The welcome's whole backdrop, back to front: sky, sun, flakes, snow,
-// paper grain. The content sits on top of all of it.
-export function Scene({ tint }: { tint: string | null }) {
+// The welcome's whole backdrop, back to front: sky, sun, flakes, whatever
+// rises from behind the snow (children), snow, paper grain. The content
+// sits on top of all of it.
+export function Scene({
+  tint,
+  children,
+}: {
+  tint: string | null;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="fl-scene" aria-hidden>
       <div className="fl-sky" />
@@ -90,6 +97,7 @@ export function Scene({ tint }: { tint: string | null }) {
           }
         />
       ))}
+      {children}
       <Snow tint={tint} />
       <div className="fl-grain" />
     </div>

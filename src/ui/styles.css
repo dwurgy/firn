@@ -2764,6 +2764,131 @@ button {
   opacity: 0.85;
 }
 
+/* The finish, about 1.6s, transform and opacity only:
+   0-250ms the step fades; 0-900ms the sun brightens and rises;
+   from 250ms "Welcome in." fades in and holds; 600-1250ms the browser
+   rises from behind the snow into the real browser's place, and from
+   1050ms the whole scene fades away to the real browser underneath. */
+.welcome.is-finishing {
+  pointer-events: none;
+  animation: fl-out 550ms ease-in 1050ms forwards;
+}
+
+.welcome.is-finishing .welcome-stage,
+.welcome.is-finishing .welcome-skip {
+  animation: fl-out 250ms ease-out forwards;
+}
+
+.welcome.is-finishing .fl-sun {
+  animation: fl-sun-rise 900ms ease-out forwards;
+}
+
+/* A brighter sun on top of the usual one, faded in as it rises. */
+.fl-sun::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(closest-side, var(--fl-sun), transparent 72%);
+  opacity: 0;
+}
+
+.welcome.is-finishing .fl-sun::after {
+  animation: fl-in 900ms ease-out forwards;
+}
+
+.welcome-in {
+  position: absolute;
+  top: 15%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: 'Fraunces', Georgia, serif;
+  font-variation-settings:
+    'SOFT' 100,
+    'WONK' 0;
+  font-optical-sizing: auto;
+  font-size: 44px;
+  font-weight: 360;
+  color: var(--text);
+  opacity: 0;
+  animation: fl-in 400ms ease-out 250ms forwards;
+}
+
+/* The browser, drawn simply, rising into the window. */
+.welcome-browser {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--frame);
+  box-shadow:
+    0 2px 8px rgba(40, 28, 16, 0.14),
+    0 18px 48px rgba(40, 28, 16, 0.22);
+  transform: translateY(96%) scale(0.86);
+  transform-origin: 50% 0;
+  animation: fl-browser-rise 650ms cubic-bezier(0.22, 0.8, 0.3, 1) 600ms
+    forwards;
+}
+
+.welcome-browser-side {
+  width: calc(var(--sidebar-width) - 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+}
+
+.welcome-browser-side i {
+  display: block;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--fl-pill);
+}
+
+.welcome-browser-side .is-address {
+  height: 30px;
+}
+
+.welcome-browser-side span {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.welcome-browser-page {
+  flex: 1;
+  border-radius: 11px;
+  background: var(--page);
+  box-shadow: var(--page-shadow);
+}
+
+@keyframes fl-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fl-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fl-sun-rise {
+  to {
+    transform: translateX(-50%) translateY(-6vh) scale(1.12);
+  }
+}
+
+@keyframes fl-browser-rise {
+  to {
+    transform: none;
+  }
+}
+
 .welcome button:focus-visible,
 .welcome input:focus-visible {
   outline: 2px solid var(--frost-strong);
@@ -2775,6 +2900,23 @@ button {
   .welcome-hello-screen,
   .welcome-body {
     animation: none;
+  }
+
+  /* The finish is a plain 300ms cross-fade to the browser. */
+  .welcome.is-finishing {
+    animation: fl-out 300ms ease-out forwards;
+  }
+
+  .welcome.is-finishing .welcome-stage,
+  .welcome.is-finishing .welcome-skip,
+  .welcome.is-finishing .fl-sun,
+  .welcome.is-finishing .fl-sun::after {
+    animation: none;
+  }
+
+  .welcome-browser,
+  .welcome-in {
+    display: none;
   }
 }
 

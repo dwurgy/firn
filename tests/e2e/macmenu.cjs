@@ -64,6 +64,29 @@ const check = (n, ok, x = '') => {
     file,
   );
 
+  const item = (menu, label) =>
+    app.evaluate(
+      ({ Menu }, [menu, label]) => {
+        const i = Menu.getApplicationMenu()
+          .items.find((m) => m.label === menu)
+          .submenu.items.find((i) => i.label === label);
+        return { role: i.role, accelerator: i.accelerator };
+      },
+      [menu, label],
+    );
+  const hide = await item('Firn', 'Hide Firn');
+  check(
+    "Hide Firn is the Mac's own Hide (Cmd+H)",
+    hide.role === 'hide',
+    JSON.stringify(hide),
+  );
+  const history = await item('View', 'History');
+  check(
+    'History is Cmd+Y, like Safari and Chrome',
+    history.accelerator === 'Cmd+Y',
+    JSON.stringify(history),
+  );
+
   const click = (menu, label) =>
     app.evaluate(
       ({ Menu }, [menu, label]) =>

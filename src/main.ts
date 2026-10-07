@@ -87,6 +87,9 @@ if (process.platform === 'win32' && !started) {
 }
 
 const HOME_URL = 'https://duckduckgo.com';
+// History: Ctrl+H on Windows and Linux; Cmd+Y on a Mac, like Safari and
+// Chrome there (Cmd+H hides the app on a Mac).
+const HISTORY_KEY = process.platform === 'darwin' ? 'y' : 'h';
 
 // Start with FIRN_DEBUG=1 to log what the window's layers are doing.
 const DEBUG = Boolean(process.env.FIRN_DEBUG);
@@ -2409,7 +2412,7 @@ const createWindow = () => {
         { type: 'separator' },
         {
           label: 'History',
-          accelerator: 'CmdOrCtrl+H',
+          accelerator: `CmdOrCtrl+${HISTORY_KEY.toUpperCase()}`,
           click: () => openHistory(),
         },
         { label: 'Passwords', click: () => openPasswords() },
@@ -2691,7 +2694,7 @@ const createWindow = () => {
       focusAddress();
     } else if (mod && key === 'f') {
       openFind();
-    } else if (mod && key === 'h') {
+    } else if (mod && key === HISTORY_KEY) {
       openHistory();
     } else if (mod && key === ',') {
       openSettings();
@@ -2787,7 +2790,6 @@ const createWindow = () => {
       Menu.buildFromTemplate(
         macMenuTemplate({
           settings: live(() => openSettings()),
-          hide: () => app.hide(),
           newTab: live(() => openCommandBar()),
           reopenClosedTab: live(() => tabs.reopenClosed()),
           closeTab: live(() => {

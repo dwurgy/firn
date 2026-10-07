@@ -12,7 +12,6 @@ import type { MenuItemConstructorOptions } from 'electron';
 
 export interface MenuActions {
   settings: () => void;
-  hide: () => void;
   newTab: () => void;
   reopenClosedTab: () => void;
   closeTab: () => void;
@@ -37,8 +36,7 @@ export const macMenuTemplate = (
       { type: 'separator' },
       { label: 'Settings…', accelerator: 'Cmd+,', click: a.settings },
       { type: 'separator' },
-      // Cmd+H opens History in Firn, so hiding has no shortcut here.
-      { label: 'Hide Firn', click: a.hide },
+      { role: 'hide', label: 'Hide Firn' },
       { role: 'hideOthers', label: 'Hide Others' },
       { role: 'unhide', label: 'Show All' },
       { type: 'separator' },
@@ -84,7 +82,7 @@ export const macMenuTemplate = (
       { label: 'Back', accelerator: 'Cmd+[', click: a.back },
       { label: 'Forward', accelerator: 'Cmd+]', click: a.forward },
       { label: 'Reload', accelerator: 'Cmd+R', click: a.reload },
-      { label: 'History', accelerator: 'Cmd+H', click: a.history },
+      { label: 'History', accelerator: 'Cmd+Y', click: a.history },
       { type: 'separator' },
       { label: 'Actual Size', accelerator: 'Cmd+0', click: () => a.zoom(0) },
       { label: 'Zoom In', accelerator: 'Cmd+=', click: () => a.zoom(1) },

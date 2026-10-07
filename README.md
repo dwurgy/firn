@@ -75,7 +75,7 @@ On Windows, an installed Firn keeps itself up to date. About a minute after it o
 | Close tab (a pinned or Basecamp tab is unloaded instead) | Ctrl+W (or middle-click a tab) | Cmd+W |
 | Pin / unpin tab | Ctrl+D | Cmd+D |
 | Preview a link in Lookout | Shift+click | Shift+click |
-| History | Ctrl+H | Cmd+H |
+| History | Ctrl+H | Cmd+Y |
 | Settings | Ctrl+, | Cmd+, |
 | Find in page (Enter / Shift+Enter: next / previous, Esc: close) | Ctrl+F (then F3 or Ctrl+G for next) | Cmd+F (then Cmd+G) |
 | Zoom in / out / back to 100% (each site remembers its zoom) | Ctrl+= / Ctrl+- / Ctrl+0, or Ctrl+mouse wheel | Cmd+= / Cmd+- / Cmd+0 |
@@ -88,7 +88,7 @@ On Windows, an installed Firn keeps itself up to date. About a minute after it o
 | Hard reload | Ctrl+Shift+R | Cmd+Shift+R |
 | Developer tools for the page | F12 or Ctrl+Shift+I | Cmd+Option+I |
 
-On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Help** menus with the main ones (Firn > **Settings…** is Cmd+,). Since Cmd+H opens History, **Hide Firn** is in the Firn menu without a shortcut.
+On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Help** menus with the main ones (Firn > **Settings…** is Cmd+,). Shortcuts follow the Mac's habits: Cmd+H hides Firn and Cmd+Y opens History, like Safari and Chrome.
 
 ### Where things live
 
@@ -140,7 +140,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 
 The **Firn mark** button at the bottom-left of the sidebar (beside the space icons) opens the Firn menu: New tab, New space, History, Passwords, Downloads and Settings.
 
-- **History** (Ctrl+H) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
+- **History** (Ctrl+H, or Cmd+Y on a Mac) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
 - **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Saved passwords

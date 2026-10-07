@@ -1214,9 +1214,26 @@ button {
   top: var(--top-bar-height);
 }
 
-/* With no tabs open, Firn shows its own calm page here. */
+/* With no tabs open, Firn shows its own calm page here: First light snow
+   and a soft glow in the space's color at the bottom (src/ui/FirstLight.tsx). */
 .page-area.is-empty {
+  overflow: hidden;
   background: var(--page);
+}
+
+.empty-glow {
+  position: absolute;
+  left: 50%;
+  bottom: -40px;
+  width: min(1000px, 100%);
+  height: 54%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--tint) var(--empty-glow), transparent),
+    color-mix(in srgb, var(--tint) var(--empty-glow-mid), transparent) 50%,
+    transparent
+  );
 }
 
 /* --- Split view ------------------------------------------------------------ */
@@ -1308,17 +1325,22 @@ button {
 }
 
 .empty-page {
+  position: relative;
+  /* A little above the middle, clear of the snow. */
+  margin-bottom: 150px;
   text-align: center;
   animation: settle 250ms ease-out;
 }
 
-/* Firn's mark, resting quietly above the words. */
+/* Firn's mark, in the space's color, resting quietly above the words. */
 .empty-mark {
   display: block;
   width: 44px;
   height: 44px;
   margin: 0 auto 18px;
-  opacity: 0.85;
+  background: var(--tint);
+  mask: url('./firn-mark.svg') center / contain no-repeat;
+  opacity: 0.9;
 }
 
 .empty-title {
@@ -2421,6 +2443,8 @@ button {
   --fl-mix-3: 47%;
   --fl-mix-4: 62%;
   --fl-mix-5: 78%;
+  --empty-glow: 33%;
+  --empty-glow-mid: 11%;
 }
 
 /* Dark: "blue hour". */
@@ -2453,6 +2477,8 @@ button {
   --fl-mix-3: 29%;
   --fl-mix-4: 38%;
   --fl-mix-5: 48%;
+  --empty-glow: 25%;
+  --empty-glow-mid: 7%;
 }
 
 .fl-scene {

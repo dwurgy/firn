@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SplitGroup } from '../types';
-import firnMark from './firn-mark.svg';
+import { Snow } from './FirstLight';
 import { Sidebar, useSidebarData } from './Sidebar';
 
 const PAGE_INSET = 8; // matches --page-inset in styles.css
@@ -14,6 +14,13 @@ export function App() {
   const resize = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => window.firn.onTopBarState(setTopBarShown), []);
+
+  // The active space's color, for the empty page.
+  const spaceColor =
+    spaces.spaces.find((s) => s.id === spaces.activeSpaceId)?.color ?? null;
+  const spaceTint = {
+    '--tint': spaceColor ?? '#6e98b2',
+  } as React.CSSProperties;
 
   // How far the sidebar has tucked away (0 = fully out, 1 = fully away),
   // following the page's left edge as it glides. Not while the peeking
@@ -102,8 +109,16 @@ export function App() {
           .join(' ')}
       >
         {noTabs && (
-          <div className="empty-page">
-            <img className="empty-mark" src={firnMark} alt="" />
+          // First light: snow and a soft glow in the space's color, the
+          // mark above the words in it too. Static; follows the space.
+          <>
+            <div className="empty-glow" style={spaceTint} aria-hidden />
+            <Snow tint={spaceColor} />
+          </>
+        )}
+        {noTabs && (
+          <div className="empty-page" style={spaceTint}>
+            <span className="empty-mark" aria-hidden />
             <p className="empty-title">No open tabs</p>
             <p className="empty-hint">
               Press {window.firn.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+T to

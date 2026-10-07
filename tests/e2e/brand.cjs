@@ -61,6 +61,59 @@ const check = (n, ok, x = '') => {
     await fam(ui, '.empty-title'),
   );
   shot('brand-empty');
+
+  // First light on the empty page: snow, a glow and the mark, all in the
+  // active space's color, following it when it changes.
+  const emptyLook = () =>
+    ui.evaluate(() => {
+      const layers = document.querySelectorAll('.page-area .fl-snow-layer');
+      const top = layers[layers.length - 1];
+      return {
+        bands: top ? top.querySelectorAll('path').length : 0,
+        tinted: !!top?.classList.contains('is-tinted'),
+        snow: top
+          ? getComputedStyle(top.querySelector('path:nth-child(5)')).fill
+          : null,
+        glow: !!document.querySelector('.page-area .empty-glow'),
+        mark: getComputedStyle(document.querySelector('.empty-mark'))
+          .backgroundColor,
+        moving: document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.playState === 'running' &&
+              a.effect?.getTiming().iterations === Infinity,
+          ),
+      };
+    });
+  const before = await emptyLook();
+  check(
+    "empty page: five snow bands and a glow in the space's color",
+    before.bands === 5 && before.tinted && before.glow,
+    JSON.stringify(before),
+  );
+  check('...and nothing moves while it sits there', !before.moving);
+  const spaceId = await ui.evaluate(
+    () =>
+      new Promise((r) => {
+        const off = window.firn.onSpacesState((s) => {
+          off();
+          r(s.activeSpaceId);
+        });
+        window.firn.ready();
+      }),
+  );
+  await ui.evaluate(
+    (id) => window.firn.updateSpace(id, { color: '#8e8fb8' }),
+    spaceId,
+  );
+  await wait(800);
+  const after = await emptyLook();
+  check(
+    "...and they follow the space's new color",
+    after.snow !== before.snow && after.mark === 'rgb(142, 143, 184)',
+    `${before.snow} -> ${after.snow}, mark ${after.mark}`,
+  );
   for (const [action, name] of [
     ['settings', 'Settings'],
     ['history', 'History'],

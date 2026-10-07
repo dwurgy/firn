@@ -395,8 +395,33 @@ const check = (name, ok, extra = '') => {
   warp(o.x + 3, o.y + 400);
   await wait(400);
   await pk.click('.sidebar-top button[title^="Keep sidebar open"]');
-  await wait(500);
+  await wait(80);
+  const settling = await pk.evaluate(() =>
+    document.querySelector('.peek').classList.contains('is-docking'),
+  );
+  const dockedStill = await ui.evaluate(
+    () => getComputedStyle(document.querySelector('.sidebar')).transform,
+  );
+  check(
+    "...the peeking sidebar settles into place (it doesn't slide away)",
+    settling,
+  );
+  check(
+    '...while the docked sidebar waits underneath, already in place',
+    dockedStill === 'none',
+    dockedStill,
+  );
+  await wait(420);
   check('button in peek brings sidebar back', (await pageX()) === 260);
+  check(
+    '...and the peeking sidebar is gone once it has settled',
+    await app.evaluate(
+      ({ BrowserWindow }) =>
+        !BrowserWindow.getAllWindows()[0].contentView.children.some(
+          (v) => v.webContents.getURL().includes('view=peek') && v.getVisible(),
+        ),
+    ),
+  );
   const eEnd = await layoutSample();
   check(
     'expanding: site fits its new width at the end',

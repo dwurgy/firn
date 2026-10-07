@@ -207,11 +207,14 @@ export interface NavState {
 
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
 // page currently starts (it glides while collapsing or expanding).
+// `docking`: the peeking sidebar was just kept open, and is settling into
+// the docked sidebar's place (instead of sliding away).
 export interface SidebarState {
   width: number;
   collapsed: boolean;
   pageLeft: number;
   peeking: boolean;
+  docking: boolean;
 }
 
 // Whether the window shows frosted glass, and whether it's in focus (glass

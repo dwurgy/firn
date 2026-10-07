@@ -6,7 +6,7 @@ export function Peek() {
   const { nav, tabs, sidebar, spaces, downloads } = useSidebarData();
   return (
     <div
-      className={`peek ${sidebar.peeking ? 'is-shown' : ''}`}
+      className={`peek ${sidebar.peeking ? 'is-shown' : ''} ${sidebar.docking ? 'is-docking' : ''}`}
       // Typing (address bar, a space's name) keeps it open; a click on a
       // button doesn't.
       onFocus={(e) => {

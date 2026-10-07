@@ -35,6 +35,7 @@ export const DEFAULT_SIDEBAR: SidebarState = {
   collapsed: false,
   pageLeft: 260,
   peeking: false,
+  docking: false,
 };
 
 // The live state every sidebar needs, kept in step with the main process.

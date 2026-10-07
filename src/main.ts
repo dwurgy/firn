@@ -1560,6 +1560,8 @@ const createWindow = () => {
   // --- Sidebar: resize, collapse, peek -------------------------------------
 
   let peeking = false;
+  // The peeking sidebar settling into the docked one's place (see hidePeek).
+  let docking = false;
   let peekWatch: ReturnType<typeof setInterval> | undefined;
   let peekHideTimer: ReturnType<typeof setTimeout> | undefined;
   let glide: ReturnType<typeof setInterval> | undefined;
@@ -1570,6 +1572,7 @@ const createWindow = () => {
       collapsed: windowState.sidebarCollapsed,
       pageLeft,
       peeking,
+      docking,
     });
 
   // Slides the page's left edge (and the sidebar with it) to a new spot.
@@ -1643,7 +1646,8 @@ const createWindow = () => {
   const setSidebarCollapsed = (collapsed: boolean) => {
     if (windowState.sidebarCollapsed === collapsed) return;
     windowState.sidebarCollapsed = collapsed;
-    hidePeek();
+    // Kept open while peeking: the peeking sidebar becomes the docked one.
+    hidePeek(!collapsed);
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
     saver.schedule();
   };
@@ -1684,6 +1688,7 @@ const createWindow = () => {
     if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
     if (!readyUi.has(peek.webContents)) return;
     peeking = true;
+    docking = false;
     clearTimeout(peekHideTimer);
     showLayer(peek);
     sendSidebar();
@@ -1703,19 +1708,43 @@ const createWindow = () => {
     }, 50);
   };
 
-  const hidePeek = () => {
-    if (!peeking) return;
+  // Slides the peeking sidebar away; or, when it's kept open (`dock`), lets
+  // it settle into the docked sidebar's place while the page makes room
+  // (src/ui/styles.css, ".peek.is-docking"), like Arc: the docked sidebar
+  // waits underneath, already in place, and takes over when it's done.
+  const hidePeek = (dock = false) => {
+    if (!peeking) {
+      // Hidden again while still settling: no need to wait.
+      if (docking && !dock) {
+        clearTimeout(peekHideTimer);
+        docking = false;
+        hideLayer(peek);
+        lightsAt.delete(peek.webContents);
+        sendSidebar();
+        syncTrafficLights();
+      }
+      return;
+    }
     peeking = false;
+    docking = dock;
     peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
-    // Let it slide away before the layer goes.
-    peekHideTimer = setTimeout(() => {
-      if (peeking) return;
-      hideLayer(peek);
-      lightsAt.delete(peek.webContents);
-      syncTrafficLights();
-    }, GLIDE_MS + 60);
+    // Let it slide away (or settle, then fade: see styles.css) before the
+    // layer goes.
+    peekHideTimer = setTimeout(
+      () => {
+        if (peeking) return;
+        hideLayer(peek);
+        lightsAt.delete(peek.webContents);
+        if (docking) {
+          docking = false;
+          sendSidebar();
+        }
+        syncTrafficLights();
+      },
+      dock ? GLIDE_MS + 140 : GLIDE_MS + 60,
+    );
   };
 
   // Reaching the window's edges reveals things: the left edge brings the

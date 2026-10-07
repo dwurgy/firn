@@ -160,7 +160,7 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 - **Phases 1–5: done.** Firn browses, has the sidebar with vertical tabs, pins, Basecamp, spaces, session restore, Lookout, split view and the command bar.
 - **Phase 6 (polish & shipping): in progress.**
   - Done: find in page, zoom, right-click menus, downloads, PDF viewer, site permissions, history, settings (including the address bar's two looks), saved passwords, scam and malware warnings (Google Safe Browsing), the welcome, Fraunces brand headings, the Firn menu at the bottom-left, the Windows installer ("Firn Setup.exe"), version 0.1.0, the MPL 2.0 license, and automatic Windows and Mac builds on GitHub (releases attach the downloads), and the first round of testing on real Macs (traffic lights that move with the sidebar, page corners matching macOS 26+, the window's top edge to grab it).
-  - Next: auto-updates. Later: Apple notarization ($99/year, needed before sharing widely and for Mac auto-updates) and Windows code signing (optional).
+  - Next: auto-updates, and Apple notarization early on ($99/year; David will pay for it so even early Mac testers get an easy install, and Mac auto-updates need it). Later: Windows code signing (optional).
 - **Not shared yet:** personal use and a few friends first. See "Decided: coming later" below for what's queued.
 
 ## Decided: coming later
@@ -173,6 +173,8 @@ Agreed with David; not started yet. Build them one at a time, in small steps lik
 - **Import passwords from another browser:** from the export file every browser and password manager can make (Chrome, Edge, Firefox, Safari, Bitwarden, 1Password), with short plain steps for each browser; imported passwords are encrypted like Firn's own, and Firn offers to delete the export file afterwards (it holds every password as plain text). In Settings > Saved passwords ("Import…") and as an optional welcome step. Reading them straight from Chrome or Edge isn't possible on Windows (they lock their passwords to themselves since 2024). Open question, decide separately: bookmarks and history. They can be read directly, but Firn has no bookmarks (pins and Basecamp instead), so they probably belong in what the command bar can search, not in the sidebar.
 - **Extension support:** many people rely on one or two (password managers, ad blockers). Electron only partly supports Chrome extensions: research what works before promising anything.
 - **A full-window welcome:** the welcome fills the whole window (calm background, big Fraunces headlines, choices reflected live), then glides away to reveal the browser. Do it before sharing Firn widely.
+- **A proper Mac menu bar:** Firn > Settings… (Cmd+,) opens Firn's own Settings panel, plus short, plain File / Edit / View / Window / Help menus (today Mac shows Electron's generic default menu). Ctrl+, opens Settings on Windows too.
+- **A Liquid Glass Mac app icon:** built from the layers in `brand/icon-composer`. David makes `AppIcon.icon` in Apple's Icon Composer; the Mac build compiles it, keeping the current `.icns` for older Macs.
 
 ## Deliberately not doing
 

@@ -118,10 +118,21 @@ body,
    - the main window's sidebar top row, and
    - the top bar layer's empty band, which only counts while the bar is
      showing (hidden layers are skipped).
+   On macOS, which has no such trouble, the thin frame strip along the
+   window's top edge moves it too (instead of the top bar sliding down).
    No other layer declares any drag setting at all. */
 :root[data-view='main'] .sidebar-top,
-:root[data-view='topbar'] .top-bar-drag {
+:root[data-view='topbar'] .top-bar-drag,
+:root[data-view='main'][data-platform='darwin'] .window-grip {
   -webkit-app-region: drag;
+}
+
+.window-grip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--page-inset);
 }
 
 :root[data-view='main'] .sidebar-top .icon-button,
@@ -230,9 +241,9 @@ button {
   height: 36px;
 }
 
-/* Leave room for the macOS traffic lights. */
+/* Leave room for the macOS traffic lights, and a little air after them. */
 :root[data-platform='darwin'] .sidebar-top {
-  padding-left: 68px;
+  padding-left: 76px;
 }
 
 .button-row {
@@ -2086,11 +2097,9 @@ button {
   padding: 8px;
   border-radius: var(--page-radius);
   background: var(--frame);
-  background-image: linear-gradient(
-    rgb(var(--space-rgb, 0 0 0) / var(--space-wash)),
-    rgb(var(--space-rgb, 0 0 0) / var(--space-wash))
-  );
+  /* The space's tint, as a shadow inside (so it can fade, see below). */
   box-shadow:
+    inset 0 0 0 100vmax rgb(var(--space-rgb, 0 0 0) / var(--space-wash)),
     0 0 0 1px var(--panel-edge),
     0 4px 12px rgba(30, 20, 10, 0.12),
     0 16px 40px rgba(30, 20, 10, 0.18);
@@ -2102,6 +2111,35 @@ button {
 .peek.is-shown .sidebar {
   transform: none;
   transition-duration: 140ms;
+}
+
+/* Kept open while peeking: instead of sliding away, it settles into the
+   docked sidebar's place (a little up and to the left, edge and shadow
+   melting away) while the page slides over to make room. Its own
+   background fades only once it lines up exactly with the docked sidebar
+   waiting underneath (any earlier, the two show through each other,
+   doubled), which then takes over. */
+.peek.is-docking .sidebar {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow:
+    inset 0 0 0 100vmax transparent,
+    0 0 0 1px transparent,
+    0 4px 12px transparent,
+    0 16px 40px transparent;
+  transform: none;
+  transition:
+    top var(--motion),
+    left var(--motion),
+    bottom var(--motion),
+    width var(--motion),
+    border-radius var(--motion),
+    background-color 80ms ease-out 200ms,
+    box-shadow 80ms ease-out 200ms;
 }
 
 /* --- Lookout: a link previewed over the page -------------------------------- */

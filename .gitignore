@@ -147,3 +147,6 @@ out/
 
 # Firn's Google Safe Browsing key (see vite.main.config.mts)
 safe-browsing-key.txt
+
+# Screenshots and logs from the end-to-end checks
+tests/e2e/out/

@@ -207,11 +207,14 @@ export interface NavState {
 
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
 // page currently starts (it glides while collapsing or expanding).
+// `docking`: the peeking sidebar was just kept open, and is settling into
+// the docked sidebar's place (instead of sliding away).
 export interface SidebarState {
   width: number;
   collapsed: boolean;
   pageLeft: number;
   peeking: boolean;
+  docking: boolean;
 }
 
 // Whether the window shows frosted glass, and whether it's in focus (glass
@@ -298,6 +301,8 @@ export interface Rect {
 // The narrow API the preload script exposes to Firn's UI as `window.firn`.
 export interface FirnBridge {
   platform: string;
+  // The page's corner radius (rounder windows on newer macOS change it).
+  pageRadius: number;
   navigate(input: string): void;
   command(command: NavCommand): void;
   newTab(): void;
@@ -362,6 +367,9 @@ export interface FirnBridge {
   toggleSidebar(): void;
   // The peeking sidebar has a text field focused (so it stays open).
   setPeekTyping(typing: boolean): void;
+  // macOS: where this layer's sidebar top row is drawn (for the window's
+  // traffic lights, which sit in it).
+  lightsAt(x: number, y: number): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;

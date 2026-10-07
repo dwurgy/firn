@@ -1,0 +1,23 @@
+<!doctype html><title>Sign in</title>
+<body style="font: 16px sans-serif; padding: 40px">
+  <form id="f">
+    <p><input id="email" type="email" name="email" placeholder="Email" /></p>
+    <p>
+      <input id="pw" type="password" name="password" placeholder="Password" />
+    </p>
+    <p><button id="go" type="submit">Sign in</button></p>
+  </form>
+  <p id="msg"></p>
+  <script>
+    document.getElementById('f').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pw = document.getElementById('pw').value;
+      if (pw === 'wrong') {
+        document.getElementById('msg').textContent = 'Wrong password';
+        return;
+      }
+      history.pushState({}, '', '/dashboard');
+      document.body.innerHTML = '<h1>Welcome</h1>';
+    });
+  </script>
+</body>

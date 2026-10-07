@@ -16,14 +16,17 @@ export function App() {
   useEffect(() => window.firn.onTopBarState(setTopBarShown), []);
 
   // How far the sidebar has tucked away (0 = fully out, 1 = fully away),
-  // following the page's left edge as it glides.
-  const away = Math.min(
-    1,
-    Math.max(
-      0,
-      (sidebar.width - sidebar.pageLeft) / (sidebar.width - PAGE_INSET),
-    ),
-  );
+  // following the page's left edge as it glides. Not while the peeking
+  // sidebar settles into its place: then it waits underneath, already out.
+  const away = sidebar.docking
+    ? 0
+    : Math.min(
+        1,
+        Math.max(
+          0,
+          (sidebar.width - sidebar.pageLeft) / (sidebar.width - PAGE_INSET),
+        ),
+      );
   // Nothing on screen (e.g. a new, empty space).
   const noTabs = !tabs.activeTabId;
   // The active tab is one side of a split view.
@@ -48,6 +51,7 @@ export function App() {
         } as React.CSSProperties
       }
     >
+      <div className="window-grip" />
       <Sidebar
         nav={nav}
         tabs={tabs}

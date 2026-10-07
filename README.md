@@ -32,6 +32,16 @@ npm run package
 
 Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
 
+### Downloads built by GitHub (Windows and Mac)
+
+GitHub builds Firn by itself, on its own Windows and Mac computers, every time changes are pushed (see `.github/workflows/build.yml`). Nothing to run on your computer:
+
+- **To try a change:** open the repository's **Actions** tab, click the latest **Build** run, and scroll to **Artifacts**: "Firn for Windows" holds `Firn Setup.exe`, and "Firn for macOS" holds a `.zip` with `Firn.app` (one app for every Mac, Apple chip or Intel). You need to be signed in to GitHub to download them; they're kept for 30 days.
+- **To share a version:** on GitHub, open **Releases > Draft a new release**, create a tag named `v` plus the version in `package.json` (for example `v0.1.0`), give it a title and a few words about what's new, and click **Publish release**. In about 15 minutes, GitHub attaches the Windows installer and the Mac zip to that release's page: the link to send to friends (anyone can download, no account needed). To publish the next version, raise `version` in `package.json` first.
+- **The Safe Browsing key:** add it once as a repository secret named `FIRN_SAFE_BROWSING_KEY` (**Settings > Secrets and variables > Actions > New repository secret**), so GitHub's builds warn about scam sites too.
+
+**Opening Firn on a Mac the first time.** Until Firn is notarized by Apple (an Apple Developer account, $99 a year), macOS can't vouch for it: unzip the download, drag **Firn** into **Applications**, and open it. macOS says it "can't be opened" or "can't verify" it: click **Done**, then open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to the note about Firn. After that it opens normally.
+
 ### Making the installer (to share Firn)
 
 To give Firn to someone on Windows, build its installer:
@@ -77,6 +87,7 @@ What happens when they open it: no wizard and no questions. A small window shows
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
 - `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `tests/e2e/` — checks that start Firn and click through it (see `tests/e2e/README.md`).
 - `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
 - `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.
@@ -92,7 +103,7 @@ The first time Firn opens, a short welcome sets things up, one card at a time. E
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
-Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces, the typeface of Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
+Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces with its soft (rounded) corners on and its quirky "wonky" letters off, the same as Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
 
 ### Command bar
 

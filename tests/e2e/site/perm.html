@@ -1,0 +1,38 @@
+<!doctype html><title>Permission page</title>
+<body style="font: 16px sans-serif; padding: 40px">
+  <button
+    id="notify"
+    onclick="
+      Notification.requestPermission().then(
+        (r) => (window.result = 'notify:' + r),
+      )
+    "
+  >
+    Notify
+  </button>
+  <button
+    id="cam"
+    onclick="
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(
+        (s) => {
+          window.result = 'cam:ok';
+          s.getTracks().forEach((t) => t.stop());
+        },
+        (e) => (window.result = 'cam:' + e.name),
+      )
+    "
+  >
+    Camera
+  </button>
+  <button
+    id="loc"
+    onclick="
+      navigator.geolocation.getCurrentPosition(
+        () => (window.result = 'loc:ok'),
+        (e) => (window.result = 'loc:' + e.code),
+      )
+    "
+  >
+    Location
+  </button>
+</body>

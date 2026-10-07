@@ -35,6 +35,7 @@ import type { PermissionKind, PermissionRequest } from './engine/engine';
 import { parseKey, PERMISSION_WORDING, SitePermissions } from './permissions';
 import { History } from './history';
 import { searchUrl, setSearchEngine } from './url';
+import { isLiquidGlass, pageRadius } from './frame';
 import { cleanSettings, loadSettings, saveSettings } from './settings';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
@@ -119,8 +120,8 @@ const EDGE_CHECK_MS = 30;
 const PEEK_ZONE_OUTSIDE = 8;
 const PEEK_ZONE_INSIDE = 20;
 const PAGE_INSET = 8;
-// Matches macOS's window corners.
-const PAGE_RADIUS = 12;
+// See src/frame.ts.
+const PAGE_RADIUS = pageRadius(process.platform, process.getSystemVersion());
 
 // Hovering the top edge lowers the page to make room for a bar with the
 // window buttons above it (Windows / Linux).
@@ -128,9 +129,37 @@ const TOP_BAR_HEIGHT = 40; // matches --top-bar-height in styles.css
 // With the address bar at the top, the bar is always there and a little
 // taller, so the address bar has room around it.
 const TOP_ADDRESS_HEIGHT = 48;
+
+// macOS: where the window's traffic lights sit (their top-left corner),
+// relative to the sidebar's top row (8pt in; 36pt tall, so 10pt down puts
+// their middle on the row's), and at the left of the "At the top" bar (48pt
+// tall). Liquid Glass draws them 1pt higher, so there they go 1pt lower.
+const LIGHTS_DOWN = isLiquidGlass(process.platform, process.getSystemVersion())
+  ? 1
+  : 0;
+const LIGHTS_IN_ROW = { x: 8, y: 10 + LIGHTS_DOWN };
+const LIGHTS_IN_SIDEBAR = { x: 8 + LIGHTS_IN_ROW.x, y: 8 + LIGHTS_IN_ROW.y };
+const LIGHTS_IN_TOP_BAR = { x: 16, y: 16 + LIGHTS_DOWN };
+// The three lights are about 60pt wide: further left than this, they're
+// past the window's edge altogether.
+const LIGHTS_GONE_X = -60;
 // Once the mouse leaves the bar, wait this long before sliding it away, so
 // brushing past the edge doesn't make it flicker.
 const TOP_BAR_LINGER_MS = 250;
+
+// The window's name (the Dock's menu, the Window menu, the taskbar): the
+// page's title, cut short like the sidebar's tabs (some sites put a whole
+// description in it), then "— Firn".
+const WINDOW_TITLE_MAX = 60;
+const windowTitle = (pageTitle: string) => {
+  const title = pageTitle.replace(/\s+/g, ' ').trim();
+  if (!title) return 'Firn';
+  const short =
+    title.length > WINDOW_TITLE_MAX
+      ? `${title.slice(0, WINDOW_TITLE_MAX - 1).trimEnd()}…`
+      : title;
+  return `${short} — Firn`;
+};
 
 // Ctrl+Tab: a quick tap just flips tabs; holding Ctrl this long shows the list.
 const SWITCHER_DELAY_MS = 180;
@@ -374,7 +403,7 @@ const createWindow = () => {
     // Hide the OS title bar. macOS keeps its traffic lights; on Windows and
     // Linux Firn draws its own window buttons, hidden in the top-right corner.
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 16, y: 16 },
+    trafficLightPosition: LIGHTS_IN_SIDEBAR,
     webPreferences: UI_WEB_PREFERENCES,
   });
 
@@ -1169,6 +1198,7 @@ const createWindow = () => {
   // Shows the top bar for good, or takes it away, to match the address bar
   // setting and fullscreen.
   const syncTopBar = (animate = true) => {
+    syncTrafficLights();
     if (!readyUi.has(topBar.webContents)) return;
     clearInterval(topBarWatch);
     clearTimeout(topBarHideTimer);
@@ -1197,8 +1227,10 @@ const createWindow = () => {
     }
   };
 
+  // On macOS the window's top edge moves it by itself (.window-grip in
+  // styles.css), and its window buttons stay in the sidebar, so no bar.
   const revealTopBar = (reveal: boolean) => {
-    if (addressOnTop()) return;
+    if (addressOnTop() || process.platform === 'darwin') return;
     if (reveal && !isFullscreen()) {
       if (topBarShown || !readyUi.has(topBar.webContents)) return;
       topBarShown = true;
@@ -1340,8 +1372,7 @@ const createWindow = () => {
       showLoginPrompt();
     },
     onNavChanged: (state) => {
-      if (!win.isDestroyed())
-        win.setTitle(state.title ? `${state.title} — Firn` : 'Firn');
+      if (!win.isDestroyed()) win.setTitle(windowTitle(state.title));
       sendNav();
     },
     onEmpty: () => openCommandBar(),
@@ -1529,6 +1560,8 @@ const createWindow = () => {
   // --- Sidebar: resize, collapse, peek -------------------------------------
 
   let peeking = false;
+  // The peeking sidebar settling into the docked one's place (see hidePeek).
+  let docking = false;
   let peekWatch: ReturnType<typeof setInterval> | undefined;
   let peekHideTimer: ReturnType<typeof setTimeout> | undefined;
   let glide: ReturnType<typeof setInterval> | undefined;
@@ -1539,6 +1572,7 @@ const createWindow = () => {
       collapsed: windowState.sidebarCollapsed,
       pageLeft,
       peeking,
+      docking,
     });
 
   // Slides the page's left edge (and the sidebar with it) to a new spot.
@@ -1569,10 +1603,51 @@ const createWindow = () => {
     }, 16);
   };
 
+  // macOS: the traffic lights belong to the sidebar's top row, and move
+  // with it, like part of the sidebar: out and back with it, along with the
+  // peeking sidebar, sliding past the window's edge as it goes. macOS draws
+  // them itself, at once, while the sidebar is drawn by its layer a moment
+  // later, so they can't simply be slid along on a timer of their own (they
+  // ran ahead). Instead each sidebar (the window's and the peeking one)
+  // reports where its top row is actually drawn, frame by frame while it
+  // moves ('lights:at'), and the lights go there; the one further out wins.
+  // With both away and the address bar "At the top", they sit at the left of
+  // the top bar; otherwise there are none.
+  const lightsAt = new Map<WebContents, { x: number; y: number }>();
+  // They start in the sidebar (trafficLightPosition), until it reports.
+  if (!windowState.sidebarCollapsed)
+    lightsAt.set(win.webContents, LIGHTS_IN_SIDEBAR);
+  let lightsShown: string | null =
+    `${LIGHTS_IN_SIDEBAR.x},${LIGHTS_IN_SIDEBAR.y}`;
+  const syncTrafficLights = () => {
+    if (process.platform !== 'darwin' || win.isDestroyed()) return;
+    let place: { x: number; y: number } | null = null;
+    for (const at of lightsAt.values())
+      if (at.x > LIGHTS_GONE_X && (!place || at.x > place.x)) place = at;
+    if (!place && windowState.sidebarCollapsed && addressOnTop())
+      place = LIGHTS_IN_TOP_BAR;
+    const key = place ? `${place.x},${place.y}` : null;
+    if (key === lightsShown) return;
+    const wasShown = lightsShown !== null;
+    lightsShown = key;
+    if (!place) return win.setWindowButtonVisibility(false);
+    if (wasShown) return win.setWindowButtonPosition(place);
+    // Shown first, then placed: macOS forgets a place given while they're
+    // hidden and shows them in its default spot instead. Placed once more
+    // a moment later, in case it lays them out again as they appear.
+    win.setWindowButtonVisibility(true);
+    win.setWindowButtonPosition(place);
+    setTimeout(() => {
+      if (!win.isDestroyed() && lightsShown === key)
+        win.setWindowButtonPosition(place);
+    }, 50);
+  };
+
   const setSidebarCollapsed = (collapsed: boolean) => {
     if (windowState.sidebarCollapsed === collapsed) return;
     windowState.sidebarCollapsed = collapsed;
-    hidePeek();
+    // Kept open while peeking: the peeking sidebar becomes the docked one.
+    hidePeek(!collapsed);
     glidePageLeft(collapsed ? PAGE_INSET : windowState.sidebarWidth);
     saver.schedule();
   };
@@ -1613,6 +1688,7 @@ const createWindow = () => {
     if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
     if (!readyUi.has(peek.webContents)) return;
     peeking = true;
+    docking = false;
     clearTimeout(peekHideTimer);
     showLayer(peek);
     sendSidebar();
@@ -1632,16 +1708,43 @@ const createWindow = () => {
     }, 50);
   };
 
-  const hidePeek = () => {
-    if (!peeking) return;
+  // Slides the peeking sidebar away; or, when it's kept open (`dock`), lets
+  // it settle into the docked sidebar's place while the page makes room
+  // (src/ui/styles.css, ".peek.is-docking"), like Arc: the docked sidebar
+  // waits underneath, already in place, and takes over when it's done.
+  const hidePeek = (dock = false) => {
+    if (!peeking) {
+      // Hidden again while still settling: no need to wait.
+      if (docking && !dock) {
+        clearTimeout(peekHideTimer);
+        docking = false;
+        hideLayer(peek);
+        lightsAt.delete(peek.webContents);
+        sendSidebar();
+        syncTrafficLights();
+      }
+      return;
+    }
     peeking = false;
+    docking = dock;
     peekTyping = false;
     clearInterval(peekWatch);
     sendSidebar();
-    // Let it slide away before the layer goes.
-    peekHideTimer = setTimeout(() => {
-      if (!peeking) hideLayer(peek);
-    }, GLIDE_MS + 60);
+    // Let it slide away (or settle, then fade: see styles.css) before the
+    // layer goes.
+    peekHideTimer = setTimeout(
+      () => {
+        if (peeking) return;
+        hideLayer(peek);
+        lightsAt.delete(peek.webContents);
+        if (docking) {
+          docking = false;
+          sendSidebar();
+        }
+        syncTrafficLights();
+      },
+      dock ? GLIDE_MS + 140 : GLIDE_MS + 60,
+    );
   };
 
   // Reaching the window's edges reveals things: the left edge brings the
@@ -2427,6 +2530,17 @@ const createWindow = () => {
       hideOverlay();
     },
     'sidebar:toggle': () => setSidebarCollapsed(!windowState.sidebarCollapsed),
+    'lights:at': (sender, x, y) => {
+      if (sender !== win.webContents && sender !== peek.webContents) return;
+      if (typeof x !== 'number' || typeof y !== 'number') return;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      // Both layers sit at the window's top-left corner.
+      lightsAt.set(sender, {
+        x: Math.round(x) + LIGHTS_IN_ROW.x,
+        y: Math.round(y) + LIGHTS_IN_ROW.y,
+      });
+      syncTrafficLights();
+    },
     'peek:typing': (sender, typing) => {
       if (sender === peek.webContents) peekTyping = typing === true;
     },

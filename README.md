@@ -88,6 +88,8 @@ On Windows, an installed Firn keeps itself up to date. About a minute after it o
 | Hard reload | Ctrl+Shift+R | Cmd+Shift+R |
 | Developer tools for the page | F12 or Ctrl+Shift+I | Cmd+Option+I |
 
+On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Help** menus with the main ones (Firn > **Settings…** is Cmd+,). Since Cmd+H opens History, **Hide Firn** is in the Firn menu without a shortcut.
+
 ### Where things live
 
 - `src/main.ts` — the main process: creates the window, handles shortcuts and messages from the UI.

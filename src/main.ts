@@ -40,6 +40,7 @@ import { cleanSettings, loadSettings, saveSettings } from './settings';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
+import { macMenuTemplate } from './menu';
 import type {
   CommandAction,
   FrameState,
@@ -2771,6 +2772,42 @@ const createWindow = () => {
       );
     }
   };
+
+  // --- The Mac menu bar ------------------------------------------------------
+  // (FIRN_MAC_MENU=1 shows it on other systems too, for the checks.)
+
+  if (process.platform === 'darwin' || process.env.FIRN_MAC_MENU) {
+    // With Firn's window closed (a Mac app keeps running), any menu choice
+    // first brings the window back.
+    const live = (action: () => void) => () => {
+      if (win.isDestroyed()) createWindow();
+      else action();
+    };
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(
+        macMenuTemplate({
+          settings: live(() => openSettings()),
+          hide: () => app.hide(),
+          newTab: live(() => openCommandBar()),
+          reopenClosedTab: live(() => tabs.reopenClosed()),
+          closeTab: live(() => {
+            if (tabs.activeTabId) tabs.close(tabs.activeTabId);
+          }),
+          find: live(() => openFind()),
+          toggleSidebar: live(() =>
+            setSidebarCollapsed(!windowState.sidebarCollapsed),
+          ),
+          back: live(() => tabs.command('back')),
+          forward: live(() => tabs.command('forward')),
+          reload: live(() => tabs.command('reload')),
+          history: live(() => openHistory()),
+          zoom: (direction) => live(() => tabs.zoom(direction))(),
+          devTools: live(() => tabs.toggleDevTools()),
+          website: live(() => void tabs.create('https://firnbrowser.com')),
+        }),
+      ),
+    );
+  }
 
   const watchShortcuts = (web: WebContents) =>
     web.on('before-input-event', (event, input) =>

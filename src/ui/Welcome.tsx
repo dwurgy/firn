@@ -74,7 +74,7 @@ export function Welcome({
             minute, and you can change any of it later.
           </p>
           <button className="welcome-next" onClick={next} autoFocus>
-            Get started
+            Let's begin
           </button>
         </>
       );

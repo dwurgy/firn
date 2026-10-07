@@ -1615,8 +1615,16 @@ const createWindow = () => {
     const key = place ? `${place.x},${place.y}` : null;
     if (key === lightsShown) return;
     lightsShown = key;
-    if (place) win.setWindowButtonPosition(place);
-    win.setWindowButtonVisibility(!!place);
+    if (!place) return win.setWindowButtonVisibility(false);
+    // Shown first, then placed: macOS forgets a place given while they're
+    // hidden and shows them in its default spot instead. Placed once more
+    // a moment later, in case it lays them out again as they appear.
+    win.setWindowButtonVisibility(true);
+    win.setWindowButtonPosition(place);
+    setTimeout(() => {
+      if (!win.isDestroyed() && lightsShown === key)
+        win.setWindowButtonPosition(place);
+    }, 50);
   };
   // Hides the lights for a while (a slide is starting), then puts them
   // where they belong.

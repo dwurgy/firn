@@ -364,6 +364,9 @@ export interface FirnBridge {
   toggleSidebar(): void;
   // The peeking sidebar has a text field focused (so it stays open).
   setPeekTyping(typing: boolean): void;
+  // macOS: where this layer's sidebar top row is drawn (for the window's
+  // traffic lights, which sit in it).
+  lightsAt(x: number, y: number): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
   activateTab(id: string): void;

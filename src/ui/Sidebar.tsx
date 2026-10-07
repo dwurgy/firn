@@ -108,6 +108,8 @@ export function Sidebar({
   style?: React.CSSProperties;
 }) {
   const space = spaces.spaces.find((s) => s.id === spaces.activeSpaceId);
+  const topRow = useRef<HTMLDivElement>(null);
+  useTrafficLights(topRow);
   // Which space's name is being edited (only shown while it's the active
   // space).
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -156,7 +158,7 @@ export function Sidebar({
         window.firn.showSidebarMenu();
       }}
     >
-      <div className="sidebar-top">
+      <div className="sidebar-top" ref={topRow}>
         <div className="button-row">
           <button
             className="icon-button"
@@ -244,4 +246,47 @@ export function Sidebar({
       )}
     </aside>
   );
+}
+
+// macOS: the window's traffic lights sit in the sidebar's top row, but
+// macOS draws them, not this layer. So that they move with the row (when the
+// sidebar slides out and back, or peeks), this reports where the row is
+// drawn, frame by frame for a little while after anything changes (the
+// sidebar re-renders on every step of a slide). Each report goes out a
+// frame late: the row reaches the screen about a frame after it's measured,
+// while the lights move at once.
+const LIGHTS_WATCH_MS = 500;
+
+function useTrafficLights(row: React.RefObject<HTMLDivElement | null>) {
+  const watch = useRef({ until: 0, frame: 0, sent: '', next: '' });
+  useEffect(() => {
+    if (window.firn.platform !== 'darwin') return;
+    const w = watch.current;
+    w.until = performance.now() + LIGHTS_WATCH_MS;
+    if (w.frame) return;
+    const send = (at: string) => {
+      if (!at || at === w.sent) return;
+      w.sent = at;
+      const [x, y] = at.split(',').map(Number);
+      window.firn.lightsAt(x, y);
+    };
+    const tick = () => {
+      send(w.next);
+      const box = row.current?.getBoundingClientRect();
+      w.next = box ? `${Math.round(box.left)},${Math.round(box.top)}` : '';
+      if (performance.now() < w.until) w.frame = requestAnimationFrame(tick);
+      else {
+        send(w.next);
+        w.frame = 0;
+      }
+    };
+    w.frame = requestAnimationFrame(tick);
+  });
+  useEffect(() => {
+    const w = watch.current;
+    return () => {
+      cancelAnimationFrame(w.frame);
+      w.frame = 0;
+    };
+  }, []);
 }

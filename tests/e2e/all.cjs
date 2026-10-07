@@ -154,6 +154,29 @@ const check = (name, ok, extra = '') => {
     t.includes('*Dark page'),
     t.join(', '),
   );
+  const winTitle = () =>
+    app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].getTitle(),
+    );
+  check(
+    'the window is named after the page',
+    (await winTitle()) === 'Dark page — Firn',
+    await winTitle(),
+  );
+  await addr.click();
+  await addr.fill('127.0.0.1:8765/longtitle.html');
+  await addr.press('Enter');
+  await wait(1200);
+  check(
+    '...cut short when the title is very long (the Dock menu, the taskbar)',
+    /^A very long page title .{20,}… — Firn$/.test(await winTitle()) &&
+      (await winTitle()).length <= 60 + ' — Firn'.length,
+    await winTitle(),
+  );
+  await addr.click();
+  await addr.fill('127.0.0.1:8765/dark.html');
+  await addr.press('Enter');
+  await wait(1200);
   // drag reorder: first tab to the bottom
   const firstTitle = (await tabsNow())[0].replace('*', '');
   const box = await ui.locator('.tab').first().boundingBox();

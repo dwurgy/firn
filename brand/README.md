@@ -14,6 +14,8 @@ isn't listed below, don't use it.
 - `app-icons/` – ready-made Glacier app icons (Windows `.ico`, macOS `.icns`,
   PNGs from 16 to 1024px).
 - `favicon/` – favicons (16–512px, `.ico`, `.svg`) for firnbrowser.com.
+  Tab favicon = bare flake (glacier-deep, lighter on dark themes).
+  Home-screen icons (180/192/512) = glacier tile.
 - `icon-composer/` – the two layers for a native macOS 26+ "Liquid Glass"
   icon, with step-by-step notes. Not used yet: for the Mac build later.
 

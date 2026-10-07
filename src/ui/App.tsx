@@ -109,10 +109,12 @@ export function App() {
           .join(' ')}
       >
         {noTabs && (
-          // First light: snow and a soft glow in the space's color, the
-          // mark above the words in it too. Static; follows the space.
+          // First light: the welcome's glacier sky and sunrise glow (the
+          // same for every space), and snow in the space's color, the mark
+          // above the words in it too. Static; follows the space.
           <>
-            <div className="empty-glow" style={spaceTint} aria-hidden />
+            <div className="fl-sky" aria-hidden />
+            <div className="fl-sun" aria-hidden />
             <Snow tint={spaceColor} />
           </>
         )}

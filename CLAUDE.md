@@ -66,8 +66,9 @@ Light & dark:         both, following the OS setting
 
 Firn's brand moments use the "First light" look: sunrise in a snowy cabin, coffee in hand. Cool glacier sky high, warm sunrise low, snow at the bottom. Code: `src/ui/FirstLight.tsx` (the scene and the snow) and the "First light" section of `src/ui/styles.css`.
 
-- **Where:** the full-window welcome (sky, sun, drifting flakes, snow, grain) and the empty page (snow plus a soft glow in the space's color). Not on everyday browser UI.
-- **Snow:** five wavy bands. Glacier blues by default; with a space color, `mix(page, space, 20/33/47/62/78%)` in light and `mix(#2B2826, space, 12/20/29/38/48%)` in dark. A color change cross-fades (400ms).
+- **Where:** the full-window welcome (sky, sun, drifting flakes, snow, grain) and the empty page (the same sky and sunrise, snow, and the mark). Not on everyday browser UI.
+- **Only the snow and the mark take the space's color.** The glacier sky haze and the orange sunrise glow stay the same for every space (David's call: they're First light's constant).
+- **Snow:** five wavy bands. Glacier blues by default and for a Glacier space (the first color, the default for new spaces, so nothing shifts at the welcome's space step); with another space color, `mix(page, space, 20/33/47/62/78%)` in light and `mix(#2B2826, space, 12/20/29/38/48%)` in dark. A color change cross-fades (400ms).
 - **Dark = "blue hour":** a dark sky with a deep glacier haze and a faint ember low down, dark snow, light ink buttons.
 - **Performance (required):** no `backdrop-filter` on large surfaces ("glass" is a semi-clear color); the paper grain sits under the content, never over blurred things; glows are plain gradients and the snow is one SVG; nothing re-renders while idle; motion is transform and opacity only, and stops with reduced motion.
 - **The welcome's finish** ("Welcome in."): about 1.6s; the browser rises over the words, then the scene fades to the real browser. Reduced motion: a plain 300ms fade.
@@ -170,7 +171,7 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 - **Phases 1–5: done.** Firn browses, has the sidebar with vertical tabs, pins, Basecamp, spaces, session restore, Lookout, split view and the command bar.
 - **Phase 6 (polish & shipping): in progress.**
   - Done: find in page, zoom, right-click menus, downloads, PDF viewer, site permissions, history, settings (including the address bar's two looks), saved passwords, scam and malware warnings (Google Safe Browsing), the welcome, Fraunces brand headings, the Firn menu at the bottom-left, the Windows installer ("Firn Setup.exe"), version 0.1.0, the MPL 2.0 license, and automatic Windows and Mac builds on GitHub (releases attach the downloads), and the first round of testing on real Macs (traffic lights that move with the sidebar, page corners matching macOS 26+, the window's top edge to grab it).
-  - First light: the full-window welcome (sunrise scene, frosted cards, snow in the space's color, the "Welcome in." finish) and the empty page (snow and a glow in the space's color). See "First light" under the design principles.
+  - First light: the full-window welcome (sunrise scene, frosted cards, snow in the space's color, the "Welcome in." finish) and the empty page (the sky and sunrise, with snow and the mark in the space's color). Glacier is the first space color and the default for new spaces. See "First light" under the design principles.
   - Auto-updates: Windows built, to be tested on a real install (an installed copy checks GitHub releases through update.electronjs.org and updates on the next start); Mac follows notarization.
   - Mac menu bar: short Firn / File / Edit / View / Window / Help menus (`src/menu.ts`), Firn > Settings… (Cmd+,); Ctrl+, already opened Settings on Windows. To be checked on David's Mac mini.
   - Mac app icon: the Liquid Glass icon (`brand/icon-composer/Firn.icon`) on macOS 26+, compiled by GitHub's Mac build; older Macs keep the .icns. To be checked on David's Mac mini.

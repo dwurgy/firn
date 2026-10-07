@@ -114,7 +114,7 @@ The first time Firn opens, a short welcome fills the window with a calm sunrise 
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
-With no tabs open, the page shows the same snow and a soft glow in the space's color, under "No open tabs".
+With no tabs open, the page shows the same sky and sunrise, with the snow and Firn's mark in the space's color, under "No open tabs". A new space starts out Glacier, Firn's own blue.
 
 Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces with its soft (rounded) corners on and its quirky "wonky" letters off, the same as Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
 

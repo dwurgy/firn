@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SPACE_COLOR_CHOICES } from '../welcome';
 
 // "First light": sunrise in a snowy cabin. Cool glacier sky high, warm
 // sunrise low, snow at the bottom. Used by the welcome (the whole scene)
@@ -32,9 +33,13 @@ function SnowLayer({ tint, fresh }: { tint: string | null; fresh: boolean }) {
   );
 }
 
+// Firn's own color: its snow is the hand-picked glacier blues.
+const GLACIER = SPACE_COLOR_CHOICES.find((c) => c.name === 'Glacier')?.hex;
+
 // The snow: glacier blues, or (with a tint) the space's color mixed into
 // the page. A new tint cross-fades in over the old one (400ms).
-export function Snow({ tint }: { tint: string | null }) {
+export function Snow({ tint: color }: { tint: string | null }) {
+  const tint = color?.toLowerCase() === GLACIER ? null : color;
   const [layers, setLayers] = useState([{ tint, id: 0 }]);
   useEffect(() => {
     setLayers((all) => {

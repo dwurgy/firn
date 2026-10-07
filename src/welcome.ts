@@ -94,8 +94,8 @@ export const BASECAMP_SUGGESTIONS: {
 // Each space's theme color: it softly tints the frame and the glass.
 // Muted, natural tones so the tint stays calm.
 export const SPACE_COLOR_CHOICES = [
-  { name: 'Sand', hex: '#c9a27e' },
   { name: 'Glacier', hex: '#7f9cb0' },
+  { name: 'Sand', hex: '#c9a27e' },
   { name: 'Sage', hex: '#8fae8b' },
   { name: 'Heather', hex: '#b88a9e' },
   { name: 'Ochre', hex: '#c4a95b' },

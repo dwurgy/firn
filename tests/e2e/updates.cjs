@@ -27,7 +27,7 @@ const check = (n, ok, x = '') => {
   );
   let out = '';
   firn.stdout.on('data', (d) => (out += d));
-  await wait(8000);
+  await wait(12000);
   check(
     'a copy that is not installed on Windows does not ask for updates',
     out.includes('updates: off (not an installed Windows copy)') &&

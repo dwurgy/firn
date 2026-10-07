@@ -161,7 +161,8 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 - **Phase 6 (polish & shipping): in progress.**
   - Done: find in page, zoom, right-click menus, downloads, PDF viewer, site permissions, history, settings (including the address bar's two looks), saved passwords, scam and malware warnings (Google Safe Browsing), the welcome, Fraunces brand headings, the Firn menu at the bottom-left, the Windows installer ("Firn Setup.exe"), version 0.1.0, the MPL 2.0 license, and automatic Windows and Mac builds on GitHub (releases attach the downloads), and the first round of testing on real Macs (traffic lights that move with the sidebar, page corners matching macOS 26+, the window's top edge to grab it).
   - Auto-updates: Windows built, to be tested on a real install (an installed copy checks GitHub releases through update.electronjs.org and updates on the next start); Mac follows notarization.
-  - Next: Apple notarization early on ($99/year; David will pay for it so even early Mac testers get an easy install), then Mac auto-updates. Later: Windows code signing (optional).
+  - Mac app icon: the Liquid Glass icon (`brand/icon-composer/Firn.icon`) on macOS 26+, compiled by GitHub's Mac build; older Macs keep the .icns. To be checked on David's Mac mini.
+  - **Next: Apple notarization, in progress.** Part 1 done (David joined the Apple Developer Program). **Remind David to resume Parts 2–5 when he's at his Mac at home:** 2) make the "Developer ID Application" certificate in Xcode and export it as a .p12; 3) make an App Store Connect API key (.p8, Key ID, Issuer ID); 4) add the GitHub secrets `MAC_CERTIFICATE_P12`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_TEAM_ID` (never pasted to Claude); 5) Claude switches the Mac build to real signing + notarization (hardened runtime, camera/microphone/location entitlements and usage texts, ad-hoc fallback without the secrets, README without "Open Anyway"). Then Mac auto-updates. Later: Windows code signing (optional).
 - **Not shared yet:** personal use and a few friends first. See "Decided: coming later" below for what's queued.
 
 ## Decided: coming later
@@ -175,7 +176,6 @@ Agreed with David; not started yet. Build them one at a time, in small steps lik
 - **Extension support:** many people rely on one or two (password managers, ad blockers). Electron only partly supports Chrome extensions: research what works before promising anything.
 - **A full-window welcome:** the welcome fills the whole window (calm background, big Fraunces headlines, choices reflected live), then glides away to reveal the browser. Do it before sharing Firn widely.
 - **A proper Mac menu bar:** Firn > Settings… (Cmd+,) opens Firn's own Settings panel, plus short, plain File / Edit / View / Window / Help menus (today Mac shows Electron's generic default menu). Ctrl+, opens Settings on Windows too.
-- **A Liquid Glass Mac app icon:** built from the layers in `brand/icon-composer`. David makes `AppIcon.icon` in Apple's Icon Composer; the Mac build compiles it, keeping the current `.icns` for older Macs.
 
 ## Deliberately not doing
 

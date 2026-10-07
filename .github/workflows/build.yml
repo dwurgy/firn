@@ -54,7 +54,9 @@ jobs:
             os: windows-latest
             make: npm run make
           - name: macOS
-            os: macos-latest
+            # macOS 26 with Xcode 26: needed to compile the Liquid Glass
+            # app icon (brand/icon-composer/Firn.icon).
+            os: macos-26
             make: npm run make -- --arch=universal
     runs-on: ${{ matrix.os }}
     steps:
@@ -77,6 +79,14 @@ jobs:
         run: ${{ matrix.make }}
         env:
           FIRN_SAFE_BROWSING_KEY: ${{ secrets.FIRN_SAFE_BROWSING_KEY }}
+      - name: Check the Mac app has its Liquid Glass icon
+        if: runner.os == 'macOS'
+        run: |
+          app="$(find out -maxdepth 2 -name Firn.app -print -quit)"
+          test -f "$app/Contents/Resources/Assets.car" ||
+            { echo "::error::Firn.app has no Assets.car (the Liquid Glass icon)"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$app/Contents/Info.plist"
       - uses: actions/upload-artifact@v7
         with:
           name: Firn for ${{ matrix.name }}

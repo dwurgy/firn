@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
@@ -10,6 +11,21 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+// The Liquid Glass icon can only be compiled on macOS 26+ with Xcode 26's
+// actool (GitHub's Mac build has both). A Mac without them still builds
+// Firn, with just the .icns icon, instead of failing.
+const canCompileGlassIcon = () => {
+  if (process.platform !== 'darwin' || Number(os.release().split('.')[0]) < 25)
+    return false;
+  try {
+    const version = execFileSync('actool', ['--version'], { encoding: 'utf8' });
+    const major = /short-bundle-version<\/key>\s*<string>(\d+)/.exec(version);
+    return Number(major?.[1]) >= 26;
+  } catch {
+    return false;
+  }
+};
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -17,7 +33,12 @@ const config: ForgeConfig = {
     // system: assets/icon.ico on Windows (the Windows icon from
     // brand/app-icons/firn-app-icon-windows-glacier.ico) and
     // assets/icon.icns on macOS (firn-app-icon-macos-glacier.icns).
-    icon: './assets/icon',
+    // macOS 26+ also gets the Liquid Glass icon, Firn.icon from Icon
+    // Composer: the packager compiles it into Assets.car and sets
+    // CFBundleIconName, while older Macs keep using the .icns.
+    icon: canCompileGlassIcon()
+      ? ['./assets/icon', './brand/icon-composer/Firn.icon']
+      : './assets/icon',
   },
   rebuildConfig: {},
   hooks: {

@@ -1,6 +1,11 @@
 Firn app icon: layers for Apple's Icon Composer (macOS 26 / 27 and later)
 =========================================================================
 
+FINAL: Firn.icon (in this folder) is Firn's Mac app icon on macOS 26 and
+later: glacier gradient fill, the Firn flake as one glass layer; the dark
+and tinted looks are left to macOS. The Mac build compiles it (see
+"Getting it into Firn" below). Older Macs keep the glacier .icns.
+
 Why: since macOS 26, Mac app icons are built from layers of "Liquid Glass".
 A flat icon (our .icns) still works, but macOS guesses the layers and adds a
 generic glass look. A layered icon lets macOS 27 give the Firn crystal its own
@@ -23,9 +28,12 @@ Doing it (on a Mac, about five minutes)
      charcoal #3A3734 with the mark in glacier #7F9CB0, like the dark tile.
   6. Save as AppIcon.icon.
 
-Getting it into Firn (tell Claude Code)
-  "Add brand/icon-composer/AppIcon.icon as the macOS app icon. It has to be
-  compiled with Xcode's actool on a Mac during the macOS build; keep the
-  existing .icns as the fallback for older macOS and for builds made on Windows."
+Getting it into Firn (done)
+  forge.config.mts hands Firn.icon to the packager next to assets/icon.icns.
+  On a Mac with macOS 26+ and Xcode 26 (GitHub's Mac build), the packager
+  compiles it with actool into Firn.app/Contents/Resources/Assets.car and
+  sets CFBundleIconName; CFBundleIconFile still points at the .icns for
+  older macOS. A Mac without Xcode 26 builds Firn with the .icns only.
+  To change the icon: edit Firn.icon in Icon Composer and replace the folder.
 
 Windows and Linux are not affected: they keep using the .ico and PNGs.

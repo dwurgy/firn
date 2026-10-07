@@ -16,13 +16,16 @@ isn't listed below, don't use it.
 - `favicon/` – favicons (16–512px, `.ico`, `.svg`) for firnbrowser.com.
   Tab favicon = bare flake (glacier-deep, lighter on dark themes).
   Home-screen icons (180/192/512) = glacier tile.
-- `icon-composer/` – the two layers for a native macOS 26+ "Liquid Glass"
-  icon, with step-by-step notes. Not used yet: for the Mac build later.
+- `icon-composer/` – **`Firn.icon`, the final Mac app icon** for macOS 26+
+  ("Liquid Glass", made in Apple's Icon Composer), plus the two layer SVGs
+  it was made from and step-by-step notes.
 
 Firn itself uses the **Glacier** app icon, copied into `../assets/`:
 
 - Windows: `icon.ico` = `app-icons/firn-app-icon-windows-glacier.ico`
-- macOS: `icon.icns` = `app-icons/firn-app-icon-macos-glacier.icns`
+- macOS 26 and later: `icon-composer/Firn.icon` (the Liquid Glass icon),
+  compiled by the Mac build on GitHub
+- older macOS: `icon.icns` = `app-icons/firn-app-icon-macos-glacier.icns`
 - Linux: `icon.png` = `app-icons/firn-app-icon-windows-glacier-512.png`
 
 …and the mark (`svg/firn-mark.svg`) on its "No open tabs" page. The

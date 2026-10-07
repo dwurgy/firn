@@ -1214,8 +1214,11 @@ button {
   top: var(--top-bar-height);
 }
 
-/* With no tabs open, Firn shows its own calm page here. */
+/* With no tabs open, Firn shows its own calm page here: First light's sky
+   and sunrise (the same for every space) and snow in the space's color
+   (src/ui/FirstLight.tsx). */
 .page-area.is-empty {
+  overflow: hidden;
   background: var(--page);
 }
 
@@ -1308,17 +1311,22 @@ button {
 }
 
 .empty-page {
+  position: relative;
+  /* A little above the middle, clear of the snow. */
+  margin-bottom: 150px;
   text-align: center;
   animation: settle 250ms ease-out;
 }
 
-/* Firn's mark, resting quietly above the words. */
+/* Firn's mark, in the space's color, resting quietly above the words. */
 .empty-mark {
   display: block;
   width: 44px;
   height: 44px;
   margin: 0 auto 18px;
-  opacity: 0.85;
+  background: var(--tint);
+  mask: url('./firn-mark.svg') center / contain no-repeat;
+  opacity: 0.9;
 }
 
 .empty-title {
@@ -2467,9 +2475,9 @@ button {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(70vw 58vh at 50% -12%, var(--fl-cool), transparent 70%),
-    radial-gradient(56vw 60vh at 86% 62%, var(--fl-warm), transparent 68%),
-    radial-gradient(44vw 50vh at 10% 56%, var(--fl-warm2), transparent 70%),
+    radial-gradient(70% 58% at 50% -12%, var(--fl-cool), transparent 70%),
+    radial-gradient(56% 60% at 86% 62%, var(--fl-warm), transparent 68%),
+    radial-gradient(44% 50% at 10% 56%, var(--fl-warm2), transparent 70%),
     linear-gradient(var(--fl-skytop), var(--page) 70%);
 }
 
@@ -2477,9 +2485,9 @@ button {
 .fl-sun {
   position: absolute;
   left: 50%;
-  bottom: -7.5vh;
-  width: min(1200px, 94vw);
-  height: 52vh;
+  bottom: -7.5%;
+  width: min(1200px, 94%);
+  height: 52%;
   transform: translateX(-50%);
   background: radial-gradient(
     closest-side,

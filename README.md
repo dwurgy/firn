@@ -107,12 +107,14 @@ On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Hel
 
 ### Welcome
 
-The first time Firn opens, a short welcome sets things up, one card at a time. Each choice shows right away behind the card, and you can skip it at any point (Esc or "Skip setup"):
+The first time Firn opens, a short welcome fills the window with a calm sunrise over the snow ("First light") and sets things up, one card at a time. Every choice applies right away; from the space step on, the snow takes your space's color. You can skip it at any point (Esc or "Skip setup", bottom left). At the end, "Welcome in." appears and the browser rises into place from behind the snow (with "reduce motion" on, it simply fades).
 
 1. **Where the address bar goes:** in the sidebar, or at the top.
 2. **Your first space:** its name, color and icon.
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
+
+With no tabs open, the page shows the same sky and sunrise, with the snow and Firn's mark in the space's color, under "No open tabs". A new space starts out Glacier, Firn's own blue.
 
 Type "welcome" in the command bar to see it again. (Someone who used Firn before the welcome existed doesn't get it on their next start.) Its headlines are set in Fraunces with its soft (rounded) corners on and its quirky "wonky" letters off, the same as Firn's wordmark, built into Firn (`src/ui/fonts/`, under the SIL Open Font License) so nothing is downloaded.
 

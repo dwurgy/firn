@@ -61,6 +61,74 @@ const check = (n, ok, x = '') => {
     await fam(ui, '.empty-title'),
   );
   shot('brand-empty');
+
+  // First light on the empty page: the welcome's sky and sunrise (the same
+  // for every space), and the snow and mark in the space's color.
+  const emptyLook = () =>
+    ui.evaluate(() => {
+      const layers = document.querySelectorAll('.page-area .fl-snow-layer');
+      const top = layers[layers.length - 1];
+      return {
+        bands: top ? top.querySelectorAll('path').length : 0,
+        tinted: !!top?.classList.contains('is-tinted'),
+        snow: top
+          ? getComputedStyle(top.querySelector('path:nth-child(5)')).fill
+          : null,
+        sky: [
+          document.querySelector('.page-area .fl-sky'),
+          document.querySelector('.page-area .fl-sun'),
+        ]
+          .map((e) => (e ? getComputedStyle(e).backgroundImage : ''))
+          .join(' | '),
+        mark: getComputedStyle(document.querySelector('.empty-mark'))
+          .backgroundColor,
+        moving: document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.playState === 'running' &&
+              a.effect?.getTiming().iterations === Infinity,
+          ),
+      };
+    });
+  const before = await emptyLook();
+  check(
+    'empty page: the sky, the sunrise and five snow bands (Glacier, the first space)',
+    before.bands === 5 &&
+      !before.tinted &&
+      before.snow === 'rgb(110, 152, 178)' &&
+      before.sky.includes('radial-gradient') &&
+      before.mark === 'rgb(127, 156, 176)',
+    JSON.stringify(before),
+  );
+  check('...and nothing moves while it sits there', !before.moving);
+  const spaceId = await ui.evaluate(
+    () =>
+      new Promise((r) => {
+        const off = window.firn.onSpacesState((s) => {
+          off();
+          r(s.activeSpaceId);
+        });
+        window.firn.ready();
+      }),
+  );
+  await ui.evaluate(
+    (id) => window.firn.updateSpace(id, { color: '#8e8fb8' }),
+    spaceId,
+  );
+  await wait(800);
+  const after = await emptyLook();
+  check(
+    "...the snow and the mark follow the space's new color",
+    after.tinted &&
+      after.snow !== before.snow &&
+      after.mark === 'rgb(142, 143, 184)',
+    `${before.snow} -> ${after.snow}, mark ${after.mark}`,
+  );
+  check(
+    '...while the sky and the sunrise stay the same',
+    after.sky === before.sky,
+  );
   for (const [action, name] of [
     ['settings', 'Settings'],
     ['history', 'History'],

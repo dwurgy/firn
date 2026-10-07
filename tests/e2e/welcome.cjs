@@ -152,6 +152,12 @@ const settings = () => {
     typed[0] === 'Home' && typed[1] === 'INPUT',
     JSON.stringify(typed),
   );
+  const glacier = await scene();
+  check(
+    'reaching the space step with Glacier (the default), the snow stays the same',
+    glacier.snow === hello.snow,
+    glacier.snow,
+  );
   await fl.click('.welcome-color[aria-label="Sage"]');
   await wait(600);
   const sage = await scene();

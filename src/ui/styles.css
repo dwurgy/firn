@@ -2372,7 +2372,6 @@ button {
    welcome, the panels' titles, the empty page, the scam warning). Every
    other bit of the interface keeps the system font. */
 .welcome h1,
-.welcome-site-tile,
 .empty-title,
 .sheet-header h2,
 .danger-card h1 {
@@ -2406,6 +2405,10 @@ button {
   --fl-card-shadow:
     0 1px 2px rgba(40, 60, 80, 0.08), 0 18px 48px rgba(40, 60, 80, 0.14);
   --fl-mark-shadow: rgba(60, 90, 110, 0.22);
+  --fl-tile: rgba(255, 255, 255, 0.66);
+  --fl-tile-edge: rgba(60, 40, 20, 0.1);
+  --fl-line: rgba(60, 40, 20, 0.1);
+  --fl-pill: rgba(255, 255, 255, 0.6);
   /* The snow: glacier blues, or a space's color mixed into the page. */
   --fl-snow-1: #dce5eb;
   --fl-snow-2: #c3d3de;
@@ -2435,6 +2438,10 @@ button {
   --fl-card-shadow:
     0 1px 2px rgba(0, 0, 0, 0.25), 0 18px 48px rgba(0, 0, 0, 0.35);
   --fl-mark-shadow: rgba(0, 0, 0, 0.35);
+  --fl-tile: rgba(255, 250, 245, 0.07);
+  --fl-tile-edge: rgba(255, 250, 245, 0.1);
+  --fl-line: rgba(255, 250, 245, 0.09);
+  --fl-pill: rgba(255, 250, 245, 0.12);
   --fl-snow-1: #34353a;
   --fl-snow-2: #3a3f46;
   --fl-snow-3: #414b55;
@@ -2630,21 +2637,21 @@ button {
   font-size: 16px;
 }
 
-/* Steps 2–5: a card (styled in the next step). */
+/* Steps 2–5: a frosted card. Semi-clear, never blurred (no
+   backdrop-filter: it's a large surface). */
 .welcome-card {
   width: min(620px, 100%);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  padding: 40px 44px 30px;
+  border: 1px solid var(--fl-edge);
   border-radius: 20px;
-  background: var(--page);
-  box-shadow:
-    0 0 0 1px var(--panel-edge),
-    0 4px 12px rgba(30, 20, 10, 0.12),
-    0 24px 60px rgba(30, 20, 10, 0.22);
+  background: var(--fl-card);
+  box-shadow: var(--fl-card-shadow);
 }
 
 .welcome-body {
-  padding: 44px 48px 12px;
   animation: welcome-step 220ms ease-out;
 }
 
@@ -2657,18 +2664,16 @@ button {
 
 .welcome h1 {
   margin: 0 0 10px;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 380;
-  line-height: 1.2;
-  letter-spacing: -0.005em;
+  line-height: 1.15;
   color: var(--text);
 }
 
 .welcome-body > p {
-  margin: 0 0 24px;
-  max-width: 440px;
-  font-size: 14.5px;
-  line-height: 1.6;
+  margin: 0 0 26px;
+  font-size: 16px;
+  line-height: 1.55;
   color: var(--text-muted);
 }
 
@@ -2676,7 +2681,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px 24px 34px;
+  margin-top: 30px;
 }
 
 .welcome-dots {
@@ -2729,7 +2734,8 @@ button {
 }
 
 .welcome-quiet {
-  padding: 0 14px;
+  margin-left: -10px;
+  padding: 0 10px;
   background: none;
   color: var(--text-muted);
 }
@@ -2772,49 +2778,49 @@ button {
   }
 }
 
+/* The card steps' controls: light tiles with a fine edge; a choice gets a
+   2px ring in the space's color. */
+
 /* Address bar: two little pictures of the window. */
 .welcome-looks {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 14px;
 }
 
 .welcome-look {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 12px 12px 14px;
-  border: 0;
+  padding: 14px;
+  border: 1px solid var(--fl-tile-edge);
   border-radius: 14px;
-  background: var(--hover);
+  background: var(--fl-tile);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: default;
-  box-shadow: 0 0 0 2px transparent;
-  transition:
-    box-shadow var(--motion),
-    background var(--motion);
+  transition: box-shadow var(--motion);
 }
 
 .welcome-look:hover {
-  background: var(--press);
+  box-shadow: 0 0 0 1px var(--fl-tile-edge);
 }
 
 .welcome-look.is-on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  box-shadow: 0 0 0 2px var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .welcome-look strong {
-  margin-top: 8px;
-  font-size: 14px;
+  margin-top: 12px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .welcome-look small {
-  font-size: 12.5px;
+  margin-top: 2px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -2833,29 +2839,28 @@ button {
 }
 
 .look-pill {
-  fill: var(--press);
+  fill: var(--fl-pill);
 }
 
 .look-pill.is-address {
-  fill: var(--page);
-  stroke: var(--panel-edge);
+  fill: var(--fl-pill);
 }
 
 /* First space: name, color, icon. */
 .welcome-space {
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
 .welcome-name {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 14px;
+  gap: 12px;
+  height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--fl-tile-edge);
   border-radius: 12px;
-  background: var(--hover);
+  background: var(--fl-tile);
 }
 
 .welcome-name-icon {
@@ -2870,18 +2875,19 @@ button {
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 15px;
+  font-size: 17px;
   outline: none;
 }
 
 .welcome-colors {
   display: flex;
   gap: 12px;
+  margin: 20px 0 18px;
 }
 
 .welcome-color {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -2893,43 +2899,46 @@ button {
   transition: box-shadow var(--motion);
 }
 
+/* The chosen color: an ink ring around it. */
 .welcome-color.is-on {
   box-shadow:
     0 0 0 3px var(--page),
-    0 0 0 5px var(--swatch);
+    0 0 0 5px var(--text);
 }
 
+/* Two even rows of eight. */
 .welcome-icons {
   display: grid;
-  grid-template-columns: repeat(8, 40px);
-  gap: 6px;
+  grid-template-columns: repeat(8, 38px);
+  gap: 8px;
 }
 
 .welcome-icon {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border: 0;
+  border: 1px solid var(--fl-tile-edge);
   border-radius: 10px;
-  background: none;
+  background: var(--fl-tile);
   cursor: default;
-  transition: background var(--motion);
+  transition: box-shadow var(--motion);
 }
 
 .welcome-icon:hover {
-  background: var(--hover);
+  box-shadow: 0 0 0 1px var(--fl-tile-edge);
 }
 
 .welcome-icon.is-on {
-  background: var(--press);
+  border-color: currentColor;
+  box-shadow: 0 0 0 1px currentColor;
 }
 
-/* Basecamp: Firn's own letter tiles. */
+/* Basecamp: the sites' own icons (or a letter) on tiles. */
 .welcome-sites {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px 8px;
+  gap: 14px;
 }
 
 .welcome-site {
@@ -2947,45 +2956,41 @@ button {
 
 .welcome-site-tile {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 64px;
+  height: 64px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  background: var(--hover);
+  border: 1px solid var(--fl-tile-edge);
+  border-radius: 14px;
+  background: var(--fl-tile);
   font-size: 22px;
-  font-weight: 420;
-  color: var(--text-muted);
-  box-shadow: 0 0 0 2px transparent;
-  transition:
-    background var(--motion),
-    box-shadow var(--motion),
-    color var(--motion);
+  font-weight: 600;
+  color: var(--text);
+  transition: box-shadow var(--motion);
 }
 
 .welcome-site-tile img {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   /* App icons sit on a solid square; rounded like Basecamp's. */
-  border-radius: 6px;
+  border-radius: 7px;
   animation: fade-in 200ms ease-out;
 }
 
 .welcome-site:hover .welcome-site-tile {
-  background: var(--press);
+  box-shadow: 0 0 0 1px var(--fl-tile-edge);
 }
 
 .welcome-site.is-on .welcome-site-tile {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  box-shadow: 0 0 0 2px var(--accent);
-  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .welcome-site-check {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
+  right: -7px;
+  top: -7px;
   width: 20px;
   height: 20px;
   display: grid;
@@ -3000,54 +3005,55 @@ button {
   width: 12px;
   height: 12px;
   fill: none;
-  stroke: var(--page);
+  stroke: #fff;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .welcome-site-name {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
-/* Tips. */
+/* Tips: three rows with fine lines between them. */
 .welcome-tips {
   margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 .welcome-tips li {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 150px 1fr;
   align-items: center;
-  gap: 16px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-muted);
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--fl-line);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.welcome-tips li:first-child {
+  border-top: 0;
 }
 
 .welcome-keys {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .welcome-keys kbd {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 8px;
-  display: grid;
-  place-items: center;
+  min-width: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--fl-tile-edge);
   border-radius: 7px;
-  background: var(--hover);
-  box-shadow: inset 0 -1px 0 var(--panel-edge);
+  background: var(--fl-tile);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
+  text-align: center;
   color: var(--text);
 }
 

@@ -11,6 +11,6 @@ Firn keeps your tabs in a quiet sidebar and lets the page be the star. It's buil
 - **Lookout** previews a link without leaving your page.
 - **Split view** puts two tabs side by side.
 - **Private by default:** no tracking. Your passwords and history stay on your computer.
-- **Keeps itself up to date** on Windows.
+- **Keeps itself up to date** on Windows and Mac.
 
 For Windows and Mac.

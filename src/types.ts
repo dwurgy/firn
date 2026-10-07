@@ -266,7 +266,7 @@ export type OverlayState =
       url: string;
       threat: 'SOCIAL_ENGINEERING' | 'MALWARE' | 'UNWANTED_SOFTWARE';
     }
-  // The history panel (Ctrl+H) and the settings panel (Ctrl+,).
+  // The history panel (Ctrl+H, Cmd+Y on a Mac) and the settings panel (Ctrl+,).
   | { mode: 'history'; openId: number }
   | { mode: 'settings'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.

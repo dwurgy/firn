@@ -791,7 +791,7 @@ function DangerWarning({
   );
 }
 
-// The history panel (Ctrl+H): pages visited, newest first, grouped by day.
+// The history panel (Ctrl+H, Cmd+Y on a Mac): pages visited, newest first, grouped by day.
 // Type to search; click a page to open it in a new tab; hover for ✕ to
 // forget one. Esc or a click outside closes it.
 function HistoryPanel() {

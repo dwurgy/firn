@@ -2391,7 +2391,7 @@ const createWindow = () => {
         cancelId: 1,
         message: 'Clear cookies and site data?',
         detail:
-          "This signs you out of websites and clears what they've saved on this computer. Your tabs, history and downloads stay.",
+          "This signs you out of websites and clears what they've saved on this computer. Your tabs, history, and downloads stay.",
       });
       if (response !== 0) return;
       await session.defaultSession.clearStorageData();

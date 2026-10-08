@@ -184,6 +184,8 @@ Each phase has a "done" test. Don't start the next phase until the current one p
 
 Agreed with David; not started yet. Build them one at a time, in small steps like everything else.
 
+- **Drag to reorder Basecamp tiles (for 0.1.0):** the tiles move like the sidebar's tabs do, gliding as you drag. Reordering within Basecamp only; dragging a tab into Basecamp or a tile out of it can come later.
+- **Built-in ad blocking (the headline of 0.2.0: "Firn now blocks ads and trackers."):** on by default, with an obvious, gentle way out when a site breaks ("Allow ads on this site"). Likely Ghostery's open-source ad blocker for Electron (a new dependency: ask David first). Firn downloads and updates the block lists, and the README says so plainly, so the privacy claims stay true.
 - **Make Firn the default browser:** a plain option in Settings and in the welcome, so links clicked in other apps open in Firn (the normal browser window, no special mini-window).
 - **Sound in tabs:** first a small speaker icon on any tab playing sound (click to mute); then a mini player at the bottom of the sidebar, above the Firn button, shown only while audio plays in a tab that isn't on screen (title, play/pause, click to go to the tab).
 - **Archiving old tabs:** everyday tabs not looked at for a while tidy themselves away. Options in Settings: 1 day, 7 days, **30 days (default)**, Never. Never archived: pinned and Basecamp tabs, the tab on screen, a tab playing sound, a tab in split view. Archived isn't deleted: an Archive list (Firn menu, command bar) brings any of them back, and they stay in History. Count days Firn was used, not calendar days (a vacation doesn't empty the sidebar).

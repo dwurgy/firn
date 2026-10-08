@@ -137,14 +137,16 @@ const TOP_ADDRESS_HEIGHT = 48;
 
 // macOS: where the window's traffic lights sit (their top-left corner),
 // relative to the sidebar's top row (8pt in; 36pt tall, so 10pt down puts
-// their middle on the row's), and at the left of the "At the top" bar (48pt
-// tall). Liquid Glass draws them 1pt higher, so there they go 1pt lower.
+// their middle on the row's). Liquid Glass draws them 1pt higher, so there
+// they go 1pt lower.
 const LIGHTS_DOWN = isLiquidGlass(process.platform, process.getSystemVersion())
   ? 1
   : 0;
 const LIGHTS_IN_ROW = { x: 8, y: 10 + LIGHTS_DOWN };
 const LIGHTS_IN_SIDEBAR = { x: 8 + LIGHTS_IN_ROW.x, y: 8 + LIGHTS_IN_ROW.y };
-const LIGHTS_IN_TOP_BAR = { x: 16, y: 16 + LIGHTS_DOWN };
+// With the address bar at the top, the sidebar's top row moves up into the
+// bar exactly where it was, and the lights stay where they were with it.
+const LIGHTS_IN_TOP_BAR = LIGHTS_IN_SIDEBAR;
 // The three lights are about 60pt wide: further left than this, they're
 // past the window's edge altogether.
 const LIGHTS_GONE_X = -60;

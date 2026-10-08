@@ -18,9 +18,9 @@ const EMPTY_NAV: NavState = {
 // reaches the top edge, while the page glides down to make room, with the
 // window buttons (Windows and Linux; on macOS it's just a strip to grab the
 // window by). With the address bar set to sit at the top, it's always
-// there, across the whole window: the sidebar's top row moves up into it
-// (the macOS traffic lights, the sidebar button, back, forward, and
-// reload, on the left), with the same address bar as the sidebar's,
+// there, across the whole window: the sidebar's top row moves up into it,
+// exactly where it was (the macOS traffic lights, the sidebar button,
+// back, forward, and reload), with the same address bar as the sidebar's,
 // centered over the page. The sidebar, docked or peeking, sits below it.
 // The bar has no background: the frame behind it (frosted glass, where
 // available) shows through. When to come and go is decided in src/main.ts.
@@ -58,7 +58,10 @@ export function TopBar() {
   }, []);
 
   return (
-    <div className={`top-bar ${shown ? 'is-shown' : ''}`}>
+    <div
+      className={`top-bar ${shown ? 'is-shown' : ''}`}
+      style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
+    >
       {/* Empty bar space is a real title bar (drag, snap to screen edges,
           double-click to maximize). See the drag rules in styles.css. */}
       {/* (With the address bar at the top, the peeking sidebar slides out
@@ -70,7 +73,9 @@ export function TopBar() {
       {addressOnTop && (
         <>
           <div className="top-bar-nav">
-            <SidebarToggle collapsed={collapsed} />
+            <div className="button-row">
+              <SidebarToggle collapsed={collapsed} />
+            </div>
             <NavButtons nav={nav} />
           </div>
           <div

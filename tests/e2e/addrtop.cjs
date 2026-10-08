@@ -86,6 +86,10 @@ const check = (n, ok, x = '') => {
     (await sideAddr()) && !L.bar.visible && L.page.y === 8,
     JSON.stringify(L),
   );
+  // Where the top row's buttons are in the sidebar: they stay there.
+  const spots = (sel) =>
+    `[...document.querySelectorAll('${sel} button')].map((b) => { const r = b.getBoundingClientRect(); return b.title.split(' ')[0] + '@' + Math.round(r.x) + ',' + Math.round(r.y); }).join(' ')`;
+  const rowSpots = await ui.evaluate(spots('.sidebar-top'));
   await ui.evaluate(() => window.firn.updateSettings({ addressBar: 'top' }));
   await wait(700);
   L = await layout();
@@ -125,6 +129,12 @@ const check = (n, ok, x = '') => {
     JSON.stringify({ box, pageCenter }),
   );
   check('...and the window buttons on the right', box.buttons === 3);
+  const barSpots = await tb.evaluate(spots('.top-bar-nav'));
+  check(
+    'the sidebar button, back, forward, and reload stay exactly where they were in the sidebar',
+    barSpots === rowSpots && rowSpots.split(' ').length === 4,
+    `${rowSpots} | ${barSpots}`,
+  );
   check(
     "...and the sidebar's top row moved up into it, on the left: sidebar button, back, forward, reload",
     box.nav.join('|') === 'Hide sidebar (Ctrl+S)|Back|Forward|Reload' &&
@@ -152,7 +162,9 @@ const check = (n, ok, x = '') => {
   const mac = await tb.evaluate(async () => {
     document.documentElement.dataset.platform = 'darwin';
     await new Promise((r) => setTimeout(r, 300));
-    const nav = document.querySelector('.top-bar-nav').getBoundingClientRect();
+    const nav = document
+      .querySelector('.top-bar-nav button')
+      .getBoundingClientRect();
     const addr = document
       .querySelector('.top-bar-address')
       .getBoundingClientRect();
@@ -212,6 +224,11 @@ const check = (n, ok, x = '') => {
       Math.abs(box2.x + box2.w / 2 - (L.page.x + L.page.width / 2 - L.bar.x)) <=
         1,
     JSON.stringify({ L, box2 }),
+  );
+  check(
+    '...and the buttons still stay exactly where they were',
+    (await tb.evaluate(spots('.top-bar-nav'))).replace('Keep', 'Hide') ===
+      rowSpots,
   );
   check(
     "...and the bar's sidebar button now offers to bring it back",

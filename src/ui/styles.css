@@ -1382,29 +1382,24 @@ button {
 }
 
 /* The sidebar's top row, moved up into the bar (the address bar at the
-   top): the sidebar button, then back, forward, and reload, after the
-   macOS traffic lights (which stay put here, in the bar). --bar-nav-end is
-   where its buttons end: 4 buttons of 32px, 2px apart, plus the 8px gap. */
-.top-bar {
-  --bar-nav-end: calc(var(--page-inset) + 140px);
-}
-
-:root[data-platform='darwin'] .top-bar {
-  --bar-nav-end: calc(84px + 140px);
-}
-
+   top): exactly where it is in the sidebar, whether the sidebar is open or
+   hidden, so switching looks moves nothing. The sidebar button on the
+   left (after the macOS traffic lights, which stay put here too), back,
+   forward, and reload at the sidebar column's right edge. */
 .top-bar-nav {
   position: absolute;
-  top: calc((var(--top-bar-height) - 32px) / 2);
+  top: var(--page-inset);
   left: var(--page-inset);
+  width: calc(var(--sidebar-width) - 2 * var(--page-inset));
+  height: 36px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
 }
 
 /* Room for the traffic lights, as in the sidebar's top row. */
 :root[data-platform='darwin'] .top-bar-nav {
-  left: 84px;
+  padding-left: 76px;
 }
 
 /* The address bar at the top: as wide as in the sidebar, centered over the
@@ -1415,7 +1410,7 @@ button {
   position: absolute;
   top: calc((var(--top-bar-height) - 36px) / 2);
   left: max(
-    calc(var(--bar-nav-end) + 12px + var(--address-half)),
+    calc(var(--sidebar-width) - var(--page-inset) + 12px + var(--address-half)),
     calc(var(--page-left) + (100% - var(--page-left) - var(--page-inset)) / 2)
   );
   max-width: calc(100% - 240px);

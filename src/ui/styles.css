@@ -18,9 +18,12 @@
   --frame-glow: rgba(196, 214, 222, 0.55);
   --frame-glass: rgba(233, 227, 218, 0.4); /* --frame, see-through */
   --page: #fbfaf8;
-  --text: #241f1b;
-  --text-muted: #5e564e;
-  --text-faint: #9d9389;
+  /* A hair more contrast than before (muted 6.6:1 and faint 3:1 on the
+     frame, from 5.6 and 2.4), so everyday tabs and buttons read clearly
+     and only unloaded ones look quiet. */
+  --text: #211c19;
+  --text-muted: #544c46;
+  --text-faint: #8c8278;
   --field: rgba(255, 255, 255, 0.55);
   --field-hover: rgba(255, 255, 255, 0.75);
   --field-focus: #fbfaf8;
@@ -77,9 +80,9 @@
   --frame-glow: rgba(150, 178, 192, 0.1);
   --frame-glass: rgba(58, 55, 52, 0.4);
   --page: #2b2826;
-  --text: #f5f1ec;
-  --text-muted: #d4cdc5;
-  --text-faint: #958d85;
+  --text: #f7f4ef;
+  --text-muted: #ddd6ce;
+  --text-faint: #a39b93;
   --field: rgba(255, 250, 245, 0.08);
   --field-hover: rgba(255, 250, 245, 0.12);
   --field-focus: rgba(255, 250, 245, 0.15);

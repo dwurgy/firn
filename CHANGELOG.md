@@ -9,6 +9,7 @@ Firn now runs on the newest version of its Chrome engine, with the latest securi
 ### Better
 
 - **Security fixes** from the Chrome engine Firn is built on.
+- **Text and buttons** are a little easier to read, so open tabs no longer look like they're resting.
 
 ## Firn 0.1.1
 

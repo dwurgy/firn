@@ -52,7 +52,7 @@ export function Welcome({
   };
   // The finish ("Start browsing", Skip or Esc): the card fades, the sun
   // rises, "Welcome in.", and the browser comes up from behind the snow
-  // (about 1.6s; a plain 300ms fade with reduced motion). Firn's own
+  // (about 2.4s; a plain 300ms fade with reduced motion). Firn's own
   // welcome closes once it's over.
   const [finishing, setFinishing] = useState(false);
   const finishTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -66,7 +66,7 @@ export function Welcome({
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     finishTimer.current = setTimeout(
       () => window.firn.finishWelcome(picked),
-      calm ? 300 : 1600,
+      calm ? 300 : 2400,
     );
   };
   const next = () => {

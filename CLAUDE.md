@@ -72,7 +72,7 @@ Firn's brand moments use the "First light" look: sunrise in a snowy cabin, coffe
 - **Snow:** five wavy bands. Glacier blues by default and for a Glacier space (the first color, the default for new spaces, so nothing shifts at the welcome's space step); with another space color, `mix(page, space, 20/33/47/62/78%)` in light and `mix(#2B2826, space, 12/20/29/38/48%)` in dark. A color change cross-fades (400ms).
 - **Dark = "blue hour":** a dark sky with a deep glacier haze and a faint ember low down, dark snow, light ink buttons.
 - **Performance (required):** no `backdrop-filter` on large surfaces ("glass" is a semi-clear color); the paper grain sits under the content, never over blurred things; glows are plain gradients and the snow is one SVG; nothing re-renders while idle; motion is transform and opacity only, and stops with reduced motion.
-- **The welcome's finish** ("Welcome in."): about 1.6s; the browser rises over the words, then the scene fades to the real browser. Reduced motion: a plain 300ms fade.
+- **The welcome's finish** ("Welcome in."): about 2.4s, unhurried (David found 1.6s too fast to enjoy); the words hold a moment, the browser rises over them (about 1.1s), then the scene fades to the real browser. Reduced motion: a plain 300ms fade.
 
 ---
 

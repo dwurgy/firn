@@ -131,7 +131,7 @@ export function Welcome({
           <h1>Make your first space</h1>
           <p>
             Spaces keep things apart, like Work and Personal: each has its own
-            tabs, color and icon. You can add more later.
+            tabs, color, and icon. You can add more later.
           </p>
           {space && (
             <div className="welcome-space">
@@ -255,7 +255,7 @@ export function Welcome({
               <span className="welcome-keys">
                 <kbd>Right-click</kbd>
               </span>
-              <span>Tabs, links and spaces each have a short menu.</span>
+              <span>Tabs, links, and spaces each have a short menu.</span>
             </li>
             <li>
               <span className="welcome-keys">

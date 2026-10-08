@@ -30,7 +30,7 @@ Development mode is slower than the real thing: Firn's own panels are served pie
 npm run package
 ```
 
-Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
+Then open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`). It starts several times faster and animates more smoothly. It keeps the same tabs, spaces, and history as `npm start`, but only one Firn can run at a time, so close the other first. After pulling new changes, run `npm run package` again.
 
 ### Downloads built by GitHub (Windows and Mac)
 
@@ -52,7 +52,7 @@ npm run make
 
 It takes a few minutes. The installer appears as `out\make\squirrel.windows\x64\Firn Setup.exe`: that one file is all you send. (Make sure `safe-browsing-key.txt` is in place first, so their copy warns about scam sites too.)
 
-What happens when they open it: no wizard and no questions. A small window shows the Firn mark for a few seconds while it installs, then Firn opens with its welcome. It's added to the Start menu and the desktop, and can be removed like any app in Windows' **Settings > Apps**. Firn installs just for that person (in `%LOCALAPPDATA%\firn`), so it doesn't need administrator rights. Uninstalling keeps their tabs, history and passwords (in `%APPDATA%\Firn`), so reinstalling brings everything back.
+What happens when they open it: no wizard and no questions. A small window shows the Firn mark for a few seconds while it installs, then Firn opens with its welcome. It's added to the Start menu and the desktop, and can be removed like any app in Windows' **Settings > Apps**. Firn installs just for that person (in `%LOCALAPPDATA%\firn`), so it doesn't need administrator rights. Uninstalling keeps their tabs, history, and passwords (in `%APPDATA%\Firn`), so reinstalling brings everything back.
 
 **Until Firn is code-signed**, Windows will say "Windows protected your PC" the first time: click **More info**, then **Run anyway**. Signing (a paid certificate) removes that; it's a later step.
 
@@ -88,18 +88,18 @@ On Windows, an installed Firn keeps itself up to date. About a minute after it o
 | Hard reload | Ctrl+Shift+R | Cmd+Shift+R |
 | Developer tools for the page | F12 or Ctrl+Shift+I | Cmd+Option+I |
 
-On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Help** menus with the main ones (Firn > **Settings…** is Cmd+,). Shortcuts follow the Mac's habits: Cmd+H hides Firn and Cmd+Y opens History, like Safari and Chrome.
+On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window, and Help** menus with the main ones (Firn > **Settings…** is Cmd+,). Shortcuts follow the Mac's habits: Cmd+H hides Firn and Cmd+Y opens History, like Safari and Chrome.
 
 ### Where things live
 
 - `src/main.ts` — the main process: creates the window, handles shortcuts and messages from the UI.
-- `src/tabs.ts` — the tab manager: tabs, spaces, Basecamp, pins and their order. It doesn't depend on Electron.
+- `src/tabs.ts` — the tab manager: tabs, spaces, Basecamp, pins, and their order. It doesn't depend on Electron.
 - `src/engine/` — the browser engine: `engine.ts` describes what a web page can do, and `electron.ts` is Electron's version of it (the one place web pages are created).
 - `src/types.ts` — the data model (spaces, tabs, window) shared by every part of the app.
 - `src/preload.ts` — the narrow, safe bridge between Firn's UI and the main process.
-- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
+- `src/ui/` — Firn's own interface (React): the window frame (`App.tsx`), the sidebar and tabs (`Sidebar.tsx`, `TabList.tsx`, `Basecamp.tsx`, `Spaces.tsx`), the sidebar peeking over the page while collapsed (`Peek.tsx`), the command bar, tab switcher, and find bar that float over the page (`Floating.tsx`), and the bar with the window buttons (`TopBar.tsx`).
 - `tests/e2e/` — checks that start Firn and click through it (see `tests/e2e/README.md`).
-- `brand/` — Firn's logo, wordmark and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
+- `brand/` — Firn's logo, wordmark, and app icons (see `brand/README.md`); `assets/` holds the app icon Firn itself uses.
 - `src/url.ts` — decides whether what you typed is an address or a search.
 - `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.
 - `src/safebrowsing.ts` — scam and malware warnings (Google Safe Browsing, checked on this computer).
@@ -110,7 +110,7 @@ On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window and Hel
 The first time Firn opens, a short welcome fills the window with a calm sunrise over the snow ("First light") and sets things up, one card at a time. Every choice applies right away; from the space step on, the snow takes your space's color. You can skip it at any point (Esc or "Skip setup", bottom left). At the end, "Welcome in." appears and the browser rises into place from behind the snow (with "reduce motion" on, it simply fades).
 
 1. **Where the address bar goes:** in the sidebar, or at the top.
-2. **Your first space:** its name, color and icon.
+2. **Your first space:** its name, color, and icon.
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
 4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
@@ -136,14 +136,14 @@ Both remember the address they were added at as their *home*: right-click for **
 
 ### Spaces
 
-Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them), and its own icon: one of 16 simple line icons drawn for Firn, shown in the space's color so it never looks like a website's icon. "Change icon…" opens a small grid of them under the space's name. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
+Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. Switch with the icons at the bottom of the sidebar or **Ctrl+Shift+1…9**; **+** makes a new space and lets you name it right away. Each space has its own color, which softly tints the frame and glass (switching spaces cross-fades between them), and its own icon: one of 16 simple line icons drawn for Firn, shown in the space's color so it never looks like a website's icon. "Change icon…" opens a small grid of them under the space's name. Right-click a space's icon (or use the ⋯ next to its name) to rename it, change its icon or color, or delete it. Right-clicking any empty spot in the sidebar offers the same color, icon, and name options for the space you're in. Right-click a tab to move it to another space. Each space remembers the tab you were last on, and everything is saved with your session.
 
 ### History and settings
 
-The **Firn mark** button at the bottom-left of the sidebar (beside the space icons) opens the Firn menu: New tab, New space, History, Passwords, Downloads and Settings.
+The **Firn mark** button at the bottom-left of the sidebar (beside the space icons) opens the Firn menu: New tab, New space, History, Passwords, Downloads, and Settings.
 
 - **History** (Ctrl+H, or Cmd+Y on a Mac) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
-- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia or Startpage), the **theme** (match the system, light or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia, or Startpage), the **theme** (match the system, light, or dark), **where the address bar sits** (in the sidebar, or at the top in a bar that's always there, with the window buttons always visible), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Saved passwords
 
@@ -151,13 +151,13 @@ After you sign in to a site, a small card asks **Save password for example.com?*
 
 Next time, click into the site's sign-in form and Firn fills in your username and password. Nothing is filled until you click, and only on the very same site (and only over a secure https connection), so a look-alike site gets nothing.
 
-**Passwords** in the Firn menu (or Settings → Privacy → Manage…, or "saved passwords" in the command bar) lists them: search, **Show**, **Copy** or **Delete** each one. They're encrypted with your computer's own protection (on Windows, the same lock your Windows account uses) and kept in `passwords.json` next to your session, on this computer only. If the computer has no such protection available, Firn doesn't save passwords at all rather than keep them unprotected.
+**Passwords** in the Firn menu (or Settings → Privacy → Manage…, or "saved passwords" in the command bar) lists them: search, **Show**, **Copy**, or **Delete** each one. They're encrypted with your computer's own protection (on Windows, the same lock your Windows account uses) and kept in `passwords.json` next to your session, on this computer only. If the computer has no such protection available, Firn doesn't save passwords at all rather than keep them unprotected.
 
 To do this, Firn adds a tiny helper to each web page that notices sign-in forms. It's walled off from the page: the site can't see it or talk to it, and it only reports a sign-in from the page's own main frame.
 
 ### Scam and malware warnings
 
-Before any page opens, Firn checks its address against **Google Safe Browsing**, the same list of scam (phishing) and malware sites that Chrome, Firefox and Safari use. A dangerous page is stopped before it loads, and a calm warning covers the tab ("This site may be a scam", "This site may harm your computer" or "This site may install unwanted software") with **Go back** (or close the tab, if there's nothing to go back to) and a quiet **Visit anyway**, which lets that address through until Firn closes. A dangerous link previewed in Lookout closes the preview and shows the same warning.
+Before any page opens, Firn checks its address against **Google Safe Browsing**, the same list of scam (phishing) and malware sites that Chrome, Firefox, and Safari use. A dangerous page is stopped before it loads, and a calm warning covers the tab ("This site may be a scam", "This site may harm your computer" or "This site may install unwanted software") with **Go back** (or close the tab, if there's nothing to go back to) and a quiet **Visit anyway**, which lets that address through until Firn closes. A dangerous link previewed in Lookout closes the preview and shows the same warning.
 
 It's done the private way. Firn downloads Google's lists about every half hour; they hold only the first few bytes of a code made from each dangerous address, not the addresses. Every page is checked against them on this computer. Only when the start of a code matches, which is rare, does Firn ask Google for the full codes that start that way. It sends just those 4 bytes, which many addresses share, never the address. The lists live in a `safe-browsing` folder next to your session. To turn it off: Settings → Privacy → Scam and malware warnings → Off.
 
@@ -177,7 +177,7 @@ Downloads save straight to your Downloads folder, like Chrome (a name that's alr
 
 ### Site permissions
 
-Websites have to ask before using your **camera, microphone, location, notifications or clipboard**, or before opening another app from a link (like a Zoom link). A small card at the top-left of the page asks, in plain words ("meet.google.com wants to use your camera and microphone"), with **Block** and **Allow**; Firn remembers the answer for that site. Pressing Esc closes it without answering, so the site can ask again later. A site that isn't on screen waits until you're looking at it. Harmless things (fullscreen, protected video like Netflix) are allowed without asking, and unusual hardware access (USB, serial ports) is refused.
+Websites have to ask before using your **camera, microphone, location, notifications, or clipboard**, or before opening another app from a link (like a Zoom link). A small card at the top-left of the page asks, in plain words ("meet.google.com wants to use your camera and microphone"), with **Block** and **Allow**; Firn remembers the answer for that site. Pressing Esc closes it without answering, so the site can ask again later. A site that isn't on screen waits until you're looking at it. Harmless things (fullscreen, protected video like Netflix) are allowed without asking, and unusual hardware access (USB, serial ports) is refused.
 
 Once a site has answers saved, a small button appears at the left of the address bar: click it to change an answer or choose "Ask again next time". Answers are kept in `permissions.json` next to your session, on your computer only.
 
@@ -209,7 +209,7 @@ On Windows 11 (22H2 or later) and macOS, the frame around the page is frosted gl
 
 ### If something misbehaves
 
-- **Ctrl+Shift+D** prints a snapshot of the window's layers, the cursor and the screen to the terminal.
+- **Ctrl+Shift+D** prints a snapshot of the window's layers, the cursor, and the screen to the terminal.
 - If the window ever shows black or flickers behind the sidebar, try turning frosted glass off (above) and tell Claude.
 - To log what the layers do as you use Firn, start it with debug logging. In PowerShell: `$env:FIRN_DEBUG=1; npm start` (close and reopen PowerShell to turn it off again).
 
@@ -217,6 +217,6 @@ On Windows 11 (22H2 or later) and macOS, the frame around the page is frosted gl
 
 Firn's code is open source under the [Mozilla Public License 2.0](LICENSE), the license Firefox uses. Anyone can read it, check what Firn does with their data, and build on it; changes to Firn's own files have to stay open under the same license.
 
-**The Firn name, logo and app icons are not covered by the license.** They identify Firn itself, so please don't use them for your own version or anything that could be mistaken for Firn; give a version you share its own name and look. (That covers `brand/`, `assets/` and `src/ui/firn-mark.svg`.)
+**The Firn name, logo, and app icons are not covered by the license.** They identify Firn itself, so please don't use them for your own version or anything that could be mistaken for Firn; give a version you share its own name and look. (That covers `brand/`, `assets/`, and `src/ui/firn-mark.svg`.)
 
 Fraunces, the typeface in `src/ui/fonts/`, has its own license: the SIL Open Font License (`src/ui/fonts/Fraunces-OFL.txt`).

@@ -733,7 +733,7 @@ function PermissionPrompt({
 const DANGER_WORDING = {
   SOCIAL_ENGINEERING: {
     title: 'This site may be a scam',
-    text: 'It may try to trick you into giving away passwords, card numbers or other personal details, often by looking like a site you trust.',
+    text: 'It may try to trick you into giving away passwords, card numbers, or other personal details, often by looking like a site you trust.',
   },
   MALWARE: {
     title: 'This site may harm your computer',
@@ -741,7 +741,7 @@ const DANGER_WORDING = {
   },
   UNWANTED_SOFTWARE: {
     title: 'This site may install unwanted software',
-    text: "Programs from it may change your settings, slow your computer down or show ads you didn't ask for.",
+    text: "Programs from it may change your settings, slow your computer down, or show ads you didn't ask for.",
   },
 };
 
@@ -1196,7 +1196,7 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
         )}
         <footer className="sheet-footer">
           <span>Firn {state?.version}</span>
-          <span>Your history, passwords and data stay on this computer.</span>
+          <span>Your history, passwords, and data stay on this computer.</span>
         </footer>
       </div>
     </div>

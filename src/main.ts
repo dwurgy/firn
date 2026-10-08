@@ -137,14 +137,16 @@ const TOP_ADDRESS_HEIGHT = 48;
 
 // macOS: where the window's traffic lights sit (their top-left corner),
 // relative to the sidebar's top row (8pt in; 36pt tall, so 10pt down puts
-// their middle on the row's), and at the left of the "At the top" bar (48pt
-// tall). Liquid Glass draws them 1pt higher, so there they go 1pt lower.
+// their middle on the row's). Liquid Glass draws them 1pt higher, so there
+// they go 1pt lower.
 const LIGHTS_DOWN = isLiquidGlass(process.platform, process.getSystemVersion())
   ? 1
   : 0;
 const LIGHTS_IN_ROW = { x: 8, y: 10 + LIGHTS_DOWN };
 const LIGHTS_IN_SIDEBAR = { x: 8 + LIGHTS_IN_ROW.x, y: 8 + LIGHTS_IN_ROW.y };
-const LIGHTS_IN_TOP_BAR = { x: 16, y: 16 + LIGHTS_DOWN };
+// With the address bar at the top, the sidebar's top row moves up into the
+// bar exactly where it was, and the lights stay where they were with it.
+const LIGHTS_IN_TOP_BAR = LIGHTS_IN_SIDEBAR;
 // The three lights are about 60pt wide: further left than this, they're
 // past the window's edge altogether.
 const LIGHTS_GONE_X = -60;
@@ -560,6 +562,13 @@ const createWindow = () => {
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
     if (layer === topBar) {
+      // With the address bar at the top: across the whole window, with the
+      // sidebar's top row moved up into it (the sidebar sits below). It's
+      // all there at once, even while the page is still gliding down to
+      // make room, so the top row's buttons never blink out as they move
+      // over from the sidebar (the address bar fades in; styles.css).
+      if (addressOnTop())
+        return { x: 0, y: 0, width, height: TOP_ADDRESS_HEIGHT };
       // Only as tall as the gap above the page, so the bar's buttons are
       // revealed and covered exactly as the page's top edge glides.
       return {
@@ -583,7 +592,10 @@ const createWindow = () => {
     if (layer === peek) {
       // A little wider than the sidebar, so its soft shadow has room.
       const peekWidth = Math.min(width, windowState.sidebarWidth + 32);
-      return { x: 0, y: 0, width: peekWidth, height };
+      // With the address bar at the top, it slides out below the bar, its
+      // panel level with the page (the panel sits an inset into the layer).
+      const top = addressOnTop() ? TOP_ADDRESS_HEIGHT - PAGE_INSET : 0;
+      return { x: 0, y: top, width: peekWidth, height: height - top };
     }
     return { x: 0, y: 0, width, height };
   };
@@ -1616,8 +1628,8 @@ const createWindow = () => {
   // ran ahead). Instead each sidebar (the window's and the peeking one)
   // reports where its top row is actually drawn, frame by frame while it
   // moves ('lights:at'), and the lights go there; the one further out wins.
-  // With both away and the address bar "At the top", they sit at the left of
-  // the top bar; otherwise there are none.
+  // With the address bar "At the top", they stay at the left of the top bar
+  // instead, whatever the sidebar does (it slides out below the bar).
   const lightsAt = new Map<WebContents, { x: number; y: number }>();
   // They start in the sidebar (trafficLightPosition), until it reports.
   if (!windowState.sidebarCollapsed)
@@ -1627,10 +1639,10 @@ const createWindow = () => {
   const syncTrafficLights = () => {
     if (process.platform !== 'darwin' || win.isDestroyed()) return;
     let place: { x: number; y: number } | null = null;
-    for (const at of lightsAt.values())
-      if (at.x > LIGHTS_GONE_X && (!place || at.x > place.x)) place = at;
-    if (!place && windowState.sidebarCollapsed && addressOnTop())
-      place = LIGHTS_IN_TOP_BAR;
+    if (addressOnTop()) place = LIGHTS_IN_TOP_BAR;
+    else
+      for (const at of lightsAt.values())
+        if (at.x > LIGHTS_GONE_X && (!place || at.x > place.x)) place = at;
     const key = place ? `${place.x},${place.y}` : null;
     if (key === lightsShown) return;
     const wasShown = lightsShown !== null;
@@ -1770,10 +1782,12 @@ const createWindow = () => {
     const top = Math.max(content.y, display.y);
     const right = content.x + content.width;
     const bottom = content.y + content.height;
+    // (Below the bar, when the address bar is at the top: up there, the
+    // mouse is on its way to the traffic lights or the buttons.)
     const alongLeftEdge =
       cursor.x >= left - PEEK_ZONE_OUTSIDE &&
       cursor.x < left + PEEK_ZONE_INSIDE &&
-      cursor.y >= top &&
+      cursor.y >= Math.max(top, content.y + (addressOnTop() ? pageTop : 0)) &&
       cursor.y <= bottom;
     const alongTopEdge =
       cursor.y >= top - 2 &&

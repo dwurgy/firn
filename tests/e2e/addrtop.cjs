@@ -66,9 +66,13 @@ const check = (n, ok, x = '') => {
       const bar = kids.find((c) =>
         c.webContents.getURL().includes('view=topbar'),
       );
+      const peek = kids.find((c) =>
+        c.webContents.getURL().includes('view=peek'),
+      );
       return {
         page: page?.getBounds(),
         bar: { ...bar.getBounds(), visible: bar.getVisible() },
+        peek: { ...peek.getBounds(), visible: peek.getVisible() },
       };
     });
   const sideAddr = () =>
@@ -82,12 +86,29 @@ const check = (n, ok, x = '') => {
     (await sideAddr()) && !L.bar.visible && L.page.y === 8,
     JSON.stringify(L),
   );
+  // Where the top row's buttons are in the sidebar: they stay there.
+  const spots = (sel) =>
+    `[...document.querySelectorAll('${sel} button')].map((b) => { const r = b.getBoundingClientRect(); return b.title.split(' ')[0] + '@' + Math.round(r.x) + ',' + Math.round(r.y); }).join(' ')`;
+  const rowSpots = await ui.evaluate(spots('.sidebar-top'));
   await ui.evaluate(() => window.firn.updateSettings({ addressBar: 'top' }));
-  await wait(700);
+  await wait(60);
+  // While the page is still gliding down, the bar is already all there, so
+  // the buttons moving up from the sidebar never blink out.
+  const early = await layout();
+  check(
+    'switching: the bar is all there at once, while the page glides down',
+    early.bar.visible && early.bar.height === 48 && early.page.y < 48,
+    JSON.stringify(early),
+  );
+  await wait(640);
   L = await layout();
   check(
-    '"At the top": the top bar stays, 48px, the page below it',
-    L.bar.visible && L.bar.height === 48 && L.bar.x === 260 && L.page.y === 48,
+    '"At the top": the top bar stays, 48px, across the whole window, the page below it',
+    L.bar.visible &&
+      L.bar.height === 48 &&
+      L.bar.x === 0 &&
+      L.bar.width === o.width &&
+      L.page.y === 48,
     JSON.stringify(L),
   );
   check("...and the sidebar's address bar steps aside", !(await sideAddr()));
@@ -100,7 +121,12 @@ const check = (n, ok, x = '') => {
       y: r.y,
       h: r.height,
       input: a.querySelector('.address-input').value,
-      buttons: document.querySelectorAll('.top-bar .button-row button').length,
+      buttons: document.querySelectorAll('.top-bar-window button').length,
+      nav: [...document.querySelectorAll('.top-bar-nav button')].map(
+        (b) => b.title,
+      ),
+      navEnd: document.querySelector('.top-bar-nav').getBoundingClientRect()
+        .right,
     };
   });
   const pageCenter = L.page.x + L.page.width / 2 - L.bar.x;
@@ -112,9 +138,58 @@ const check = (n, ok, x = '') => {
     JSON.stringify({ box, pageCenter }),
   );
   check('...and the window buttons on the right', box.buttons === 3);
+  const barSpots = await tb.evaluate(spots('.top-bar-nav'));
+  check(
+    'the sidebar button, back, forward, and reload stay exactly where they were in the sidebar',
+    barSpots === rowSpots && rowSpots.split(' ').length === 4,
+    `${rowSpots} | ${barSpots}`,
+  );
+  check(
+    "...and the sidebar's top row moved up into it, on the left: sidebar button, back, forward, reload",
+    box.nav.join('|') === 'Hide sidebar (Ctrl+S)|Back|Forward|Reload' &&
+      box.navEnd < box.x,
+    JSON.stringify(box.nav),
+  );
+  const side = await ui.evaluate(() => ({
+    topRow: !!document.querySelector('.sidebar .sidebar-top'),
+    firstTop: Math.round(
+      [...document.querySelector('.sidebar').children]
+        .map((c) => c.getBoundingClientRect())
+        .find((r) => r.height > 0).top,
+    ),
+  }));
+  check(
+    'the sidebar has no top row of its own, and starts below the bar, level with the page',
+    !side.topRow && side.firstTop === 48,
+    JSON.stringify(side),
+  );
   execSync(
     `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/addr-top.png`,
   );
+  // macOS look: the traffic lights stay at the bar's left, the buttons after
+  // them, and the address bar never runs into them.
+  const mac = await tb.evaluate(async () => {
+    document.documentElement.dataset.platform = 'darwin';
+    await new Promise((r) => setTimeout(r, 300));
+    const nav = document
+      .querySelector('.top-bar-nav button')
+      .getBoundingClientRect();
+    const addr = document
+      .querySelector('.top-bar-address')
+      .getBoundingClientRect();
+    return { navLeft: nav.left, navEnd: nav.right, addrLeft: addr.left };
+  });
+  execSync(
+    `import -window root -crop ${o.width}x60+${o.x}+${o.y} ${SP}/addr-top-mac.png`,
+  );
+  check(
+    'on macOS the buttons sit after the traffic lights, clear of the address bar',
+    mac.navLeft === 84 && mac.navEnd + 12 <= mac.addrLeft,
+    JSON.stringify(mac),
+  );
+  await tb.evaluate(() => {
+    document.documentElement.dataset.platform = 'linux';
+  });
   warp(o.x + 700, o.y + 500);
   await wait(1500);
   check(
@@ -153,12 +228,62 @@ const check = (n, ok, x = '') => {
     return { x: r.x, w: r.width };
   });
   check(
-    'hiding the sidebar: the bar and address follow the page',
-    L.bar.x === 8 &&
+    'hiding the sidebar: the bar stays across the window, the address follows the page',
+    L.bar.x === 0 &&
       Math.abs(box2.x + box2.w / 2 - (L.page.x + L.page.width / 2 - L.bar.x)) <=
         1,
     JSON.stringify({ L, box2 }),
   );
+  check(
+    '...and the buttons still stay exactly where they were',
+    (await tb.evaluate(spots('.top-bar-nav'))).replace('Keep', 'Hide') ===
+      rowSpots,
+  );
+  check(
+    "...and the bar's sidebar button now offers to bring it back",
+    (await tb.evaluate(
+      () => document.querySelector('.top-bar-nav button').title,
+    )) === 'Keep sidebar open (Ctrl+S)',
+  );
+  // The left edge, up in the bar (on the way to the traffic lights): no peek.
+  warp(o.x + 2, o.y + 20);
+  await wait(500);
+  check(
+    'the left edge up in the bar does not bring the sidebar out',
+    !(await layout()).peek.visible,
+  );
+  warp(o.x + 2, o.y + 300);
+  await wait(600);
+  L = await layout();
+  const pk = app.windows().find((w) => w.url().includes('view=peek'));
+  const peekPanel = await pk.evaluate(() => ({
+    topRow: !!document.querySelector('.sidebar .sidebar-top'),
+    top: Math.round(
+      document.querySelector('.sidebar').getBoundingClientRect().top,
+    ),
+  }));
+  check(
+    'below the bar, it peeks out under the bar, its panel level with the page, without a top row',
+    L.peek.visible &&
+      L.peek.y === 40 &&
+      L.peek.y + peekPanel.top === L.page.y &&
+      !peekPanel.topRow,
+    JSON.stringify({ peek: L.peek, peekPanel }),
+  );
+  execSync(
+    `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/addr-top-peek.png`,
+  );
+  // The bar's sidebar button keeps it open.
+  await tb.click('.top-bar-nav button');
+  await wait(800);
+  L = await layout();
+  check(
+    "...and the bar's sidebar button keeps it open",
+    L.page.x === 260 && !L.peek.visible,
+    JSON.stringify(L),
+  );
+  await key('S');
+  await wait(600);
   await key('S');
   await wait(600);
   await app.evaluate(({ BrowserWindow }) =>
@@ -209,8 +334,13 @@ const check = (n, ok, x = '') => {
   await wait(500);
   L = await layout();
   check(
-    'back to "In the sidebar": the bar goes, the page moves up, the sidebar address returns',
-    !L.bar.visible && L.page.y === 8 && (await sideAddr()),
+    'back to "In the sidebar": the bar goes, the page moves up, the sidebar address and top row return',
+    !L.bar.visible &&
+      L.page.y === 8 &&
+      (await sideAddr()) &&
+      (await ui.evaluate(
+        () => !!document.querySelector('.sidebar .sidebar-top'),
+      )),
     JSON.stringify(L),
   );
   warp(o.x + 700, o.y + 2);

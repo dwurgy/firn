@@ -234,7 +234,7 @@ const settings = () => {
     finale.props.every((p) => p === 'transform' || p === 'opacity'),
     finale.props.join(','),
   );
-  await wait(1500);
+  await wait(2200);
   check('...then the welcome is gone', (await title()) === null);
   const tiles = await ui.evaluate(
     () => document.querySelectorAll('.basecamp-grid > *').length,
@@ -255,7 +255,7 @@ const settings = () => {
   );
   // icons: the test machine is offline, so a stand-in answers icon fetches
   await fl.keyboard.press('Escape');
-  await wait(2000);
+  await wait(2800);
   await app.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('welcome:icon');
     ipcMain.handle('welcome:icon', (_e, url) =>

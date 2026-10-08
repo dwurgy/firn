@@ -3,7 +3,7 @@ import { Sidebar, useSidebarData } from './Sidebar';
 // The sidebar sliding in over the page while it's collapsed. It lives in its
 // own layer above the page; src/main.ts decides when to show and hide it.
 export function Peek() {
-  const { nav, tabs, sidebar, spaces, downloads } = useSidebarData();
+  const { nav, tabs, sidebar, spaces, downloads, barOnTop } = useSidebarData();
   return (
     <div
       className={`peek ${sidebar.peeking ? 'is-shown' : ''} ${sidebar.docking ? 'is-docking' : ''}`}
@@ -25,6 +25,7 @@ export function Peek() {
         spaces={spaces}
         downloads={downloads}
         collapsed={sidebar.collapsed}
+        barOnTop={barOnTop}
       />
     </div>
   );

@@ -50,5 +50,5 @@ worrying:
 
 - `ctxmenu`: "Search opens a search for it in a new tab" needs the real
   internet, which the workspace may block.
-- `all`: "on the way up, bar is covered in step with the page" is timing-
-  sensitive by a pixel.
+- `all`: "on the way up, bar is covered in step with the page" and "bar
+  edge matches page edge while gliding" are timing-sensitive by a frame.

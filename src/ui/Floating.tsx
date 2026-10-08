@@ -1178,6 +1178,35 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
               </div>
               <div className="settings-row">
                 <div className="settings-label">
+                  <span>Block ads and trackers</span>
+                  <small>
+                    Public block lists, updated daily. Right-click a page to
+                    allow ads on that site.
+                  </small>
+                </div>
+                <div className="segmented" role="radiogroup">
+                  {(
+                    [
+                      [true, 'On'],
+                      [false, 'Off'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={label}
+                      role="radio"
+                      aria-checked={state.settings.adBlocking === value}
+                      className={
+                        state.settings.adBlocking === value ? 'is-on' : ''
+                      }
+                      onClick={() => change({ adBlocking: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-row">
+                <div className="settings-label">
                   <span>Cookies and site data</span>
                   <small>Clearing signs you out of websites.</small>
                 </div>

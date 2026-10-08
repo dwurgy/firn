@@ -278,9 +278,20 @@ export class ElectronEngine implements PageEngine {
     session.webRequest.onBeforeRequest(
       { urls: ['http://*/*', 'https://*/*'] },
       (details, callback) => {
-        // Only whole pages (a frame inside a page is part of it).
-        if (details.resourceType !== 'mainFrame') return callback({});
         const web = details.webContents;
+        // What a page loads: maybe an ad or a tracker (only for pages, not
+        // Firn's own panels).
+        if (details.resourceType !== 'mainFrame') {
+          const page = web && this.pages.has(web) ? web : null;
+          const cancel =
+            !!page &&
+            !!this.requestBlocker?.(
+              details.url,
+              details.resourceType,
+              page.getURL(),
+            );
+          return callback(cancel ? { cancel: true } : {});
+        }
         // Firn's own panels aren't checked.
         if (web && !this.pages.has(web) && this.isOwnUi(web))
           return callback({});
@@ -295,6 +306,18 @@ export class ElectronEngine implements PageEngine {
       },
     );
     this.win.on('closed', () => session.webRequest.onBeforeRequest(null));
+  }
+
+  private requestBlocker:
+    | ((url: string, type: string, pageUrl: string) => boolean)
+    | null = null;
+
+  // Checked by the same request hook as the navigation guard above (a
+  // session has only one).
+  setRequestBlocker(
+    shouldBlock: (url: string, type: string, pageUrl: string) => boolean,
+  ) {
+    this.requestBlocker = shouldBlock;
   }
 
   // The window's own web contents and its child views that aren't pages.

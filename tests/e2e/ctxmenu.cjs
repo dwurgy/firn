@@ -224,8 +224,8 @@ const check = (n, ok, x = '') => {
   await pg.evaluate(() => getSelection().removeAllRanges());
   m = await menuAt('#plain');
   check(
-    'empty part of the page: back, forward, reload',
-    m.join('|') === '(Back)|(Forward)|Reload',
+    'empty part of the page: back, forward, reload (and allowing ads)',
+    m.join('|') === '(Back)|(Forward)|Reload|—|Allow ads on this site',
     m.join(' | '),
   );
   await pg.evaluate(() => {

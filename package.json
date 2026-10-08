@@ -1,7 +1,7 @@
 {
   "name": "firn",
   "productName": "Firn",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "A calm, minimalist desktop browser.",
   "keywords": [],
@@ -41,6 +41,7 @@
     "vite": "^8.3.2"
   },
   "dependencies": {
+    "@ghostery/adblocker": "2.18.2",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

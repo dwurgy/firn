@@ -171,6 +171,12 @@ export interface PageEngine {
     check: (url: string) => Promise<string | null> | string | null,
     onBlocked: (page: Page | null, url: string, threat: string) => void,
   ): void;
+  // Everything a page loads (scripts, images, frames...; not the page
+  // itself) is checked: `shouldBlock` says whether to stop it. `pageUrl` is
+  // the address of the page it's for. For blocking ads and trackers.
+  setRequestBlocker(
+    shouldBlock: (url: string, type: string, pageUrl: string) => boolean,
+  ): void;
   // Every download starts here; `download` starts one from a URL.
   onDownload(listener: (download: EngineDownload) => void): void;
   download(url: string): void;

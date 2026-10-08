@@ -106,6 +106,7 @@ On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window, and He
 - `src/url.ts` — decides whether what you typed is an address or a search.
 - `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.
 - `src/safebrowsing.ts` — scam and malware warnings (Google Safe Browsing, checked on this computer).
+- `src/adblock.ts` — blocking ads and trackers (Ghostery's open-source blocker, with the public block lists).
 - `src/passwords.ts` — saved passwords, encrypted on disk; `src/page-preload.ts` is the small helper inside web pages that spots sign-ins and fills saved ones.
 
 ### Welcome
@@ -146,7 +147,7 @@ Spaces keep separate sets of pinned and everyday tabs, like Work and Personal. S
 The **Firn mark** button at the bottom-left of the sidebar (beside the space icons) opens the Firn menu: New tab, New space, History, Passwords, Downloads, and Settings.
 
 - **History** (Ctrl+H, or Cmd+Y on a Mac) shows the pages you've visited, newest first, grouped by day. Type to search, click a page to open it in a new tab, hover for ✕ to forget one, or use "Clear history…" (the last hour, today, or all time). It's kept on your computer only.
-- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia, or Startpage), the **theme** (match the system, light, or dark), **where the address bar sits** (in the sidebar, or at the top in a bar across the window that's always there, with the window buttons, back, forward, and reload), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
+- **Settings** (Ctrl+,) has just a few things: the **search engine** (DuckDuckGo by default; Google, Bing, Ecosia, or Startpage), the **theme** (match the system, light, or dark), **where the address bar sits** (in the sidebar, or at the top in a bar across the window that's always there, with the window buttons, back, forward, and reload), **where downloads are saved**, and **privacy**: saved passwords, scam and malware warnings (on or off), blocking ads and trackers (on or off), clear history, clear cookies and site data (signs you out of websites; it asks first), and reset every site's permissions. Changes apply right away and are kept in `settings.json` next to your session.
 
 ### Saved passwords
 
@@ -173,6 +174,14 @@ It's done the private way. Firn downloads Google's lists about every half hour; 
 5. Run `npm start` or `npm run package` again.
 
 Without a key, Firn works the same but doesn't warn, and Settings says "Not set up in this copy of Firn". Google's free key is for non-commercial use; if Firn is ever sold, it should move to Google's paid version (Web Risk).
+
+### Ads and trackers
+
+Firn blocks ads and trackers by default, with Ghostery's open-source blocker (`@ghostery/adblocker`) and the standard public block lists: EasyList, EasyPrivacy, and uBlock Origin's. Blocked things simply never load, so pages are calmer and faster, and fewer companies follow you around. (Sometimes an empty space is left where an ad was.)
+
+- **When a site breaks:** right-click the page and choose **Allow ads on this site**. Firn reloads it with everything. The address bar's site button shows it's allowed, and **Block ads on this site** (or the site button) turns blocking back on.
+- **Off entirely:** **Settings > Block ads and trackers**.
+- **What it sends:** about once a day Firn downloads the latest lists (about 6 MB) from Ghostery's public GitHub repository and keeps them on your computer, so blocking also works offline. Downloading them sends nothing about you or what you browse; every check happens on your computer.
 
 ### Downloads
 

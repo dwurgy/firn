@@ -41,6 +41,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `macmenu`      | The Mac menu bar (shown on Linux for the check): menus and choices    |
 | `basecamp`     | Basecamp: dragging tiles to reorder them                              |
 | `whatsnew`     | What's new: after an update, from the menus, never on a fresh install |
+| `adblock`      | Blocking ads and trackers, "Allow ads on this site", the switch       |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

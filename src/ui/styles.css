@@ -59,6 +59,12 @@
   display: none;
 }
 
+/* ...and the sidebar's top row moves up into the bar too (src/ui/TopBar.tsx),
+   so the sidebar starts below the bar, level with the page. */
+:root[data-view='main'] .sidebar.is-under-bar {
+  padding-top: var(--top-bar-height);
+}
+
 :root[data-theme='light'] {
   color-scheme: light;
 }
@@ -1375,13 +1381,43 @@ button {
   height: var(--top-bar-height);
 }
 
+/* The sidebar's top row, moved up into the bar (the address bar at the
+   top): the sidebar button, then back, forward, and reload, after the
+   macOS traffic lights (which stay put here, in the bar). --bar-nav-end is
+   where its buttons end: 4 buttons of 32px, 2px apart, plus the 8px gap. */
+.top-bar {
+  --bar-nav-end: calc(var(--page-inset) + 140px);
+}
+
+:root[data-platform='darwin'] .top-bar {
+  --bar-nav-end: calc(84px + 140px);
+}
+
+.top-bar-nav {
+  position: absolute;
+  top: calc((var(--top-bar-height) - 32px) / 2);
+  left: var(--page-inset);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Room for the traffic lights, as in the sidebar's top row. */
+:root[data-platform='darwin'] .top-bar-nav {
+  left: 84px;
+}
+
 /* The address bar at the top: as wide as in the sidebar, centered over the
-   page (the bar starts where the page does; the page ends an inset before
-   the window's edge), and never under the window buttons. */
+   page (which starts at --page-left and ends an inset before the window's
+   edge), but never over the buttons on the left, nor under the window
+   buttons on the right. */
 .top-bar-address {
   position: absolute;
   top: calc((var(--top-bar-height) - 36px) / 2);
-  left: calc((100% - var(--page-inset)) / 2);
+  left: max(
+    calc(var(--bar-nav-end) + 12px + var(--address-half)),
+    calc(var(--page-left) + (100% - var(--page-left) - var(--page-inset)) / 2)
+  );
   max-width: calc(100% - 240px);
   transform: translateX(-50%);
 }
@@ -1390,7 +1426,7 @@ button {
   -webkit-app-region: no-drag;
 }
 
-.top-bar .button-row {
+.top-bar-window {
   position: absolute;
   top: calc((var(--top-bar-height) - 32px) / 2);
   right: var(--page-inset);

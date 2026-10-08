@@ -52,6 +52,7 @@ export function useSidebarData() {
     activeSpaceId: '',
   });
   const [downloads, setDownloads] = useState<Download[]>([]);
+  const barOnTop = useBarOnTop();
 
   useEffect(() => {
     const offs = [
@@ -79,7 +80,25 @@ export function useSidebarData() {
     }
   }, [color]);
 
-  return { nav, tabs, sidebar, spaces, downloads };
+  return { nav, tabs, sidebar, spaces, downloads, barOnTop };
+}
+
+// Whether the bar at the top holds the window's buttons and the sidebar's
+// top row (the address bar "At the top", except in fullscreen, where the
+// bar goes away and the sidebar gets its top row back).
+export function useBarOnTop() {
+  const [addressOnTop, setAddressOnTop] = useState(false);
+  const [barShown, setBarShown] = useState(false);
+  useEffect(() => {
+    const offs = [
+      window.firn.onSettingsState(({ settings }) =>
+        setAddressOnTop(settings.addressBar === 'top'),
+      ),
+      window.firn.onTopBarState(setBarShown),
+    ];
+    return () => offs.forEach((off) => off());
+  }, []);
+  return addressOnTop && barShown;
 }
 
 // "#c9a27e" -> "201 162 126", for use in rgb().
@@ -97,6 +116,7 @@ export function Sidebar({
   spaces,
   downloads,
   collapsed,
+  barOnTop,
   className = '',
   style,
 }: {
@@ -105,6 +125,7 @@ export function Sidebar({
   spaces: SpacesState;
   downloads: Download[];
   collapsed: boolean;
+  barOnTop: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -147,7 +168,7 @@ export function Sidebar({
   return (
     <aside
       ref={asideRef}
-      className={`sidebar ${className}`}
+      className={`sidebar ${barOnTop ? 'is-under-bar' : ''} ${className}`}
       style={style}
       // Right-click on empty space: the space's menu (Change color...).
       // Tabs, tiles and the space's name have their own menus, and text
@@ -159,47 +180,15 @@ export function Sidebar({
         window.firn.showSidebarMenu();
       }}
     >
-      <div className="sidebar-top" ref={topRow}>
-        <div className="button-row">
-          <button
-            className="icon-button"
-            title={
-              collapsed ? 'Keep sidebar open (Ctrl+S)' : 'Hide sidebar (Ctrl+S)'
-            }
-            onClick={() => window.firn.toggleSidebar()}
-          >
-            <SidebarIcon />
-          </button>
+      {/* With the bar at the top, these buttons are up there instead. */}
+      {!barOnTop && (
+        <div className="sidebar-top" ref={topRow}>
+          <div className="button-row">
+            <SidebarToggle collapsed={collapsed} />
+          </div>
+          <NavButtons nav={nav} />
         </div>
-        <nav className="button-row">
-          <button
-            className="icon-button"
-            title="Back"
-            disabled={!nav.canGoBack}
-            onClick={() => window.firn.command('back')}
-          >
-            <BackIcon />
-          </button>
-          <button
-            className="icon-button"
-            title="Forward"
-            disabled={!nav.canGoForward}
-            onClick={() => window.firn.command('forward')}
-          >
-            <ForwardIcon />
-          </button>
-          <button
-            className="icon-button"
-            title={nav.isLoading ? 'Stop' : 'Reload'}
-            disabled={!nav.url}
-            onClick={() =>
-              window.firn.command(nav.isLoading ? 'stop' : 'reload')
-            }
-          >
-            {nav.isLoading ? <StopIcon /> : <ReloadIcon />}
-          </button>
-        </nav>
-      </div>
+      )}
 
       <AddressBar nav={nav} />
 
@@ -246,6 +235,50 @@ export function Sidebar({
         <SpaceIconPicker space={space} top={picking.top} onDone={closePicker} />
       )}
     </aside>
+  );
+}
+
+// The sidebar's top-row buttons, also used by the bar at the top.
+export function SidebarToggle({ collapsed }: { collapsed: boolean }) {
+  return (
+    <button
+      className="icon-button"
+      title={collapsed ? 'Keep sidebar open (Ctrl+S)' : 'Hide sidebar (Ctrl+S)'}
+      onClick={() => window.firn.toggleSidebar()}
+    >
+      <SidebarIcon />
+    </button>
+  );
+}
+
+export function NavButtons({ nav }: { nav: NavState }) {
+  return (
+    <nav className="button-row">
+      <button
+        className="icon-button"
+        title="Back"
+        disabled={!nav.canGoBack}
+        onClick={() => window.firn.command('back')}
+      >
+        <BackIcon />
+      </button>
+      <button
+        className="icon-button"
+        title="Forward"
+        disabled={!nav.canGoForward}
+        onClick={() => window.firn.command('forward')}
+      >
+        <ForwardIcon />
+      </button>
+      <button
+        className="icon-button"
+        title={nav.isLoading ? 'Stop' : 'Reload'}
+        disabled={!nav.url}
+        onClick={() => window.firn.command(nav.isLoading ? 'stop' : 'reload')}
+      >
+        {nav.isLoading ? <StopIcon /> : <ReloadIcon />}
+      </button>
+    </nav>
   );
 }
 

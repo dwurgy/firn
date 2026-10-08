@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NavState } from '../types';
 import { AddressBar } from './AddressBar';
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from './icons';
+import { NavButtons, SidebarToggle } from './Sidebar';
 
 const EMPTY_NAV: NavState = {
   url: '',
@@ -17,7 +18,10 @@ const EMPTY_NAV: NavState = {
 // reaches the top edge, while the page glides down to make room, with the
 // window buttons (Windows and Linux; on macOS it's just a strip to grab the
 // window by). With the address bar set to sit at the top, it's always
-// there, with the same address bar as the sidebar's, centered over the page.
+// there, across the whole window: the sidebar's top row moves up into it
+// (the macOS traffic lights, the sidebar button, back, forward, and
+// reload, on the left), with the same address bar as the sidebar's,
+// centered over the page. The sidebar, docked or peeking, sits below it.
 // The bar has no background: the frame behind it (frosted glass, where
 // available) shows through. When to come and go is decided in src/main.ts.
 export function TopBar() {
@@ -26,6 +30,9 @@ export function TopBar() {
   const [nav, setNav] = useState<NavState>(EMPTY_NAV);
   const [addressOnTop, setAddressOnTop] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [collapsed, setCollapsed] = useState(false);
+  // Where the page starts, to center the address bar over it.
+  const [pageLeft, setPageLeft] = useState(260);
   // Where the peeking sidebar reaches into the bar (0 when it isn't out):
   // that part mustn't drag the window, or it would swallow the sidebar's
   // clicks.
@@ -39,8 +46,10 @@ export function TopBar() {
       window.firn.onSettingsState(({ settings }) =>
         setAddressOnTop(settings.addressBar === 'top'),
       ),
-      window.firn.onSidebarState(({ width, peeking, pageLeft }) => {
+      window.firn.onSidebarState(({ width, peeking, pageLeft, collapsed }) => {
         setSidebarWidth(width);
+        setCollapsed(collapsed);
+        setPageLeft(pageLeft);
         setPeekCover(peeking ? Math.max(0, width + 32 - pageLeft) : 0);
       }),
     ];
@@ -52,18 +61,35 @@ export function TopBar() {
     <div className={`top-bar ${shown ? 'is-shown' : ''}`}>
       {/* Empty bar space is a real title bar (drag, snap to screen edges,
           double-click to maximize). See the drag rules in styles.css. */}
-      <div className="top-bar-drag" style={{ left: peekCover }} />
+      {/* (With the address bar at the top, the peeking sidebar slides out
+          below the bar, so it never covers it.) */}
+      <div
+        className="top-bar-drag"
+        style={{ left: addressOnTop ? 0 : peekCover }}
+      />
       {addressOnTop && (
-        <div
-          className="top-bar-address"
-          // As wide as in the sidebar (its width less the side insets).
-          style={{ width: sidebarWidth - 16 }}
-        >
-          <AddressBar nav={nav} />
-        </div>
+        <>
+          <div className="top-bar-nav">
+            <SidebarToggle collapsed={collapsed} />
+            <NavButtons nav={nav} />
+          </div>
+          <div
+            className="top-bar-address"
+            style={
+              {
+                // As wide as in the sidebar (its width less the side insets).
+                width: sidebarWidth - 16,
+                '--address-half': `${(sidebarWidth - 16) / 2}px`,
+                '--page-left': `${pageLeft}px`,
+              } as React.CSSProperties
+            }
+          >
+            <AddressBar nav={nav} />
+          </div>
+        </>
       )}
       {window.firn.platform !== 'darwin' && (
-        <div className="button-row">
+        <div className="button-row top-bar-window">
           <button
             className="icon-button"
             title="Minimize"

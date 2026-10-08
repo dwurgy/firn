@@ -1415,6 +1415,8 @@ button {
   );
   max-width: calc(100% - 240px);
   transform: translateX(-50%);
+  /* Fades in as the page glides down to make room for it. */
+  animation: fade-in 200ms ease-out;
 }
 
 :root[data-view='topbar'] .top-bar-address {
@@ -2855,7 +2857,9 @@ button {
   animation: fl-in 400ms ease-out 200ms forwards;
 }
 
-/* The browser, drawn simply, rising into the window. */
+/* The browser, drawn simply, rising into the window. Its frame wears
+   Glacier's tint (#7f9cb0), the first space color and the default, as the
+   real frame does, whatever color was picked at the space step. */
 .welcome-browser {
   position: absolute;
   inset: 0;
@@ -2865,6 +2869,7 @@ button {
   border-radius: 14px;
   background: var(--frame);
   box-shadow:
+    inset 0 0 0 100vmax rgb(127 156 176 / var(--space-wash)),
     0 2px 8px rgba(40, 28, 16, 0.14),
     0 18px 48px rgba(40, 28, 16, 0.22);
   transform: translateY(96%) scale(0.86);

@@ -563,15 +563,12 @@ const createWindow = () => {
     const [width, height] = win.getContentSize();
     if (layer === topBar) {
       // With the address bar at the top: across the whole window, with the
-      // sidebar's top row moved up into it (the sidebar sits below). Like
-      // the other bar, only as tall as the gap above the page as it comes.
+      // sidebar's top row moved up into it (the sidebar sits below). It's
+      // all there at once, even while the page is still gliding down to
+      // make room, so the top row's buttons never blink out as they move
+      // over from the sidebar (the address bar fades in; styles.css).
       if (addressOnTop())
-        return {
-          x: 0,
-          y: 0,
-          width,
-          height: Math.min(pageTop, TOP_ADDRESS_HEIGHT),
-        };
+        return { x: 0, y: 0, width, height: TOP_ADDRESS_HEIGHT };
       // Only as tall as the gap above the page, so the bar's buttons are
       // revealed and covered exactly as the page's top edge glides.
       return {

@@ -91,7 +91,16 @@ const check = (n, ok, x = '') => {
     `[...document.querySelectorAll('${sel} button')].map((b) => { const r = b.getBoundingClientRect(); return b.title.split(' ')[0] + '@' + Math.round(r.x) + ',' + Math.round(r.y); }).join(' ')`;
   const rowSpots = await ui.evaluate(spots('.sidebar-top'));
   await ui.evaluate(() => window.firn.updateSettings({ addressBar: 'top' }));
-  await wait(700);
+  await wait(60);
+  // While the page is still gliding down, the bar is already all there, so
+  // the buttons moving up from the sidebar never blink out.
+  const early = await layout();
+  check(
+    'switching: the bar is all there at once, while the page glides down',
+    early.bar.visible && early.bar.height === 48 && early.page.y < 48,
+    JSON.stringify(early),
+  );
+  await wait(640);
   L = await layout();
   check(
     '"At the top": the top bar stays, 48px, across the whole window, the page below it',

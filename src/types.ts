@@ -89,6 +89,10 @@ export interface Settings {
   addressBar: 'sidebar' | 'top';
   // Warn before opening scam and malware sites (Google Safe Browsing).
   safeBrowsing: boolean;
+  // Block ads and trackers (src/adblock.ts), except on these sites (their
+  // host names, without "www."), where the person chose to allow them.
+  adBlocking: boolean;
+  adsAllowedSites: string[];
   // The welcome (shown the first time Firn opens) has been seen.
   onboarded: boolean;
   // The version of Firn that last ran here ('' before Firn kept track), so

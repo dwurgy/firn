@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS: Settings = {
   downloadsFolder: '',
   addressBar: 'sidebar',
   safeBrowsing: true,
+  adBlocking: true,
+  adsAllowedSites: [],
   onboarded: false,
   lastVersion: '',
 };
@@ -52,6 +54,18 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
       typeof c.safeBrowsing === 'boolean'
         ? c.safeBrowsing
         : current.safeBrowsing,
+    adBlocking:
+      typeof c.adBlocking === 'boolean' ? c.adBlocking : current.adBlocking,
+    adsAllowedSites: Array.isArray(c.adsAllowedSites)
+      ? [
+          ...new Set(
+            c.adsAllowedSites
+              .filter((site): site is string => typeof site === 'string')
+              .map((site) => site.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ].slice(0, 1000)
+      : current.adsAllowedSites,
     onboarded:
       typeof c.onboarded === 'boolean' ? c.onboarded : current.onboarded,
     lastVersion:

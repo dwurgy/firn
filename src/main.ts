@@ -28,6 +28,7 @@ import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
 import { PasswordStore } from './passwords';
+import { AdBlocker } from './adblock';
 import { SafeBrowsing, type Threat } from './safebrowsing';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from './welcome';
 import { iconLinksFromHtml, pickIcon } from './favicon';
@@ -815,7 +816,9 @@ const createWindow = () => {
     return {
       ...state,
       sitePermissions:
-        !!origin && Object.keys(sitePermissions.of(origin)).length > 0,
+        !!origin &&
+        (Object.keys(sitePermissions.of(origin)).length > 0 ||
+          (settings.adBlocking && adsAllowedOn(state.url))),
     };
   };
   const sendNav = () => send('nav:state', navState());
@@ -855,21 +858,43 @@ const createWindow = () => {
         };
       },
     );
+    // Ads allowed here: shown, and can be blocked again.
+    const page = tabs.activeTabId ? tabs.pageOf(tabs.activeTabId) : undefined;
+    if (page && settings.adBlocking && adsAllowedOn(page.url))
+      items.push({
+        label: 'Ads and trackers',
+        submenu: [
+          {
+            label: 'Allow',
+            type: 'radio' as const,
+            checked: true,
+            click: () => {},
+          },
+          {
+            label: 'Block',
+            type: 'radio' as const,
+            checked: false,
+            click: () => setAdsAllowed(page, false),
+          },
+        ],
+      });
     if (!items.length) return;
     items.unshift(
       { label: hostOf(origin), enabled: false },
       { type: 'separator' },
     );
-    items.push(
-      { type: 'separator' },
-      {
-        label: 'Ask again next time',
-        click: () => {
-          sitePermissions.forget(origin);
-          sendNav();
+    // (Only for the permissions; ads have their own item.)
+    if (decided.length)
+      items.push(
+        { type: 'separator' },
+        {
+          label: 'Ask again next time',
+          click: () => {
+            sitePermissions.forget(origin);
+            sendNav();
+          },
         },
-      },
-    );
+      );
     Menu.buildFromTemplate(items).popup({ window: win });
   };
 
@@ -1020,6 +1045,44 @@ const createWindow = () => {
     log: (message) => debug(`safe browsing: ${message}`),
   });
   const visitAnyway = new Set<string>();
+
+  // --- Ads and trackers -------------------------------------------------------
+  // Blocked by default (src/adblock.ts): what a page loads is checked
+  // against the public block lists, kept on this computer. A site where the
+  // person chose "Allow ads on this site" (its page menu, or the address
+  // bar's site button) loads everything.
+  const adBlocker = new AdBlocker(
+    path.join(app.getPath('userData'), 'ad-block-lists.bin'),
+    (message) => debug(message),
+    // Automated tests only: a small list instead of downloading any.
+    process.env.FIRN_AD_BLOCK_TEST_LIST,
+  );
+  // The site a page is on, as ads are allowed by ("www." left off).
+  const adSiteOf = (url: string) => {
+    try {
+      const { protocol, hostname } = new URL(url);
+      if (protocol !== 'http:' && protocol !== 'https:') return null;
+      return hostname.replace(/^www\./, '');
+    } catch {
+      return null;
+    }
+  };
+  const adsAllowedOn = (url: string) => {
+    const site = adSiteOf(url);
+    return !!site && settings.adsAllowedSites.includes(site);
+  };
+  // Allows ads on a page's site, or blocks them again, and reloads it so
+  // that takes effect.
+  const setAdsAllowed = (page: Page, allowed: boolean) => {
+    const site = adSiteOf(page.url);
+    if (!site) return;
+    const others = settings.adsAllowedSites.filter((s) => s !== site);
+    changeSettings({
+      adsAllowedSites: allowed ? [...others, site] : others,
+    });
+    sendNav();
+    page.reload();
+  };
   type Danger = {
     tabId: string;
     url: string;
@@ -1323,6 +1386,7 @@ const createWindow = () => {
     nativeTheme.themeSource = settings.theme;
     if (settings.safeBrowsing) safeBrowsing.start();
     else safeBrowsing.stop();
+    if (settings.adBlocking) adBlocker.start();
   };
   applySettings();
   // The folder downloads go to (the system's Downloads folder unless one
@@ -1356,6 +1420,12 @@ const createWindow = () => {
   engine.setNavigationGuard(
     (url) => (visitAnyway.has(url) ? null : safeBrowsing.check(url)),
     onDangerFound,
+  );
+  engine.setRequestBlocker(
+    (url, type, pageUrl) =>
+      settings.adBlocking &&
+      !adsAllowedOn(pageUrl) &&
+      adBlocker.shouldBlock(url, type, pageUrl),
   );
   // A site asking for the camera and so on: answered from what was decided
   // before, or asked (see "Site permissions" above).
@@ -1905,7 +1975,7 @@ const createWindow = () => {
     }
 
     // Nothing in particular under the mouse: the page itself.
-    if (!items.length)
+    if (!items.length) {
       section([
         { label: 'Back', enabled: page.canGoBack, click: () => page.back() },
         {
@@ -1915,6 +1985,19 @@ const createWindow = () => {
         },
         { label: 'Reload', click: () => page.reload() },
       ]);
+      // The way out when blocking ads breaks a site.
+      if (settings.adBlocking && adSiteOf(page.url)) {
+        const allowed = adsAllowedOn(page.url);
+        section([
+          {
+            label: allowed
+              ? 'Block ads on this site'
+              : 'Allow ads on this site',
+            click: () => setAdsAllowed(page, !allowed),
+          },
+        ]);
+      }
+    }
 
     Menu.buildFromTemplate(items).popup({ window: win });
   };

@@ -1,5 +1,17 @@
 # What's new in Firn
 
+## Firn 0.2.0
+
+**Firn now blocks ads and trackers.**
+
+Pages are calmer and faster, and fewer companies can follow you from site to site. It's on from the start, using the same public block lists as popular ad blockers, and it all happens on your computer.
+
+### New
+
+- **Ads and trackers are blocked** on every site.
+- **If a site doesn't work right,** right-click the page and choose **Allow ads on this site**.
+- **Turn it off** anytime in Settings.
+
 ## Firn 0.1.2
 
 **Safer under the hood.**

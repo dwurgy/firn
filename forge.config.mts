@@ -52,6 +52,9 @@ const config: ForgeConfig = {
     icon: canCompileGlassIcon()
       ? ['./assets/icon', './brand/icon-composer/Firn.icon']
       : './assets/icon',
+    // macOS: Firn is a browser. It opens http and https links and web page
+    // files, so it can be chosen as the default browser (src/defaultBrowser.ts).
+    protocols: [{ name: 'Web page', schemes: ['http', 'https'] }],
     // The texts macOS shows the first time a website asks for the camera,
     // the microphone, or the location (Firn asks for each site as well).
     extendInfo: {
@@ -63,6 +66,14 @@ const config: ForgeConfig = {
         'So websites you allow can see where you are, for maps for example. Firn asks you first for each site.',
       NSLocationWhenInUseUsageDescription:
         'So websites you allow can see where you are, for maps for example. Firn asks you first for each site.',
+      CFBundleDocumentTypes: [
+        {
+          CFBundleTypeName: 'Web page',
+          CFBundleTypeRole: 'Viewer',
+          LSHandlerRank: 'Alternate',
+          LSItemContentTypes: ['public.html'],
+        },
+      ],
     },
     // The signature (with the "hardened runtime" Apple requires) uses
     // osx-sign's defaults, the same permissions Chrome asks for: camera,

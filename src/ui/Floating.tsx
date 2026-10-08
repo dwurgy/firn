@@ -1023,6 +1023,34 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
         </header>
         {state && (
           <div className="sheet-body settings-body">
+            {/* Only where this copy can be the default (installed on
+                Windows, or in a Mac's Applications folder). */}
+            {state.defaultBrowser !== 'unavailable' && (
+              <section className="settings-group">
+                <h3>Default browser</h3>
+                <div className="settings-row">
+                  <div className="settings-label">
+                    <span>Open links in Firn</span>
+                    <small>
+                      Links from other apps, like mail and chat, open as new
+                      tabs.
+                    </small>
+                  </div>
+                  {state.defaultBrowser === 'yes' ? (
+                    <span className="settings-done">
+                      Firn is your default browser
+                    </span>
+                  ) : (
+                    <button
+                      className="sheet-button"
+                      onClick={() => window.firn.makeDefaultBrowser()}
+                    >
+                      Make Firn default…
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
             <section className="settings-group">
               <h3>Search</h3>
               <div className="settings-row">

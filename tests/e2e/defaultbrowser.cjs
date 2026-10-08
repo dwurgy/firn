@@ -1,0 +1,109 @@
+// Firn as the default browser: a link handed to Firn by another app opens
+// as a new tab (when Firn starts with it, and when Firn is already running,
+// as Windows does). The Settings row only shows where this copy can be the
+// default (installed on Windows, or in a Mac's Applications folder), so not
+// on this Linux copy run from the source code.
+const { _electron } = require('./playwright.cjs');
+const path = require('path');
+const ROOT = path.resolve(__dirname, '../..');
+const fs = require('fs');
+const { execSync, spawn } = require('child_process');
+const ELECTRON = path.join(ROOT, 'node_modules/electron/dist/electron');
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const results = [];
+const check = (n, ok, x = '') => {
+  results.push(ok);
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  ${n}${x !== '' ? '  (' + x + ')' : ''}`,
+  );
+};
+(async () => {
+  execSync('rm -f /root/.config/Firn/session.json');
+  fs.writeFileSync(
+    '/root/.config/Firn/settings.json',
+    JSON.stringify({
+      onboarded: true,
+      lastVersion: require('../../package.json').version,
+    }),
+  );
+  // Started by another app with a link.
+  const app = await _electron.launch({
+    args: ['--no-sandbox', '.', 'http://127.0.0.1:8765/red.html'],
+    cwd: ROOT,
+    executablePath: ELECTRON,
+  });
+  await wait(6500);
+  const ui = app.windows().find((w) => w.url().endsWith(':5173/'));
+  const titles = () =>
+    ui.evaluate(() =>
+      [...document.querySelectorAll('.space-tabs .tab')].map((t) => ({
+        title: t.querySelector('.tab-title')?.textContent,
+        active: t.classList.contains('is-active'),
+      })),
+    );
+  let t = await titles();
+  check(
+    'started with a link: it opens, on screen (and no start page beside it)',
+    t.length === 1 && t[0].title === 'Red site' && t[0].active,
+    JSON.stringify(t),
+  );
+
+  // Already running: a second start with a link hands it over and quits.
+  const second = spawn(
+    ELECTRON,
+    ['--no-sandbox', '.', 'http://127.0.0.1:8765/green.html'],
+    { cwd: ROOT, stdio: 'ignore' },
+  );
+  const exited = await Promise.race([
+    new Promise((r) => second.on('exit', () => r(true))),
+    wait(8000).then(() => false),
+  ]);
+  await wait(1500);
+  t = await titles();
+  check(
+    'already running: the link opens as a new tab in the same window',
+    t.length === 2 &&
+      t.some((x) => x.title === 'Green site' && x.active) &&
+      (await app.evaluate(
+        ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
+      )) === 1,
+    JSON.stringify(t),
+  );
+  check('...and the second Firn quits right away', exited);
+  if (!exited) second.kill();
+
+  // Not a web address: ignored.
+  const third = spawn(
+    ELECTRON,
+    ['--no-sandbox', '.', 'javascript:alert(1)', '/etc/passwd'],
+    { cwd: ROOT, stdio: 'ignore' },
+  );
+  await new Promise((r) => third.on('exit', r));
+  await wait(1000);
+  check(
+    "anything that isn't a web address or a web page file is ignored",
+    (await titles()).length === 2,
+  );
+
+  // Settings: no "Default browser" here (a copy that can't be the default).
+  await ui.evaluate(() => window.firn.runAction('settings'));
+  await wait(600);
+  const fl = app.windows().find((w) => w.url().includes('view=floating'));
+  const groups = await fl.evaluate(() =>
+    [...document.querySelectorAll('.settings-group h3')].map(
+      (h) => h.textContent,
+    ),
+  );
+  check(
+    'Settings leaves out "Default browser" where this copy can\'t be it',
+    groups.length > 0 && !groups.includes('Default browser'),
+    groups.join(', '),
+  );
+  console.log(
+    `\n${results.filter(Boolean).length}/${results.length} checks passed`,
+  );
+  await app.close();
+})().catch((e) => {
+  console.log('TEST ERROR', e.message);
+  process.exit(1);
+});

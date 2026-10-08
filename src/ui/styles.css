@@ -1545,6 +1545,13 @@ button {
   color: var(--text-faint);
 }
 
+/* A quiet "already done" in place of a button (e.g. Firn is already the
+   default browser). */
+.settings-done {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .sheet-button {
   height: 30px;
   padding: 0 14px;

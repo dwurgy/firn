@@ -22,6 +22,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page, PageContextMenu } from './engine/engine';
@@ -29,6 +30,13 @@ import { ElectronEngine } from './engine/electron';
 import { Downloads } from './downloads';
 import { PasswordStore } from './passwords';
 import { AdBlocker } from './adblock';
+import {
+  askToBeDefault,
+  defaultBrowserState,
+  handleWindowsInstallerEvent,
+  linksFromArguments,
+  type DefaultBrowserState,
+} from './defaultBrowser';
 import { SafeBrowsing, type Threat } from './safebrowsing';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from './welcome';
 import { iconLinksFromHtml, pickIcon } from './favicon';
@@ -52,10 +60,25 @@ import type {
   WindowState,
 } from './types';
 
+// Windows: the installer's events also list Firn among the browsers (or
+// take it off the list), before the shortcuts are made and Firn quits.
+handleWindowsInstallerEvent();
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
+
+// Links from other apps (Firn as the default browser, see
+// src/defaultBrowser.ts): opened as new tabs once the window is there.
+const pendingLinks: string[] = started ? [] : linksFromArguments(process.argv);
+let openLinks: ((urls: string[]) => void) | null = null;
+const receiveLinks = (urls: string[]) => {
+  if (!urls.length) return;
+  if (openLinks) return openLinks(urls);
+  pendingLinks.push(...urls);
+  // macOS keeps Firn running with its window closed: open it again.
+  if (app.isReady() && !BrowserWindow.getAllWindows().length) createWindow();
+};
 
 // Windows: Firn's taskbar button and pins belong with the Start menu and
 // desktop shortcuts the installer makes (the installer's own name for
@@ -1395,11 +1418,24 @@ const createWindow = () => {
     settings.downloadsFolder && fs.existsSync(settings.downloadsFolder)
       ? settings.downloadsFolder
       : app.getPath('downloads');
+  // Whether Firn is the default browser (src/defaultBrowser.ts), looked
+  // up when the window opens and each time it comes back into focus (say,
+  // from Windows' Default apps settings).
+  let defaultBrowser: DefaultBrowserState = 'unavailable';
+  const refreshDefaultBrowser = () =>
+    void defaultBrowserState().then((state) => {
+      if (state === defaultBrowser || win.isDestroyed()) return;
+      defaultBrowser = state;
+      send('settings:state', settingsState());
+    });
+  refreshDefaultBrowser();
+  win.on('focus', refreshDefaultBrowser);
   const settingsState = () => ({
     settings,
     downloadsFolder: downloadsFolder(),
     version: app.getVersion(),
     safeBrowsingAvailable: safeBrowsing.available,
+    defaultBrowser,
   });
   const changeSettings = (changes: unknown) => {
     settings = cleanSettings(changes, settings);
@@ -2599,6 +2635,11 @@ const createWindow = () => {
         answerPermission(answer);
     },
     'site:menu': () => showSiteMenu(),
+    'browser:make-default': () => {
+      askToBeDefault();
+      // macOS answers in its own little window; look again after.
+      setTimeout(refreshDefaultBrowser, 1500);
+    },
     // A finished download opens with its usual app; "show" points to it in
     // the folder (or opens the folder, if the file is gone).
     'downloads:open': (_sender, id) => {
@@ -3037,9 +3078,19 @@ const createWindow = () => {
       ? saved!.window.activeTabId!
       : tabs.recentIds()[0];
     if (activeId) tabs.activate(activeId);
-  } else {
+  } else if (!pendingLinks.length) {
     tabs.create(HOME_URL);
   }
+
+  // Links from other apps (Firn as the default browser): new tabs in this
+  // window, which comes forward.
+  openLinks = (urls) => {
+    for (const url of urls) tabs.create(url);
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  };
+  win.on('closed', () => (openLinks = null));
+  if (pendingLinks.length) openLinks(pendingLinks.splice(0));
 };
 
 // Only one Firn runs at a time. Opening it again brings the existing window
@@ -3047,11 +3098,25 @@ const createWindow = () => {
 const isFirstInstance = app.requestSingleInstanceLock();
 if (!isFirstInstance) app.quit();
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
   const win = BrowserWindow.getAllWindows()[0];
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.focus();
+  // A link clicked in another app (Windows starts Firn again with it).
+  receiveLinks(linksFromArguments(argv));
+});
+
+// macOS hands links and web page files to the running Firn instead (also
+// the one it starts for them).
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (/^https?:\/\//i.test(url)) receiveLinks([url]);
+});
+app.on('open-file', (event, file) => {
+  if (!/\.html?$/i.test(file)) return;
+  event.preventDefault();
+  receiveLinks([pathToFileURL(file).href]);
 });
 
 app.whenReady().then(() => {

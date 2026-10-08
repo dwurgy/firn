@@ -38,9 +38,10 @@ GitHub builds Firn by itself, on its own Windows and Mac computers, every time c
 
 - **To try a change:** open the repository's **Actions** tab, click the latest **Build** run, and scroll to **Artifacts**: "Firn for Windows" holds `Firn Setup.exe`, and "Firn for macOS" holds a `.zip` with `Firn.app` (one app for every Mac, Apple chip or Intel). You need to be signed in to GitHub to download them; they're kept for 30 days.
 - **To share a version:** on GitHub, open **Releases > Draft a new release**, create a tag named `v` plus the version in `package.json` (for example `v0.1.0`), use that version's headline from `CHANGELOG.md` as the title and paste the rest of its section as the description, and click **Publish release**. In about 15 minutes, GitHub attaches the Windows installer and the Mac zip to that release's page: the link to send to friends (anyone can download, no account needed). To publish the next version, raise `version` in `package.json` and add its notes at the top of `CHANGELOG.md` first.
+- **Mac signing:** the Mac build reads six repository secrets: `MAC_CERTIFICATE_P12`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` (see the top of `build.yml`). Without them, a push still builds a Mac app, but macOS won't vouch for it, and a release refuses to build.
 - **The Safe Browsing key:** add it once as a repository secret named `FIRN_SAFE_BROWSING_KEY` (**Settings > Secrets and variables > Actions > New repository secret**), so GitHub's builds warn about scam sites too.
 
-**Opening Firn on a Mac the first time.** Until Firn is notarized by Apple (an Apple Developer account, $99 a year), macOS can't vouch for it: unzip the download, drag **Firn** into **Applications**, and open it. macOS says it "can't be opened" or "can't verify" it: click **Done**, then open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to the note about Firn. After that it opens normally.
+**Opening Firn on a Mac.** GitHub's Mac build signs Firn with Firn's Apple "Developer ID" and has Apple notarize it (check it for malware), so it opens like any app from the web: unzip the download, drag **Firn** into **Applications**, and open it. The first time, macOS asks once whether to open an app downloaded from the internet: click **Open**.
 
 ### Making the installer (to share Firn)
 
@@ -63,7 +64,7 @@ On Windows, an installed Firn keeps itself up to date. About a minute after it o
 - **Publishing an update** is the same as sharing a version (see "Downloads built by GitHub" above): raise `version` in `package.json`, then publish a release tagged `v` plus that version. Drafts and pre-releases are skipped. The release needs all the files GitHub attaches (`RELEASES` and the `.nupkg`, not just `Firn Setup.exe`), so wait until they're there.
 - **From the first release on:** 0.1.0 already has this, so everyone who installs Firn gets later versions by themselves.
 - **What it sends:** the question goes to update.electronjs.org, a free service the Electron project runs for open-source apps. It carries only Firn's version and the kind of computer (for example "win32-x64"), nothing about you or what you browse.
-- **Mac and Linux** don't update themselves yet. On a Mac that needs Apple's paid signature (coming with notarization); Linux packages are updated by the system.
+- **Mac and Linux** don't update themselves yet. Mac updates come next, now that Firn is notarized; Linux packages are updated by the system.
 
 ### Shortcuts (so far)
 

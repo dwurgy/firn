@@ -26,6 +26,19 @@ const canCompileGlassIcon = () => {
   }
 };
 
+// macOS: sign Firn with David's Apple "Developer ID" certificate and have
+// Apple notarize it (check it for malware), so Macs open it like any app
+// from the web. Only GitHub's Mac build does this: it puts the certificate
+// in a keychain of its own (FIRN_MAC_KEYCHAIN) and the App Store Connect
+// key in a file (APPLE_API_KEY_PATH), from the repository's secrets (see
+// .github/workflows/build.yml). Without them, Firn still builds, with a
+// basic ("ad-hoc") signature instead (see hooks.postPackage).
+const macKeychain = process.env.FIRN_MAC_KEYCHAIN;
+const appleApiKey = process.env.APPLE_API_KEY_PATH;
+const appleApiKeyId = process.env.APPLE_API_KEY_ID;
+const appleApiIssuer = process.env.APPLE_API_ISSUER;
+const signForMac = process.platform === 'darwin' && Boolean(macKeychain);
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -39,16 +52,41 @@ const config: ForgeConfig = {
     icon: canCompileGlassIcon()
       ? ['./assets/icon', './brand/icon-composer/Firn.icon']
       : './assets/icon',
+    // The texts macOS shows the first time a website asks for the camera,
+    // the microphone, or the location (Firn asks for each site as well).
+    extendInfo: {
+      NSCameraUsageDescription:
+        'So websites you allow can use your camera, for video calls for example. Firn asks you first for each site.',
+      NSMicrophoneUsageDescription:
+        'So websites you allow can use your microphone, for calls for example. Firn asks you first for each site.',
+      NSLocationUsageDescription:
+        'So websites you allow can see where you are, for maps for example. Firn asks you first for each site.',
+      NSLocationWhenInUseUsageDescription:
+        'So websites you allow can see where you are, for maps for example. Firn asks you first for each site.',
+    },
+    // The signature (with the "hardened runtime" Apple requires) uses
+    // osx-sign's defaults, the same permissions Chrome asks for: camera,
+    // microphone, location, and the few others web pages can use.
+    ...(signForMac && {
+      osxSign: { keychain: macKeychain, continueOnError: false },
+      ...(appleApiKey &&
+        appleApiKeyId &&
+        appleApiIssuer && {
+          osxNotarize: { appleApiKey, appleApiKeyId, appleApiIssuer },
+        }),
+    }),
   },
   rebuildConfig: {},
   hooks: {
-    // macOS: give the finished app a basic ("ad-hoc") signature. Apple
-    // Silicon Macs refuse to open an app whose signature doesn't cover the
-    // whole app ("damaged"). This isn't Apple's paid approval: until Firn is
-    // notarized, people still confirm it once in System Settings > Privacy
-    // & Security > Open Anyway. (Needs macOS: only the Mac build runs it.)
+    // macOS without the Developer ID certificate (a build on your own Mac,
+    // for example): give the finished app a basic ("ad-hoc") signature.
+    // Apple Silicon Macs refuse to open an app whose signature doesn't
+    // cover the whole app ("damaged"). This isn't Apple's approval: such a
+    // copy still needs System Settings > Privacy & Security > Open Anyway
+    // once. (Needs macOS: only the Mac build runs it.)
     postPackage: async (_config, { platform, outputPaths }) => {
       if (platform !== 'darwin' || process.platform !== 'darwin') return;
+      if (signForMac) return;
       for (const folder of outputPaths)
         for (const name of fs.readdirSync(folder))
           if (name.endsWith('.app'))
@@ -116,7 +154,7 @@ const config: ForgeConfig = {
       version: FuseVersion.V1,
       // Don't sign the Apple-silicon half of the Mac app on its own: the Mac
       // build joins it with the Intel half, which must match, and the joined
-      // app is signed as a whole afterwards (see hooks.postPackage).
+      // app is signed as a whole afterwards (osxSign, or hooks.postPackage).
       resetAdHocDarwinSignature: false,
       [FuseV1Options.RunAsNode]: false,
       [FuseV1Options.EnableCookieEncryption]: true,

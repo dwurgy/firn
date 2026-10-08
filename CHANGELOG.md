@@ -1,5 +1,15 @@
 # What's new in Firn
 
+## Firn 0.1.1
+
+**Updates now tell you what's new.**
+
+The first time Firn opens after an update, a short note shows what changed, in plain words. You can read it again anytime.
+
+### New
+
+- **What's new** appears once after each update, and anytime from the Firn menu or the command bar.
+
 ## Firn 0.1.0
 
 **Meet Firn, a calm browser for everyone.**

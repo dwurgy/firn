@@ -113,7 +113,11 @@ const hit = (h) => hits.some((x) => x.startsWith(h));
   );
   fs.writeFileSync(
     '/root/.config/Firn/settings.json',
-    JSON.stringify({ onboarded: true }),
+    JSON.stringify({
+      onboarded: true,
+      // A current install (not just updated, so no What's new).
+      lastVersion: require('../../package.json').version,
+    }),
   );
   const app = await _electron.launch({
     args: [

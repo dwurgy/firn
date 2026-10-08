@@ -17,7 +17,11 @@ const check = (n, ok, x = '') => {
   );
   require('fs').writeFileSync(
     '/root/.config/Firn/settings.json',
-    JSON.stringify({ onboarded: true }),
+    JSON.stringify({
+      onboarded: true,
+      // A current install (not just updated, so no What's new).
+      lastVersion: require('../../package.json').version,
+    }),
   );
   fs.writeFileSync(
     '/root/.config/Firn/permissions.json',
@@ -76,9 +80,9 @@ const check = (n, ok, x = '') => {
     globalThis.__menu.map((i) => (i.type === 'separator' ? '—' : i.label)),
   );
   check(
-    "the sidebar's ⋯ menu: new tab, new space, history, downloads, settings",
+    "the sidebar's ⋯ menu: new tab, new space, history, downloads, settings, what's new",
     labels.join('|') ===
-      'New tab|New space|—|History|Passwords|Downloads|—|Settings',
+      "New tab|New space|—|History|Passwords|Downloads|—|Settings|What's new",
     labels.join(' | '),
   );
   await app.evaluate(() =>

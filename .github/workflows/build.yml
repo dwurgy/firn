@@ -181,6 +181,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The Mac app once more under a name that never changes, so
+          # .../releases/latest/download/Firn.for.Mac.zip is always the
+          # newest (like Firn.Setup.exe). No dash before "Mac": the update
+          # service only reads Mac zips named "-mac", "-darwin" or "-osx"
+          # (Firn-darwin-universal-<version>.zip), so it ignores this copy.
+          mac_zip="$(find dist -name 'Firn-darwin-universal-*.zip' -print -quit)"
+          [ -n "$mac_zip" ] || { echo "::error::No Mac zip to attach."; exit 1; }
+          cp "$mac_zip" dist/Firn.for.Mac.zip
           find dist -type f -print
           find dist -type f -print0 |
             xargs -0 gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber

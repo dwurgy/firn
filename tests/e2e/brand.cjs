@@ -15,7 +15,11 @@ const check = (n, ok, x = '') => {
   execSync('rm -f /root/.config/Firn/session.json');
   fs.writeFileSync(
     '/root/.config/Firn/settings.json',
-    JSON.stringify({ onboarded: true }),
+    JSON.stringify({
+      onboarded: true,
+      // A current install (not just updated, so no What's new).
+      lastVersion: require('../../package.json').version,
+    }),
   );
   const app = await _electron.launch({
     args: ['--no-sandbox', '.'],

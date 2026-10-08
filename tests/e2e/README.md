@@ -39,6 +39,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `bottom`       | The bottom row of the sidebar (the Firn button, spaces)               |
 | `updates`      | Automatic updates stay off on a copy that isn't installed on Windows  |
 | `macmenu`      | The Mac menu bar (shown on Linux for the check): menus and choices    |
+| `basecamp`     | Basecamp: dragging tiles to reorder them                              |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

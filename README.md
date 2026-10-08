@@ -129,7 +129,7 @@ Firn saves your tabs (with their back/forward history and scroll position), the 
 
 ### Basecamp and pinned tabs
 
-**Basecamp** is the grid of favorite sites at the top of the sidebar: the same in every space, up to 12. Right-click any tab and choose **Add to Basecamp**. The site you're on glows softly in its own color.
+**Basecamp** is the grid of favorite sites at the top of the sidebar: the same in every space, up to 12. Right-click any tab and choose **Add to Basecamp**. Drag a tile to move it; the others glide aside to make room. The site you're on glows softly in its own color.
 
 **Pinned tabs** belong to one space and sit as rows under its name. Pin a tab with **Ctrl+D**, by right-clicking it, or by dragging it above the divider line (drag it back below to unpin). Click the space's name to fold its pins away (the pin you're on stays in view).
 

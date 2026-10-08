@@ -951,7 +951,8 @@ button {
   cursor: default;
   transition:
     background var(--motion),
-    box-shadow var(--motion);
+    box-shadow var(--motion),
+    scale var(--motion);
 }
 
 .basecamp-tile:hover {
@@ -981,6 +982,24 @@ button {
     inset 0 0 0 1px rgb(var(--space-rgb, 128 128 128) / 0.75),
     inset 0 0 0 40px rgb(var(--space-rgb, 128 128 128) / 0.24),
     0 1px 4px rgb(var(--space-rgb, 128 128 128) / 0.2);
+}
+
+/* Dragging a tile to reorder Basecamp (see Basecamp.tsx): it lifts a
+   little (it's the active tile, so it keeps its glow), and the others glide
+   out of its way. */
+.basecamp-tile.is-dragged {
+  position: relative;
+  z-index: 1;
+  scale: 1.05;
+}
+
+.basecamp-grid.is-dragging .basecamp-tile:not(.is-dragged),
+.basecamp-tile.is-returning {
+  transition:
+    background var(--motion),
+    box-shadow var(--motion),
+    scale var(--motion),
+    transform var(--motion);
 }
 
 .basecamp-tile:focus-visible {

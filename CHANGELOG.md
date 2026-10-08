@@ -1,5 +1,15 @@
 # What's new in Firn
 
+## Firn 0.1.2
+
+**Safer under the hood.**
+
+Firn now runs on the newest version of its Chrome engine, with the latest security fixes.
+
+### Better
+
+- **Security fixes** from the Chrome engine Firn is built on.
+
 ## Firn 0.1.1
 
 **Updates now tell you what's new.**

@@ -1,7 +1,7 @@
 {
   "name": "firn",
   "productName": "Firn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "A calm, minimalist desktop browser.",
   "keywords": [],
@@ -34,7 +34,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "electron": "44.5.1",
+    "electron": "44.7.0",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.86.0",
     "typescript": "^6.0.3",

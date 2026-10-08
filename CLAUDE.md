@@ -202,6 +202,7 @@ The "guts to say no" list. Don't add these without David asking again.
 
 ## How to work on this project (instructions for Claude)
 
+- **Only work in dwurgy/firn.** The website (dwurgy/firn-site) has its own separate Claude Code session. Never attach, clone, or change another repository; if a task touches the website, tell David so he can take it there.
 - Work in **small steps**: one feature at a time, then stop so David can run the app and look at it.
 - After each step, say in plain words what changed and how to test it.
 - **Design is half the job.** When building UI, follow the design principles and tokens above. If something would look cramped or loud, flag it.

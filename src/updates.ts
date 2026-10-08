@@ -1,16 +1,20 @@
-// Automatic updates, Windows only for now.
+// Automatic updates, on Windows and macOS.
 //
 // How it works: an installed Firn asks update.electronjs.org (a free
 // service run by the Electron project for open-source apps) whether
 // Firn's GitHub releases have a newer version. It sends only Firn's
-// version and the kind of computer (e.g. "win32-x64"), nothing about the
-// person or what they browse. If there is one, Windows' installer tool
-// (Squirrel, the one behind "Firn Setup.exe") downloads it quietly in the
-// background; the next time Firn is opened, it's the new version. No
+// version and the kind of computer (e.g. "win32-x64" or "darwin-arm64"),
+// nothing about the person or what they browse. If there is one, it's
+// downloaded quietly in the background (by Squirrel: the installer tool
+// behind "Firn Setup.exe" on Windows, and macOS's own updater for apps
+// like Firn); the next time Firn is opened, it's the new version. No
 // questions, nothing to click.
 //
-// macOS needs Apple's paid signature for this (coming with notarization),
-// and Linux packages are updated by the system, so both are skipped.
+// On a Mac, the download is the release's Mac zip (one app for Apple-chip
+// and Intel Macs, "Firn-darwin-universal-<version>.zip": the service hands
+// it to both). macOS only accepts it because it's signed with the same
+// Developer ID as the Firn already there. Linux packages are updated by
+// the system, so Linux is skipped.
 
 import { app, autoUpdater } from 'electron';
 import fs from 'node:fs';
@@ -30,17 +34,30 @@ export const updateFeedUrl = (
 ) =>
   `https://update.electronjs.org/${REPOSITORY}/${platform}-${arch}/${version}`;
 
-// Only a copy installed by "Firn Setup.exe" can update itself: it has the
-// installer's Update.exe in the folder above it. (Not a copy run from the
-// source code, and not one unzipped by hand.)
-const isInstalledWindowsCopy = () =>
-  process.platform === 'win32' &&
-  app.isPackaged &&
-  fs.existsSync(path.join(path.dirname(process.execPath), '..', 'Update.exe'));
+// Why this copy can't update itself, or null if it can. On Windows, only a
+// copy installed by "Firn Setup.exe" (it has the installer's Update.exe in
+// the folder above it, not one unzipped by hand); on a Mac, only one in
+// the Applications folder (macOS won't let an app opened straight from
+// Downloads replace itself); never a copy run from the source code.
+const whyNoUpdates = (): string | null => {
+  if (!app.isPackaged) return 'run from the source code';
+  if (process.platform === 'win32')
+    return fs.existsSync(
+      path.join(path.dirname(process.execPath), '..', 'Update.exe'),
+    )
+      ? null
+      : 'not installed by Firn Setup.exe';
+  if (process.platform === 'darwin')
+    return app.isInApplicationsFolder()
+      ? null
+      : 'not in the Applications folder';
+  return 'updated by the system';
+};
 
 export const startUpdates = (log: (message: string) => void) => {
-  if (!isInstalledWindowsCopy()) {
-    log('updates: off (not an installed Windows copy)');
+  const why = whyNoUpdates();
+  if (why) {
+    log(`updates: off (${why})`);
     return;
   }
   const feed = updateFeedUrl(app.getVersion(), process.platform, process.arch);

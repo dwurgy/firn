@@ -1,4 +1,5 @@
-// Automatic updates: only an installed Windows copy asks for updates.
+// Automatic updates: only an installed copy (Windows: by Firn Setup.exe;
+// Mac: in the Applications folder) asks for updates.
 // This copy (Linux, run from the source code) must stay quiet and still
 // open normally. Firn is started directly (not through Playwright) so its
 // log can be read from the very first line.
@@ -29,8 +30,8 @@ const check = (n, ok, x = '') => {
   firn.stdout.on('data', (d) => (out += d));
   await wait(12000);
   check(
-    'a copy that is not installed on Windows does not ask for updates',
-    out.includes('updates: off (not an installed Windows copy)') &&
+    'a copy run from the source code does not ask for updates',
+    out.includes('updates: off (run from the source code)') &&
       !out.includes('updates: asking'),
   );
   check('Firn still opens normally', out.includes('started'));

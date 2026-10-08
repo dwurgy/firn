@@ -59,12 +59,13 @@ What happens when they open it: no wizard and no questions. A small window shows
 
 ### Updates
 
-On Windows, an installed Firn keeps itself up to date. About a minute after it opens, and every 4 hours after that, it asks whether there's a newer version on Firn's GitHub **Releases** page. If there is, it downloads it quietly in the background, and the next time Firn is opened it's the new version. Nothing pops up and there's nothing to click.
+On Windows and Mac, an installed Firn keeps itself up to date (on Windows, installed with `Firn Setup.exe`; on a Mac, in the **Applications** folder). About a minute after it opens, and every 4 hours after that, it asks whether there's a newer version on Firn's GitHub **Releases** page. If there is, it downloads it quietly in the background, and the next time Firn is opened it's the new version. Nothing pops up and there's nothing to click.
 
-- **Publishing an update** is the same as sharing a version (see "Downloads built by GitHub" above): raise `version` in `package.json`, then publish a release tagged `v` plus that version. Drafts and pre-releases are skipped. The release needs all the files GitHub attaches (`RELEASES` and the `.nupkg`, not just `Firn Setup.exe`), so wait until they're there.
+- **Publishing an update** is the same as sharing a version (see "Downloads built by GitHub" above): raise `version` in `package.json`, then publish a release tagged `v` plus that version. Drafts and pre-releases are skipped. The release needs all the files GitHub attaches (`RELEASES` and the `.nupkg`, not just `Firn Setup.exe`, and the Mac zip), so wait until they're there.
 - **From the first release on:** 0.1.0 already has this, so everyone who installs Firn gets later versions by themselves.
-- **What it sends:** the question goes to update.electronjs.org, a free service the Electron project runs for open-source apps. It carries only Firn's version and the kind of computer (for example "win32-x64"), nothing about you or what you browse.
-- **Mac and Linux** don't update themselves yet. Mac updates come next, now that Firn is notarized; Linux packages are updated by the system.
+- **What it sends:** the question goes to update.electronjs.org, a free service the Electron project runs for open-source apps. It carries only Firn's version and the kind of computer (for example "win32-x64" or "darwin-arm64"), nothing about you or what you browse.
+- **On a Mac**, the update is the release's Mac zip (one app for every Mac). macOS only accepts it because it's signed with the same Apple Developer ID as the Firn already installed, so a tampered download can't sneak in.
+- **Linux** packages are updated by the system.
 
 ### Shortcuts (so far)
 

@@ -24,6 +24,7 @@ export interface MenuActions {
   zoom: (direction: 1 | -1 | 0) => void;
   devTools: () => void;
   website: () => void;
+  whatsNew: () => void;
 }
 
 export const macMenuTemplate = (
@@ -96,6 +97,9 @@ export const macMenuTemplate = (
   {
     role: 'help',
     label: 'Help',
-    submenu: [{ label: 'Firn Website', click: a.website }],
+    submenu: [
+      { label: "What's New in Firn", click: a.whatsNew },
+      { label: 'Firn Website', click: a.website },
+    ],
   },
 ];

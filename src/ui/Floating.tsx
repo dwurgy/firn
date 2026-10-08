@@ -37,6 +37,7 @@ import {
   ShieldIcon,
   UpIcon,
 } from './icons';
+import { WhatsNewPanel } from './WhatsNew';
 
 // The layer that floats above the web page: the command bar (new tab), the
 // Ctrl+Tab switcher and Lookout's backdrop and buttons. It's transparent
@@ -91,6 +92,15 @@ export function Floating() {
   }
   if (overlay.mode === 'history') {
     return <HistoryPanel key={overlay.openId} />;
+  }
+  if (overlay.mode === 'whats-new') {
+    return (
+      <WhatsNewPanel
+        key={overlay.openId}
+        version={settings?.version ?? ''}
+        since={overlay.since}
+      />
+    );
   }
   if (overlay.mode === 'find') {
     return <FindBar key={overlay.openId} initialText={overlay.text} />;
@@ -237,6 +247,11 @@ function actionsFor(
       action: 'welcome',
       label: 'Welcome to Firn (setup)',
       words: 'welcome setup start tour onboarding',
+    },
+    {
+      action: 'whats-new',
+      label: "What's new in Firn",
+      words: 'whats new release notes update changes version',
     },
   );
   for (const space of spaces.spaces)

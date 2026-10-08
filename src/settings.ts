@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   addressBar: 'sidebar',
   safeBrowsing: true,
   onboarded: false,
+  lastVersion: '',
 };
 
 export function loadSettings(file: string): Settings {
@@ -53,6 +54,8 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
         : current.safeBrowsing,
     onboarded:
       typeof c.onboarded === 'boolean' ? c.onboarded : current.onboarded,
+    lastVersion:
+      typeof c.lastVersion === 'string' ? c.lastVersion : current.lastVersion,
   };
 }
 

@@ -470,6 +470,8 @@ const createWindow = () => {
     // The top bar may need to be there from the start.
     if (web === topBar.webContents) syncTopBar(false);
     if (web === floating.webContents && welcomePending) openWelcome();
+    else if (web === floating.webContents && whatsNewSince !== null)
+      openWhatsNew(whatsNewSince);
     if (web === win.webContents || !layersToStart.includes(web)) {
       const next = layersToStart[0];
       if (next && !startTimers.has(next)) startUi(next);
@@ -1299,6 +1301,23 @@ const createWindow = () => {
       saveSettings(settingsFile, settings);
     } else welcomePending = true;
   }
+  // What's new: the first start after an update shows the release notes
+  // since the version that ran before (src/ui/WhatsNew.tsx), once. A fresh
+  // install gets the welcome instead; its version is noted right away.
+  const version = app.getVersion();
+  let whatsNewSince: string | null =
+    settings.onboarded && settings.lastVersion !== version
+      ? settings.lastVersion
+      : null;
+  if (settings.lastVersion !== version) {
+    settings = { ...settings, lastVersion: version };
+    saveSettings(settingsFile, settings);
+  }
+  // `since`: '' for just this version's notes (from a menu).
+  const openWhatsNew = (since: string) => {
+    whatsNewSince = null;
+    showOverlay({ mode: 'whats-new', openId: ++commandOpenId, since });
+  };
   const applySettings = () => {
     setSearchEngine(settings.searchEngine);
     nativeTheme.themeSource = settings.theme;
@@ -2221,6 +2240,9 @@ const createWindow = () => {
       case 'welcome':
         openWelcome();
         break;
+      case 'whats-new':
+        openWhatsNew('');
+        break;
     }
   };
 
@@ -2440,6 +2462,7 @@ const createWindow = () => {
           accelerator: 'CmdOrCtrl+,',
           click: () => openSettings(),
         },
+        { label: "What's new", click: () => openWhatsNew('') },
       ]).popup({ window: win }),
     'history:remove': (_sender, url) => {
       if (typeof url !== 'string') return;
@@ -2820,6 +2843,7 @@ const createWindow = () => {
           zoom: (direction) => live(() => tabs.zoom(direction))(),
           devTools: live(() => tabs.toggleDevTools()),
           website: live(() => void tabs.create('https://firnbrowser.com')),
+          whatsNew: live(() => openWhatsNew('')),
         }),
       ),
     );

@@ -91,6 +91,9 @@ export interface Settings {
   safeBrowsing: boolean;
   // The welcome (shown the first time Firn opens) has been seen.
   onboarded: boolean;
+  // The version of Firn that last ran here ('' before Firn kept track), so
+  // the first start after an update can show what's new.
+  lastVersion: string;
 }
 
 // What the settings panel shows: the settings, plus the downloads folder
@@ -156,7 +159,8 @@ export type CommandAction =
   | 'history'
   | 'settings'
   | 'passwords'
-  | 'welcome';
+  | 'welcome'
+  | 'whats-new';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -269,6 +273,9 @@ export type OverlayState =
   // The history panel (Ctrl+H, Cmd+Y on a Mac) and the settings panel (Ctrl+,).
   | { mode: 'history'; openId: number }
   | { mode: 'settings'; openId: number }
+  // What's new: the release notes of every version after `since` (just
+  // updated), or of this version alone (since: '', or opened from a menu).
+  | { mode: 'whats-new'; openId: number; since: string }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
   | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.

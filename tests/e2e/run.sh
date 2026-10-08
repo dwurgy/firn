@@ -12,7 +12,7 @@ export SP="$E2E/out"
 mkdir -p "$SP"
 DATA="$HOME/.config/Firn"
 
-ALL="all settings perm ctxmenu lookout addrtop downloads passwords safebrowsing welcome brand bottom updates macmenu basecamp"
+ALL="all settings perm ctxmenu lookout addrtop downloads passwords safebrowsing welcome brand bottom updates macmenu basecamp whatsnew"
 CHECKS="${*:-$ALL}"
 
 cleanup() {
@@ -48,12 +48,13 @@ sleep 4
 
 for t in $CHECKS; do
   echo "=== $t"
-  # Start each check from a clean slate: no saved tabs, the welcome done
-  # (the welcome check sets up its own).
+  # Start each check from a clean slate: no saved tabs, the welcome done,
+  # and this version already run (so no What's new; the welcome and
+  # whatsnew checks set up their own).
   mkdir -p "$DATA"
   rm -f "$DATA/session.json"
   if [ "$t" != welcome ]; then
-    python3 -c "import json,os,sys;f=sys.argv[1];d=json.load(open(f)) if os.path.exists(f) else {};d['onboarded']=True;json.dump(d,open(f,'w'))" "$DATA/settings.json"
+    python3 -c "import json,os,sys;f=sys.argv[1];d=json.load(open(f)) if os.path.exists(f) else {};d['onboarded']=True;d['lastVersion']=json.load(open(sys.argv[2]))['version'];json.dump(d,open(f,'w'))" "$DATA/settings.json" "$ROOT/package.json"
   fi
   timeout 300 node "$E2E/$t.cjs" 2>&1 | grep -E 'PASS|FAIL' | tail -60
   pkill -f 'electron/dist/electro[n]'

@@ -71,7 +71,7 @@ const check = (n, ok, x = '') => {
       const area = document.querySelector('.page-area').getBoundingClientRect();
       return {
         side: r.left - area.left < area.width / 4 ? 'left' : 'right',
-        title: c.querySelector('.drop-card-title')?.textContent ?? '',
+        title: c.getAttribute('aria-label') ?? '',
       };
     });
   const active = () =>

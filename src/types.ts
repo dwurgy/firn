@@ -264,6 +264,21 @@ export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
 
+// A tab carried under the pointer (see carryTab): where the pointer is
+// (`x`, `y`), where on the tab it holds it (`grabX`, `grabY`), how wide
+// the tab is, and where the tab was when it was picked up (`fromX`,
+// `fromY`: its top left corner), so it can glide from there to the pointer.
+export interface CarryTab {
+  tabId: string;
+  x: number;
+  y: number;
+  grabX: number;
+  grabY: number;
+  width: number;
+  fromX: number;
+  fromY: number;
+}
+
 // What the floating layer above the page is showing.
 export type TipState =
   | { kind: 'measure'; text: string }
@@ -428,6 +443,10 @@ export interface FirnBridge {
   // then drop (true) or not (false: back over the sidebar, or cancelled).
   dragToSplit(id: string, x: number): void;
   endDragToSplit(drop: boolean): void;
+  // A tab pulled out of the sidebar is carried under the pointer, drawn on
+  // the floating layer (so it stays in front of the page) until it's let
+  // go (null). In this layer's coordinates.
+  carryTab(carry: CarryTab | null): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.
@@ -464,6 +483,7 @@ export interface FirnBridge {
   hideTip(): void;
   tipSize(width: number, height: number): void;
   onTipState(listener: (state: TipState) => void): () => void;
+  onCarryState(listener: (carry: CarryTab | null) => void): () => void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
   onTabsState(listener: (state: TabsState) => void): () => void;

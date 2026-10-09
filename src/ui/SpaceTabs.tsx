@@ -13,7 +13,7 @@ import {
   UnloadIcon,
 } from './icons';
 import { useFollowPointer } from './followPointer';
-import { dragOverPage } from './splitDrag';
+import { carry, CARRY_AFTER, dragOverPage } from './splitDrag';
 import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
@@ -45,12 +45,15 @@ interface Drag {
   tabId: string; // the tab to open on a click (a split row's half)
   startX: number;
   startY: number;
-  // The dragged row follows the pointer up and down, and sideways too, so
-  // it can be seen heading out to the page (a split view's row only moves
-  // up and down: it isn't dragged into another split).
-  dx: number;
   dy: number;
   active: boolean;
+  // Pulled sideways out of its place: carried under the pointer on the
+  // floating layer, in front of the page (see CARRY_AFTER). A split
+  // view's row isn't: it isn't dragged into another split.
+  carried: boolean;
+  // Where on the row it was grabbed, and the row's box when it was.
+  grab: { x: number; y: number; width: number };
+  box: { left: number; top: number };
   // Out over the page (to open it in split view), not reordering.
   overPage: boolean;
   items: Item[]; // measured once the drag starts
@@ -185,14 +188,21 @@ export function SpaceTabs({
       window.firn.activateTab(tabId);
       return;
     }
+    const box = e.currentTarget.getBoundingClientRect();
     update({
       id: rowId,
       tabId,
       startX: e.clientX,
       startY: e.clientY,
-      dx: 0,
       dy: 0,
       active: false,
+      carried: false,
+      grab: {
+        x: e.clientX - box.left,
+        y: e.clientY - box.top,
+        width: box.width,
+      },
+      box: { left: box.left, top: box.top },
       overPage: false,
       items: [],
     });
@@ -222,25 +232,31 @@ export function SpaceTabs({
     // Out over the page: the row waits in its place while the page shows
     // where the tab would open. (A split view's row moves as a whole, so
     // it isn't dragged into another split.)
-    const overPage =
-      d.id === d.tabId && dragOverPage(e, d.tabId, listRef.current);
+    const carried = d.id === d.tabId && e.clientX - d.startX > CARRY_AFTER;
+    if (carried)
+      carry(e, d.tabId, d.grab, {
+        left: d.box.left,
+        top: d.box.top + (d.carried ? 0 : d.dy),
+      });
+    else if (d.carried) window.firn.carryTab(null);
+    const overPage = carried && dragOverPage(e, d.tabId, listRef.current);
     if (d.overPage && !overPage) window.firn.endDragToSplit(false);
-    if (overPage) {
-      update({ ...d, dx: 0, dy: 0, active: true, overPage });
+    if (carried) {
+      update({ ...d, dy: 0, active: true, carried, overPage });
       return;
     }
     const dy = Math.max(
       -self.top,
       Math.min(last.top + last.height - self.top - self.height / 2, raw),
     );
-    const dx = d.id === d.tabId ? Math.max(0, e.clientX - d.startX) : 0;
-    update({ ...d, dx, dy, active: true, overPage: false });
+    update({ ...d, dy, active: true, carried, overPage: false });
   };
 
   const finish = (commit: boolean) => {
     const d = dragRef.current;
     update(null);
     if (!d) return;
+    if (d.carried) window.firn.carryTab(null);
     // A click (no drag): open the tab.
     if (!d.active) {
       if (commit) window.firn.activateTab(d.tabId);
@@ -281,8 +297,7 @@ export function SpaceTabs({
       : null;
   const nudge = (key: string) => {
     const y = offsets?.get(key);
-    const x = drag?.active && drag.id === key ? drag.dx : 0;
-    return x || y ? { transform: `translate(${x}px, ${y ?? 0}px)` } : undefined;
+    return y ? { transform: `translateY(${y}px)` } : undefined;
   };
 
   const row = (tab: TabView, kind: 'pinned' | 'everyday', listed = true) => (
@@ -292,6 +307,7 @@ export function SpaceTabs({
       kind={kind}
       active={tab.id === activeTabId}
       dragged={drag?.active === true && drag.id === tab.id}
+      carriedAway={drag?.carried === true && drag.id === tab.id}
       returning={returning === tab.id}
       listed={listed}
       style={listed ? nudge(tab.id) : undefined}
@@ -367,6 +383,7 @@ function TabRow({
   kind,
   active,
   dragged,
+  carriedAway,
   returning,
   listed,
   style,
@@ -376,6 +393,8 @@ function TabRow({
   kind: 'pinned' | 'everyday';
   active: boolean;
   dragged: boolean;
+  // Carried out to the page: its place waits, faded.
+  carriedAway?: boolean;
   returning: boolean;
   // False for the copies hidden inside folded pins (not part of dragging or
   // gliding).
@@ -390,7 +409,8 @@ function TabRow({
         'tab',
         active && 'is-active',
         pinned && !tab.loaded && 'is-unloaded',
-        dragged && 'is-dragged',
+        dragged && !carriedAway && 'is-dragged',
+        carriedAway && 'is-carried-away',
         returning && 'is-returning',
       ]
         .filter(Boolean)

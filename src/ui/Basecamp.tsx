@@ -8,7 +8,7 @@ import {
 import type { TabView } from '../types';
 import { useIconColor } from './iconColor';
 import { useFollowPointer } from './followPointer';
-import { dragOverPage } from './splitDrag';
+import { carry, dragOverPage } from './splitDrag';
 import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // Basecamp: a grid of favorite sites at the top of the sidebar, the same in
@@ -44,6 +44,13 @@ interface Drag {
   dx: number;
   dy: number;
   active: boolean;
+  // Pulled out past Basecamp's right edge: carried under the pointer on
+  // the floating layer, in front of the page (as a tab), until it's let
+  // go; the tile waits in its place, faded.
+  carried: boolean;
+  // The tile's box when it was picked up, and Basecamp's right edge.
+  box: { left: number; top: number };
+  gridRight: number;
   // Measured once the drag starts: each tile's spot within the grid, and
   // the grid's size.
   spots: Map<string, Spot>;
@@ -158,6 +165,7 @@ export function Basecamp({
       window.firn.activateTab(id);
       return;
     }
+    const box = e.currentTarget.getBoundingClientRect();
     update({
       id,
       overPage: false,
@@ -166,6 +174,9 @@ export function Basecamp({
       dx: 0,
       dy: 0,
       active: false,
+      carried: false,
+      box: { left: box.left, top: box.top },
+      gridRight: gridRef.current?.getBoundingClientRect().right ?? Infinity,
       spots: new Map(),
       size: { width: 0, height: 0, tileWidth: 0, tileHeight: 0 },
     });
@@ -193,10 +204,23 @@ export function Basecamp({
     }
     // Out over the page: the tile waits in its place while the page shows
     // where a copy of it would open.
-    const overPage = dragOverPage(e, d.id, gridRef.current);
+    const carried = e.clientX > d.gridRight;
+    if (carried)
+      // Carried as a tab: held near its start, from where the tile is.
+      carry(
+        e,
+        d.id,
+        { x: 24, y: 18, width: grid.clientWidth },
+        {
+          left: d.box.left + (d.carried ? 0 : d.dx),
+          top: d.box.top + (d.carried ? 0 : d.dy),
+        },
+      );
+    else if (d.carried) window.firn.carryTab(null);
+    const overPage = carried && dragOverPage(e, d.id, gridRef.current);
     if (d.overPage && !overPage) window.firn.endDragToSplit(false);
-    if (overPage) {
-      update({ ...d, dx: 0, dy: 0, active: true, overPage });
+    if (carried) {
+      update({ ...d, dx: 0, dy: 0, active: true, carried, overPage });
       return;
     }
     // Keep it within Basecamp.
@@ -209,13 +233,14 @@ export function Basecamp({
       -self.y,
       Math.min(d.size.height - d.size.tileHeight - self.y, rawY),
     );
-    update({ ...d, dx, dy, active: true, overPage: false });
+    update({ ...d, dx, dy, active: true, carried, overPage: false });
   };
 
   const finish = (commit: boolean) => {
     const d = dragRef.current;
     update(null);
     if (!d) return;
+    if (d.carried) window.firn.carryTab(null);
     // A click (no drag): open the tile's site.
     if (!d.active) {
       if (commit) window.firn.activateTab(d.id);
@@ -257,6 +282,7 @@ export function Basecamp({
               tab={tab}
               active={tab.id === activeTabId}
               dragged={drag?.active === true && drag.id === tab.id}
+              carriedAway={drag?.carried === true && drag.id === tab.id}
               returning={returning === tab.id}
               offset={offset}
               onPointerDown={(e) => onPointerDown(e, tab.id)}
@@ -272,6 +298,7 @@ function BasecampTile({
   tab,
   active,
   dragged,
+  carriedAway,
   returning,
   offset,
   ...handlers
@@ -279,6 +306,8 @@ function BasecampTile({
   tab: TabView;
   active: boolean;
   dragged: boolean;
+  // Carried out to the page: it waits in its place, faded.
+  carriedAway: boolean;
   returning: boolean;
   offset?: Spot;
   onPointerDown: (e: ReactPointerEvent) => void;
@@ -292,7 +321,8 @@ function BasecampTile({
         active && 'is-active',
         color && 'is-tinted',
         !tab.loaded && 'is-unloaded',
-        dragged && 'is-dragged',
+        dragged && !carriedAway && 'is-dragged',
+        carriedAway && 'is-carried-away',
         returning && 'is-returning',
       ]
         .filter(Boolean)

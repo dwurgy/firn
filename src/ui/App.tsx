@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SplitGroup, TabView } from '../types';
 import { Snow } from './FirstLight';
 import { Sidebar, useSidebarData } from './Sidebar';
-import { TabIcon, tabTitle } from './TabList';
+import { tabTitle } from './TabList';
 
 const PAGE_INSET = 8; // matches --page-inset in styles.css
 const DEFAULT_WIDTH = 260;
@@ -166,15 +166,12 @@ function DropCard({
     <>
       {/* The page's lifted outline, on the half it moved to. */}
       <div className="split-side" style={side === 'left' ? right : left} />
-      <div className="drop-card" style={side === 'left' ? left : right}>
-        {tab && (
-          <>
-            <span className="drop-card-icon">
-              <TabIcon tab={tab} />
-            </span>
-            <span className="drop-card-title">{tabTitle(tab)}</span>
-          </>
-        )}
+      {/* (The tab itself is carried under the pointer, in front.) */}
+      <div
+        className="drop-card"
+        style={side === 'left' ? left : right}
+        aria-label={tab ? `Let go to open ${tabTitle(tab)} here` : undefined}
+      >
         <span className="drop-card-hint">Let go to open it here</span>
       </div>
     </>

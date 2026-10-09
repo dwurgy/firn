@@ -47,7 +47,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `sound`        | The speaker on tabs playing sound: muting and unmuting               |
 | `player`       | The mini player: shown for sound off screen, pause and play, going there |
 | `splitdrag`    | Dragging a tab (or a Basecamp tile or pin) onto the page opens it in split view (the page glides aside; also from the peeking sidebar); a tab opens on click |
-| `realdrag`     | The same drags with a real system mouse (through the window system), which the other checks can't do |
+| `realdrag`     | The same drags with a real system mouse (through the window system): the carried tab stays under the mouse, in front of the page |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

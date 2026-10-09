@@ -71,7 +71,7 @@ const check = (n, ok, x = '') => {
       const area = document.querySelector('.page-area').getBoundingClientRect();
       return {
         side: r.left - area.left < area.width / 4 ? 'left' : 'right',
-        title: c.querySelector('.drop-card-title')?.textContent ?? '',
+        title: c.getAttribute('aria-label') ?? '',
       };
     });
   const active = () =>
@@ -113,36 +113,80 @@ const check = (n, ok, x = '') => {
   await open('red.html');
   await open('blue.html');
   const red = await center(rowOf('Red'));
-  // Partway: the row follows the mouse sideways, heading for the page.
-  await realDrag(red, { x: red.x + 90, y: red.y + 6 }, 8);
-  const shifted = await ui.evaluate(() => {
-    const r = document.querySelector('.tab.is-dragged');
-    return r ? new DOMMatrix(getComputedStyle(r).transform).m41 : null;
-  });
+  // The carried tab: drawn by the floating layer (in front of the page),
+  // with the point it was grabbed at under the pointer.
+  const carried = () =>
+    fl.evaluate(() => {
+      const c = document.querySelector('.carried-tab:not(.is-let-go)');
+      if (!c) return null;
+      const r = c.getBoundingClientRect();
+      return {
+        left: Math.round(r.left),
+        top: Math.round(r.top),
+        title: c.textContent,
+      };
+    });
+  const floatingShown = () =>
+    app.evaluate(
+      ({ BrowserWindow }) =>
+        !!BrowserWindow.getAllWindows()[0].contentView.children.find(
+          (v) =>
+            v.webContents?.getURL().includes('view=floating') && v.getVisible(),
+        ),
+    );
+  const redBox = await rowOf('Red').boundingBox();
+  const grab = { x: red.x - redBox.x, y: red.y - redBox.y };
+  // Partway, still over the sidebar: pulled sideways, it's carried.
+  const mid = { x: red.x + 90, y: red.y + 6 };
+  await realDrag(red, mid, 8);
+  let held = await carried();
   check(
-    'real mouse: the dragged row follows the mouse sideways',
-    shifted > 60,
-    String(shifted),
+    'real mouse: pulled sideways, the tab is carried under the mouse',
+    held &&
+      /Red/.test(held.title) &&
+      Math.abs(held.left - (mid.x - grab.x)) <= 2 &&
+      Math.abs(held.top - (mid.y - grab.y)) <= 2,
+    JSON.stringify({ held, expect: [mid.x - grab.x, mid.y - grab.y] }),
+  );
+  check(
+    '...and its place in the sidebar waits, faded',
+    await ui.evaluate(() => !!document.querySelector('.tab.is-carried-away')),
   );
   execSync(
-    `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/realdrag-row.png`,
+    `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/realdrag-carried.png`,
   );
   for (let i = 1; i <= 12; i++) {
     xm(
       'move',
-      Math.round(o.x + red.x + 90 + ((leftHalf - red.x - 90) * i) / 12),
-      Math.round(o.y + red.y + 6 + ((area.middle - red.y - 6) * i) / 12),
+      Math.round(o.x + mid.x + ((leftHalf - mid.x) * i) / 12),
+      Math.round(o.y + mid.y + ((area.middle - mid.y) * i) / 12),
     );
     await wait(25);
   }
   await wait(600);
+  held = await carried();
+  check(
+    'real mouse: over the page, it stays under the mouse, in front',
+    held &&
+      Math.abs(held.left - (leftHalf - grab.x)) <= 2 &&
+      Math.abs(held.top - (area.middle - grab.y)) <= 2 &&
+      (await floatingShown()),
+    JSON.stringify(held),
+  );
   check(
     'real mouse: tab row over the page shows the card',
     !!(await card()),
     JSON.stringify(await card()) + ' ' + JSON.stringify(await shownPages()),
   );
+  execSync(
+    `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/realdrag-over.png`,
+  );
   xm('up');
   await wait(1000);
+  check(
+    '...let go, it fades and the floating layer goes',
+    !(await carried()) && !(await floatingShown()),
+  );
   check(
     'real mouse: dropped, side by side',
     (await names()) === 'red|blue',

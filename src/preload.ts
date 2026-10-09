@@ -69,6 +69,7 @@ const bridge: FirnBridge = {
   togglePlaying: (id) => ipcRenderer.send('tabs:toggle-playing', id),
   dragToSplit: (id, x) => ipcRenderer.send('tabs:drag-to-split', id, x),
   endDragToSplit: (drop) => ipcRenderer.send('tabs:end-drag-to-split', drop),
+  carryTab: (carry) => ipcRenderer.send('tabs:carry', carry),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex, pinned) =>
     ipcRenderer.send('tabs:move', id, toIndex, pinned),
@@ -86,6 +87,7 @@ const bridge: FirnBridge = {
   hideTip: () => ipcRenderer.send('tip:hide'),
   tipSize: (width, height) => ipcRenderer.send('tip:size', width, height),
   onTipState: (listener) => listen('tip:state', listener),
+  onCarryState: (listener) => listen('carry:state', listener),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => listen('nav:state', listener),
   onTabsState: (listener) => listen('tabs:state', listener),

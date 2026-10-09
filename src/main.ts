@@ -51,6 +51,7 @@ import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
 import { macMenuTemplate } from './menu';
 import type {
+  CarryTab,
   CommandAction,
   FrameState,
   NavCommand,
@@ -584,6 +585,12 @@ const createWindow = () => {
     for (const web of uiContents)
       if (!web.isDestroyed()) web.send(channel, ...args);
   };
+
+  // A tab pulled out of the sidebar, carried under the pointer: the
+  // floating layer draws it across the whole window, in front of the page
+  // (the sidebar is drawn behind the page, so it can't).
+  let carried: CarryTab | null = null;
+  let carryHideTimer: ReturnType<typeof setTimeout> | undefined;
 
   // The top bar's hover labels. The bar is too short to hold them, so the
   // floating layer draws them: shown as just the label's own small box
@@ -2554,6 +2561,61 @@ const createWindow = () => {
         sendSidebar();
       }
     },
+    'tabs:carry': (sender, carry) => {
+      if (sender !== win.webContents && sender !== peek.webContents) return;
+      if (carry === null) {
+        if (!carried) return;
+        carried = null;
+        // It fades as it's let go, then the layer goes (unless something
+        // else has opened on it meanwhile).
+        floating.webContents.send('carry:state', null);
+        clearTimeout(carryHideTimer);
+        carryHideTimer = setTimeout(() => {
+          if (!carried && overlay.mode === 'hidden' && !barTip)
+            hideLayer(floating);
+        }, 180);
+        return;
+      }
+      const c = carry as Partial<Record<keyof CarryTab, unknown>>;
+      const numbers = [
+        c.x,
+        c.y,
+        c.grabX,
+        c.grabY,
+        c.width,
+        c.fromX,
+        c.fromY,
+      ] as const;
+      if (
+        typeof c.tabId !== 'string' ||
+        !numbers.every((n) => typeof n === 'number' && Number.isFinite(n))
+      )
+        return;
+      // A panel is open on the floating layer: the tab isn't carried.
+      if (overlay.mode !== 'hidden' || !readyUi.has(floating.webContents))
+        return;
+      const origin =
+        sender === peek.webContents ? boundsFor(peek) : { x: 0, y: 0 };
+      const first = !carried;
+      const at = carry as CarryTab;
+      carried = {
+        ...at,
+        x: at.x + origin.x,
+        y: at.y + origin.y,
+        fromX: at.fromX + origin.x,
+        fromY: at.fromY + origin.y,
+      };
+      if (first) {
+        clearTimeout(carryHideTimer);
+        // The top bar's hover label makes way.
+        if (barTip) {
+          barTip = null;
+          floating.webContents.send('tip:state', { kind: 'hide' });
+        }
+        showLayer(floating);
+      }
+      floating.webContents.send('carry:state', carried);
+    },
     'tabs:end-drag-to-split': (_sender, drop) => {
       if (drop === true) tabs.dropToSplit();
       else tabs.previewDrop(null);
@@ -2805,6 +2867,7 @@ const createWindow = () => {
       if (!topBar || sender !== topBar.webContents) return;
       if (overlay.mode !== 'hidden' || !readyUi.has(floating.webContents))
         return;
+      if (carried) return;
       const a = anchor as { left?: unknown; right?: unknown; bottom?: unknown };
       if (
         typeof text !== 'string' ||
@@ -2845,7 +2908,7 @@ const createWindow = () => {
       if (!topBar || sender !== topBar.webContents || !barTip) return;
       barTip = null;
       floating.webContents.send('tip:state', { kind: 'hide' });
-      if (overlay.mode === 'hidden') hideLayer(floating);
+      if (overlay.mode === 'hidden' && !carried) hideLayer(floating);
     },
     'peek:typing': (sender, typing) => {
       if (sender === peek.webContents) peekTyping = typing === true;

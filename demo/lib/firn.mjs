@@ -253,6 +253,11 @@ export async function launchFirn({ glass }) {
       );
     }
     last = await progress().catch(() => last);
+    // (Every 15 seconds, so a slow start doesn't look frozen.)
+    if (i && i % 150 === 0)
+      console.log(
+        `[demo]   still opening (${i / 10}s; window ${last.window ? 'yes' : 'no'}, sidebar ${last.sidebar ? 'yes' : 'no'}, panels ${last.panels ? 'yes' : 'no'})…`,
+      );
     if (last.window && last.sidebar && last.panels) return { app };
     await wait(100);
   }

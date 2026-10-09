@@ -237,6 +237,28 @@ function prepareProfile(seed) {
 let scale;
 let toldSize = false;
 
+// A step of a clip, given `seconds` to finish; if it doesn't, the run
+// stops and says which step it was.
+async function within(step, seconds, promise) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `Stuck while ${step} (over ${seconds}s). Look for a macOS prompt behind the windows (Cmd+Tab); otherwise send Claude what Terminal shows.`,
+          ),
+        ),
+      seconds * 1000,
+    );
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function record(clip) {
   log(`Recording ${clip.name}…`);
   prepareProfile(clip.seed);
@@ -245,15 +267,19 @@ async function record(clip) {
   try {
     log('  Firn is open; getting ready…');
     await wait(1000);
-    await bringToFront(app);
-    const info = await windowInfo(app);
+    await within('bringing Firn to the front', 15, bringToFront(app));
+    const info = await within('measuring Firn’s window', 15, windowInfo(app));
     if (info.workArea.width < 1440 || info.workArea.height < 900)
       throw new Error(
         `The main screen is too small for a 1440×900 window (it has ${info.workArea.width}×${info.workArea.height} free). Use a larger display, or a "More Space" setting in System Settings > Displays.`,
       );
     // How sharp the recording is (measured once per run).
     if (scale === undefined) log('  checking the screen…');
-    scale ??= await captureScale(info.display, info.scale);
+    scale ??= await within(
+      'checking the screen',
+      45,
+      captureScale(info.display, info.scale),
+    );
     if (!toldSize) {
       toldSize = true;
       const size = (n) => Math.round(n * scale) - (Math.round(n * scale) % 2);
@@ -262,7 +288,11 @@ async function record(clip) {
       );
     }
     log('  adding the demo cursor…');
-    const cursor = await openCursor(app, info.bounds);
+    const cursor = await within(
+      'adding the demo cursor',
+      20,
+      openCursor(app, info.bounds),
+    );
     let stillNumber = 0;
     // Stills are taken in the background, so the clip flows on.
     const stills = [];
@@ -285,11 +315,16 @@ async function record(clip) {
         );
       },
     });
-    await clip.setup?.(d);
-    await d.settle();
-    await bringToFront(app);
+    log('  setting up the clip…');
+    await within('setting up the clip', 60, clip.setup?.(d));
+    await within('waiting for pages to load', 60, d.settle());
+    await within('bringing Firn to the front', 15, bringToFront(app));
     // (And the cursor's window back above it.)
-    await app.evaluate(() => globalThis.__demoCursor.moveTop());
+    await within(
+      'raising the demo cursor',
+      15,
+      app.evaluate(() => globalThis.__demoCursor.moveTop()),
+    );
     await waitForPointerOff(app, info.bounds);
 
     if (clip.video === false) {
@@ -300,23 +335,28 @@ async function record(clip) {
     const raw = path.join(OUT, '.raw', `${clip.name}.mkv`);
     fs.mkdirSync(path.dirname(raw), { recursive: true });
     log('  recording…');
-    const recording = await startRecording(
-      {
-        ...info.bounds,
-        x: info.bounds.x - info.display.x,
-        y: info.bounds.y - info.display.y,
-      },
-      scale,
-      raw,
+    const recording = await within(
+      'starting the recording',
+      45,
+      startRecording(
+        {
+          ...info.bounds,
+          x: info.bounds.x - info.display.x,
+          y: info.bounds.y - info.display.y,
+        },
+        scale,
+        raw,
+      ),
     );
     await wait(400);
     const from = Date.now();
     await wait(PACE.lead);
-    await clip.run(d);
+    await within('playing the clip', 90, clip.run(d));
     await wait(PACE.lead);
     const to = Date.now();
     await wait(300);
-    const saved = await recording.stop();
+    log('  saving…');
+    const saved = await within('stopping the recording', 60, recording.stop());
     await Promise.all(stills);
     const file = path.join(OUT, 'clips', `${clip.name}.mp4`);
     await finishClip(saved, from, to, file);

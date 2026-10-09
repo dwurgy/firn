@@ -45,6 +45,10 @@ interface Drag {
   tabId: string; // the tab to open on a click (a split row's half)
   startX: number;
   startY: number;
+  // The dragged row follows the pointer up and down, and sideways too, so
+  // it can be seen heading out to the page (a split view's row only moves
+  // up and down: it isn't dragged into another split).
+  dx: number;
   dy: number;
   active: boolean;
   // Out over the page (to open it in split view), not reordering.
@@ -186,6 +190,7 @@ export function SpaceTabs({
       tabId,
       startX: e.clientX,
       startY: e.clientY,
+      dx: 0,
       dy: 0,
       active: false,
       overPage: false,
@@ -221,14 +226,15 @@ export function SpaceTabs({
       d.id === d.tabId && dragOverPage(e, d.tabId, listRef.current);
     if (d.overPage && !overPage) window.firn.endDragToSplit(false);
     if (overPage) {
-      update({ ...d, dy: 0, active: true, overPage });
+      update({ ...d, dx: 0, dy: 0, active: true, overPage });
       return;
     }
     const dy = Math.max(
       -self.top,
       Math.min(last.top + last.height - self.top - self.height / 2, raw),
     );
-    update({ ...d, dy, active: true, overPage: false });
+    const dx = d.id === d.tabId ? Math.max(0, e.clientX - d.startX) : 0;
+    update({ ...d, dx, dy, active: true, overPage: false });
   };
 
   const finish = (commit: boolean) => {
@@ -275,7 +281,8 @@ export function SpaceTabs({
       : null;
   const nudge = (key: string) => {
     const y = offsets?.get(key);
-    return y ? { transform: `translateY(${y}px)` } : undefined;
+    const x = drag?.active && drag.id === key ? drag.dx : 0;
+    return x || y ? { transform: `translate(${x}px, ${y ?? 0}px)` } : undefined;
   };
 
   const row = (tab: TabView, kind: 'pinned' | 'everyday', listed = true) => (

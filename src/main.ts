@@ -603,6 +603,11 @@ const createWindow = () => {
     dragging: boolean;
   } | null = null;
   let splitHandleHideTimer: ReturnType<typeof setTimeout> | undefined;
+  // It comes out only once the mouse rests near there a moment (sites
+  // often keep a logo, a search box, or a menu up there, and a mouse just
+  // passing on its way to them shouldn't bring it out).
+  let splitHandleWait: { tabId: string; since: number } | null = null;
+  const HANDLE_DELAY_MS = 350;
   const HANDLE_WIDTH = 76;
   const HANDLE_HEIGHT = 28;
   const HANDLE_ROOM = 20; // for its soft shadow
@@ -2010,6 +2015,7 @@ const createWindow = () => {
         y <= r.y + HANDLE_ZONE_DOWN
       );
     });
+    if (!near) splitHandleWait = null;
     if (!near) {
       // A moment's grace, so it doesn't flicker at the zone's edge.
       if (splitHandle && !splitHandleHideTimer)
@@ -2018,6 +2024,11 @@ const createWindow = () => {
     }
     clearTimeout(splitHandleHideTimer);
     splitHandleHideTimer = undefined;
+    if (!splitHandle) {
+      if (splitHandleWait?.tabId !== near)
+        splitHandleWait = { tabId: near, since: Date.now() };
+      if (Date.now() - splitHandleWait.since < HANDLE_DELAY_MS) return;
+    }
     const r = split.rects[near];
     const at = {
       x: Math.round(r.x + r.width / 2),

@@ -150,8 +150,11 @@ const check = (n, ok, x = '') => {
   xm('move', o.x + leftMiddle, o.y + top + 300);
   await wait(500);
   check('away from the top, no handle', !(await handle()));
-  // Near the top middle of the left side: its handle.
+  // Passing through near the top middle: not yet (it waits a moment).
   xm('move', o.x + leftMiddle + 40, o.y + top + 20);
+  await wait(120);
+  check('just passing by the top middle, no handle yet', !(await handle()));
+  // Resting there: its handle.
   await wait(500);
   let box = await floatingBox();
   check(

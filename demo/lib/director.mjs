@@ -130,14 +130,21 @@ export async function installDriver(app) {
         const layer = layerFor(target);
         if (!layer) return null;
         const code = `(() => {
+          // Only things that are shown (and, with inView, on screen).
+          const shown = (el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 &&
+              (!${!!target.inView} || (r.top >= 0 && r.bottom <= innerHeight &&
+                r.left >= 0 && r.right <= innerWidth));
+          };
           const all = [...document.querySelectorAll(${JSON.stringify(target.selector)})]
             .filter((el) => ${JSON.stringify(target.text ?? '')} === '' ||
-              el.textContent.includes(${JSON.stringify(target.text ?? '')}));
+              el.textContent.includes(${JSON.stringify(target.text ?? '')}))
+            .filter(shown);
           const el = all[${target.nth ?? 0}];
           if (!el) return null;
           const r = el.getBoundingClientRect();
-          return r.width > 0 && r.height > 0
-            ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
         })()`;
         const box = await run(layer.id, code);
         if (!box) return null;
@@ -184,8 +191,17 @@ export function createDirector({ app, cursor, random, takeStill }) {
     for (;;) {
       const spot = await drive('spot', target, share);
       if (spot) return spot;
-      if (Date.now() > deadline)
-        throw new Error(`Couldn’t find ${target.selector} (${target.layer}).`);
+      if (Date.now() > deadline) {
+        // Which page was looked in, for working out why.
+        const pages = await drive('layers').catch(() => []);
+        const where = pages
+          .filter((l) => l.shown)
+          .map((l) => l.url)
+          .join(', ');
+        throw new Error(
+          `Couldn’t find ${target.selector} (${target.layer}; showing: ${where || 'nothing'}).`,
+        );
+      }
       await wait(150);
     }
   };

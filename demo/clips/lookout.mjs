@@ -9,12 +9,12 @@ export default {
     await d.placeCursor(900, 700);
   },
   async run(d) {
-    // The first ordinary article link.
-    const link = web(
-      // (Wikipedia wraps paragraphs in sections, so any paragraph.)
-      '#mw-content-text p a[href^="/wiki/"]:not([href*=":"])',
-      { url: '/wiki/Firn' },
-    );
+    // The first ordinary article link that's on screen. (Wikipedia wraps
+    // paragraphs in sections, and some are hidden, so any shown one.)
+    const link = web('#mw-content-text p a[href^="/wiki/"]:not([href*=":"])', {
+      url: '/wiki/Firn',
+      inView: true,
+    });
     await d.click(link, { shift: true });
     // The preview: the web page on screen that isn't the article.
     const preview = web('body', { notUrl: '/wiki/Firn' });

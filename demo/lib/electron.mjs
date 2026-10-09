@@ -104,18 +104,22 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
   await send('Runtime.enable', {});
   const contextId = await context;
 
-  // The inspector answers as soon as Electron starts, a moment before
-  // Electron has set itself up; until then, require('electron') gives the
-  // npm package (a file path), not Electron's API. Wait for the real one.
+  // Electron's API, through Firn's own main program. (Not the
+  // inspector's own require('electron'): asked before Electron has set
+  // itself up, that gives the npm package, a file path, and Node then
+  // remembers that answer for it for good.) Wait until it's there.
+  const ELECTRON = `(process.mainModule && process.mainModule.require('electron'))`;
   for (let i = 0; ; i++) {
     const { result } = await send('Runtime.evaluate', {
-      expression: `(() => { const e = require('electron'); return typeof e === 'object' && !!e && !!e.app && !!e.BrowserWindow; })()`,
+      expression: `(() => { const e = ${ELECTRON}; return typeof e === 'object' && !!e && !!e.app && !!e.BrowserWindow; })()`,
       contextId,
-      includeCommandLineAPI: true,
       returnByValue: true,
     }).catch(() => ({ result: {} }));
     if (result?.value === true) break;
-    if (i > 300) throw new Error('Electron didn’t finish starting.');
+    if (ended || i > 600)
+      throw new Error(
+        `Electron didn’t finish starting.\n${output.slice(-1500)}`,
+      );
     await new Promise((r) => setTimeout(r, 100));
   }
 
@@ -126,10 +130,8 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
     ended: () => ended || child.exitCode !== null,
     async evaluate(fn, arg) {
       const { result, exceptionDetails } = await send('Runtime.evaluate', {
-        expression: `(${fn.toString()})(require('electron'), ${JSON.stringify(arg ?? null)})`,
+        expression: `(${fn.toString()})(${ELECTRON}, ${JSON.stringify(arg ?? null)})`,
         contextId,
-        // (Makes `require` available, as in Playwright.)
-        includeCommandLineAPI: true,
         awaitPromise: true,
         returnByValue: true,
       });

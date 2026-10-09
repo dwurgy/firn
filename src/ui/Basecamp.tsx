@@ -7,6 +7,8 @@ import {
 } from 'react';
 import type { TabView } from '../types';
 import { useIconColor } from './iconColor';
+import { useFollowPointer } from './followPointer';
+import { carry, dragOverPage } from './splitDrag';
 import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // Basecamp: a grid of favorite sites at the top of the sidebar, the same in
@@ -20,7 +22,8 @@ import { TabIcon, TabSound, tabTitle } from './TabList';
 //
 // Drag a tile to reorder Basecamp, like the sidebar's tabs: it lifts and
 // follows the pointer, the others glide aside to make room, and it settles
-// into its new place. (Within Basecamp only.)
+// into its new place. Dragged out onto the page instead, a copy of it
+// opens there in split view (src/ui/splitDrag.ts); the tile stays put.
 
 // How far the pointer must move before a press becomes a drag (so ordinary
 // clicks never turn into accidental drags).
@@ -34,11 +37,20 @@ interface Spot {
 
 interface Drag {
   id: string;
+  // Out over the page (to open it in split view), not reordering.
+  overPage: boolean;
   startX: number;
   startY: number;
   dx: number;
   dy: number;
   active: boolean;
+  // Pulled out past Basecamp's right edge: carried under the pointer on
+  // the floating layer, in front of the page (as a tab), until it's let
+  // go; the tile waits in its place, faded.
+  carried: boolean;
+  // The tile's box when it was picked up, and Basecamp's right edge.
+  box: { left: number; top: number };
+  gridRight: number;
   // Measured once the drag starts: each tile's spot within the grid, and
   // the grid's size.
   spots: Map<string, Spot>;
@@ -145,28 +157,33 @@ export function Basecamp({
 
   const onPointerDown = (e: ReactPointerEvent, id: string) => {
     if (e.button !== 0) return;
-    window.firn.activateTab(id);
-    // (A click without a real pointer behind it can't be captured; it still
-    // switches tabs, it just can't start a drag.)
+    // (A click without a real pointer behind it can't be captured; it
+    // switches tabs right away, it just can't start a drag.)
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
+      window.firn.activateTab(id);
       return;
     }
-    if (tabs.length < 2) return;
+    const box = e.currentTarget.getBoundingClientRect();
     update({
       id,
+      overPage: false,
       startX: e.clientX,
       startY: e.clientY,
       dx: 0,
       dy: 0,
       active: false,
+      carried: false,
+      box: { left: box.left, top: box.top },
+      gridRight: gridRef.current?.getBoundingClientRect().right ?? Infinity,
       spots: new Map(),
       size: { width: 0, height: 0, tileWidth: 0, tileHeight: 0 },
     });
+    followPointer();
   };
 
-  const onPointerMove = (e: ReactPointerEvent) => {
+  const onPointerMove = (e: { clientX: number; clientY: number }) => {
     const d = dragRef.current;
     const grid = gridRef.current;
     if (!d || !grid) return;
@@ -185,6 +202,27 @@ export function Basecamp({
         tileHeight: tile.offsetHeight,
       };
     }
+    // Out over the page: the tile waits in its place while the page shows
+    // where a copy of it would open.
+    const carried = e.clientX > d.gridRight;
+    if (carried)
+      // Carried as a tab: held near its start, from where the tile is.
+      carry(
+        e,
+        d.id,
+        { x: 24, y: 18, width: grid.clientWidth },
+        {
+          left: d.box.left + (d.carried ? 0 : d.dx),
+          top: d.box.top + (d.carried ? 0 : d.dy),
+        },
+      );
+    else if (d.carried) window.firn.carryTab(null);
+    const overPage = carried && dragOverPage(e, d.id, gridRef.current);
+    if (d.overPage && !overPage) window.firn.endDragToSplit(false);
+    if (carried) {
+      update({ ...d, dx: 0, dy: 0, active: true, carried, overPage });
+      return;
+    }
     // Keep it within Basecamp.
     const self = d.spots.get(d.id)!;
     const dx = Math.max(
@@ -195,14 +233,21 @@ export function Basecamp({
       -self.y,
       Math.min(d.size.height - d.size.tileHeight - self.y, rawY),
     );
-    update({ ...d, dx, dy, active: true });
+    update({ ...d, dx, dy, active: true, carried, overPage: false });
   };
 
   const finish = (commit: boolean) => {
     const d = dragRef.current;
     update(null);
-    if (!d?.active) return;
-    const to = commit ? dropIndex(d) : ids.indexOf(d.id);
+    if (!d) return;
+    if (d.carried) window.firn.carryTab(null);
+    // A click (no drag): open the tile's site.
+    if (!d.active) {
+      if (commit) window.firn.activateTab(d.id);
+      return;
+    }
+    if (d.overPage) window.firn.endDragToSplit(commit);
+    const to = commit && !d.overPage ? dropIndex(d) : ids.indexOf(d.id);
     if (to === ids.indexOf(d.id)) {
       // Glide back to where it was.
       setReturning(d.id);
@@ -214,6 +259,8 @@ export function Basecamp({
     // In case the move doesn't happen, don't leave tiles out of place.
     setTimeout(() => setPending(null), 1000);
   };
+
+  const followPointer = useFollowPointer(onPointerMove, finish);
 
   if (!tabs.length) return null;
   const offsets = drag?.active
@@ -235,12 +282,10 @@ export function Basecamp({
               tab={tab}
               active={tab.id === activeTabId}
               dragged={drag?.active === true && drag.id === tab.id}
+              carriedAway={drag?.carried === true && drag.id === tab.id}
               returning={returning === tab.id}
               offset={offset}
               onPointerDown={(e) => onPointerDown(e, tab.id)}
-              onPointerMove={onPointerMove}
-              onPointerUp={() => finish(true)}
-              onPointerCancel={() => finish(false)}
             />
           );
         })}
@@ -253,6 +298,7 @@ function BasecampTile({
   tab,
   active,
   dragged,
+  carriedAway,
   returning,
   offset,
   ...handlers
@@ -260,12 +306,11 @@ function BasecampTile({
   tab: TabView;
   active: boolean;
   dragged: boolean;
+  // Carried out to the page: it waits in its place, faded.
+  carriedAway: boolean;
   returning: boolean;
   offset?: Spot;
   onPointerDown: (e: ReactPointerEvent) => void;
-  onPointerMove: (e: ReactPointerEvent) => void;
-  onPointerUp: () => void;
-  onPointerCancel: () => void;
 }) {
   // The active tile is tinted with its icon's own color.
   const color = useIconColor(tab.favicon);
@@ -276,7 +321,8 @@ function BasecampTile({
         active && 'is-active',
         color && 'is-tinted',
         !tab.loaded && 'is-unloaded',
-        dragged && 'is-dragged',
+        dragged && !carriedAway && 'is-dragged',
+        carriedAway && 'is-carried-away',
         returning && 'is-returning',
       ]
         .filter(Boolean)

@@ -201,6 +201,9 @@ export interface TabsState {
   // The mini player at the bottom of the sidebar, if a tab that isn't on
   // screen is playing sound (in any space).
   player: PlayerState | null;
+  // A tab dragged from the sidebar over the page: the side it would open
+  // on in split view (the page has made room on the other side).
+  dropPreview: { tabId: string; side: 'left' | 'right' } | null;
 }
 
 // The mini player: the tab it's for, and whether it's playing (false:
@@ -236,13 +239,16 @@ export interface NavState {
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
 // page currently starts (it glides while collapsing or expanding).
 // `docking`: the peeking sidebar was just kept open, and is settling into
-// the docked sidebar's place (instead of sliding away).
+// the docked sidebar's place (instead of sliding away). `aside`: a tab
+// dragged out of the peeking sidebar is over the page, so the sidebar has
+// stepped out of the way (it's still there, to finish the drag).
 export interface SidebarState {
   width: number;
   collapsed: boolean;
   pageLeft: number;
   peeking: boolean;
   docking: boolean;
+  aside: boolean;
 }
 
 // Whether the window shows frosted glass, and whether it's in focus (glass
@@ -257,6 +263,28 @@ export interface FrameState {
 export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
+
+// A tab carried under the pointer (see carryTab): where the pointer is
+// (`x`, `y`), where on the tab it holds it (`grabX`, `grabY`), how wide
+// the tab is, and where the tab was when it was picked up (`fromX`,
+// `fromY`: its top left corner), so it can glide from there to the pointer.
+export interface CarryTab {
+  tabId: string;
+  x: number;
+  y: number;
+  grabX: number;
+  grabY: number;
+  width: number;
+  fromX: number;
+  fromY: number;
+}
+
+// The handle at the top of one side of a split view (on the floating
+// layer): shown for `tabId`'s side, being dragged, or gone.
+export type SplitHandleState =
+  | { kind: 'show'; tabId: string }
+  | { kind: 'drag' }
+  | { kind: 'hide' };
 
 // What the floating layer above the page is showing.
 export type TipState =
@@ -405,6 +433,9 @@ export interface FirnBridge {
   toggleSidebar(): void;
   // The peeking sidebar has a text field focused (so it stays open).
   setPeekTyping(typing: boolean): void;
+  // The mouse button is held down in the peeking sidebar (a drag may be
+  // starting, so it stays open).
+  setPeekHolding(holding: boolean): void;
   // macOS: where this layer's sidebar top row is drawn (for the window's
   // traffic lights, which sit in it).
   lightsAt(x: number, y: number): void;
@@ -414,6 +445,21 @@ export interface FirnBridge {
   toggleMute(id: string): void;
   // The mini player's pause / play button.
   togglePlaying(id: string): void;
+  // Dragging a tab from the sidebar onto the page, for split view: where
+  // the pointer is across (`x`, in this layer), while it's over the page;
+  // then drop (true) or not (false: back over the sidebar, or cancelled).
+  dragToSplit(id: string, x: number): void;
+  endDragToSplit(drop: boolean): void;
+  // A tab pulled out of the sidebar is carried under the pointer, drawn on
+  // the floating layer (so it stays in front of the page) until it's let
+  // go (null). In this layer's coordinates.
+  carryTab(carry: CarryTab | null): void;
+  // A split view side's handle (on the floating layer): dragged (where the
+  // pointer is, on the screen), let go, or its × (take `tabId` out of the
+  // split view).
+  dragSplitHandle(screenX: number, screenY: number): void;
+  dropSplitHandle(): void;
+  takeOutOfSplit(tabId: string): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.
@@ -450,6 +496,8 @@ export interface FirnBridge {
   hideTip(): void;
   tipSize(width: number, height: number): void;
   onTipState(listener: (state: TipState) => void): () => void;
+  onCarryState(listener: (carry: CarryTab | null) => void): () => void;
+  onSplitHandleState(listener: (state: SplitHandleState) => void): () => void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
   onTabsState(listener: (state: TabsState) => void): () => void;

@@ -1184,6 +1184,149 @@ button {
     box-shadow var(--motion);
 }
 
+/* A split view side's handle (src/ui/Floating.tsx): a soft pill at the
+   top middle of the side, frosted in the space's color like the sidebar.
+   It slides down a little as it appears, and lifts a touch while dragged.
+   The floating layer is exactly its size plus room for its shadow
+   (HANDLE_ROOM in src/main.ts). */
+.split-handle {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 76px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+  background: var(--frame);
+  box-shadow:
+    inset 0 0 0 100vmax rgb(var(--space-rgb, 0 0 0) / var(--space-wash, 0)),
+    0 0 0 1px var(--panel-edge),
+    0 1px 3px rgba(60, 40, 20, 0.1),
+    0 4px 12px rgba(60, 40, 20, 0.12);
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms ease-out,
+    box-shadow var(--motion);
+}
+
+.split-handle.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+.split-handle.is-dragging {
+  transform: scale(1.05);
+  box-shadow:
+    inset 0 0 0 100vmax rgb(var(--space-rgb, 0 0 0) / var(--space-wash, 0)),
+    0 0 0 1px var(--panel-edge),
+    0 3px 8px rgba(60, 40, 20, 0.14),
+    0 6px 14px rgba(60, 40, 20, 0.14);
+}
+
+.split-handle button {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  border-radius: 14px;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.split-handle button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.split-handle-grip {
+  flex: 1;
+  cursor: grab;
+}
+
+.split-handle.is-dragging .split-handle-grip {
+  cursor: grabbing;
+  background: none;
+}
+
+.split-handle-close {
+  width: 30px;
+}
+
+.split-handle-close svg {
+  width: 13px;
+  height: 13px;
+}
+
+.split-handle-line {
+  width: 1px;
+  height: 14px;
+  background: var(--panel-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-handle {
+    transition: none;
+  }
+}
+
+/* A tab pulled out of the sidebar, carried under the pointer in front of
+   the page (drawn by the floating layer; src/ui/Floating.tsx). It looks
+   like the tab it is, lifted. While it's carried, its row in the sidebar
+   waits in its place, faded. */
+.carried-tab {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--frame);
+  box-shadow:
+    inset 0 0 0 100vmax var(--tab-active),
+    0 0 0 1px var(--panel-edge),
+    var(--tab-dragged-shadow);
+  pointer-events: none;
+  transition: opacity 150ms ease-out;
+}
+
+.carried-tab .tab-title {
+  color: var(--text);
+}
+
+/* Picked up: a short glide to the pointer. */
+.carried-tab.is-gliding {
+  transition:
+    transform 120ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.carried-tab.is-let-go {
+  opacity: 0;
+}
+
+.tab.is-carried-away,
+.basecamp-tile.is-carried-away {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carried-tab,
+  .carried-tab.is-gliding {
+    transition: none;
+  }
+}
+
 /* The others glide out of the dragged tab's way (the divider and "New tab"
    too); a tab dropped back where it started glides home. */
 .space-tabs.is-dragging [data-item]:not(.is-dragged),
@@ -1456,6 +1599,44 @@ button {
 .page-area.is-split {
   background: transparent;
   box-shadow: none;
+}
+
+/* A tab dragged from the sidebar over the page (src/ui/App.tsx): the half
+   it will open in, a soft card in the space's color, while the page waits
+   on the other half. The tab itself is carried under the pointer, so the
+   card only says what letting go does, low down, out of its way. */
+.drop-card {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 32px 24px;
+  border-radius: var(--page-radius);
+  background: rgb(var(--space-rgb, 128 120 110) / 0.1);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--space-rgb, 128 120 110) / 0.45);
+  text-align: center;
+  animation: drop-card-in 200ms ease-out;
+}
+
+@keyframes drop-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.drop-card-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-card {
+    animation: none;
+  }
 }
 
 .split-side {

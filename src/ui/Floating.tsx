@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isSearch, SEARCH_ENGINES, toNavigableUrl } from '../url';
 import type {
+  CarryTab,
   CommandAction,
   FindResult,
+  SplitHandleState,
   HistoryEntry,
   OverlayState,
   Rect,
@@ -25,6 +27,7 @@ import {
   ClipboardIcon,
   CopyIcon,
   EyeIcon,
+  GripIcon,
   KeyIcon,
   CloseIcon,
   DownIcon,
@@ -125,7 +128,139 @@ export function Floating() {
       <Switcher tabIds={overlay.tabIds} index={overlay.index} tabs={tabs} />
     );
   }
-  return null;
+  return (
+    <>
+      <CarriedTab tabs={tabs} />
+      <SplitHandle spaces={spaces} />
+    </>
+  );
+}
+
+// --- A split view's handle ------------------------------------------------------
+// A soft pill at the top middle of one side of a split view, while the
+// mouse is near (src/main.ts decides where, and when). Its grip drags that
+// side over the other to swap them; its × takes that side out of the split
+// (the tab stays, as an ordinary tab). The layer is just the pill's size.
+
+function SplitHandle({ spaces }: { spaces: SpacesState }) {
+  const [state, setState] = useState<SplitHandleState>({ kind: 'hide' });
+  // The last side it showed for, kept while it fades.
+  const [tabId, setTabId] = useState<string | null>(null);
+  const press = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  useEffect(
+    () =>
+      window.firn.onSplitHandleState((next) => {
+        setState(next);
+        if (next.kind === 'show') setTabId(next.tabId);
+      }),
+    [],
+  );
+  // In the space's color, like the sidebar.
+  const color = spaces.spaces.find((s) => s.id === spaces.activeSpaceId)?.color;
+  useEffect(() => {
+    const rgb = color && /^#?([0-9a-f]{6})$/i.exec(color)?.[1];
+    if (!rgb) return;
+    const n = parseInt(rgb, 16);
+    document.documentElement.style.setProperty(
+      '--space-rgb',
+      `${n >> 16} ${(n >> 8) & 255} ${n & 255}`,
+    );
+  }, [color]);
+  if (!tabId) return null;
+  return (
+    <div
+      className={`split-handle ${state.kind === 'hide' ? '' : 'is-shown'} ${state.kind === 'drag' ? 'is-dragging' : ''}`}
+      data-testid="split-handle"
+    >
+      <button
+        className="split-handle-grip"
+        aria-label="Drag to swap sides"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          press.current = { x: e.screenX, y: e.screenY, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const p = press.current;
+          if (!p) return;
+          if (!p.moved && Math.hypot(e.screenX - p.x, e.screenY - p.y) < 3)
+            return;
+          p.moved = true;
+          window.firn.dragSplitHandle(e.screenX, e.screenY);
+        }}
+        onPointerUp={() => {
+          if (press.current?.moved) window.firn.dropSplitHandle();
+          press.current = null;
+        }}
+        onPointerCancel={() => {
+          if (press.current?.moved) window.firn.dropSplitHandle();
+          press.current = null;
+        }}
+      >
+        <GripIcon />
+      </button>
+      <span className="split-handle-line" />
+      <button
+        className="split-handle-close"
+        aria-label="Take out of split view"
+        onClick={() => window.firn.takeOutOfSplit(tabId)}
+      >
+        <CloseIcon />
+      </button>
+    </div>
+  );
+}
+
+// --- A carried tab ------------------------------------------------------------
+// A tab pulled out of the sidebar stays under the pointer, in front of the
+// page, until it's let go (src/main.ts, 'tabs:carry'). It glides from where
+// it was picked up to the pointer, then follows it exactly; let go, it
+// fades.
+
+function CarriedTab({ tabs }: { tabs: TabView[] }) {
+  const [carry, setCarry] = useState<CarryTab | null>(null);
+  // The last one, kept while it fades.
+  const [last, setLast] = useState<CarryTab | null>(null);
+  // Just picked up: it's drawn where it was, then glides to the pointer.
+  const [phase, setPhase] = useState<'from' | 'gliding' | 'held'>('held');
+  const carrying = useRef(false);
+  useEffect(
+    () =>
+      window.firn.onCarryState((next) => {
+        if (next && !carrying.current) setPhase('from');
+        carrying.current = !!next;
+        setCarry(next);
+        if (next) setLast(next);
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (phase === 'from') {
+      const frame = requestAnimationFrame(() => setPhase('gliding'));
+      return () => cancelAnimationFrame(frame);
+    }
+    if (phase === 'gliding') {
+      const timer = setTimeout(() => setPhase('held'), 140);
+      return () => clearTimeout(timer);
+    }
+  }, [phase]);
+  const shown = carry ?? last;
+  const tab = shown && tabs.find((t) => t.id === shown.tabId);
+  if (!shown || !tab) return null;
+  const x = phase === 'from' ? shown.fromX : shown.x - shown.grabX;
+  const y = phase === 'from' ? shown.fromY : shown.y - shown.grabY;
+  return (
+    <div
+      className={`carried-tab ${phase === 'gliding' ? 'is-gliding' : ''} ${carry ? '' : 'is-let-go'}`}
+      style={{ width: shown.width, transform: `translate(${x}px, ${y}px)` }}
+      onTransitionEnd={() => !carry && setLast(null)}
+    >
+      <span className="tab-icon">
+        <TabIcon tab={tab} />
+      </span>
+      <span className="tab-title">{tabTitle(tab)}</span>
+    </div>
+  );
 }
 
 const byRecent = (a: TabView, b: TabView) => b.lastActiveAt - a.lastActiveAt;

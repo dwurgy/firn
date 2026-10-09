@@ -21,7 +21,21 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  child.stdout.on('data', () => {});
+  // The last part of what Electron prints (for working out problems).
+  let output = '';
+  // Electron quitting while the demo is connected waits for it to let go
+  // ("Waiting for the debugger to disconnect"): then it has ended.
+  let ended = false;
+  let letGo = () => {};
+  const keep = (chunk) => {
+    output = (output + chunk).slice(-50_000);
+    if (!ended && /Waiting for the debugger to disconnect/.test(output)) {
+      ended = true;
+      letGo();
+    }
+  };
+  child.stdout.on('data', keep);
+  child.stderr.on('data', keep);
   const url = await new Promise((resolve, reject) => {
     let log = '';
     const onData = (chunk) => {
@@ -29,7 +43,6 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
       const match = /Debugger listening on (ws:\/\/\S+)/.exec(log);
       if (match) {
         child.stderr.off('data', onData);
-        child.stderr.on('data', () => {});
         resolve(match[1]);
       }
     };
@@ -73,7 +86,12 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
     pending.clear();
   };
   socket.addEventListener('close', closed);
-  child.once('exit', () => socket.close());
+  child.once('exit', () => {
+    ended = true;
+    socket.close();
+  });
+  letGo = () => socket.close();
+  if (ended) socket.close();
 
   const send = (method, params) =>
     new Promise((resolve, reject) => {
@@ -88,6 +106,9 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
 
   return {
     process: () => child,
+    output: () => output,
+    // Firn has quit (or is quitting).
+    ended: () => ended || child.exitCode !== null,
     async evaluate(fn, arg) {
       const { result, exceptionDetails } = await send('Runtime.evaluate', {
         expression: `(${fn.toString()})(require('electron'), ${JSON.stringify(arg ?? null)})`,

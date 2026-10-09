@@ -32,6 +32,7 @@ import {
   launchFirn,
   PROFILE,
   runningFirn,
+  stopStrayFirns,
   startDevServer,
   wipeProfile,
 } from './lib/firn.mjs';
@@ -134,12 +135,15 @@ async function quitFirn(app) {
       app.quit();
     })
     .catch(() => {});
-  await Promise.race([exited, wait(6000)]);
+  for (let i = 0; i < 30 && !app.ended(); i++) await wait(200);
+  await Promise.race([exited, wait(1000)]);
   if (child.exitCode === null) {
     child.kill('SIGKILL');
     await Promise.race([exited, wait(2000)]);
   }
-  // (Chromium's helper processes finish writing a moment later.)
+  // Anything it left running, too (and Chromium's helper processes finish
+  // writing a moment later).
+  await stopStrayFirns();
   await wait(700);
   running.delete(app);
 }
@@ -345,6 +349,7 @@ async function main() {
   // Ctrl+C (or a crash) still stops Firn and the interface server.
   const stopAll = async () => {
     for (const app of running) app.process().kill('SIGKILL');
+    await stopStrayFirns();
     await server.stop();
   };
   for (const signal of ['SIGINT', 'SIGTERM'])

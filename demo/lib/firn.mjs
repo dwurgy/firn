@@ -54,6 +54,47 @@ export function runningFirn() {
   return '';
 }
 
+// Stops every Electron started from this folder (the demo's own Firns,
+// and the one Electron Forge opens while building) and waits until
+// they're gone. (On a Mac, Electron can outlive the process that started
+// it; a leftover copy would make the next one close at once, since only
+// one Firn runs per profile.) Safe: the demo refuses to start while any
+// such Firn is open, so these are all the demo's.
+export async function stopStrayFirns() {
+  const find = () => {
+    try {
+      return execFileSync(
+        'pgrep',
+        ['-f', `${ROOT}/node_modules/electron/dist`],
+        { encoding: 'utf8' },
+      )
+        .split('\n')
+        .map(Number)
+        .filter((pid) => pid && pid !== process.pid);
+    } catch {
+      return []; // none
+    }
+  };
+  for (const [signal, ms] of [
+    ['SIGTERM', 5000],
+    ['SIGKILL', 3000],
+  ]) {
+    let pids = find();
+    if (!pids.length) return;
+    for (const pid of pids) {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // Already gone.
+      }
+    }
+    for (let waited = 0; waited < ms && pids.length; waited += 200) {
+      await wait(200);
+      pids = find();
+    }
+  }
+}
+
 // Starts a command in its own process group, so it can be stopped with
 // everything it started.
 function startGroup(command, args, options) {
@@ -110,6 +151,7 @@ export async function buildFirn(log) {
   }
   await wait(1500);
   await stopGroup(forge);
+  await stopStrayFirns();
 }
 
 // Serves Firn's interface (the sidebar and panels) on this computer.
@@ -156,6 +198,7 @@ export function wipeProfile() {
 
 // Starts Firn in demo mode and waits for its window and layers.
 export async function launchFirn({ glass }) {
+  await stopStrayFirns();
   const app = await launchElectron({
     executablePath: require('electron'),
     args: [...(process.platform === 'linux' ? ['--no-sandbox'] : []), '.'],
@@ -186,10 +229,17 @@ export async function launchFirn({ glass }) {
   // prepared for the first time.
   let last = { window: false, sidebar: false, panels: false };
   for (let i = 0; i < 1200; i++) {
+    if (app.ended()) {
+      saveLog(app);
+      throw new Error(
+        'Firn closed right after starting (see demo/out/firn-log.txt). Run the demo again; if it keeps happening, send Claude what Terminal shows.',
+      );
+    }
     last = await progress().catch(() => last);
     if (last.window && last.sidebar && last.panels) return { app };
     await wait(100);
   }
+  saveLog(app);
   app.process().kill('SIGKILL');
   const missing = !last.window
     ? 'its window'
@@ -197,6 +247,13 @@ export async function launchFirn({ glass }) {
       ? 'its sidebar'
       : 'its floating panels';
   throw new Error(
-    `Firn didn’t finish opening in 2 minutes (${missing} never loaded). Run the demo again; if it keeps happening, send Claude what Terminal shows.`,
+    `Firn didn’t finish opening in 2 minutes (${missing} never loaded; see demo/out/firn-log.txt). Run the demo again; if it keeps happening, send Claude what Terminal shows.`,
   );
+}
+
+// What Firn printed, for working out what went wrong.
+function saveLog(app) {
+  const file = path.join(DEMO_DIR, 'out', 'firn-log.txt');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, app.output());
 }

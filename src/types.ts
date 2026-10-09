@@ -167,7 +167,8 @@ export type CommandAction =
   | 'settings'
   | 'passwords'
   | 'welcome'
-  | 'whats-new';
+  | 'whats-new'
+  | 'shortcuts';
 
 // --- What the UI is told ----------------------------------------------------
 
@@ -333,6 +334,7 @@ export type OverlayState =
   // What's new: the release notes of every version after `since` (just
   // updated), or of this version alone (since: '', or opened from a menu).
   | { mode: 'whats-new'; openId: number; since: string }
+  | { mode: 'shortcuts'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
   | { mode: 'find'; openId: number; text: string }
   // Ctrl+Tab: tabs by most recent use, and which one is picked.

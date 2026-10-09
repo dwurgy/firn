@@ -40,6 +40,7 @@ import {
   ShieldIcon,
   UpIcon,
 } from './icons';
+import { ShortcutsPanel } from './Shortcuts';
 import { WhatsNewPanel } from './WhatsNew';
 
 // The layer that floats above the web page: the command bar (new tab), the
@@ -105,6 +106,9 @@ export function Floating() {
         since={overlay.since}
       />
     );
+  }
+  if (overlay.mode === 'shortcuts') {
+    return <ShortcutsPanel key={overlay.openId} />;
   }
   if (overlay.mode === 'find') {
     return <FindBar key={overlay.openId} initialText={overlay.text} />;
@@ -388,6 +392,11 @@ function actionsFor(
       action: 'whats-new',
       label: "What's new in Firn",
       words: 'whats new release notes update changes version',
+    },
+    {
+      action: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      words: 'keyboard shortcuts keys hotkeys',
     },
   );
   for (const space of spaces.spaces)
@@ -1397,6 +1406,22 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
                   }}
                 >
                   {permissionsReset ? 'Reset' : 'Reset all'}
+                </button>
+              </div>
+            </section>
+            <section className="settings-group">
+              <h3>Keyboard</h3>
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span>Keyboard shortcuts</span>
+                  <small>Quicker ways to do what you do most.</small>
+                </div>
+                <button
+                  className="sheet-button"
+                  data-testid="show-shortcuts"
+                  onClick={() => window.firn.runAction('shortcuts')}
+                >
+                  Show…
                 </button>
               </div>
             </section>

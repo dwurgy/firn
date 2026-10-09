@@ -120,7 +120,7 @@ const check = (n, ok, x = '') => {
   await lp.evaluate(() => window.scrollTo(0, 1200));
   await wait(200);
   const gid = (await views()).find((x) => x.url === 'long.html').id;
-  await fl.click('.lookout-button[title="Open as tab"]');
+  await fl.click('.lookout-button[data-tip="Open as tab"]');
   await wait(600);
   v = await views();
   const t = await tabsNow();

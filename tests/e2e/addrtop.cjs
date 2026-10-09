@@ -92,7 +92,7 @@ const check = (n, ok, x = '') => {
   );
   // Where the top row's buttons are in the sidebar: they stay there.
   const spots = (sel) =>
-    `[...document.querySelectorAll('${sel} button')].map((b) => { const r = b.getBoundingClientRect(); return b.title.split(' ')[0] + '@' + Math.round(r.x) + ',' + Math.round(r.y); }).join(' ')`;
+    `[...document.querySelectorAll('${sel} button')].map((b) => { const r = b.getBoundingClientRect(); return (b.title || b.dataset.tip || '').split(' ')[0] + '@' + Math.round(r.x) + ',' + Math.round(r.y); }).join(' ')`;
   const rowSpots = await ui.evaluate(spots('.sidebar-top'));
   await ui.evaluate(() => window.firn.updateSettings({ addressBar: 'top' }));
   await wait(60);
@@ -127,7 +127,7 @@ const check = (n, ok, x = '') => {
       input: a.querySelector('.address-input').value,
       buttons: document.querySelectorAll('.top-bar-window button').length,
       nav: [...document.querySelectorAll('.top-bar-nav button')].map(
-        (b) => b.title,
+        (b) => b.dataset.tip,
       ),
       navEnd: document.querySelector('.top-bar-nav').getBoundingClientRect()
         .right,
@@ -246,7 +246,7 @@ const check = (n, ok, x = '') => {
   check(
     "...and the bar's sidebar button now offers to bring it back",
     (await tb.evaluate(
-      () => document.querySelector('.top-bar-nav button').title,
+      () => document.querySelector('.top-bar-nav button').dataset.tip,
     )) === 'Keep sidebar open (Ctrl+S)',
   );
   // The left edge, up in the bar (on the way to the traffic lights): no peek.

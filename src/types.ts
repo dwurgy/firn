@@ -242,6 +242,11 @@ export type NavCommand = 'back' | 'forward' | 'reload' | 'stop';
 export type WindowCommand = 'minimize' | 'toggle-maximize' | 'close';
 
 // What the floating layer above the page is showing.
+export type TipState =
+  | { kind: 'measure'; text: string }
+  | { kind: 'show' }
+  | { kind: 'hide' };
+
 export type OverlayState =
   | { mode: 'hidden' }
   // `openId` changes each time it opens, so it always starts fresh.
@@ -414,6 +419,16 @@ export interface FirnBridge {
   // A suggested site's icon for the welcome (see BASECAMP_SUGGESTIONS).
   welcomeIcon(siteUrl: string): Promise<string | null>;
   windowCommand(command: WindowCommand): void;
+  // The top bar's hover labels, drawn by the floating layer (the bar is too
+  // short to hold them): the bar asks, the floating layer measures and
+  // shows (src/ui/tooltips.ts).
+  showTip(
+    text: string,
+    anchor: { left: number; right: number; bottom: number },
+  ): void;
+  hideTip(): void;
+  tipSize(width: number, height: number): void;
+  onTipState(listener: (state: TipState) => void): () => void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
   onTabsState(listener: (state: TabsState) => void): () => void;

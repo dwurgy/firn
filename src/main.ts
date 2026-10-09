@@ -585,8 +585,40 @@ const createWindow = () => {
       if (!web.isDestroyed()) web.send(channel, ...args);
   };
 
+  // The top bar's hover labels. The bar is too short to hold them, so the
+  // floating layer draws them: shown as just the label's own small box
+  // below the button (so nothing else on the page is covered), and only
+  // while the floating layer isn't busy with anything else.
+  let barTip: {
+    anchor: { left: number; right: number; bottom: number };
+    barBottom: number;
+    size?: { width: number; height: number };
+  } | null = null;
+  // Room around the label for its soft shadow (the label sits this far
+  // into the box, and TIP_TOP from its top; src/ui/tooltips.ts). The box
+  // starts below the bar, never over it, so the pointer on the bar can't
+  // slip onto it.
+  const TIP_ROOM = 12;
+  const TIP_TOP = 2;
+  const TIP_GAP = 6;
+
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
+    if (layer === floating && overlay.mode === 'hidden' && barTip?.size) {
+      const w = barTip.size.width + TIP_ROOM * 2;
+      const h = barTip.size.height + TIP_TOP + TIP_ROOM;
+      const centre = (barTip.anchor.left + barTip.anchor.right) / 2;
+      const labelTop = Math.max(
+        barTip.anchor.bottom + TIP_GAP,
+        barTip.barBottom + TIP_TOP,
+      );
+      return {
+        x: Math.round(Math.min(Math.max(centre - w / 2, 0), width - w)),
+        y: Math.round(labelTop - TIP_TOP),
+        width: Math.round(w),
+        height: Math.round(h),
+      };
+    }
     if (layer === topBar) {
       // With the address bar at the top: across the whole window, with the
       // sidebar's top row moved up into it (the sidebar sits below). It's
@@ -692,6 +724,11 @@ const createWindow = () => {
       shownLogin = null;
     if (overlay.mode === 'danger' && state.mode !== 'danger')
       shownDanger = null;
+    // A panel replaces the top bar's hover label.
+    if (barTip) {
+      barTip = null;
+      floating.webContents.send('tip:state', { kind: 'hide' });
+    }
     overlay = state;
     send('overlay:state', state);
     showLayer(floating);
@@ -2706,6 +2743,55 @@ const createWindow = () => {
         y: Math.round(y) + LIGHTS_IN_ROW.y,
       });
       syncTrafficLights();
+    },
+    // The top bar asks for a hover label below one of its buttons (`anchor`:
+    // the button, in the bar's own coordinates). The floating layer measures
+    // it ('tip:size'), then it's shown there.
+    'tip:show': (sender, text, anchor) => {
+      if (!topBar || sender !== topBar.webContents) return;
+      if (overlay.mode !== 'hidden' || !readyUi.has(floating.webContents))
+        return;
+      const a = anchor as { left?: unknown; right?: unknown; bottom?: unknown };
+      if (
+        typeof text !== 'string' ||
+        !text ||
+        typeof a?.left !== 'number' ||
+        typeof a.right !== 'number' ||
+        typeof a.bottom !== 'number'
+      )
+        return;
+      const bar = topBar.getBounds();
+      barTip = {
+        anchor: {
+          left: bar.x + a.left,
+          right: bar.x + a.right,
+          bottom: bar.y + a.bottom,
+        },
+        barBottom: bar.y + bar.height,
+      };
+      floating.webContents.send('tip:state', {
+        kind: 'measure',
+        text: text.slice(0, 200),
+      });
+    },
+    'tip:size': (sender, width, height) => {
+      if (sender !== floating.webContents || !barTip) return;
+      if (overlay.mode !== 'hidden') return;
+      if (
+        typeof width !== 'number' ||
+        typeof height !== 'number' ||
+        !(width > 0 && width < 1000 && height > 0 && height < 400)
+      )
+        return;
+      barTip.size = { width, height };
+      if (showLayer(floating))
+        floating.webContents.send('tip:state', { kind: 'show' });
+    },
+    'tip:hide': (sender) => {
+      if (!topBar || sender !== topBar.webContents || !barTip) return;
+      barTip = null;
+      floating.webContents.send('tip:state', { kind: 'hide' });
+      if (overlay.mode === 'hidden') hideLayer(floating);
     },
     'peek:typing': (sender, typing) => {
       if (sender === peek.webContents) peekTyping = typing === true;

@@ -116,7 +116,7 @@ const server = http
   await ui
     .locator('.download')
     .first()
-    .locator('button[title="Show in folder"]')
+    .locator('button[data-tip="Show in folder"]')
     .click();
   await wait(300);
   check(
@@ -140,7 +140,7 @@ const server = http
   await ui
     .locator('.download')
     .first()
-    .locator('button[title="Cancel download"]')
+    .locator('button[data-tip="Cancel download"]')
     .click();
   await wait(800);
   r = await rows();
@@ -193,7 +193,7 @@ const server = http
   await ui
     .locator('.download')
     .first()
-    .locator('button[title="Remove from list"]')
+    .locator('button[data-tip="Remove from list"]')
     .click();
   await wait(500);
   r = await rows();

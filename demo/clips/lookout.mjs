@@ -10,11 +10,23 @@ export default {
   },
   async run(d) {
     // The first ordinary article link that's on screen. (Wikipedia wraps
-    // paragraphs in sections, and some are hidden, so any shown one.)
-    const link = web('#mw-content-text p a[href^="/wiki/"]:not([href*=":"])', {
-      url: '/wiki/Firn',
-      inView: true,
-    });
+    // paragraphs in sections, and some are hidden, so any shown one. Its
+    // links can be full addresses, so pages like File: are left out by
+    // name, not by any colon.)
+    const link = web(
+      '#mw-content-text p a[href*="/wiki/"]' +
+        [
+          '/wiki/File:',
+          '/wiki/Help:',
+          '/wiki/Special:',
+          '/wiki/Wikipedia:',
+          'redlink',
+          '#',
+        ]
+          .map((part) => `:not([href*="${part}"])`)
+          .join(''),
+      { url: '/wiki/Firn', inView: true },
+    );
     await d.click(link, { shift: true });
     // The preview: the web page on screen that isn't the article.
     const preview = web('body', { notUrl: '/wiki/Firn' });

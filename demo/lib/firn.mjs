@@ -96,6 +96,16 @@ export async function stopStrayFirns() {
     if (!pids.length) return;
     for (const pid of pids) {
       try {
+        const what = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], {
+          encoding: 'utf8',
+        }).trim();
+        console.log(
+          `[demo]   stopping a leftover Firn (${pid}: ${what.slice(-80)})`,
+        );
+      } catch {
+        // Gone already.
+      }
+      try {
         process.kill(pid, signal);
       } catch {
         // Already gone.
@@ -278,4 +288,10 @@ function saveLog(app) {
   const file = path.join(DEMO_DIR, 'out', 'firn-log.txt');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, app.output());
+  // The end of it here too (without Chromium's routine noise).
+  const lines = app
+    .output()
+    .split('\n')
+    .filter((line) => line.trim() && !/^\[\d+:\d+\/[\d.]+:/.test(line));
+  console.log(`[demo]   Firn's last words:\n${lines.slice(-25).join('\n')}`);
 }

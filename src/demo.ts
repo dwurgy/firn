@@ -42,6 +42,18 @@ export function demoBounds() {
 // choose one of its items (by the start of its label) after showing it.
 export function installDemoHooks() {
   if (!DEMO) return;
+  // What made Firn quit, for the recorder's log (demo/out/firn-log.txt).
+  const quit = app.quit.bind(app);
+  app.quit = () => {
+    console.log(`[demo] Firn was asked to quit:\n${new Error().stack}`);
+    quit();
+  };
+  app.on('before-quit', () => console.log('[demo] Firn is quitting'));
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const)
+    process.on(signal, () => {
+      console.log(`[demo] Firn got ${signal}`);
+      quit();
+    });
   let lastMenu: Menu | null = null;
   const build = Menu.buildFromTemplate;
   Menu.buildFromTemplate = (template) => {

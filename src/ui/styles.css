@@ -2786,6 +2786,76 @@ button {
 /* --- What's new (src/ui/WhatsNew.tsx) ---------------------------------------
    The release notes after an update: Settings' sheet, narrower and only as
    tall as the notes, set like a short letter. */
+/* Keyboard shortcuts (src/ui/Shortcuts.tsx): each shortcut's words on
+   the left, its keys as soft key caps on the right. */
+.shortcuts-sheet {
+  width: min(560px, calc(100vw - 64px));
+}
+
+.shortcuts-body {
+  padding: 4px 28px 20px 24px;
+}
+
+.shortcuts-group + .shortcuts-group {
+  margin-top: 20px;
+}
+
+.shortcuts-group h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 38px;
+  font-size: 13px;
+}
+
+.shortcut-row + .shortcut-row {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.shortcut-keys,
+.shortcut-combo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shortcut-keys {
+  gap: 8px;
+}
+
+.shortcut-or {
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.key-cap {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--tab-active);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 1px 0 var(--panel-edge);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .whats-new-sheet {
   width: min(520px, calc(100vw - 64px));
   height: auto;
@@ -3764,14 +3834,6 @@ button {
     0 2px 8px rgba(60, 40, 20, 0.12);
   font-size: 12px;
   line-height: 1.35;
-  /* A long name wraps onto a second line, then ends in "…". */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: normal;
   width: max-content;
   pointer-events: none;
   opacity: 0;
@@ -3779,6 +3841,18 @@ button {
   transition:
     opacity 120ms ease-out,
     transform 120ms ease-out;
+}
+
+/* A long name wraps onto a second line, then ends in "…". (Its own box,
+   inside the label's padding: cut off there, a third line can't show.) */
+.firn-tip-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .firn-tip.is-shown {

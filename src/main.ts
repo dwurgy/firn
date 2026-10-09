@@ -50,6 +50,7 @@ import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
 import { macMenuTemplate } from './menu';
+import { matchShortcut, menuAccelerator } from './shortcuts';
 import type {
   CarryTab,
   CommandAction,
@@ -114,7 +115,6 @@ if (process.platform === 'win32' && !started) {
 const HOME_URL = 'https://duckduckgo.com';
 // History: Ctrl+H on Windows and Linux; Cmd+Y on a Mac, like Safari and
 // Chrome there (Cmd+H hides the app on a Mac).
-const HISTORY_KEY = process.platform === 'darwin' ? 'y' : 'h';
 
 // Start with FIRN_DEBUG=1 to log what the window's layers are doing.
 const DEBUG = Boolean(process.env.FIRN_DEBUG);
@@ -2541,6 +2541,9 @@ const createWindow = () => {
       case 'whats-new':
         openWhatsNew('');
         break;
+      case 'shortcuts':
+        showOverlay({ mode: 'shortcuts', openId: ++commandOpenId });
+        break;
     }
   };
 
@@ -2839,7 +2842,7 @@ const createWindow = () => {
         { type: 'separator' },
         {
           label: 'History',
-          accelerator: `CmdOrCtrl+${HISTORY_KEY.toUpperCase()}`,
+          accelerator: menuAccelerator('history', process.platform),
           click: () => openHistory(),
         },
         { label: 'Passwords', click: () => openPasswords() },
@@ -3188,72 +3191,97 @@ const createWindow = () => {
       return;
     }
     if (input.type !== 'keyDown') return;
-    if (input.type !== 'keyDown') return;
-    const mod = process.platform === 'darwin' ? input.meta : input.control;
-    const key = input.key.toLowerCase();
-
+    // Which shortcut it is: see src/shortcuts.ts (the same list Settings'
+    // Keyboard shortcuts page shows).
+    const hit = matchShortcut(input, process.platform);
     let handled = true;
-    if (input.control && key === 'tab') {
-      stepSwitcher(input.shift ? -1 : 1);
-      // Blocking a key here also hides the matching key release from that
-      // same view, so let the switcher layer keep its own key events.
-      if (source === floating.webContents) handled = false;
-    } else if (lookout && key === 'escape') {
-      closeLookout();
-    } else if (switcher && key === 'escape') {
-      endSwitcher(false);
-    } else if (mod && input.shift && key === 'd') {
-      printDiagnostics();
-    } else if (mod && key === 'd') {
-      if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
-    } else if (mod && key === 's') {
-      setSidebarCollapsed(!windowState.sidebarCollapsed);
-    } else if (mod && key === 'l') {
-      focusAddress();
-    } else if (mod && key === 'f') {
-      openFind();
-    } else if (mod && key === HISTORY_KEY) {
-      openHistory();
-    } else if (mod && key === ',') {
-      openSettings();
-    } else if (key === 'f3' || (mod && key === 'g')) {
-      // Next (or, with Shift, previous) match of the last search.
-      if (overlay.mode !== 'find') openFind();
-      else if (lastFindText) tabs.find(lastFindText, !input.shift, false);
-    } else if (mod && (key === '=' || key === '+')) {
-      tabs.zoom(1);
-    } else if (mod && (key === '-' || key === '_')) {
-      tabs.zoom(-1);
-    } else if (mod && key === '0') {
-      tabs.zoom(0);
-    } else if (mod && input.shift && key === 't') {
-      tabs.reopenClosed();
-    } else if (mod && key === 't') {
-      openCommandBar();
-    } else if (mod && key === 'w') {
-      if (tabs.activeTabId) tabs.close(tabs.activeTabId);
-    } else if (mod && input.shift && /^Digit[1-9]$/.test(input.code)) {
-      // Ctrl+Shift+1…9 switch to that space.
-      const space = spaces[Number(input.code.slice(5)) - 1];
-      if (space) switchSpace(space.id);
-    } else if (mod && /^[1-9]$/.test(key)) {
-      // Ctrl+1…8 jump to that tab; Ctrl+9 always means the last one.
-      tabs.activateIndex(key === '9' ? -1 : Number(key) - 1);
-    } else if ((input.alt && key === 'arrowleft') || (mod && key === '[')) {
-      tabs.command('back');
-    } else if ((input.alt && key === 'arrowright') || (mod && key === ']')) {
-      tabs.command('forward');
-    } else if (key === 'f5' || (mod && key === 'r')) {
-      if (input.shift) tabs.hardReload();
-      else tabs.command('reload');
-    } else if (
-      key === 'f12' ||
-      (mod && input.shift && key === 'i') ||
-      (input.meta && input.alt && key === 'i')
-    ) {
-      tabs.toggleDevTools();
-    } else {
-      handled = false;
+    switch (hit?.id) {
+      case 'next-tab':
+      case 'previous-tab':
+        stepSwitcher(hit.id === 'previous-tab' ? -1 : 1);
+        // Blocking a key here also hides the matching key release from
+        // that same view, so let the switcher layer keep its own events.
+        if (source === floating.webContents) handled = false;
+        break;
+      case 'escape':
+        if (lookout) closeLookout();
+        else if (switcher) endSwitcher(false);
+        else handled = false;
+        break;
+      case 'diagnostics':
+        printDiagnostics();
+        break;
+      case 'pin':
+        if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
+        break;
+      case 'sidebar':
+        setSidebarCollapsed(!windowState.sidebarCollapsed);
+        break;
+      case 'address':
+        focusAddress();
+        break;
+      case 'find':
+        openFind();
+        break;
+      case 'history':
+        openHistory();
+        break;
+      case 'settings':
+        openSettings();
+        break;
+      case 'find-next':
+      case 'find-previous':
+        // The next (or previous) match of the last search.
+        if (overlay.mode !== 'find') openFind();
+        else if (lastFindText)
+          tabs.find(lastFindText, hit.id === 'find-next', false);
+        break;
+      case 'zoom-in':
+        tabs.zoom(1);
+        break;
+      case 'zoom-out':
+        tabs.zoom(-1);
+        break;
+      case 'zoom-reset':
+        tabs.zoom(0);
+        break;
+      case 'reopen-tab':
+        tabs.reopenClosed();
+        break;
+      case 'new-tab':
+        openCommandBar();
+        break;
+      case 'close-tab':
+        if (tabs.activeTabId) tabs.close(tabs.activeTabId);
+        break;
+      case 'space-number': {
+        const space = spaces[(hit.number ?? 0) - 1];
+        if (space) switchSpace(space.id);
+        break;
+      }
+      case 'tab-number':
+        tabs.activateIndex((hit.number ?? 1) - 1);
+        break;
+      case 'last-tab':
+        tabs.activateIndex(-1);
+        break;
+      case 'back':
+        tabs.command('back');
+        break;
+      case 'forward':
+        tabs.command('forward');
+        break;
+      case 'reload':
+        tabs.command('reload');
+        break;
+      case 'hard-reload':
+        tabs.hardReload();
+        break;
+      case 'dev-tools':
+        tabs.toggleDevTools();
+        break;
+      default:
+        handled = false;
     }
     if (handled) event.preventDefault();
   };

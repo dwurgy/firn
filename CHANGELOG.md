@@ -1,5 +1,19 @@
 # What's new in Firn
 
+## Firn 0.6.0
+
+**Learn Firn's keyboard shortcuts.**
+
+Settings now has a page that lists every keyboard shortcut, grouped and in plain words, for anyone who likes to keep their hands on the keys.
+
+### New
+
+- **Keyboard shortcuts** in Settings, also from the command bar (type "shortcuts"). On a Mac it shows ⌘ where Windows shows Ctrl.
+
+### Fixed
+
+- **Long hover labels** now end neatly after two lines, instead of a third line peeking out at the bottom.
+
 ## Firn 0.5.0
 
 **Drag a tab onto the page to see two side by side.**

@@ -1184,6 +1184,99 @@ button {
     box-shadow var(--motion);
 }
 
+/* A split view side's handle (src/ui/Floating.tsx): a soft pill at the
+   top middle of the side, frosted in the space's color like the sidebar.
+   It slides down a little as it appears, and lifts a touch while dragged.
+   The floating layer is exactly its size plus room for its shadow
+   (HANDLE_ROOM in src/main.ts). */
+.split-handle {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 76px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+  background: var(--frame);
+  box-shadow:
+    inset 0 0 0 100vmax rgb(var(--space-rgb, 0 0 0) / var(--space-wash, 0)),
+    0 0 0 1px var(--panel-edge),
+    0 1px 3px rgba(60, 40, 20, 0.1),
+    0 4px 12px rgba(60, 40, 20, 0.12);
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms ease-out,
+    box-shadow var(--motion);
+}
+
+.split-handle.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+.split-handle.is-dragging {
+  transform: scale(1.05);
+  box-shadow:
+    inset 0 0 0 100vmax rgb(var(--space-rgb, 0 0 0) / var(--space-wash, 0)),
+    0 0 0 1px var(--panel-edge),
+    0 3px 8px rgba(60, 40, 20, 0.14),
+    0 6px 14px rgba(60, 40, 20, 0.14);
+}
+
+.split-handle button {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  border-radius: 14px;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.split-handle button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.split-handle-grip {
+  flex: 1;
+  cursor: grab;
+}
+
+.split-handle.is-dragging .split-handle-grip {
+  cursor: grabbing;
+  background: none;
+}
+
+.split-handle-close {
+  width: 30px;
+}
+
+.split-handle-close svg {
+  width: 13px;
+  height: 13px;
+}
+
+.split-handle-line {
+  width: 1px;
+  height: 14px;
+  background: var(--panel-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-handle {
+    transition: none;
+  }
+}
+
 /* A tab pulled out of the sidebar, carried under the pointer in front of
    the page (drawn by the floating layer; src/ui/Floating.tsx). It looks
    like the tab it is, lifted. While it's carried, its row in the sidebar

@@ -70,6 +70,9 @@ const bridge: FirnBridge = {
   dragToSplit: (id, x) => ipcRenderer.send('tabs:drag-to-split', id, x),
   endDragToSplit: (drop) => ipcRenderer.send('tabs:end-drag-to-split', drop),
   carryTab: (carry) => ipcRenderer.send('tabs:carry', carry),
+  dragSplitHandle: (x, y) => ipcRenderer.send('split:handle-drag', x, y),
+  dropSplitHandle: () => ipcRenderer.send('split:handle-drop'),
+  takeOutOfSplit: (tabId) => ipcRenderer.send('split:take-out', tabId),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex, pinned) =>
     ipcRenderer.send('tabs:move', id, toIndex, pinned),
@@ -88,6 +91,7 @@ const bridge: FirnBridge = {
   tipSize: (width, height) => ipcRenderer.send('tip:size', width, height),
   onTipState: (listener) => listen('tip:state', listener),
   onCarryState: (listener) => listen('carry:state', listener),
+  onSplitHandleState: (listener) => listen('split-handle:state', listener),
   ready: () => ipcRenderer.send('ui:ready'),
   onNavState: (listener) => listen('nav:state', listener),
   onTabsState: (listener) => listen('tabs:state', listener),

@@ -279,6 +279,13 @@ export interface CarryTab {
   fromY: number;
 }
 
+// The handle at the top of one side of a split view (on the floating
+// layer): shown for `tabId`'s side, being dragged, or gone.
+export type SplitHandleState =
+  | { kind: 'show'; tabId: string }
+  | { kind: 'drag' }
+  | { kind: 'hide' };
+
 // What the floating layer above the page is showing.
 export type TipState =
   | { kind: 'measure'; text: string }
@@ -447,6 +454,12 @@ export interface FirnBridge {
   // the floating layer (so it stays in front of the page) until it's let
   // go (null). In this layer's coordinates.
   carryTab(carry: CarryTab | null): void;
+  // A split view side's handle (on the floating layer): dragged (where the
+  // pointer is, on the screen), let go, or its × (take `tabId` out of the
+  // split view).
+  dragSplitHandle(screenX: number, screenY: number): void;
+  dropSplitHandle(): void;
+  takeOutOfSplit(tabId: string): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.
@@ -484,6 +497,7 @@ export interface FirnBridge {
   tipSize(width: number, height: number): void;
   onTipState(listener: (state: TipState) => void): () => void;
   onCarryState(listener: (carry: CarryTab | null) => void): () => void;
+  onSplitHandleState(listener: (state: SplitHandleState) => void): () => void;
   ready(): void;
   onNavState(listener: (state: NavState) => void): () => void;
   onTabsState(listener: (state: TabsState) => void): () => void;

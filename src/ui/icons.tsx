@@ -120,6 +120,18 @@ export const ExpandIcon = () => (
 );
 
 // "Separate split view": two panes drawing apart.
+// Something to take hold of and drag: two soft rows of dots.
+export const GripIcon = () => (
+  <svg {...base} stroke="none" fill="currentColor">
+    <circle cx="4.5" cy="6.5" r="1.1" />
+    <circle cx="8" cy="6.5" r="1.1" />
+    <circle cx="11.5" cy="6.5" r="1.1" />
+    <circle cx="4.5" cy="9.5" r="1.1" />
+    <circle cx="8" cy="9.5" r="1.1" />
+    <circle cx="11.5" cy="9.5" r="1.1" />
+  </svg>
+);
+
 export const SeparateIcon = () => (
   <svg {...base}>
     <rect x="2.5" y="4" width="4.5" height="8" rx="1.2" />

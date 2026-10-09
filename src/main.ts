@@ -592,6 +592,26 @@ const createWindow = () => {
   let carried: CarryTab | null = null;
   let carryHideTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // The handle at the top of one side of a split view: a small pill with a
+  // grip (drag it over the other side to swap them) and a × (take that side
+  // out of the split). It shows while the mouse is near the top middle of
+  // a side, drawn by the floating layer in a small box of its own (`at`:
+  // the pill's middle, in the window); dragged, it follows the pointer.
+  let splitHandle: {
+    tabId: string;
+    at: { x: number; y: number };
+    dragging: boolean;
+  } | null = null;
+  let splitHandleHideTimer: ReturnType<typeof setTimeout> | undefined;
+  const HANDLE_WIDTH = 76;
+  const HANDLE_HEIGHT = 28;
+  const HANDLE_ROOM = 20; // for its soft shadow
+  const HANDLE_TOP = 8; // below the page's top edge
+  // Where the mouse brings it out: this far either side of the middle, and
+  // this far down from the top.
+  const HANDLE_ZONE_ACROSS = 130;
+  const HANDLE_ZONE_DOWN = 48;
+
   // The top bar's hover labels. The bar is too short to hold them, so the
   // floating layer draws them: shown as just the label's own small box
   // below the button (so nothing else on the page is covered), and only
@@ -611,6 +631,18 @@ const createWindow = () => {
 
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
+    if (
+      layer === floating &&
+      overlay.mode === 'hidden' &&
+      !carried &&
+      splitHandle
+    )
+      return {
+        x: Math.round(splitHandle.at.x - HANDLE_WIDTH / 2 - HANDLE_ROOM),
+        y: Math.round(splitHandle.at.y - HANDLE_HEIGHT / 2 - HANDLE_ROOM),
+        width: HANDLE_WIDTH + HANDLE_ROOM * 2,
+        height: HANDLE_HEIGHT + HANDLE_ROOM * 2,
+      };
     if (layer === floating && overlay.mode === 'hidden' && barTip?.size) {
       const w = barTip.size.width + TIP_ROOM * 2;
       const h = barTip.size.height + TIP_TOP + TIP_ROOM;
@@ -731,10 +763,15 @@ const createWindow = () => {
       shownLogin = null;
     if (overlay.mode === 'danger' && state.mode !== 'danger')
       shownDanger = null;
-    // A panel replaces the top bar's hover label.
+    // A panel replaces the top bar's hover label (and a split view's
+    // handle).
     if (barTip) {
       barTip = null;
       floating.webContents.send('tip:state', { kind: 'hide' });
+    }
+    if (splitHandle) {
+      splitHandle = null;
+      floating.webContents.send('split-handle:state', { kind: 'hide' });
     }
     overlay = state;
     send('overlay:state', state);
@@ -1941,6 +1978,72 @@ const createWindow = () => {
     );
   };
 
+  // --- A split view's handles -------------------------------------------------
+
+  const hideSplitHandle = () => {
+    if (!splitHandle) return;
+    splitHandle = null;
+    clearTimeout(splitHandleHideTimer);
+    splitHandleHideTimer = undefined;
+    // It fades, then the layer goes (unless something else is on it).
+    floating.webContents.send('split-handle:state', { kind: 'hide' });
+    setTimeout(() => {
+      if (!splitHandle && !carried && !barTip && overlay.mode === 'hidden')
+        hideLayer(floating);
+    }, 180);
+  };
+
+  // Brings out (or keeps, or moves along) the handle of the side the mouse
+  // is near the top middle of (`x`, `y`: the mouse, in the window).
+  const watchSplitHandle = (x: number, y: number) => {
+    if (splitHandle?.dragging) return;
+    const split =
+      overlay.mode === 'hidden' && !carried && readyUi.has(floating.webContents)
+        ? tabs.splitOnScreen()
+        : null;
+    if (!split) return hideSplitHandle();
+    const near = split.tabIds.find((id) => {
+      const r = split.rects[id];
+      return (
+        Math.abs(x - (r.x + r.width / 2)) <= HANDLE_ZONE_ACROSS &&
+        y >= r.y - 4 &&
+        y <= r.y + HANDLE_ZONE_DOWN
+      );
+    });
+    if (!near) {
+      // A moment's grace, so it doesn't flicker at the zone's edge.
+      if (splitHandle && !splitHandleHideTimer)
+        splitHandleHideTimer = setTimeout(hideSplitHandle, 250);
+      return;
+    }
+    clearTimeout(splitHandleHideTimer);
+    splitHandleHideTimer = undefined;
+    const r = split.rects[near];
+    const at = {
+      x: Math.round(r.x + r.width / 2),
+      y: Math.round(r.y + HANDLE_TOP + HANDLE_HEIGHT / 2),
+    };
+    if (
+      splitHandle?.tabId === near &&
+      splitHandle.at.x === at.x &&
+      splitHandle.at.y === at.y
+    )
+      return;
+    const fresh = splitHandle?.tabId !== near;
+    if (barTip) {
+      barTip = null;
+      floating.webContents.send('tip:state', { kind: 'hide' });
+    }
+    splitHandle = { tabId: near, at, dragging: false };
+    if (shownLayers.has(floating)) floating.setBounds(boundsFor(floating));
+    else showLayer(floating);
+    if (fresh)
+      floating.webContents.send('split-handle:state', {
+        kind: 'show',
+        tabId: near,
+      });
+  };
+
   // Reaching the window's edges reveals things: the left edge brings the
   // collapsed sidebar out to peek, the top edge above the page brings down
   // the window buttons. This checks the cursor's position directly rather
@@ -1979,6 +2082,7 @@ const createWindow = () => {
       debug('top edge reached: top bar');
       revealTopBar(true);
     }
+    watchSplitHandle(cursor.x - content.x, cursor.y - content.y);
   }, EDGE_CHECK_MS);
 
   // Right-click menu for a web page: only the few things that fit what was
@@ -2607,10 +2711,14 @@ const createWindow = () => {
       };
       if (first) {
         clearTimeout(carryHideTimer);
-        // The top bar's hover label makes way.
+        // The top bar's hover label (or a split view's handle) makes way.
         if (barTip) {
           barTip = null;
           floating.webContents.send('tip:state', { kind: 'hide' });
+        }
+        if (splitHandle) {
+          splitHandle = null;
+          floating.webContents.send('split-handle:state', { kind: 'hide' });
         }
         showLayer(floating);
       }
@@ -2843,6 +2951,38 @@ const createWindow = () => {
     },
     'split:separate': (_sender, tabId) => {
       if (typeof tabId === 'string') tabs.unsplit(tabId);
+    },
+    // A split view side's handle, dragged: it follows the pointer, and
+    // over the other side the two swap places (shown until it's let go).
+    'split:handle-drag': (sender, screenX, screenY) => {
+      if (sender !== floating.webContents || !splitHandle) return;
+      if (typeof screenX !== 'number' || typeof screenY !== 'number') return;
+      const split = tabs.splitOnScreen();
+      if (!split) return;
+      const content = win.getContentBounds();
+      const x = screenX - content.x;
+      const y = screenY - content.y;
+      if (!splitHandle.dragging) {
+        splitHandle.dragging = true;
+        clearTimeout(splitHandleHideTimer);
+        splitHandleHideTimer = undefined;
+        floating.webContents.send('split-handle:state', { kind: 'drag' });
+      }
+      splitHandle.at = { x: Math.round(x), y: Math.round(y) };
+      floating.setBounds(boundsFor(floating));
+      const side = x < split.middle ? 0 : 1;
+      tabs.previewSwap(side !== split.tabIds.indexOf(splitHandle.tabId));
+    },
+    'split:handle-drop': (sender) => {
+      if (sender !== floating.webContents || !splitHandle?.dragging) return;
+      // Over the other side: swapped. Back on its own: they glide back.
+      tabs.swapSides();
+      hideSplitHandle();
+    },
+    'split:take-out': (sender, tabId) => {
+      if (sender !== floating.webContents || typeof tabId !== 'string') return;
+      hideSplitHandle();
+      tabs.takeOutOfSplit(tabId);
     },
     'overlay:close': () => {
       if (switcher) endSwitcher(false);

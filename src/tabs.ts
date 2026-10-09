@@ -848,6 +848,72 @@ export class TabManager {
     this.emitTabs();
   }
 
+  // --- Rearranging a split view from its handle ------------------------------
+  // Each side of a split view has a small handle at its top (drawn by the
+  // floating layer; see src/main.ts). Dragging it over the other side
+  // swaps them: while it's over there, the two glide past each other to
+  // show it, and letting go keeps it. Its × takes that side out of the
+  // split (the tab stays, as an ordinary tab).
+
+  // The split view on screen: its tabs left to right, where each one sits
+  // (swapped while a swap is shown), and where the two halves meet.
+  splitOnScreen() {
+    const entry = this.active;
+    if (!entry || this.fullscreen || this.dropPreview) return null;
+    const split = this.splitOf(entry.tab.id);
+    if (!split) return null;
+    const area = this.options.pageBounds();
+    const swapped = this.swapPreview === split.id;
+    const sizes = swapped ? [split.sizes[1], split.sizes[0]] : split.sizes;
+    const rects = splitRects(area, sizes);
+    const ids = swapped ? [split.tabIds[1], split.tabIds[0]] : split.tabIds;
+    return {
+      id: split.id,
+      tabIds: [...split.tabIds],
+      rects: Object.fromEntries(ids.map((id, i) => [id, rects[i]])),
+      middle: area.x + area.width * split.sizes[0],
+    };
+  }
+
+  private swapPreview: string | null = null;
+
+  // Shows the split view on screen with its sides swapped (or not).
+  previewSwap(on: boolean) {
+    const split = this.active && this.splitOf(this.active.tab.id);
+    const next = on && split ? split.id : null;
+    if (next === this.swapPreview) return;
+    this.swapPreview = next;
+    this.glideNext = true;
+    this.layout();
+  }
+
+  // Keeps the swap that's shown.
+  swapSides() {
+    const split = this.swapPreview && this.splits.get(this.swapPreview);
+    this.swapPreview = null;
+    if (!split) return;
+    split.tabIds.reverse();
+    split.sizes.reverse();
+    // The sidebar row lists them in the same order.
+    const [a, b] = split.tabIds;
+    const first = Math.min(this.order.indexOf(a), this.order.indexOf(b));
+    this.order = this.order.filter((id) => id !== a && id !== b);
+    this.order.splice(first, 0, a, b);
+    this.renumber();
+    this.layout();
+    this.emitTabs();
+  }
+
+  // Takes one side out of its split view: it carries on as an ordinary
+  // tab, and the other side fills the page.
+  takeOutOfSplit(id: string) {
+    const split = this.splitOf(id);
+    if (!split) return;
+    const other = split.tabIds.find((t) => t !== id)!;
+    this.separate(id);
+    this.activate(other);
+  }
+
   // Clicking into one side makes it the current tab (the address bar and
   // buttons follow it), without anything moving.
   private focused(id: string) {
@@ -1189,8 +1255,18 @@ export class TabManager {
       }
       return;
     }
-    const ids = split ? split.tabIds : [entry.tab.id];
-    const rects = split ? splitRects(area, split.sizes) : [area];
+    const swapped = !!split && this.swapPreview === split.id;
+    const ids = split
+      ? swapped
+        ? [split.tabIds[1], split.tabIds[0]]
+        : split.tabIds
+      : [entry.tab.id];
+    const rects = split
+      ? splitRects(
+          area,
+          swapped ? [split.sizes[1], split.sizes[0]] : split.sizes,
+        )
+      : [area];
     ids.forEach((id, i) => {
       const page = this.entries.get(id)?.page;
       if (!page) return;

@@ -4,6 +4,7 @@ import type {
   CarryTab,
   CommandAction,
   FindResult,
+  SplitHandleState,
   HistoryEntry,
   OverlayState,
   Rect,
@@ -26,6 +27,7 @@ import {
   ClipboardIcon,
   CopyIcon,
   EyeIcon,
+  GripIcon,
   KeyIcon,
   CloseIcon,
   DownIcon,
@@ -126,7 +128,87 @@ export function Floating() {
       <Switcher tabIds={overlay.tabIds} index={overlay.index} tabs={tabs} />
     );
   }
-  return <CarriedTab tabs={tabs} />;
+  return (
+    <>
+      <CarriedTab tabs={tabs} />
+      <SplitHandle spaces={spaces} />
+    </>
+  );
+}
+
+// --- A split view's handle ------------------------------------------------------
+// A soft pill at the top middle of one side of a split view, while the
+// mouse is near (src/main.ts decides where, and when). Its grip drags that
+// side over the other to swap them; its × takes that side out of the split
+// (the tab stays, as an ordinary tab). The layer is just the pill's size.
+
+function SplitHandle({ spaces }: { spaces: SpacesState }) {
+  const [state, setState] = useState<SplitHandleState>({ kind: 'hide' });
+  // The last side it showed for, kept while it fades.
+  const [tabId, setTabId] = useState<string | null>(null);
+  const press = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  useEffect(
+    () =>
+      window.firn.onSplitHandleState((next) => {
+        setState(next);
+        if (next.kind === 'show') setTabId(next.tabId);
+      }),
+    [],
+  );
+  // In the space's color, like the sidebar.
+  const color = spaces.spaces.find((s) => s.id === spaces.activeSpaceId)?.color;
+  useEffect(() => {
+    const rgb = color && /^#?([0-9a-f]{6})$/i.exec(color)?.[1];
+    if (!rgb) return;
+    const n = parseInt(rgb, 16);
+    document.documentElement.style.setProperty(
+      '--space-rgb',
+      `${n >> 16} ${(n >> 8) & 255} ${n & 255}`,
+    );
+  }, [color]);
+  if (!tabId) return null;
+  return (
+    <div
+      className={`split-handle ${state.kind === 'hide' ? '' : 'is-shown'} ${state.kind === 'drag' ? 'is-dragging' : ''}`}
+      data-testid="split-handle"
+    >
+      <button
+        className="split-handle-grip"
+        aria-label="Drag to swap sides"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          press.current = { x: e.screenX, y: e.screenY, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const p = press.current;
+          if (!p) return;
+          if (!p.moved && Math.hypot(e.screenX - p.x, e.screenY - p.y) < 3)
+            return;
+          p.moved = true;
+          window.firn.dragSplitHandle(e.screenX, e.screenY);
+        }}
+        onPointerUp={() => {
+          if (press.current?.moved) window.firn.dropSplitHandle();
+          press.current = null;
+        }}
+        onPointerCancel={() => {
+          if (press.current?.moved) window.firn.dropSplitHandle();
+          press.current = null;
+        }}
+      >
+        <GripIcon />
+      </button>
+      <span className="split-handle-line" />
+      <button
+        className="split-handle-close"
+        aria-label="Take out of split view"
+        onClick={() => window.firn.takeOutOfSplit(tabId)}
+      >
+        <CloseIcon />
+      </button>
+    </div>
+  );
 }
 
 // --- A carried tab ------------------------------------------------------------

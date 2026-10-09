@@ -22,6 +22,8 @@ import {
   checkTools,
   finishClip,
   startRecording,
+  stopAllRecordings,
+  stopStrayRecordings,
   takeStill,
 } from './lib/capture.mjs';
 import { openCursor } from './lib/cursor.mjs';
@@ -45,6 +47,7 @@ import {
 } from './lib/seed.mjs';
 
 const OUT = path.join(DEMO_DIR, 'out');
+const RAW = path.join(OUT, '.raw');
 const CACHE = path.join(DEMO_DIR, '.cache');
 const WARM = path.join(CACHE, 'warm-profile');
 const AD_LISTS = 'ad-block-lists.bin';
@@ -334,7 +337,7 @@ async function record(clip) {
       await Promise.all(stills);
       return;
     }
-    const raw = path.join(OUT, '.raw', `${clip.name}.mkv`);
+    const raw = path.join(RAW, `${clip.name}.mkv`);
     fs.mkdirSync(path.dirname(raw), { recursive: true });
     log('  recording…');
     const recording = await within(
@@ -367,6 +370,8 @@ async function record(clip) {
       `  clip: ${path.relative(DEMO_DIR, file)} (${((to - from) / 1000).toFixed(1)}s)`,
     );
   } finally {
+    // A clip that failed mid-recording mustn't leave it running.
+    stopAllRecordings();
     await quitFirn(app);
   }
 }
@@ -392,11 +397,13 @@ async function main() {
       if (name.startsWith(`${clip.name}-`))
         fs.rmSync(path.join(OUT, 'stills', name));
   wipeProfile();
+  stopStrayRecordings(RAW);
 
   await buildFirn(log);
   server = await startDevServer(log);
   // Ctrl+C (or a crash) still stops Firn and the interface server.
   const stopAll = async () => {
+    stopAllRecordings();
     for (const app of running) app.process().kill('SIGKILL');
     await stopStrayFirns();
     await server.stop();

@@ -24,6 +24,41 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const FPS = 60;
 
+// Recordings that are still going, so a failed clip or a stopped run can
+// end them. (A recording left running holds the screen, and every later
+// ffmpeg that asks for it waits forever.)
+const recordings = new Set();
+
+// Ends every recording that's still going (without saving). ffmpeg can
+// ignore a polite stop while it's waiting on the screen, so it's killed.
+export function stopAllRecordings() {
+  for (const ffmpeg of recordings) ffmpeg.kill('SIGKILL');
+  recordings.clear();
+}
+
+// Ends recordings a previous run left behind (they write into this run's
+// `rawFolder`, so they're the demo's own).
+export function stopStrayRecordings(rawFolder) {
+  try {
+    const pids = execFileSync('pgrep', ['-f', `ffmpeg.*${rawFolder}`], {
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .map(Number)
+      .filter((pid) => pid && pid !== process.pid);
+    for (const pid of pids) {
+      console.log(`[demo]   stopping a leftover recording (${pid})`);
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Already gone.
+      }
+    }
+  } catch {
+    // pgrep found nothing.
+  }
+}
+
 // What to say when macOS doesn't let ffmpeg record the screen (it waits,
 // silently, until Screen Recording is allowed).
 const PERMISSION = `macOS didn’t let ffmpeg record the screen. In System Settings > Privacy & Security > Screen & System Audio Recording, turn on your Terminal app (or allow it in the prompt, which may be behind other windows). Then quit Terminal completely (Cmd+Q), reopen it, and run the demo again.`;
@@ -54,7 +89,7 @@ async function macScreenDevice() {
   const result = await run(
     'ffmpeg',
     ['-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
-    { encoding: 'utf8', timeout: LIMIT },
+    { encoding: 'utf8', timeout: LIMIT, killSignal: 'SIGKILL' },
   ).catch((error) => error);
   if (result.killed) throw new Error(stuck(result.stderr));
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
@@ -90,7 +125,7 @@ export async function captureScale(display, scale) {
       'null',
       '-',
     ],
-    { encoding: 'utf8', timeout: LIMIT },
+    { encoding: 'utf8', timeout: LIMIT, killSignal: 'SIGKILL' },
   ).catch((error) => error);
   if (result.killed) throw new Error(stuck(result.stderr));
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
@@ -158,6 +193,8 @@ export async function startRecording(region, scale, rawFile) {
     ];
   }
   const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  recordings.add(ffmpeg);
+  ffmpeg.on('exit', () => recordings.delete(ffmpeg));
   let log = '';
   let startedAt = 0;
   const started = new Promise((resolve, reject) => {
@@ -177,22 +214,28 @@ export async function startRecording(region, scale, rawFile) {
     setTimeout(() => {
       if (startedAt) return;
       ffmpeg.removeAllListeners('exit');
+      recordings.delete(ffmpeg);
       ffmpeg.kill('SIGKILL');
       reject(new Error(stuck(log)));
     }, LIMIT);
   });
   await started;
   return {
+    // Ends the recording and saves it. (If ffmpeg doesn't finish within
+    // 15 seconds, it's killed, and what it saved so far is used.)
     stop: () =>
       new Promise((resolve, reject) => {
         ffmpeg.removeAllListeners('exit');
-        ffmpeg.on('exit', () =>
+        const late = setTimeout(() => ffmpeg.kill('SIGKILL'), 15_000);
+        ffmpeg.on('exit', () => {
+          clearTimeout(late);
+          recordings.delete(ffmpeg);
           fs.existsSync(rawFile)
             ? resolve({ file: rawFile, startedAt })
             : reject(
                 new Error(`The recording wasn’t saved:\n${log.slice(-1500)}`),
-              ),
-        );
+              );
+        });
         ffmpeg.stdin.write('q');
       }),
   };

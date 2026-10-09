@@ -18,6 +18,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { CLIPS } from './clips/index.mjs';
 import {
+  captureScale,
   checkTools,
   finishClip,
   startRecording,
@@ -104,6 +105,7 @@ const windowInfo = (app) =>
     return {
       bounds,
       scale: display.scaleFactor,
+      display: display.bounds,
       workArea: display.workArea,
       windowId: Number(win.getMediaSourceId().split(':')[1]),
     };
@@ -227,6 +229,10 @@ function prepareProfile(seed) {
 
 // --- One clip ------------------------------------------------------------------
 
+// The recording's pixels per point, and whether the clip size was said.
+let scale;
+let toldSize = false;
+
 async function record(clip) {
   log(`Recording ${clip.name}…`);
   prepareProfile(clip.seed);
@@ -239,10 +245,15 @@ async function record(clip) {
       throw new Error(
         `The main screen is too small for a 1440×900 window (it has ${info.workArea.width}×${info.workArea.height} free). Use a larger display, or a "More Space" setting in System Settings > Displays.`,
       );
-    if (process.platform === 'darwin' && info.scale < 2)
+    // How sharp the recording is (measured once per run).
+    scale ??= await captureScale(info.display, info.scale);
+    if (!toldSize) {
+      toldSize = true;
+      const size = (n) => Math.round(n * scale) - (Math.round(n * scale) % 2);
       log(
-        `Note: the main screen isn’t Retina (scale ${info.scale}), so clips will be ${info.bounds.width * info.scale}×${info.bounds.height * info.scale}.`,
+        `Clips will be ${size(info.bounds.width)}×${size(info.bounds.height)}${scale < 2 ? ' (for 2880×1800, pick a display setting that’s exactly twice as sharp; see demo/README.md)' : ''}.`,
       );
+    }
     const cursor = await openCursor(app, info.bounds);
     let stillNumber = 0;
     // Stills are taken in the background, so the clip flows on.
@@ -280,7 +291,15 @@ async function record(clip) {
     }
     const raw = path.join(OUT, '.raw', `${clip.name}.mkv`);
     fs.mkdirSync(path.dirname(raw), { recursive: true });
-    const recording = await startRecording(info.bounds, info.scale, raw);
+    const recording = await startRecording(
+      {
+        ...info.bounds,
+        x: info.bounds.x - info.display.x,
+        y: info.bounds.y - info.display.y,
+      },
+      scale,
+      raw,
+    );
     await wait(400);
     const from = Date.now();
     await wait(PACE.lead);

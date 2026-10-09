@@ -46,10 +46,13 @@ real pointer or presses real keys.
 - **Quit Firn** if it's open (the demo tells you if it is).
 - **Turn on Do Not Disturb** (Control Center > Focus), so no notification
   slides into a clip.
-- **Use a Retina screen** as the main display (a MacBook's own screen, or a
-  5K/4K display at a scaled setting). The window is 1440×900, and the clips
-  are 2880×1800 on a Retina screen. On a non-Retina display they come out
-  1440×900 (the demo says so).
+- **For the sharpest clips (2880×1800)**, the main screen should be exactly
+  twice as sharp as its setting: a MacBook's own screen, or a 4K display
+  set to **1920 × 1080** (System Settings > Displays, the setting labeled
+  1920 × 1080 or "Larger Text"). At other settings the clips come out at
+  whatever the screen gives (e.g. 2160×1350 for a 4K display at "looks like
+  2560 × 1440", or 1440×900 on a non-Retina screen); the demo says which
+  when it starts. Switch back afterwards if you like.
 - **Keep your mouse off Firn's window** while it records. Your real pointer
   is left out of the recording, but Firn would still light up whatever it
   rests on. The demo waits, and says so, if it's over the window.

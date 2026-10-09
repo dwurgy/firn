@@ -56,6 +56,38 @@ async function macScreenDevice() {
   return match[1];
 }
 
+// Pixels per point in the recording. On a Mac it's measured: macOS
+// records a scaled screen (e.g. a 4K display at "looks like 2560×1440")
+// at its own size, which isn't always twice the points. `display` is the
+// main screen in points; elsewhere, Electron's `scale` is used.
+export async function captureScale(display, scale) {
+  if (process.platform !== 'darwin') return scale;
+  const device = await macScreenDevice();
+  const result = await run(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-f',
+      'avfoundation',
+      '-framerate',
+      String(FPS),
+      '-i',
+      `${device}:none`,
+      '-frames:v',
+      '1',
+      '-f',
+      'null',
+      '-',
+    ],
+    { encoding: 'utf8' },
+  ).catch((error) => error);
+  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  const size = /Video: [^\n]*?(\d{3,5})x(\d{3,5})/.exec(text);
+  if (!size)
+    throw new Error(`ffmpeg couldn’t record the screen:\n${text.slice(-1500)}`);
+  return Number(size[1]) / display.width;
+}
+
 // Starts recording `region` (the window, in screen points; `scale` pixels
 // per point). Resolves once frames are arriving, with `stop()`, which
 // resolves to { file, startedAt } (when its first frame was taken, by

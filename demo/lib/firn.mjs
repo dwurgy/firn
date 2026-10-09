@@ -163,26 +163,40 @@ export async function launchFirn({ glass }) {
     env: demoEnv(glass ? {} : { FIRN_NO_GLASS: '1' }),
   });
   await installDriver(app);
-  const ready = () =>
+  // What's ready so far: the window, its sidebar, and the floating panels.
+  const progress = () =>
     app.evaluate(async () => {
       const drive = globalThis.__demoDrive;
       const layers = drive.layers();
       const floating = layers.find((l) => l.url.includes('view=floating'));
-      if (!layers.length || !floating) return false;
-      const has = (id, selector) =>
-        drive.js(
-          id,
+      const has = async (layer, selector) =>
+        !!layer &&
+        (await drive.js(
+          layer.id,
           `!!document.querySelector(${JSON.stringify(selector)})`,
           2000,
-        );
-      return (
-        (await has(layers[0].id, '[data-testid="new-tab"]')) === true &&
-        (await has(floating.id, '#root')) === true
-      );
+        )) === true;
+      return {
+        window: layers.length > 0,
+        sidebar: await has(layers[0], '[data-testid="new-tab"]'),
+        panels: await has(floating, '#root'),
+      };
     });
-  for (let i = 0; i < 300; i++) {
-    if (await ready().catch(() => false)) return { app };
+  // The first start on a computer can take a while: Firn's interface is
+  // prepared for the first time.
+  let last = { window: false, sidebar: false, panels: false };
+  for (let i = 0; i < 1200; i++) {
+    last = await progress().catch(() => last);
+    if (last.window && last.sidebar && last.panels) return { app };
     await wait(100);
   }
-  throw new Error('Firn’s window didn’t finish opening.');
+  app.process().kill('SIGKILL');
+  const missing = !last.window
+    ? 'its window'
+    : !last.sidebar
+      ? 'its sidebar'
+      : 'its floating panels';
+  throw new Error(
+    `Firn didn’t finish opening in 2 minutes (${missing} never loaded). Run the demo again; if it keeps happening, send Claude what Terminal shows.`,
+  );
 }

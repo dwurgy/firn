@@ -6,6 +6,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { installDriver } from './director.mjs';
@@ -182,40 +183,81 @@ export async function buildFirn(log) {
 }
 
 // Serves Firn's interface (the sidebar and panels) on this computer.
+// Builds Firn's interface (the sidebar and panels) the way a release
+// does, and serves those finished files on this computer, where the Firn
+// built above looks for them. (Not Vite's development server: on a fresh
+// Mac it can stall while it prepares things, leaving a window waiting.)
 export async function startDevServer(log) {
-  try {
-    await fetch(DEV_SERVER);
+  const taken = await fetch(DEV_SERVER, { signal: AbortSignal.timeout(2000) })
+    .then(() => true)
+    .catch(() => false);
+  if (taken)
     throw new Error(
       'Something is already using port 5173 (maybe `npm start`). Quit it and run the demo again.',
     );
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Something'))
-      throw error;
-  }
   log('Starting Firn’s interface…');
-  const vite = startGroup(
-    'npx',
-    [
-      'vite',
-      '--config',
-      'vite.renderer.config.mts',
-      '--port',
-      '5173',
-      '--strictPort',
-    ],
-    {},
-  );
-  for (let i = 0; i < 120; i++) {
-    try {
-      const response = await fetch(DEV_SERVER);
-      if (response.ok) return { stop: () => stopGroup(vite) };
-    } catch {
-      // Not up yet.
-    }
-    await wait(250);
-  }
-  await stopGroup(vite);
-  throw new Error('Firn’s interface didn’t start.');
+  const out = path.join(ROOT, '.vite', 'demo-ui');
+  await new Promise((resolve, reject) => {
+    const build = spawn(
+      'npx',
+      [
+        'vite',
+        'build',
+        '--config',
+        'vite.renderer.config.mts',
+        '--outDir',
+        out,
+        '--emptyOutDir',
+      ],
+      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let said = '';
+    build.stdout.on('data', (c) => (said += c));
+    build.stderr.on('data', (c) => (said += c));
+    build.on('exit', (code) =>
+      code === 0
+        ? resolve()
+        : reject(
+            new Error(
+              `Building Firn’s interface failed:\n${said.slice(-1500)}`,
+            ),
+          ),
+    );
+  });
+  const types = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.woff2': 'font/woff2',
+    '.woff': 'font/woff',
+    '.ttf': 'font/ttf',
+    '.json': 'application/json',
+  };
+  const server = http.createServer((request, response) => {
+    const { pathname } = new URL(request.url ?? '/', DEV_SERVER);
+    let file = path.join(out, decodeURIComponent(pathname));
+    if (
+      !file.startsWith(out) ||
+      !fs.existsSync(file) ||
+      fs.statSync(file).isDirectory()
+    )
+      file = path.join(out, 'index.html');
+    response.writeHead(200, {
+      'Content-Type': types[path.extname(file)] ?? 'application/octet-stream',
+    });
+    fs.createReadStream(file).pipe(response);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    // (Every address, so "localhost" works whichever way it resolves.)
+    server.listen(5173, resolve);
+  });
+  return {
+    stop: () => new Promise((resolve) => server.close(() => resolve())),
+    alive: async () => true,
+  };
 }
 
 export function wipeProfile() {
@@ -248,6 +290,7 @@ export async function launchFirn({ glass }) {
         )) === true;
       return {
         window: layers.length > 0,
+        url: layers[0]?.url ?? '',
         sidebar: await has(layers[0], '[data-testid="new-tab"]'),
         panels: await has(floating, '#root'),
       };
@@ -266,7 +309,7 @@ export async function launchFirn({ glass }) {
     // (Every 15 seconds, so a slow start doesn't look frozen.)
     if (i && i % 150 === 0)
       console.log(
-        `[demo]   still opening (${i / 10}s; window ${last.window ? 'yes' : 'no'}, sidebar ${last.sidebar ? 'yes' : 'no'}, panels ${last.panels ? 'yes' : 'no'})…`,
+        `[demo]   still opening (${i / 10}s; window ${last.window ? `yes, showing ${last.url || 'nothing yet'}` : 'no'}, sidebar ${last.sidebar ? 'yes' : 'no'}, panels ${last.panels ? 'yes' : 'no'})…`,
       );
     if (last.window && last.sidebar && last.panels) return { app };
     await wait(100);

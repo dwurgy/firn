@@ -60,8 +60,12 @@ export function seededRandom(text) {
 export async function installDriver(app) {
   await app.evaluate(({ BrowserWindow, webContents }) => {
     const DEV = 'http://localhost:5173/';
+    // Firn's window: its first window (not the demo cursor's), whatever
+    // it has loaded.
     const mainWindow = () =>
-      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL() === DEV);
+      BrowserWindow.getAllWindows()
+        .filter((w) => !w.isDestroyed() && w !== globalThis.__demoCursor)
+        .sort((a, b) => a.id - b.id)[0];
     const layers = () => {
       const win = mainWindow();
       if (!win) return [];
@@ -117,6 +121,7 @@ export async function installDriver(app) {
       ]);
     };
     globalThis.__demoDrive = {
+      mainWindow,
       layers,
       layerFor,
       // Where a target is: in its layer, and in the window. Null if it's

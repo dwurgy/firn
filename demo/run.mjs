@@ -48,7 +48,6 @@ const OUT = path.join(DEMO_DIR, 'out');
 const CACHE = path.join(DEMO_DIR, '.cache');
 const WARM = path.join(CACHE, 'warm-profile');
 const AD_LISTS = 'ad-block-lists.bin';
-const DEV_SERVER = 'http://localhost:5173/';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (message) => console.log(`[demo] ${message}`);
@@ -97,10 +96,8 @@ const giveAdLists = () =>
 // --- Firn's window --------------------------------------------------------------
 
 const windowInfo = (app) =>
-  app.evaluate(({ BrowserWindow, screen }, devServer) => {
-    const win = BrowserWindow.getAllWindows().find(
-      (w) => w.webContents.getURL() === devServer,
-    );
+  app.evaluate(({ screen }) => {
+    const win = globalThis.__demoDrive.mainWindow();
     const bounds = win.getContentBounds();
     const display = screen.getDisplayMatching(bounds);
     return {
@@ -110,17 +107,15 @@ const windowInfo = (app) =>
       workArea: display.workArea,
       windowId: Number(win.getMediaSourceId().split(':')[1]),
     };
-  }, DEV_SERVER);
+  });
 
 const bringToFront = (app) =>
-  app.evaluate(({ app, BrowserWindow }, devServer) => {
-    const win = BrowserWindow.getAllWindows().find(
-      (w) => w.webContents.getURL() === devServer,
-    );
+  app.evaluate(({ app }) => {
+    const win = globalThis.__demoDrive.mainWindow();
     if (process.platform === 'darwin') app.focus({ steal: true });
     win.show();
     win.focus();
-  }, DEV_SERVER);
+  });
 
 // Saves Firn's session (as closing its window does), then quits; if it
 // hasn't quit a few seconds later, it's stopped.
@@ -150,7 +145,14 @@ async function quitFirn(app) {
 
 // Firns started by this run, stopped if the run is interrupted.
 const running = new Set();
+// Firn's interface server, restarted if it stops answering.
+let server;
 const launch = async () => {
+  if (!(await server.alive())) {
+    log('  Firn’s interface stopped answering; restarting it…');
+    await server.stop();
+    server = await startDevServer(log);
+  }
   const firn = await launchFirn({ glass: values.glass });
   running.add(firn.app);
   return firn;
@@ -390,7 +392,7 @@ async function main() {
   wipeProfile();
 
   await buildFirn(log);
-  const server = await startDevServer(log);
+  server = await startDevServer(log);
   // Ctrl+C (or a crash) still stops Firn and the interface server.
   const stopAll = async () => {
     for (const app of running) app.process().kill('SIGKILL');

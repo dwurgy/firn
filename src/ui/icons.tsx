@@ -165,6 +165,20 @@ export const MutedIcon = () => (
   </svg>
 );
 
+// The mini player's play and pause, softly rounded.
+export const PlayIcon = () => (
+  <svg {...base} fill="currentColor" strokeWidth={1.2}>
+    <path d="M5.5 3.9v8.2a.6.6 0 0 0 .9.5l6.4-4.1a.6.6 0 0 0 0-1L6.4 3.4a.6.6 0 0 0-.9.5Z" />
+  </svg>
+);
+
+export const PauseIcon = () => (
+  <svg {...base} fill="currentColor" strokeWidth={1.2}>
+    <rect x="4.4" y="3.6" width="2.4" height="8.8" rx="0.8" />
+    <rect x="9.2" y="3.6" width="2.4" height="8.8" rx="0.8" />
+  </svg>
+);
+
 // Points down while a space's pins are showing, right while folded away.
 export const ChevronIcon = () => (
   <svg {...base} width={12} height={12}>

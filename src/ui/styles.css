@@ -811,6 +811,92 @@ button {
 }
 
 /* The sidebar's last row: the Firn menu, then the spaces. */
+/* The mini player (src/ui/MiniPlayer.tsx): a soft card just above the
+   Firn button while a tab you can't see is playing sound. It rises in and
+   fades away. */
+.mini-player {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 4px 4px 4px 0;
+  border-radius: 12px;
+  background: var(--field);
+  animation: rise 200ms ease-out;
+  transition: opacity 200ms ease-out;
+}
+
+.mini-player.is-leaving {
+  opacity: 0;
+}
+
+.mini-player-tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: background var(--motion);
+}
+
+.mini-player-tab:hover {
+  background: var(--hover);
+}
+
+.mini-player-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mini-player-title,
+.mini-player-site {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mini-player-title {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.mini-player-site {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.mini-player-toggle {
+  flex-shrink: 0;
+}
+
+.mini-player-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.mini-player-tab:focus-visible,
+.mini-player-toggle:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-player {
+    animation: none;
+  }
+}
+
 .sidebar-bottom {
   display: flex;
   align-items: center;

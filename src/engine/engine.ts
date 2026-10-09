@@ -78,6 +78,12 @@ export interface Page {
   readonly audible: boolean;
   readonly muted: boolean;
   setMuted(on: boolean): void;
+  // Pauses the videos and sounds playing on the page (also in players
+  // embedded in it), and how many it paused (0: nothing it could pause,
+  // e.g. sound made by the page's own code). playMedia plays just those
+  // again.
+  pauseMedia(): Promise<number>;
+  playMedia(): Promise<void>;
 
   load(url: string): void;
   // Brings back saved back/forward history (with scroll positions); fails

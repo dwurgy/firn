@@ -2528,6 +2528,9 @@ const createWindow = () => {
     'tabs:toggle-mute': (_sender, id) => {
       if (typeof id === 'string') tabs.toggleMute(id);
     },
+    'tabs:toggle-playing': (_sender, id) => {
+      if (typeof id === 'string') void tabs.togglePlaying(id);
+    },
     'spaces:switch': (_sender, id) => {
       if (typeof id === 'string') switchSpace(id);
     },

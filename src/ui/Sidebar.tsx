@@ -7,6 +7,7 @@ import type {
   TabsState,
 } from '../types';
 import { DownloadsShelf } from './Downloads';
+import { MiniPlayer } from './MiniPlayer';
 import { AddressBar } from './AddressBar';
 import { Basecamp } from './Basecamp';
 import { SpaceHeader, SpaceIconPicker, SpaceSwitcher } from './Spaces';
@@ -45,6 +46,7 @@ export function useSidebarData() {
     tabs: [],
     activeTabId: null,
     splits: [],
+    player: null,
   });
   const [sidebar, setSidebar] = useState<SidebarState>(DEFAULT_SIDEBAR);
   const [spaces, setSpaces] = useState<SpacesState>({
@@ -216,6 +218,8 @@ export function Sidebar({
       </div>
 
       <DownloadsShelf downloads={downloads} />
+
+      <MiniPlayer player={tabs.player} />
 
       {/* The Firn menu at the left, the spaces centered beside it (the
           same room is kept free on the right, so they stay centered). */}

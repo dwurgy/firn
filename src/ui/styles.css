@@ -3309,6 +3309,52 @@ button {
 }
 
 /* Tips: three rows with fine lines between them. */
+/* "Open links in Firn?": one quiet framed button (Continue stays the
+   main way on, so it's optional), a line on what happens next, and a
+   check once Firn is the default. */
+.welcome-default {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  /* The button and its note, kept when it turns into "Firn is your default
+     browser", so the card doesn't jump. */
+  min-height: 68px;
+}
+
+.welcome-quiet.welcome-default-button {
+  margin-left: 0;
+  padding: 0 18px;
+  border: 1px solid var(--fl-edge);
+  background: var(--fl-pill);
+  color: var(--text);
+}
+
+.welcome-default small {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.welcome-default-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  height: 42px;
+  color: var(--text);
+  animation: fade-in 200ms ease-out;
+}
+
+.welcome-default-done svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .welcome-tips {
   margin: 0;
   padding: 0;

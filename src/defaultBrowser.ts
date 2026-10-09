@@ -29,6 +29,12 @@ const HTTPS_CHOICE = String.raw`HKCU\Software\Microsoft\Windows\Shell\Associatio
 
 export type DefaultBrowserState = 'yes' | 'no' | 'unavailable';
 
+// Automated tests only: pretend this copy can be the default (and isn't,
+// until asked), since the checks run on Linux.
+let testState = process.env.FIRN_DEFAULT_BROWSER_TEST as
+  | DefaultBrowserState
+  | undefined;
+
 // --- Windows registration --------------------------------------------------
 
 // The installer's launcher (one folder above the versioned app folder), so
@@ -120,6 +126,7 @@ const canBeDefault = () => {
 };
 
 export function defaultBrowserState(): Promise<DefaultBrowserState> {
+  if (testState) return Promise.resolve(testState);
   if (!canBeDefault()) return Promise.resolve('unavailable');
   if (process.platform === 'darwin')
     return Promise.resolve(app.isDefaultProtocolClient('https') ? 'yes' : 'no');
@@ -138,6 +145,10 @@ export function defaultBrowserState(): Promise<DefaultBrowserState> {
 // "Make Firn default…": macOS asks the person itself; Windows opens its
 // Default apps settings at Firn.
 export function askToBeDefault() {
+  if (testState) {
+    testState = 'yes';
+    return;
+  }
   if (!canBeDefault()) return;
   if (process.platform === 'darwin') {
     app.setAsDefaultProtocolClient('http');

@@ -2531,6 +2531,17 @@ const createWindow = () => {
     'tabs:toggle-playing': (_sender, id) => {
       if (typeof id === 'string') void tabs.togglePlaying(id);
     },
+    // Dragging a tab onto the page (split view): the pointer, from the
+    // sidebar's layer (the window itself, or the peeking sidebar).
+    'tabs:drag-to-split': (sender, id, x) => {
+      if (typeof id !== 'string' || typeof x !== 'number') return;
+      const origin = sender === peek.webContents ? boundsFor(peek) : { x: 0 };
+      tabs.previewDrop(id, x + origin.x);
+    },
+    'tabs:end-drag-to-split': (_sender, drop) => {
+      if (drop === true) tabs.dropToSplit();
+      else tabs.previewDrop(null);
+    },
     'spaces:switch': (_sender, id) => {
       if (typeof id === 'string') switchSpace(id);
     },

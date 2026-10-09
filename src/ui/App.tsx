@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SplitGroup } from '../types';
+import type { SplitGroup, TabView } from '../types';
 import { Snow } from './FirstLight';
 import { Sidebar, useSidebarData } from './Sidebar';
+import { TabIcon, tabTitle } from './TabList';
 
 const PAGE_INSET = 8; // matches --page-inset in styles.css
 const DEFAULT_WIDTH = 260;
@@ -105,7 +106,11 @@ export function App() {
       {/* Sits right behind the web page so the page looks lifted off the
           frame. With no tabs open, this calm page shows instead. */}
       <main
-        className={['page-area', noTabs && 'is-empty', split && 'is-split']
+        className={[
+          'page-area',
+          noTabs && 'is-empty',
+          (split || tabs.dropPreview) && 'is-split',
+        ]
           .filter(Boolean)
           .join(' ')}
       >
@@ -129,13 +134,52 @@ export function App() {
             </p>
           </div>
         )}
-        {split && <SplitFrame split={split} activeTabId={tabs.activeTabId} />}
+        {split && !tabs.dropPreview && (
+          <SplitFrame split={split} activeTabId={tabs.activeTabId} />
+        )}
+        {tabs.dropPreview && (
+          <DropCard
+            side={tabs.dropPreview.side}
+            tab={tabs.tabs.find((t) => t.id === tabs.dropPreview!.tabId)}
+          />
+        )}
       </main>
     </div>
   );
 }
 
 const SPLIT_GAP = 8; // matches SPLIT_GAP in src/tabs.ts
+
+// A tab dragged from the sidebar over the page: where it will open in
+// split view, in the half the page made room for. Let go to open it.
+function DropCard({
+  side,
+  tab,
+}: {
+  side: 'left' | 'right';
+  tab: TabView | undefined;
+}) {
+  const half = `calc((100% - ${SPLIT_GAP}px) / 2)`;
+  const left = { left: 0, width: half };
+  const right = { right: 0, width: half };
+  return (
+    <>
+      {/* The page's lifted outline, on the half it moved to. */}
+      <div className="split-side" style={side === 'left' ? right : left} />
+      <div className="drop-card" style={side === 'left' ? left : right}>
+        {tab && (
+          <>
+            <span className="drop-card-icon">
+              <TabIcon tab={tab} />
+            </span>
+            <span className="drop-card-title">{tabTitle(tab)}</span>
+          </>
+        )}
+        <span className="drop-card-hint">Let go to open it here</span>
+      </div>
+    </>
+  );
+}
 
 // Behind a split view's two pages: each side's lifted outline (the side you
 // last clicked into has a soft ring in the space's color), and the gap

@@ -47,6 +47,7 @@ export function useSidebarData() {
     activeTabId: null,
     splits: [],
     player: null,
+    dropPreview: null,
   });
   const [sidebar, setSidebar] = useState<SidebarState>(DEFAULT_SIDEBAR);
   const [spaces, setSpaces] = useState<SpacesState>({

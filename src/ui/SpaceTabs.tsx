@@ -12,13 +12,18 @@ import {
   SeparateIcon,
   UnloadIcon,
 } from './icons';
+import { useFollowPointer } from './followPointer';
+import { dragOverPage } from './splitDrag';
 import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
 // "New tab", then its everyday tabs.
 //
 // Any tab can be dragged up or down, including across the divider: above
-// it, the tab is pinned; below it, unpinned. Whenever tabs change places
+// it, the tab is pinned; below it, unpinned. Dragged out onto the page, it
+// opens in split view there (src/ui/splitDrag.ts). A tab opens when it's
+// clicked (pressed and let go without dragging), so dragging one leaves
+// the page on screen as it is. Whenever tabs change places
 // (dragging, pinning from the menu, closing, opening), the rows glide to
 // their new spots instead of jumping.
 
@@ -37,9 +42,13 @@ interface Item {
 
 interface Drag {
   id: string;
+  tabId: string; // the tab to open on a click (a split row's half)
+  startX: number;
   startY: number;
   dy: number;
   active: boolean;
+  // Out over the page (to open it in split view), not reordering.
+  overPage: boolean;
   items: Item[]; // measured once the drag starts
 }
 
@@ -164,24 +173,34 @@ export function SpaceTabs({
     tabId = rowId,
   ) => {
     if (e.button !== 0) return;
-    window.firn.activateTab(tabId);
-    // (A click without a real pointer behind it can't be captured; it still
-    // switches tabs, it just can't start a drag.)
+    // (A click without a real pointer behind it can't be captured; it
+    // switches tabs right away, it just can't start a drag.)
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
+      window.firn.activateTab(tabId);
       return;
     }
-    update({ id: rowId, startY: e.clientY, dy: 0, active: false, items: [] });
+    update({
+      id: rowId,
+      tabId,
+      startX: e.clientX,
+      startY: e.clientY,
+      dy: 0,
+      active: false,
+      overPage: false,
+      items: [],
+    });
+    followPointer();
   };
 
-  const onPointerMove = (e: ReactPointerEvent) => {
+  const onPointerMove = (e: { clientX: number; clientY: number }) => {
     const d = dragRef.current;
     const list = listRef.current;
     if (!d || !list) return;
     const raw = e.clientY - d.startY;
     if (!d.active) {
-      if (Math.abs(raw) <= DRAG_THRESHOLD) return;
+      if (Math.hypot(e.clientX - d.startX, raw) <= DRAG_THRESHOLD) return;
       setPending(null);
       setReturning(null);
       d.items = itemElements(list).map((el) => ({
@@ -195,17 +214,38 @@ export function SpaceTabs({
     const self = d.items.find((i) => i.key === d.id);
     const last = d.items.at(-1);
     if (!self || !last) return;
+    // Out over the page: the row waits in its place while the page shows
+    // where the tab would open. (A split view's row moves as a whole, so
+    // it isn't dragged into another split.)
+    const overPage =
+      d.id === d.tabId && dragOverPage(e, d.tabId, listRef.current);
+    if (d.overPage && !overPage) window.firn.endDragToSplit(false);
+    if (overPage) {
+      update({ ...d, dy: 0, active: true, overPage });
+      return;
+    }
     const dy = Math.max(
       -self.top,
       Math.min(last.top + last.height - self.top - self.height / 2, raw),
     );
-    update({ ...d, dy, active: true });
+    update({ ...d, dy, active: true, overPage: false });
   };
 
   const finish = (commit: boolean) => {
     const d = dragRef.current;
     update(null);
-    if (!d?.active) return;
+    if (!d) return;
+    // A click (no drag): open the tab.
+    if (!d.active) {
+      if (commit) window.firn.activateTab(d.tabId);
+      return;
+    }
+    if (d.overPage) {
+      window.firn.endDragToSplit(commit);
+      setReturning(d.id);
+      setTimeout(() => setReturning(null), GLIDE.duration + 50);
+      return;
+    }
     const drop = commit ? dropFor(d) : null;
     const tab = tabs.find((t) => t.id === d.id);
     const rows = tab?.pinned ? pins.map((t) => [t]) : everydayRows;
@@ -225,6 +265,8 @@ export function SpaceTabs({
     // In case the move doesn't happen, don't leave rows out of place.
     setTimeout(() => setPending(null), 1000);
   };
+
+  const followPointer = useFollowPointer(onPointerMove, finish);
 
   const offsets = drag?.active
     ? offsetsFor(drag)
@@ -247,9 +289,6 @@ export function SpaceTabs({
       listed={listed}
       style={listed ? nudge(tab.id) : undefined}
       onPointerDown={(e) => onPointerDown(e, tab.id)}
-      onPointerMove={onPointerMove}
-      onPointerUp={() => finish(true)}
-      onPointerCancel={() => finish(false)}
     />
   );
 
@@ -307,9 +346,6 @@ export function SpaceTabs({
             onPointerDown={(e, tabId) =>
               onPointerDown(e, tabsInRow[0].id, tabId)
             }
-            onPointerMove={onPointerMove}
-            onPointerUp={() => finish(true)}
-            onPointerCancel={() => finish(false)}
           />
         ) : (
           row(tabsInRow[0], 'everyday')
@@ -339,9 +375,6 @@ function TabRow({
   listed: boolean;
   style?: React.CSSProperties;
   onPointerDown: (e: ReactPointerEvent) => void;
-  onPointerMove: (e: ReactPointerEvent) => void;
-  onPointerUp: () => void;
-  onPointerCancel: () => void;
 }) {
   const pinned = kind === 'pinned';
   return (
@@ -406,9 +439,6 @@ function SplitRow({
   returning: boolean;
   style?: React.CSSProperties;
   onPointerDown: (e: ReactPointerEvent, tabId: string) => void;
-  onPointerMove: (e: ReactPointerEvent) => void;
-  onPointerUp: () => void;
-  onPointerCancel: () => void;
 }) {
   const active = tabs.some((t) => t.id === activeTabId);
   return (

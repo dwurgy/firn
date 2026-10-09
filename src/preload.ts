@@ -66,6 +66,8 @@ const bridge: FirnBridge = {
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   toggleMute: (id) => ipcRenderer.send('tabs:toggle-mute', id),
   togglePlaying: (id) => ipcRenderer.send('tabs:toggle-playing', id),
+  dragToSplit: (id, x) => ipcRenderer.send('tabs:drag-to-split', id, x),
+  endDragToSplit: (drop) => ipcRenderer.send('tabs:end-drag-to-split', drop),
   activateTab: (id) => ipcRenderer.send('tabs:activate', id),
   moveTab: (id, toIndex, pinned) =>
     ipcRenderer.send('tabs:move', id, toIndex, pinned),

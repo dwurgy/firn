@@ -247,6 +247,7 @@ export class TabManager {
         (split) => split.spaceId === this.spaceId,
       ),
       player: this.player(),
+      dropPreview: this.dropPreview,
     };
   }
 
@@ -716,6 +717,95 @@ export class TabManager {
     }
   }
 
+  // --- Dragging a tab into split view ----------------------------------------
+  // While a tab from the sidebar is dragged over the page, the page on
+  // screen makes room: it moves to one half, and the other half shows where
+  // the tab will open (drawn by the sidebar's layer, below the page).
+  // Dropping it there opens the two side by side. Any tab can be dragged
+  // in: a Basecamp or pinned tab stays where it is, and a copy of it joins
+  // the split (in the everyday tabs), so they're never moved by accident.
+
+  private dropPreview: { tabId: string; side: 'left' | 'right' } | null = null;
+
+  // Can `id` be dropped beside what's on screen?
+  private canDropToSplit(id: string) {
+    const entry = this.active;
+    if (!entry || this.fullscreen || !this.entries.has(id)) return false;
+    if (id === entry.tab.id) return false;
+    // Already one side of the split on screen: it's there.
+    return !this.splitOf(entry.tab.id)?.tabIds.includes(id);
+  }
+
+  // The tab dragged over the page at window position `x` (null: it left the
+  // page, or the drag ended).
+  previewDrop(id: string | null, x = 0) {
+    let next: typeof this.dropPreview = null;
+    if (id && this.canDropToSplit(id)) {
+      const area = this.options.pageBounds();
+      next = {
+        tabId: id,
+        side: x < area.x + area.width / 2 ? 'left' : 'right',
+      };
+    }
+    const now = this.dropPreview;
+    if (now?.tabId === next?.tabId && now?.side === next?.side) return;
+    this.dropPreview = next;
+    this.layout();
+    this.emitTabs();
+  }
+
+  // Drops the dragged tab where its preview is: a split view of it and
+  // what was on screen (on a split view, it takes that side's place, and
+  // the tab that was there carries on as an ordinary tab).
+  dropToSplit() {
+    const drop = this.dropPreview;
+    this.dropPreview = null;
+    if (!drop || !this.canDropToSplit(drop.tabId)) {
+      this.layout();
+      this.emitTabs();
+      return;
+    }
+    const activeId = this.activeId!;
+    const current = this.splitOf(activeId);
+    // What stays: the other side of the split on screen, or the tab.
+    const stays = current
+      ? current.tabIds[drop.side === 'left' ? 1 : 0]
+      : activeId;
+    if (current) this.separate(activeId);
+    this.separate(drop.tabId);
+    const stayId = this.everydayCopyOf(stays);
+    const dropId = this.everydayCopyOf(drop.tabId, stayId);
+    const split: SplitGroup = {
+      id: randomUUID(),
+      spaceId: this.spaceId,
+      tabIds: drop.side === 'left' ? [dropId, stayId] : [stayId, dropId],
+      layout: 'columns',
+      sizes: [0.5, 0.5],
+    };
+    this.splits.set(split.id, split);
+    for (const tabId of split.tabIds)
+      this.entries.get(tabId)!.tab.splitGroupId = split.id;
+    // The two sides sit next to each other, where the one that stays was.
+    this.order.splice(this.order.indexOf(dropId), 1);
+    const at = this.order.indexOf(stayId);
+    this.order.splice(drop.side === 'left' ? at : at + 1, 0, dropId);
+    this.renumber();
+    this.activate(dropId);
+  }
+
+  // `id` itself if it's an everyday tab of this space; otherwise (a
+  // Basecamp or pinned tab) a copy of it among the everyday tabs, below
+  // `after` if given.
+  private everydayCopyOf(id: string, after?: string) {
+    const { tab } = this.entries.get(id)!;
+    if (groupOf(tab) === EVERYDAY && tab.spaceId === this.spaceId) return id;
+    const copy = this.create(tab.url, { activate: false, after });
+    const copied = this.entries.get(copy)!.tab;
+    copied.title = tab.title;
+    copied.favicon = tab.favicon;
+    return copy;
+  }
+
   // Dragging the gap between the two sides: `ratio` is the left side's
   // share of the width.
   resizeSplit(splitId: string, ratio: number) {
@@ -1045,6 +1135,28 @@ export class TabManager {
       return;
     }
     const area = this.options.pageBounds();
+    const drop = this.dropPreview;
+    if (drop) {
+      // A tab is dragged over the page: what stays moves to the other
+      // half (on a split view, the side being replaced steps away).
+      const half = splitRects(area, [0.5, 0.5]);
+      const stays = split
+        ? split.tabIds[drop.side === 'left' ? 1 : 0]
+        : entry.tab.id;
+      for (const id of this.onScreen) {
+        const page = this.entries.get(id)?.page;
+        if (!page) continue;
+        if (id !== stays) page.hide();
+        else {
+          page.place(
+            half[drop.side === 'left' ? 1 : 0],
+            this.options.pageRadius,
+          );
+          page.show();
+        }
+      }
+      return;
+    }
     const ids = split ? split.tabIds : [entry.tab.id];
     const rects = split ? splitRects(area, split.sizes) : [area];
     ids.forEach((id, i) => {

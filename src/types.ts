@@ -201,6 +201,9 @@ export interface TabsState {
   // The mini player at the bottom of the sidebar, if a tab that isn't on
   // screen is playing sound (in any space).
   player: PlayerState | null;
+  // A tab dragged from the sidebar over the page: the side it would open
+  // on in split view (the page has made room on the other side).
+  dropPreview: { tabId: string; side: 'left' | 'right' } | null;
 }
 
 // The mini player: the tab it's for, and whether it's playing (false:
@@ -414,6 +417,11 @@ export interface FirnBridge {
   toggleMute(id: string): void;
   // The mini player's pause / play button.
   togglePlaying(id: string): void;
+  // Dragging a tab from the sidebar onto the page, for split view: where
+  // the pointer is across (`x`, in this layer), while it's over the page;
+  // then drop (true) or not (false: back over the sidebar, or cancelled).
+  dragToSplit(id: string, x: number): void;
+  endDragToSplit(drop: boolean): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.

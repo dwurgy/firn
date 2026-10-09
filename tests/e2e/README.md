@@ -46,6 +46,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `tooltips`     | Firn's own hover labels, in the sidebar and the top bar               |
 | `sound`        | The speaker on tabs playing sound: muting and unmuting               |
 | `player`       | The mini player: shown for sound off screen, pause and play, going there |
+| `splitdrag`    | Dragging a tab (or a Basecamp tile or pin) onto the page opens it in split view; a tab opens on click |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

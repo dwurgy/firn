@@ -166,6 +166,27 @@ export async function installDriver(app) {
       js(id, code, ms) {
         return run(id, code, ms);
       },
+      // What a target's selector finds in its layer, for working out why
+      // it wasn't found.
+      async probe(target) {
+        const layer = layerFor(target);
+        if (!layer) return 'no such layer';
+        const answer = await run(
+          layer.id,
+          `(() => {
+            const all = [...document.querySelectorAll(${JSON.stringify(target.selector)})];
+            const box = (el) => { const r = el.getBoundingClientRect();
+              return Math.round(r.x) + ',' + Math.round(r.y) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); };
+            const links = [...document.querySelectorAll('#mw-content-text a')].slice(0, 5)
+              .map((a) => a.getAttribute('href') + ' @' + box(a));
+            return JSON.stringify({ page: location.href, ready: document.readyState,
+              view: innerWidth + 'x' + innerHeight + ' scrolled ' + scrollY,
+              matches: all.length, first: all.slice(0, 3).map(box),
+              content: !!document.querySelector('#mw-content-text'), links });
+          })()`,
+        );
+        return answer ?? 'the page didn’t answer';
+      },
       offsetOf(id) {
         const layer = layers().find((l) => l.id === id);
         return layer ? { x: layer.x, y: layer.y } : { x: 0, y: 0 };
@@ -198,8 +219,9 @@ export function createDirector({ app, cursor, random, takeStill }) {
           .filter((l) => l.shown)
           .map((l) => l.url)
           .join(', ');
+        const found = await drive('probe', target).catch((e) => String(e));
         throw new Error(
-          `Couldn’t find ${target.selector} (${target.layer}; showing: ${where || 'nothing'}).`,
+          `Couldn’t find ${target.selector} (${target.layer}; showing: ${where || 'nothing'}; in it: ${found}).`,
         );
       }
       await wait(150);

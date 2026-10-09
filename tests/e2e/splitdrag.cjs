@@ -158,6 +158,33 @@ const check = (n, ok, x = '') => {
     JSON.stringify({ c, pages }),
   );
 
+  // Swinging back to the left half: the page glides across, through
+  // places in between, rather than jumping.
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const xs = (globalThis.__glideXs = []);
+    const timer = setInterval(() => {
+      const view = win.contentView.children.find(
+        (v) => v.webContents && v.webContents.getURL().includes('blue.html'),
+      );
+      if (view) xs.push(view.getBounds().x);
+    }, 10);
+    setTimeout(() => clearInterval(timer), 900);
+  });
+  await ui.mouse.move(leftHalf, area.middle, { steps: 4 });
+  await wait(1000);
+  const xs = await app.evaluate(() => globalThis.__glideXs);
+  const from = xs[0];
+  const to = xs[xs.length - 1];
+  const between = new Set(
+    xs.filter((x) => x !== from && x !== to && (x - from) * (x - to) < 0),
+  );
+  check(
+    '...and the page glides between the halves (no jump)',
+    to > from && between.size >= 3,
+    `${from} → ${to}, ${between.size} places in between`,
+  );
+
   await ui.mouse.move(120, area.middle, { steps: 8 });
   await wait(400);
   pages = await shownPages();
@@ -261,6 +288,108 @@ const check = (n, ok, x = '') => {
     'a pinned tab dropped on the page: a copy opens beside it',
     (await names()).endsWith('|mix') && pinnedNow === 1,
     `${await names()}, ${pinnedNow} pinned`,
+  );
+
+  // With the sidebar hidden: dragging out of the peeking sidebar. It stays
+  // out while the button is held, steps aside over the page (so the page
+  // and the card can be seen), comes back over it, and goes once the tab
+  // is dropped.
+  const warp = (x, y) =>
+    execSync(`python3 ${__dirname}/warp.py ${Math.round(x)} ${Math.round(y)}`);
+  await open('two.html');
+  await open('styled.html');
+  await ui.evaluate(() => window.firn.toggleSidebar());
+  await wait(800);
+  const pk = app.windows().find((w) => w.url().includes('view=peek'));
+  const peekOut = () =>
+    pk.evaluate(() =>
+      document.querySelector('.peek').classList.contains('is-shown'),
+    );
+  const peekLayer = () =>
+    app.evaluate(
+      ({ BrowserWindow }) =>
+        !!BrowserWindow.getAllWindows()[0].contentView.children.find(
+          (v) =>
+            v.webContents?.getURL().includes('view=peek') && v.getVisible(),
+        ),
+    );
+  const wide = await ui.evaluate(() => {
+    const r = document.querySelector('.page-area').getBoundingClientRect();
+    return { left: r.left, right: r.right, middle: (r.top + r.bottom) / 2 };
+  });
+  const wideRight = wide.left + (wide.right - wide.left) * 0.75;
+  warp(o.x + 12, o.y + wide.middle);
+  await wait(600);
+  check('the sidebar hidden, it peeks', await peekOut());
+  const two = await center(
+    pk.locator('.space-tabs .tab[data-kind="everyday"]', {
+      hasText: 'Page Two',
+    }),
+  );
+  // The peek's layer is only as wide as the sidebar, and the test's mouse
+  // can't go past its edge (a real one keeps reporting to it while the
+  // button is held), so moves beyond it are sent as the page's own
+  // pointer events.
+  const pkMove = async (x, y) => {
+    for (let i = 1; i <= 8; i++)
+      await pk.evaluate(
+        ([x, y]) =>
+          dispatchEvent(
+            new PointerEvent('pointermove', {
+              clientX: x,
+              clientY: y,
+              pointerId: 1,
+              buttons: 1,
+            }),
+          ),
+        [two.x + ((x - two.x) * i) / 8, y],
+      );
+  };
+  warp(o.x + two.x, o.y + two.y);
+  await pk.mouse.move(two.x, two.y);
+  await pk.mouse.down();
+  await pk.mouse.move(two.x + 60, two.y, { steps: 4 });
+  // Out over the page (the real pointer too, which the peek watches).
+  warp(o.x + wideRight, o.y + wide.middle);
+  await pkMove(wideRight, wide.middle);
+  await wait(700);
+  c = await card();
+  check(
+    'dragged out of the peeking sidebar: the card shows over the page',
+    c?.side === 'right' && /Page Two/.test(c.title),
+    JSON.stringify(c),
+  );
+  check(
+    '...and the peeking sidebar steps aside, but stays for the drag',
+    !(await peekOut()) && (await peekLayer()),
+  );
+  warp(o.x + 120, o.y + wide.middle);
+  await pkMove(120, wide.middle);
+  await wait(500);
+  check(
+    'back over it: it comes back, and the card goes',
+    (await peekOut()) && !(await card()),
+    `out ${await peekOut()}, card ${JSON.stringify(await card())}, layer ${await peekLayer()}`,
+  );
+  warp(o.x + wideRight, o.y + wide.middle);
+  await pkMove(wideRight, wide.middle);
+  await wait(500);
+  await pk.evaluate(() =>
+    dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 })),
+  );
+  await pk.mouse.up();
+  await wait(1000);
+  check(
+    'letting go: the two side by side',
+    (await names()) === 'styled|two',
+    await names(),
+  );
+  check(
+    '...and the peeking sidebar goes',
+    !(await peekOut()) && !(await peekLayer()),
+  );
+  execSync(
+    `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/splitdrag-peek.png`,
   );
 
   console.log(

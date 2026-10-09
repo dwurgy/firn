@@ -239,13 +239,16 @@ export interface NavState {
 // The sidebar's size and whether it's tucked away. `pageLeft` is where the
 // page currently starts (it glides while collapsing or expanding).
 // `docking`: the peeking sidebar was just kept open, and is settling into
-// the docked sidebar's place (instead of sliding away).
+// the docked sidebar's place (instead of sliding away). `aside`: a tab
+// dragged out of the peeking sidebar is over the page, so the sidebar has
+// stepped out of the way (it's still there, to finish the drag).
 export interface SidebarState {
   width: number;
   collapsed: boolean;
   pageLeft: number;
   peeking: boolean;
   docking: boolean;
+  aside: boolean;
 }
 
 // Whether the window shows frosted glass, and whether it's in focus (glass
@@ -408,6 +411,9 @@ export interface FirnBridge {
   toggleSidebar(): void;
   // The peeking sidebar has a text field focused (so it stays open).
   setPeekTyping(typing: boolean): void;
+  // The mouse button is held down in the peeking sidebar (a drag may be
+  // starting, so it stays open).
+  setPeekHolding(holding: boolean): void;
   // macOS: where this layer's sidebar top row is drawn (for the window's
   // traffic lights, which sit in it).
   lightsAt(x: number, y: number): void;

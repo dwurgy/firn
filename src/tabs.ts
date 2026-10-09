@@ -67,6 +67,30 @@ export const SPLIT_GAP = 8;
 const SPLIT_MIN = 0.2;
 
 // Where each side of a split view sits within the page's area.
+// How long a page takes to glide to a new place (matches --motion in
+// src/ui/styles.css).
+const GLIDE_MS = 200;
+
+const sameBounds = (a: PageBounds, b: PageBounds) =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
+// Where a gliding page is now (easing out).
+function currentBounds(glide: {
+  from: PageBounds;
+  to: PageBounds;
+  start: number;
+}): PageBounds {
+  const t = Math.min(1, (Date.now() - glide.start) / GLIDE_MS);
+  const eased = 1 - Math.pow(1 - t, 3);
+  const at = (a: number, b: number) => Math.round(a + (b - a) * eased);
+  return {
+    x: at(glide.from.x, glide.to.x),
+    y: at(glide.from.y, glide.to.y),
+    width: at(glide.from.width, glide.to.width),
+    height: at(glide.from.height, glide.to.height),
+  };
+}
+
 export function splitRects(area: PageBounds, sizes: number[]): PageBounds[] {
   const first = Math.round((area.width - SPLIT_GAP) * sizes[0]);
   return [
@@ -727,6 +751,11 @@ export class TabManager {
 
   private dropPreview: { tabId: string; side: 'left' | 'right' } | null = null;
 
+  // A tab is being dragged over the page, and the page has made room.
+  get isPreviewingDrop() {
+    return this.dropPreview !== null;
+  }
+
   // Can `id` be dropped beside what's on screen?
   private canDropToSplit(id: string) {
     const entry = this.active;
@@ -750,6 +779,7 @@ export class TabManager {
     const now = this.dropPreview;
     if (now?.tabId === next?.tabId && now?.side === next?.side) return;
     this.dropPreview = next;
+    this.glideNext = true;
     this.layout();
     this.emitTabs();
   }
@@ -761,6 +791,7 @@ export class TabManager {
     const drop = this.dropPreview;
     this.dropPreview = null;
     if (!drop || !this.canDropToSplit(drop.tabId)) {
+      this.glideNext = true;
       this.layout();
       this.emitTabs();
       return;
@@ -1122,12 +1153,16 @@ export class TabManager {
   // --- Layout ---------------------------------------------------------------
 
   layout() {
+    // (A glide is asked for just before the layout it's for.)
+    const glide = this.glideNext;
+    this.glideNext = false;
     const entry = this.active;
     if (!entry) return;
     const split = this.splitOf(entry.tab.id);
     if (this.fullscreen) {
       // A fullscreen video fills the window; a split's other side waits.
       const { width, height } = this.engine.windowSize();
+      this.stopGlides();
       entry.page.place({ x: 0, y: 0, width, height }, 0);
       for (const id of this.onScreen)
         if (id !== entry.tab.id) this.entries.get(id)?.page.hide();
@@ -1148,10 +1183,7 @@ export class TabManager {
         if (!page) continue;
         if (id !== stays) page.hide();
         else {
-          page.place(
-            half[drop.side === 'left' ? 1 : 0],
-            this.options.pageRadius,
-          );
+          this.put(id, page, half[drop.side === 'left' ? 1 : 0], glide);
           page.show();
         }
       }
@@ -1162,9 +1194,75 @@ export class TabManager {
     ids.forEach((id, i) => {
       const page = this.entries.get(id)?.page;
       if (!page) return;
-      page.place(rects[i], this.options.pageRadius);
+      this.put(id, page, rects[i], glide);
       page.show();
     });
+  }
+
+  // --- Gliding pages ---------------------------------------------------------
+  // When a tab dragged over the page makes room for itself (or the drag
+  // goes back to the sidebar), the page glides to its new place instead of
+  // jumping there: 200ms, easing out, like the rest of Firn.
+
+  private glideNext = false;
+  // Where each page was last put (what a glide starts from).
+  private placed = new Map<string, PageBounds>();
+  private glides = new Map<
+    string,
+    { page: Page; from: PageBounds; to: PageBounds; start: number }
+  >();
+  private glideTimer: ReturnType<typeof setInterval> | undefined;
+
+  // Puts a page at `to`, gliding there from where it was if `glide`. A
+  // page already gliding to `to` carries on; any other layout puts it
+  // there at once (so a resize mid-glide isn't fought).
+  private put(id: string, page: Page, to: PageBounds, glide: boolean) {
+    const moving = this.glides.get(id);
+    if (moving && sameBounds(moving.to, to)) return;
+    const from = moving ? currentBounds(moving) : this.placed.get(id);
+    this.placed.set(id, to);
+    if (moving) this.endGlide(id);
+    if (!glide || !from || sameBounds(from, to)) {
+      page.place(to, this.options.pageRadius);
+      return;
+    }
+    // The site keeps the larger of the two sizes while it glides (what
+    // doesn't fit is hidden), rather than re-fitting on every step.
+    page.holdLayout({
+      width: Math.max(from.width, to.width),
+      height: Math.max(from.height, to.height),
+    });
+    this.glides.set(id, { page, from, to, start: Date.now() });
+    page.place(from, this.options.pageRadius);
+    this.glideTimer ??= setInterval(() => this.stepGlides(), 8);
+  }
+
+  private stepGlides() {
+    for (const [id, glide] of this.glides) {
+      // (Its tab closed, or its page was replaced, mid-glide.)
+      if (this.entries.get(id)?.page !== glide.page) {
+        this.glides.delete(id);
+        continue;
+      }
+      glide.page.place(currentBounds(glide), this.options.pageRadius);
+      if (Date.now() - glide.start >= GLIDE_MS) this.endGlide(id);
+    }
+    if (!this.glides.size) {
+      clearInterval(this.glideTimer);
+      this.glideTimer = undefined;
+    }
+  }
+
+  private endGlide(id: string) {
+    const glide = this.glides.get(id);
+    if (!glide) return;
+    this.glides.delete(id);
+    glide.page.place(glide.to, this.options.pageRadius);
+    glide.page.holdLayout(null);
+  }
+
+  private stopGlides() {
+    for (const id of this.glides.keys()) this.endGlide(id);
   }
 
   // Where the page would sit with its top edge at `top`.
@@ -1196,6 +1294,8 @@ export class TabManager {
   }
 
   destroy() {
+    clearInterval(this.glideTimer);
+    this.glides.clear();
     for (const { page } of this.entries.values()) page.destroy();
     this.entries.clear();
     this.order = [];

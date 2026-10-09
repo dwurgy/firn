@@ -1752,6 +1752,7 @@ const createWindow = () => {
       pageLeft,
       peeking,
       docking,
+      aside: peekAside,
     });
 
   // Slides the page's left edge (and the sidebar with it) to a new spot.
@@ -1862,6 +1863,11 @@ const createWindow = () => {
 
   // Typing in the peeking sidebar (it says so; see src/ui/Peek.tsx).
   let peekTyping = false;
+  // The mouse button held down in it (a drag, maybe out onto the page).
+  let peekHolding = false;
+  // A tab dragged out of it is over the page: it steps aside (sliding out
+  // of view), but its layer stays to finish the drag.
+  let peekAside = false;
 
   const showPeek = () => {
     if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
@@ -1876,7 +1882,7 @@ const createWindow = () => {
       if (win.isDestroyed()) return;
       // Stay while the mouse is over it, or while typing in it (its address
       // bar or a space's name).
-      if (mouseIsOverPeek() || peekTyping) lastOver = Date.now();
+      if (mouseIsOverPeek() || peekTyping || peekHolding) lastOver = Date.now();
       else {
         // Gone far off to the left: a little more patience than when
         // coming back over the page.
@@ -1907,6 +1913,8 @@ const createWindow = () => {
     peeking = false;
     docking = dock;
     peekTyping = false;
+    peekHolding = false;
+    peekAside = false;
     clearInterval(peekWatch);
     sendSidebar();
     // Let it slide away (or settle, then fade: see styles.css) before the
@@ -2535,12 +2543,29 @@ const createWindow = () => {
     // sidebar's layer (the window itself, or the peeking sidebar).
     'tabs:drag-to-split': (sender, id, x) => {
       if (typeof id !== 'string' || typeof x !== 'number') return;
-      const origin = sender === peek.webContents ? boundsFor(peek) : { x: 0 };
+      const fromPeek = sender === peek.webContents;
+      const origin = fromPeek ? boundsFor(peek) : { x: 0 };
       tabs.previewDrop(id, x + origin.x);
+      // Out of the peeking sidebar: it steps aside, so the page (and the
+      // card for the tab) can be seen whole.
+      const aside = fromPeek && peeking && tabs.isPreviewingDrop;
+      if (aside !== peekAside) {
+        peekAside = aside;
+        sendSidebar();
+      }
     },
     'tabs:end-drag-to-split': (_sender, drop) => {
       if (drop === true) tabs.dropToSplit();
       else tabs.previewDrop(null);
+      // (Dropped: the button was let go, wherever that was.)
+      if (drop === true) peekHolding = false;
+      if (peekAside) {
+        peekAside = false;
+        // Dropped on the page: it's done, so it goes (it's already out of
+        // sight). Back over it: it comes back.
+        if (drop === true) hidePeek();
+        else sendSidebar();
+      }
     },
     'spaces:switch': (_sender, id) => {
       if (typeof id === 'string') switchSpace(id);
@@ -2824,6 +2849,9 @@ const createWindow = () => {
     },
     'peek:typing': (sender, typing) => {
       if (sender === peek.webContents) peekTyping = typing === true;
+    },
+    'peek:holding': (sender, holding) => {
+      if (sender === peek.webContents) peekHolding = holding === true;
     },
     'sidebar:width': (_sender, width) => {
       if (typeof width === 'number' && Number.isFinite(width))

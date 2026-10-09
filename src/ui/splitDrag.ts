@@ -13,9 +13,12 @@ export function dragOverPage(
   tabId: string,
   from: Element | null,
 ) {
-  const sidebar = from?.closest('.sidebar');
+  const sidebar = from?.closest<HTMLElement>('.sidebar');
   if (!sidebar) return false;
-  const over = e.clientX > sidebar.getBoundingClientRect().right + PAST_EDGE;
+  // Its resting edge (not where it's drawn: the peeking sidebar slides out
+  // of the way while a tab is over the page).
+  const edge = sidebar.offsetLeft + sidebar.offsetWidth;
+  const over = e.clientX > edge + PAST_EDGE;
   if (over) window.firn.dragToSplit(tabId, e.clientX);
   return over;
 }

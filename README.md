@@ -106,6 +106,7 @@ On a Mac, the menu bar has short, plain **Firn, File, Edit, View, Window, and He
 - `src/url.ts` — decides whether what you typed is an address or a search.
 - `src/ui/Welcome.tsx` and `src/welcome.ts` — the welcome shown the first time Firn opens.
 - `src/safebrowsing.ts` — scam and malware warnings (Google Safe Browsing, checked on this computer).
+- `src/defaultBrowser.ts` — Firn as the default browser: listing Firn among the system's browsers, and opening links from other apps.
 - `src/adblock.ts` — blocking ads and trackers (Ghostery's open-source blocker, with the public block lists).
 - `src/passwords.ts` — saved passwords, encrypted on disk; `src/page-preload.ts` is the small helper inside web pages that spots sign-ins and fills saved ones.
 
@@ -174,6 +175,14 @@ It's done the private way. Firn downloads Google's lists about every half hour; 
 5. Run `npm start` or `npm run package` again.
 
 Without a key, Firn works the same but doesn't warn, and Settings says "Not set up in this copy of Firn". Google's free key is for non-commercial use; if Firn is ever sold, it should move to Google's paid version (Web Risk).
+
+### Default browser
+
+**Settings > Default browser > Make Firn default…** makes links clicked in other apps (mail, chat, documents) open in Firn, as new tabs in its normal window. If Firn isn't open, it starts with the link.
+
+- **On Windows**, no app may make itself the default (so no app can sneakily take over), so the button opens Windows' **Default apps** settings at Firn: choose Firn there. Firn's installer lists Firn among the browsers when it installs or updates, and removes it when Firn is uninstalled.
+- **On a Mac**, macOS asks "Use Firn as your default browser?"; Firn needs to be in the **Applications** folder.
+- Once it's the default, the row says "Firn is your default browser". (Copies run from the source code, or on Linux, don't show the row.)
 
 ### Ads and trackers
 

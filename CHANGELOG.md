@@ -1,5 +1,16 @@
 # What's new in Firn
 
+## Firn 0.3.0
+
+**Make Firn your default browser.**
+
+Links you click in other apps, like mail and chat, can now open in Firn, as new tabs in your usual window.
+
+### New
+
+- **Make Firn default** in Settings. On Windows it opens the system's Default apps settings, where you choose Firn; on a Mac, your Mac asks you to confirm.
+- **Links from other apps** open as new tabs in Firn, and start Firn if it isn't open.
+
 ## Firn 0.2.0
 
 **Firn now blocks ads and trackers.**

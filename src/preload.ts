@@ -28,6 +28,7 @@ const bridge: FirnBridge = {
   zoom: (step) => ipcRenderer.send('page:zoom', step),
   answerPermission: (answer) => ipcRenderer.send('permission:answer', answer),
   showSitePermissions: () => ipcRenderer.send('site:menu'),
+  makeDefaultBrowser: () => ipcRenderer.send('browser:make-default'),
   openDownload: (id) => ipcRenderer.send('downloads:open', id),
   showDownload: (id) => ipcRenderer.send('downloads:show', id),
   cancelDownload: (id) => ipcRenderer.send('downloads:cancel', id),

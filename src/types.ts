@@ -109,6 +109,9 @@ export interface SettingsState {
   // Whether this copy of Firn can warn about dangerous sites (it needs a
   // key for Google's service, added when Firn is built).
   safeBrowsingAvailable: boolean;
+  // Whether Firn is the default browser ('unavailable': this copy can't be,
+  // e.g. not installed, or on Linux).
+  defaultBrowser: 'yes' | 'no' | 'unavailable';
 }
 
 // A saved login, as the passwords panel lists it (never with the password).
@@ -367,6 +370,8 @@ export interface FirnBridge {
   answerPermission(answer: 'allow' | 'block' | 'dismiss'): void;
   // The address bar's site button: what the current site may use.
   showSitePermissions(): void;
+  // "Make Firn default…" (macOS asks; Windows opens its Default apps).
+  makeDefaultBrowser(): void;
   openDownload(id: string): void;
   showDownload(id: string): void;
   cancelDownload(id: string): void;

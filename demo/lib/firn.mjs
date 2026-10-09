@@ -74,6 +74,20 @@ export function runningFirn() {
 // it; a leftover copy would make the next one close at once, since only
 // one Firn runs per profile.) Safe: the demo refuses to start while any
 // such Firn is open, so these are all the demo's.
+// A process that has ended but not been tidied away yet ("defunct"):
+// nothing to stop.
+const exited = (pid) => {
+  try {
+    return execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+      encoding: 'utf8',
+    })
+      .trim()
+      .startsWith('Z');
+  } catch {
+    return true;
+  }
+};
+
 export async function stopStrayFirns() {
   const find = () => {
     try {
@@ -84,7 +98,7 @@ export async function stopStrayFirns() {
       )
         .split('\n')
         .map(Number)
-        .filter((pid) => pid && pid !== process.pid);
+        .filter((pid) => pid && pid !== process.pid && !exited(pid));
     } catch {
       return []; // none
     }

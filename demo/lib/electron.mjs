@@ -104,6 +104,21 @@ export async function launchElectron({ executablePath, args, cwd, env }) {
   await send('Runtime.enable', {});
   const contextId = await context;
 
+  // The inspector answers as soon as Electron starts, a moment before
+  // Electron has set itself up; until then, require('electron') gives the
+  // npm package (a file path), not Electron's API. Wait for the real one.
+  for (let i = 0; ; i++) {
+    const { result } = await send('Runtime.evaluate', {
+      expression: `(() => { const e = require('electron'); return typeof e === 'object' && !!e && !!e.app && !!e.BrowserWindow; })()`,
+      contextId,
+      includeCommandLineAPI: true,
+      returnByValue: true,
+    }).catch(() => ({ result: {} }));
+    if (result?.value === true) break;
+    if (i > 300) throw new Error('Electron didn’t finish starting.');
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
   return {
     process: () => child,
     output: () => output,

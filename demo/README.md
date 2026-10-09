@@ -64,15 +64,14 @@ real pointer or presses real keys.
 | `spaces`        | Personal → Work → Weekend with the space buttons, pausing on each                                      |
 | `basecamp`      | Clicking between the three Basecamp tiles, then right-click a tab > Add to Basecamp                    |
 | `lookout`       | On the Firn article: Shift+click a link (Lookout), scroll it a little, close it                        |
-| `split-view`    | Right-click a tab > Split view with current tab, then ease the divider over                            |
 | `welcome`       | The First light welcome on a fresh profile, from hello to "Welcome in."                                |
 | `empty-page`    | Each space with nothing open: the snow and the mark in each space's color                               |
 | `hero`          | A still only: Personal, the Firn article open, the sidebar beside it                                   |
 
-Split view starts from a tab's right-click menu in Firn (there's no
-dragging a tab into split view), so that's what the clip shows. Right-click
-menus are drawn by macOS, not Firn: the cursor glides to the item, and the
-demo chooses it.
+The split view clip (`clips/split-view.mjs`) is on hold until Firn lets you
+drag a tab to one side of the window to split it; it'll be redone with the
+drag then. Right-click menus are drawn by macOS, not Firn: when a clip uses
+one, the cursor glides to the item, and the demo chooses it.
 
 ## How it works
 

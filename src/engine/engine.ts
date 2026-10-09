@@ -39,7 +39,7 @@ export interface PageContextMenu {
 
 // What a page reports back as it loads and changes.
 export interface PageEvents {
-  // The address, title or loading state may have changed.
+  // The address, title, loading state or sound may have changed.
   onUpdate(): void;
   onFavicon(url: string): void;
   // The page started going to another document (not just a jump within the
@@ -73,6 +73,11 @@ export interface Page {
   readonly isLoading: boolean;
   readonly canGoBack: boolean;
   readonly canGoForward: boolean;
+  // The page is making sound right now (even if muted), and whether it's
+  // muted.
+  readonly audible: boolean;
+  readonly muted: boolean;
+  setMuted(on: boolean): void;
 
   load(url: string): void;
   // Brings back saved back/forward history (with scroll positions); fails

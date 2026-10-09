@@ -149,6 +149,22 @@ export const UnloadIcon = () => (
   </svg>
 );
 
+// A tab playing sound: a small speaker with one soft wave. Muted, the wave
+// gives way to a little cross.
+export const SoundIcon = () => (
+  <svg {...base} width={14} height={14}>
+    <path d="M2.8 6.2h2l3-2.4v8.4l-3-2.4h-2a.8.8 0 0 1-.8-.8V7a.8.8 0 0 1 .8-.8Z" />
+    <path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8" />
+  </svg>
+);
+
+export const MutedIcon = () => (
+  <svg {...base} width={14} height={14}>
+    <path d="M2.8 6.2h2l3-2.4v8.4l-3-2.4h-2a.8.8 0 0 1-.8-.8V7a.8.8 0 0 1 .8-.8Z" />
+    <path d="m10.2 6.4 3.2 3.2M13.4 6.4l-3.2 3.2" />
+  </svg>
+);
+
 // Points down while a space's pins are showing, right while folded away.
 export const ChevronIcon = () => (
   <svg {...base} width={12} height={12}>

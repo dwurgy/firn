@@ -198,6 +198,8 @@ export class TabManager {
         basecamp: !!tab.basecamp,
         loaded,
         splitId: tab.splitGroupId,
+        audible: page.audible,
+        muted: page.muted,
       };
     });
   }
@@ -230,6 +232,8 @@ export class TabManager {
           basecamp: !!tab.basecamp,
           loaded: this.entries.get(id)!.loaded,
           splitId: tab.splitGroupId,
+          audible: page.audible,
+          muted: page.muted,
         };
       }),
       splits: [...this.splits.values()].filter(
@@ -474,6 +478,14 @@ export class TabManager {
       if (next) return this.activate(next);
       this.emitNav();
     }
+    this.emitTabs();
+  }
+
+  // The speaker on a tab: mutes it, or turns its sound back on.
+  toggleMute(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    entry.page.setMuted(!entry.page.muted);
     this.emitTabs();
   }
 

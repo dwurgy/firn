@@ -397,6 +397,18 @@ class ElectronPage implements Page {
     return this.web.navigationHistory.canGoForward();
   }
 
+  get audible() {
+    return this.web.isCurrentlyAudible();
+  }
+
+  get muted() {
+    return this.web.isAudioMuted();
+  }
+
+  setMuted(on: boolean) {
+    this.web.setAudioMuted(on);
+  }
+
   load(url: string) {
     this.web.loadURL(url);
   }
@@ -543,6 +555,9 @@ class ElectronPage implements Page {
     web.on('did-navigate', update);
     web.on('did-navigate-in-page', update);
     web.on('page-title-updated', update);
+    // Sound started or stopped (Chromium waits a moment after it stops, so
+    // a pause between songs doesn't flicker).
+    web.on('audio-state-changed', update);
     // Chromium reports the page's first favicon; look at all the icons the
     // page lists and pass on the best one (src/favicon.ts).
     let iconCheck = 0;

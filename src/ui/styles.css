@@ -1217,6 +1217,84 @@ button {
   color: var(--text);
 }
 
+/* The speaker on a tab playing sound (src/ui/TabList.tsx): at the end of
+   the row, always showing while there's sound. On hover it steps aside for
+   the close button. */
+.tab-sound {
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    margin-right var(--motion),
+    background var(--motion),
+    color var(--motion),
+    opacity var(--motion);
+}
+
+.tab-sound:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tab-sound:focus-visible {
+  outline: 2px solid var(--frost);
+  outline-offset: 1px;
+}
+
+/* Muted: the speaker stays (to turn it back on), a little quieter. */
+.tab-sound.is-muted {
+  opacity: 0.7;
+}
+
+.tab-sound.is-muted:hover {
+  opacity: 1;
+}
+
+.tab:hover > .tab-sound,
+.split-row:hover .split-half + .split-half .tab-sound {
+  margin-right: 20px;
+}
+
+/* The title already ends before the speaker, so it needn't fade further
+   for the close button. */
+.tab:hover .tab-title:has(+ .tab-sound) {
+  --title-fade-end: 0px;
+}
+
+/* In a Basecamp tile: a small round badge in the corner. */
+.basecamp-tile {
+  position: relative;
+}
+
+.tab-sound.is-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--tab-active);
+  box-shadow: 0 0 0 1px var(--panel-edge);
+}
+
+.tab-sound.is-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
+.tab-sound.is-badge:hover {
+  background: var(--tab-active);
+}
+
 /* --- The page's place ------------------------------------------------------ */
 
 /* Matches the web page's position (see pageBounds in src/main.ts). The page

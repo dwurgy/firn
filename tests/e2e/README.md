@@ -43,6 +43,8 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `whatsnew`     | What's new: after an update, from the menus, never on a fresh install |
 | `adblock`      | Blocking ads and trackers, "Allow ads on this site", the switch       |
 | `defaultbrowser` | Links from other apps open as tabs; the Settings row where it applies |
+| `tooltips`     | Firn's own hover labels, in the sidebar and the top bar               |
+| `sound`        | The speaker on tabs playing sound: muting and unmuting               |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

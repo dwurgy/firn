@@ -2172,7 +2172,19 @@ const createWindow = () => {
               click: () => tabs.close(id),
             },
           ];
-    Menu.buildFromTemplate(items).popup({ window: win });
+    // A tab playing sound (or muted) can be muted or turned back on here
+    // too, not only with its speaker.
+    const sound: Electron.MenuItemConstructorOptions[] =
+      tab.audible || tab.muted
+        ? [
+            {
+              label: tab.muted ? 'Unmute tab' : 'Mute tab',
+              click: () => tabs.toggleMute(id),
+            },
+            { type: 'separator' },
+          ]
+        : [];
+    Menu.buildFromTemplate([...sound, ...items]).popup({ window: win });
   };
 
   // --- Spaces ---------------------------------------------------------------
@@ -2512,6 +2524,9 @@ const createWindow = () => {
     },
     'tabs:close': (_sender, id) => {
       if (typeof id === 'string') tabs.close(id);
+    },
+    'tabs:toggle-mute': (_sender, id) => {
+      if (typeof id === 'string') tabs.toggleMute(id);
     },
     'spaces:switch': (_sender, id) => {
       if (typeof id === 'string') switchSpace(id);

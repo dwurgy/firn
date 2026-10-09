@@ -12,7 +12,7 @@ export SP="$E2E/out"
 mkdir -p "$SP"
 DATA="$HOME/.config/Firn"
 
-ALL="all settings perm ctxmenu lookout addrtop downloads passwords safebrowsing welcome brand bottom updates macmenu basecamp whatsnew adblock defaultbrowser tooltips"
+ALL="all settings perm ctxmenu lookout addrtop downloads passwords safebrowsing welcome brand bottom updates macmenu basecamp whatsnew adblock defaultbrowser tooltips sound"
 CHECKS="${*:-$ALL}"
 
 cleanup() {

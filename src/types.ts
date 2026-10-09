@@ -186,6 +186,10 @@ export interface TabView {
   loaded: boolean;
   // Set when the tab is one side of a split view.
   splitId?: string;
+  // The tab is playing sound, and whether it's muted (a muted tab keeps
+  // its speaker, crossed out, so it can be turned back on).
+  audible: boolean;
+  muted: boolean;
 }
 
 export interface TabsState {
@@ -393,6 +397,8 @@ export interface FirnBridge {
   lightsAt(x: number, y: number): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
+  // The speaker on a tab playing sound: mute it, or turn it back on.
+  toggleMute(id: string): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.

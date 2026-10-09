@@ -117,7 +117,8 @@ The first time Firn opens, a short welcome fills the window with a calm sunrise 
 1. **Where the address bar goes:** in the sidebar, or at the top.
 2. **Your first space:** its name, color, and icon.
 3. **Your everyday sites:** tick a few (Gmail, Calendar, Drive, YouTube…) to start Basecamp. Each shows its own icon, the same one Basecamp will show: Firn reads the site's front page while the welcome is open (without cookies, and nothing on it runs) and picks its best icon. If a site can't be reached, it shows a simple letter.
-4. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
+4. **Open links in Firn?** (optional, only where Firn can be the default and isn't yet): "Make Firn default" does the same as the Settings button (see Default browser below), or Continue skips it.
+5. **Three tips:** Ctrl+T, right-click, and hiding the sidebar.
 
 With no tabs open, the page shows the same sky and sunrise, with the snow and Firn's mark in the space's color, under "No open tabs". A new space starts out Glacier, Firn's own blue.
 
@@ -178,7 +179,7 @@ Without a key, Firn works the same but doesn't warn, and Settings says "Not set 
 
 ### Default browser
 
-**Settings > Default browser > Make Firn default…** makes links clicked in other apps (mail, chat, documents) open in Firn, as new tabs in its normal window. If Firn isn't open, it starts with the link.
+**Settings > Default browser > Make Firn default…** (also offered in the welcome) makes links clicked in other apps (mail, chat, documents) open in Firn, as new tabs in its normal window. If Firn isn't open, it starts with the link.
 
 - **On Windows**, no app may make itself the default (so no app can sneakily take over), so the button opens Windows' **Default apps** settings at Firn: choose Firn there. Firn's installer lists Firn among the browsers when it installs or updates, and removes it when Firn is uninstalled.
 - **On a Mac**, macOS asks "Use Firn as your default browser?"; Firn needs to be in the **Applications** folder.

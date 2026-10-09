@@ -77,6 +77,7 @@ export function Floating() {
       <Welcome
         key={overlay.openId}
         settings={settings?.settings ?? null}
+        defaultBrowser={settings?.defaultBrowser ?? 'unavailable'}
         spaces={spaces}
       />
     );

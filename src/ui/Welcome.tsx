@@ -1,24 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
 import { SPACE_ICON_NAMES } from '../spaceIcons';
-import type { Settings, SpacesState } from '../types';
+import type { Settings, SettingsState, SpacesState } from '../types';
 import { BASECAMP_SUGGESTIONS, SPACE_COLOR_CHOICES } from '../welcome';
 import { Scene } from './FirstLight';
 import { SpaceIcon } from './SpaceIcon';
 
-const STEPS = ['hello', 'address', 'space', 'basecamp', 'tips'] as const;
+const ALL_STEPS = [
+  'hello',
+  'address',
+  'space',
+  'basecamp',
+  'default',
+  'tips',
+] as const;
+type Step = (typeof ALL_STEPS)[number];
 
 // The welcome, the first time Firn opens: a full-window "First light"
 // scene (see FirstLight.tsx) and a few short steps. Every choice applies
 // right away; from the space step on, the snow takes the space's color, so
 // choices show live. Esc (or "Skip setup") leaves it at any point.
+//
+// "Open links in Firn?" (making Firn the default browser) only shows where
+// this copy can be the default and isn't yet. Whether to show it is decided
+// once, on leaving the first screen (by then Firn has looked it up), so the
+// steps don't shift under the person afterwards.
 export function Welcome({
   settings,
+  defaultBrowser,
   spaces,
 }: {
   settings: Settings | null;
+  defaultBrowser: SettingsState['defaultBrowser'];
   spaces: SpacesState;
 }) {
   const [step, setStep] = useState(0);
+  const [offerDefault, setOfferDefault] = useState<boolean | null>(null);
+  const STEPS: readonly Step[] = ALL_STEPS.filter(
+    (s) => s !== 'default' || offerDefault,
+  );
   // The card takes the keyboard once, when it opens (not on every redraw,
   // which would pull it out of the name box after each letter).
   const card = useRef<HTMLDivElement>(null);
@@ -70,6 +89,8 @@ export function Welcome({
     );
   };
   const next = () => {
+    if (step === 0 && offerDefault === null)
+      setOfferDefault(defaultBrowser === 'no');
     if (STEPS[step] === 'space') saveName();
     if (step === STEPS.length - 1) finish();
     else setStep(step + 1);
@@ -234,6 +255,42 @@ export function Welcome({
                 </button>
               );
             })}
+          </div>
+        </>
+      );
+      break;
+    case 'default':
+      body = (
+        <>
+          <h1>Open links in Firn?</h1>
+          <p>
+            Make Firn your default browser, so links from mail, chat, and other
+            apps open here, as new tabs. You can change this anytime in
+            Settings.
+          </p>
+          <div className="welcome-default">
+            {defaultBrowser === 'yes' ? (
+              <p className="welcome-default-done">
+                <svg viewBox="0 0 16 16" aria-hidden>
+                  <path d="M4 8.4 6.8 11 12 5.2" />
+                </svg>
+                Firn is your default browser
+              </p>
+            ) : (
+              <>
+                <button
+                  className="welcome-quiet welcome-default-button"
+                  onClick={() => window.firn.makeDefaultBrowser()}
+                >
+                  Make Firn default
+                </button>
+                <small>
+                  {mac
+                    ? 'Your Mac will ask you to confirm.'
+                    : 'Windows opens its settings: choose Firn there, then come back.'}
+                </small>
+              </>
+            )}
           </div>
         </>
       );

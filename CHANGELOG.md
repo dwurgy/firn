@@ -8,7 +8,7 @@ Links you click in other apps, like mail and chat, can now open in Firn, as new 
 
 ### New
 
-- **Make Firn default** in Settings. On Windows it opens the system's Default apps settings, where you choose Firn; on a Mac, your Mac asks you to confirm.
+- **Make Firn default** in Settings, or while setting up Firn. On Windows it opens the system's Default apps settings, where you choose Firn; on a Mac, your Mac asks you to confirm.
 - **Links from other apps** open as new tabs in Firn, and start Firn if it isn't open.
 
 ## Firn 0.2.0

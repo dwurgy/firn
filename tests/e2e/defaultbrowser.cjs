@@ -2,7 +2,8 @@
 // as a new tab (when Firn starts with it, and when Firn is already running,
 // as Windows does). The Settings row only shows where this copy can be the
 // default (installed on Windows, or in a Mac's Applications folder), so not
-// on this Linux copy run from the source code.
+// on this Linux copy run from the source code. The welcome's optional
+// "Open links in Firn?" step is checked by pretending it can be.
 const { _electron } = require('./playwright.cjs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '../..');
@@ -99,10 +100,66 @@ const check = (n, ok, x = '') => {
     groups.length > 0 && !groups.includes('Default browser'),
     groups.join(', '),
   );
+  await app.close();
+  await wait(1000);
+
+  // The welcome's optional step, where Firn can be the default and isn't
+  // yet (pretended here, since this copy can't be).
+  execSync('rm -f /root/.config/Firn/session.json');
+  fs.writeFileSync('/root/.config/Firn/settings.json', '{}');
+  const fresh = await _electron.launch({
+    args: ['--no-sandbox', '.'],
+    cwd: ROOT,
+    executablePath: ELECTRON,
+    env: { ...process.env, FIRN_DEFAULT_BROWSER_TEST: 'no' },
+  });
+  await wait(6500);
+  const wf = fresh.windows().find((w) => w.url().includes('view=floating'));
+  const heading = () =>
+    wf.evaluate(() => document.querySelector('.welcome h1')?.textContent);
+  const seen = [];
+  for (let i = 0; i < 8 && (await heading()) !== 'Open links in Firn?'; i++) {
+    seen.push(await heading());
+    await wf.click('.welcome-next');
+    await wait(500);
+  }
+  const dots = await wf.evaluate(
+    () => document.querySelectorAll('.welcome-dots span').length,
+  );
+  check(
+    'welcome: "Open links in Firn?" comes after the everyday sites',
+    (await heading()) === 'Open links in Firn?' &&
+      seen.at(-1) === 'Pick your everyday sites' &&
+      dots === 6,
+    `${seen.join(' > ')}; ${dots} dots`,
+  );
+  const shot = (name) =>
+    execSync(
+      `import -window root -crop 1400x900+0+0 ${process.env.SP}/${name}.png`,
+    );
+  shot('welcome-default');
+  await wf.click('.welcome-default-button');
+  await wait(2200);
+  const done = await wf.evaluate(
+    () => document.querySelector('.welcome-default-done')?.textContent ?? null,
+  );
+  shot('welcome-default-done');
+  check(
+    '"Make Firn default" asks, then says Firn is the default',
+    done === 'Firn is your default browser',
+    done,
+  );
+  await wf.click('.welcome-next');
+  await wait(500);
+  check(
+    '...and Continue goes on to the tips',
+    (await heading()) === "You're all set",
+    await heading(),
+  );
   console.log(
     `\n${results.filter(Boolean).length}/${results.length} checks passed`,
   );
-  await app.close();
+  await fresh.close();
 })().catch((e) => {
   console.log('TEST ERROR', e.message);
   process.exit(1);

@@ -28,6 +28,10 @@ const FPS = 60;
 // silently, until Screen Recording is allowed).
 const PERMISSION = `macOS didn’t let ffmpeg record the screen. In System Settings > Privacy & Security > Screen & System Audio Recording, turn on your Terminal app (or allow it in the prompt, which may be behind other windows). Then quit Terminal completely (Cmd+Q), reopen it, and run the demo again.`;
 const LIMIT = 20_000;
+// ffmpeg didn't answer in time: most likely the permission, and what it
+// said, in case it's something else.
+const stuck = (said = '') =>
+  `${PERMISSION}\n\n(What ffmpeg said:\n${String(said).trim().slice(-1200) || 'nothing'})`;
 
 export function checkTools() {
   try {
@@ -52,7 +56,7 @@ async function macScreenDevice() {
     ['-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
     { encoding: 'utf8', timeout: LIMIT },
   ).catch((error) => error);
-  if (result.killed) throw new Error(PERMISSION);
+  if (result.killed) throw new Error(stuck(result.stderr));
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   const match = /\[(\d+)\] Capture screen 0/.exec(text);
   if (!match)
@@ -88,7 +92,7 @@ export async function captureScale(display, scale) {
     ],
     { encoding: 'utf8', timeout: LIMIT },
   ).catch((error) => error);
-  if (result.killed) throw new Error(PERMISSION);
+  if (result.killed) throw new Error(stuck(result.stderr));
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   const size = /Video: [^\n]*?(\d{3,5})x(\d{3,5})/.exec(text);
   if (!size)
@@ -174,7 +178,7 @@ export async function startRecording(region, scale, rawFile) {
       if (startedAt) return;
       ffmpeg.removeAllListeners('exit');
       ffmpeg.kill('SIGKILL');
-      reject(new Error(PERMISSION));
+      reject(new Error(stuck(log)));
     }, LIMIT);
   });
   await started;

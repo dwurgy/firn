@@ -21,6 +21,19 @@ const DEV_SERVER = 'http://localhost:5173/';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Switches for the demo's Electron. On a Mac, Chromium keeps the key that
+// protects cookies and saved passwords in the Keychain, and a Firn run
+// from source can make macOS ask for your password to read it (a prompt
+// that may hide behind other windows, with Firn frozen until it's
+// answered). The throwaway demo profile has nothing to protect, so it
+// uses Chromium's stand-in instead of the Keychain.
+const ELECTRON_SWITCHES =
+  process.platform === 'darwin'
+    ? ['--use-mock-keychain']
+    : process.platform === 'linux'
+      ? ['--no-sandbox']
+      : [];
+
 // What every Firn the demo starts gets: demo mode (src/demo.ts) and the
 // throwaway profile.
 export const demoEnv = (extra = {}) => ({
@@ -139,9 +152,13 @@ const builtAfter = (since) =>
 export async function buildFirn(log) {
   const since = Date.now();
   log('Building Firn…');
-  const forge = startGroup('npx', ['electron-forge', 'start'], {
-    env: demoEnv(),
-  });
+  const forge = startGroup(
+    'npx',
+    ['electron-forge', 'start', '--', ...ELECTRON_SWITCHES],
+    {
+      env: demoEnv(),
+    },
+  );
   const deadline = Date.now() + 180_000;
   while (!builtAfter(since)) {
     if (forge.exitCode !== null)
@@ -201,7 +218,7 @@ export async function launchFirn({ glass }) {
   await stopStrayFirns();
   const app = await launchElectron({
     executablePath: require('electron'),
-    args: [...(process.platform === 'linux' ? ['--no-sandbox'] : []), '.'],
+    args: [...ELECTRON_SWITCHES, '.'],
     cwd: ROOT,
     env: demoEnv(glass ? {} : { FIRN_NO_GLASS: '1' }),
   });

@@ -240,8 +240,10 @@ let toldSize = false;
 async function record(clip) {
   log(`Recording ${clip.name}…`);
   prepareProfile(clip.seed);
+  log('  opening Firn…');
   const { app } = await launch();
   try {
+    log('  Firn is open; getting ready…');
     await wait(1000);
     await bringToFront(app);
     const info = await windowInfo(app);
@@ -250,6 +252,7 @@ async function record(clip) {
         `The main screen is too small for a 1440×900 window (it has ${info.workArea.width}×${info.workArea.height} free). Use a larger display, or a "More Space" setting in System Settings > Displays.`,
       );
     // How sharp the recording is (measured once per run).
+    if (scale === undefined) log('  checking the screen…');
     scale ??= await captureScale(info.display, info.scale);
     if (!toldSize) {
       toldSize = true;
@@ -258,6 +261,7 @@ async function record(clip) {
         `Clips will be ${size(info.bounds.width)}×${size(info.bounds.height)}${scale < 2 ? ' (for 2880×1800, pick a display setting that’s exactly twice as sharp; see demo/README.md)' : ''}.`,
       );
     }
+    log('  adding the demo cursor…');
     const cursor = await openCursor(app, info.bounds);
     let stillNumber = 0;
     // Stills are taken in the background, so the clip flows on.
@@ -295,6 +299,7 @@ async function record(clip) {
     }
     const raw = path.join(OUT, '.raw', `${clip.name}.mkv`);
     fs.mkdirSync(path.dirname(raw), { recursive: true });
+    log('  recording…');
     const recording = await startRecording(
       {
         ...info.bounds,

@@ -59,6 +59,22 @@ real pointer or presses real keys.
 - Leave the Mac alone while it runs (about 5 minutes for every clip). Other
   windows mustn't cover Firn's window.
 
+## If it stops
+
+Each step prints a line (opening Firn, checking the screen, recording), so
+the last line shows where it stopped.
+
+- **A macOS prompt**, which may be hidden behind other windows (Cmd+Tab to
+  find it): Screen Recording for Terminal, which needs Terminal reopened
+  (Cmd+Q) once it's allowed. The demo doesn't use your Keychain (it uses
+  Chromium's stand-in, `--use-mock-keychain`), so it shouldn't ask for your
+  password.
+- **A leftover Firn window** from a run that was stopped: `pkill -f
+  "$HOME/firn/node_modules/electron"` (with your folder's path), then run
+  it again.
+- **"Firn didn't finish opening"**: `demo/out/firn-log.txt` has what Firn
+  printed.
+
 ## The clips
 
 | Clip            | What it shows                                                                                          |

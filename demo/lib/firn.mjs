@@ -305,11 +305,16 @@ export async function launchFirn({ glass }) {
         'Firn closed right after starting (see demo/out/firn-log.txt). Run the demo again; if it keeps happening, send Claude what Terminal shows.',
       );
     }
-    last = await progress().catch(() => last);
+    last = await progress().catch((error) => ({
+      ...last,
+      error: String(error?.message ?? error)
+        .split('\n')[0]
+        .slice(0, 200),
+    }));
     // (Every 15 seconds, so a slow start doesn't look frozen.)
     if (i && i % 150 === 0)
       console.log(
-        `[demo]   still opening (${i / 10}s; window ${last.window ? `yes, showing ${last.url || 'nothing yet'}` : 'no'}, sidebar ${last.sidebar ? 'yes' : 'no'}, panels ${last.panels ? 'yes' : 'no'})…`,
+        `[demo]   still opening (${i / 10}s; window ${last.window ? `yes, showing ${last.url || 'nothing yet'}` : 'no'}, sidebar ${last.sidebar ? 'yes' : 'no'}, panels ${last.panels ? 'yes' : 'no'}${last.error ? `; asking Firn failed: ${last.error}` : ''})…`,
       );
     if (last.window && last.sidebar && last.panels) return { app };
     await wait(100);

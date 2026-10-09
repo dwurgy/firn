@@ -24,6 +24,11 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const FPS = 60;
 
+// What to say when macOS doesn't let ffmpeg record the screen (it waits,
+// silently, until Screen Recording is allowed).
+const PERMISSION = `macOS didn’t let ffmpeg record the screen. In System Settings > Privacy & Security > Screen & System Audio Recording, turn on your Terminal app (or allow it in the prompt, which may be behind other windows). Then quit Terminal completely (Cmd+Q), reopen it, and run the demo again.`;
+const LIMIT = 20_000;
+
 export function checkTools() {
   try {
     execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
@@ -45,8 +50,9 @@ async function macScreenDevice() {
   const result = await run(
     'ffmpeg',
     ['-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', timeout: LIMIT },
   ).catch((error) => error);
+  if (result.killed) throw new Error(PERMISSION);
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   const match = /\[(\d+)\] Capture screen 0/.exec(text);
   if (!match)
@@ -67,6 +73,7 @@ export async function captureScale(display, scale) {
     'ffmpeg',
     [
       '-hide_banner',
+      '-nostdin',
       '-f',
       'avfoundation',
       '-framerate',
@@ -79,8 +86,9 @@ export async function captureScale(display, scale) {
       'null',
       '-',
     ],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', timeout: LIMIT },
   ).catch((error) => error);
+  if (result.killed) throw new Error(PERMISSION);
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   const size = /Video: [^\n]*?(\d{3,5})x(\d{3,5})/.exec(text);
   if (!size)
@@ -162,6 +170,12 @@ export async function startRecording(region, scale, rawFile) {
         new Error(`The screen recording didn’t start:\n${log.slice(-1500)}`),
       ),
     );
+    setTimeout(() => {
+      if (startedAt) return;
+      ffmpeg.removeAllListeners('exit');
+      ffmpeg.kill('SIGKILL');
+      reject(new Error(PERMISSION));
+    }, LIMIT);
   });
   await started;
   return {

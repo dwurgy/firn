@@ -61,6 +61,32 @@ function loginOrigin(url: string) {
 // src/favicon.ts), apart from the page's own scripts.
 const ICON_WORLD_ID = 1998;
 
+// The mini player's pause and play (src/ui/MiniPlayer.tsx): pauses every
+// video and audio element that's playing, remembering which, and later
+// plays just those again. Each call answers how many it paused or played.
+// In the page itself it runs in an isolated world (apart from the page's
+// scripts); in embedded frames (a video player inside an article) Electron
+// can only run it in the frame's own world, which is fine: it reads and
+// sends back nothing but that count.
+const MEDIA_WORLD_ID = 1997;
+const MEDIA_SCRIPT = (action: 'pause' | 'play') => `(() => {
+  const key = Symbol.for('firn.paused');
+  const paused = (window[key] ??= new WeakSet());
+  let count = 0;
+  for (const media of document.querySelectorAll('video, audio')) {
+    if (${action === 'pause'} && !media.paused) {
+      media.pause();
+      paused.add(media);
+      count++;
+    } else if (${action === 'play'} && paused.has(media)) {
+      paused.delete(media);
+      media.play().catch(() => {});
+      count++;
+    }
+  }
+  return count;
+})()`;
+
 // Permissions that are fine without asking, as in Chrome.
 const HARMLESS_PERMISSIONS = new Set([
   'fullscreen',
@@ -397,6 +423,47 @@ class ElectronPage implements Page {
     return this.web.navigationHistory.canGoForward();
   }
 
+  get audible() {
+    return this.web.isCurrentlyAudible();
+  }
+
+  get muted() {
+    return this.web.isAudioMuted();
+  }
+
+  setMuted(on: boolean) {
+    this.web.setAudioMuted(on);
+  }
+
+  pauseMedia() {
+    return this.runMedia('pause');
+  }
+
+  async playMedia() {
+    await this.runMedia('play');
+  }
+
+  // Runs the media script in the page and every frame inside it; how many
+  // videos and sounds it paused or played in all.
+  private async runMedia(action: 'pause' | 'play') {
+    const web = this.web;
+    if (web.isDestroyed()) return 0;
+    const code = MEDIA_SCRIPT(action);
+    const top = web.mainFrame;
+    const counts = await Promise.all(
+      [
+        web.executeJavaScriptInIsolatedWorld(MEDIA_WORLD_ID, [{ code }], true),
+        ...top.framesInSubtree
+          .filter((frame) => frame !== top && !frame.isDestroyed())
+          .map((frame) => frame.executeJavaScript(code, true)),
+      ].map((run) => run.catch(() => 0)),
+    );
+    return counts.reduce<number>(
+      (sum, n) => sum + (typeof n === 'number' ? n : 0),
+      0,
+    );
+  }
+
   load(url: string) {
     this.web.loadURL(url);
   }
@@ -543,6 +610,9 @@ class ElectronPage implements Page {
     web.on('did-navigate', update);
     web.on('did-navigate-in-page', update);
     web.on('page-title-updated', update);
+    // Sound started or stopped (Chromium waits a moment after it stops, so
+    // a pause between songs doesn't flicker).
+    web.on('audio-state-changed', update);
     // Chromium reports the page's first favicon; look at all the icons the
     // page lists and pass on the best one (src/favicon.ts).
     let iconCheck = 0;

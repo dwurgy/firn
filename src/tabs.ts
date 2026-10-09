@@ -25,6 +25,7 @@ import type {
   FindResult,
   NavCommand,
   NavState,
+  PlayerState,
   SavedHistory,
   SavedTab,
   SplitGroup,
@@ -39,6 +40,12 @@ interface Entry {
   loaded: boolean;
   // Saved back/forward history to restore when the tab first loads.
   savedHistory?: SavedHistory;
+  // Sound, for the mini player: when the page last started making sound,
+  // whether it is (as last reported), and whether it was paused from the
+  // player ('muted': nothing could be paused, so it was muted instead).
+  audibleSince?: number;
+  wasAudible?: boolean;
+  paused?: 'media' | 'muted';
 }
 
 // How much back/forward history is kept per tab in the saved session.
@@ -198,6 +205,8 @@ export class TabManager {
         basecamp: !!tab.basecamp,
         loaded,
         splitId: tab.splitGroupId,
+        audible: page.audible,
+        muted: page.muted,
       };
     });
   }
@@ -230,12 +239,63 @@ export class TabManager {
           basecamp: !!tab.basecamp,
           loaded: this.entries.get(id)!.loaded,
           splitId: tab.splitGroupId,
+          audible: page.audible,
+          muted: page.muted,
         };
       }),
       splits: [...this.splits.values()].filter(
         (split) => split.spaceId === this.spaceId,
       ),
+      player: this.player(),
     };
+  }
+
+  // The mini player: the tab playing sound that isn't on screen (the one
+  // that started last, in any space), or one paused from the player. Not
+  // a tab muted on purpose.
+  private player(): PlayerState | null {
+    let best: { id: string; entry: Entry } | null = null;
+    for (const [id, entry] of this.entries) {
+      if (this.onScreen.includes(id)) continue;
+      const { page } = entry;
+      const playing = page.audible && !page.muted && !entry.paused;
+      if (!playing && !entry.paused) continue;
+      if (!best || (entry.audibleSince ?? 0) > (best.entry.audibleSince ?? 0))
+        best = { id, entry };
+    }
+    if (!best) return null;
+    const { tab, paused } = best.entry;
+    return {
+      tabId: best.id,
+      title: tab.title,
+      url: tab.url,
+      favicon: tab.favicon,
+      playing: !paused,
+    };
+  }
+
+  // The mini player's button: pauses the tab's videos and sounds (or, if
+  // there's nothing it can pause, mutes it), or plays them again.
+  async togglePlaying(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    const { page } = entry;
+    if (entry.paused === 'muted') page.setMuted(false);
+    else if (entry.paused === 'media') void page.playMedia();
+    if (entry.paused) {
+      entry.paused = undefined;
+    } else {
+      // Shown as paused right away (pausing takes a moment).
+      entry.paused = 'media';
+      this.emitTabs();
+      const count = await page.pauseMedia();
+      if (entry.page !== page || entry.paused !== 'media') return;
+      if (!count) {
+        page.setMuted(true);
+        entry.paused = 'muted';
+      }
+    }
+    this.emitTabs();
   }
 
   navState(): NavState {
@@ -477,6 +537,16 @@ export class TabManager {
     this.emitTabs();
   }
 
+  // The speaker on a tab: mutes it, or turns its sound back on.
+  toggleMute(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    entry.page.setMuted(!entry.page.muted);
+    // Unmuting a tab the mini player had muted plays it again.
+    if (entry.paused === 'muted') entry.paused = undefined;
+    this.emitTabs();
+  }
+
   // Takes a pinned tab back to its home page.
   goHome(id: string) {
     const entry = this.entries.get(id);
@@ -505,6 +575,8 @@ export class TabManager {
     entry.page = this.makePage(tab.id);
     entry.loaded = false;
     entry.savedHistory = undefined;
+    entry.paused = undefined;
+    entry.wasAudible = false;
     tab.url = tab.homeUrl ?? tab.url;
     if (this.activeId === tab.id) this.activate(tab.id);
     else this.emitTabs();
@@ -554,7 +626,13 @@ export class TabManager {
     for (const other of this.onScreen)
       if (!next.includes(other)) this.entries.get(other)?.page.hide();
     this.onScreen = next;
-    for (const shownId of next) this.load(this.entries.get(shownId)!);
+    for (const shownId of next) {
+      const shown = this.entries.get(shownId)!;
+      // On screen, the page's own controls (and the tab's speaker, if the
+      // player muted it) take over from the mini player.
+      shown.paused = undefined;
+      this.load(shown);
+    }
     this.layout();
     entry.page.focus();
     this.emitTabs();
@@ -1074,6 +1152,13 @@ export class TabManager {
         }
         if (url) entry.tab.url = url;
         entry.tab.title = title;
+        // Sound starting (again) ends a pause from the mini player.
+        const audible = entry.page.audible;
+        if (audible && !entry.wasAudible) {
+          entry.audibleSince = Date.now();
+          if (entry.paused === 'media') entry.paused = undefined;
+        }
+        entry.wasAudible = audible;
         // A page arriving on a site takes that site's zoom.
         const zoom = this.zoomOf(entry.tab.url);
         if (url && Math.abs(entry.page.zoom - zoom) > 0.001)
@@ -1093,6 +1178,8 @@ export class TabManager {
         const entry = entryOf();
         if (entry && safeHost(url) !== safeHost(entry.tab.url))
           entry.tab.favicon = '';
+        // A new page has nothing paused (a muted tab stays muted).
+        if (entry?.paused === 'media') entry.paused = undefined;
       },
       // Links that ask for a new tab open one right below this tab. From a
       // Basecamp or pinned tab, a link to another site opens in Lookout

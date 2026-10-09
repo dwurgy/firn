@@ -12,7 +12,7 @@ import {
   SeparateIcon,
   UnloadIcon,
 } from './icons';
-import { TabIcon, tabTitle } from './TabList';
+import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // A space's tabs as one list: its pinned tabs, the divider (with "Clear"),
 // "New tab", then its everyday tabs.
@@ -373,6 +373,7 @@ function TabRow({
         <TabIcon tab={tab} />
       </span>
       <span className="tab-title">{tabTitle(tab)}</span>
+      <TabSound tab={tab} />
       {(!pinned || tab.loaded) && (
         <button
           className="tab-close"
@@ -446,6 +447,7 @@ function SplitRow({
             <TabIcon tab={tab} />
           </span>
           <span className="tab-title">{tabTitle(tab)}</span>
+          <TabSound tab={tab} />
         </span>
       ))}
       <button

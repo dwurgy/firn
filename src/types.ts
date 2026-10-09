@@ -186,6 +186,10 @@ export interface TabView {
   loaded: boolean;
   // Set when the tab is one side of a split view.
   splitId?: string;
+  // The tab is playing sound, and whether it's muted (a muted tab keeps
+  // its speaker, crossed out, so it can be turned back on).
+  audible: boolean;
+  muted: boolean;
 }
 
 export interface TabsState {
@@ -194,6 +198,19 @@ export interface TabsState {
   // Split views among these tabs (both sides are always next to each other
   // in `tabs`).
   splits: SplitGroup[];
+  // The mini player at the bottom of the sidebar, if a tab that isn't on
+  // screen is playing sound (in any space).
+  player: PlayerState | null;
+}
+
+// The mini player: the tab it's for, and whether it's playing (false:
+// paused from the player).
+export interface PlayerState {
+  tabId: string;
+  title: string;
+  url: string;
+  favicon: string;
+  playing: boolean;
 }
 
 // The spaces, in order, and which one is shown.
@@ -393,6 +410,10 @@ export interface FirnBridge {
   lightsAt(x: number, y: number): void;
   setSidebarWidth(width: number): void;
   closeTab(id: string): void;
+  // The speaker on a tab playing sound: mute it, or turn it back on.
+  toggleMute(id: string): void;
+  // The mini player's pause / play button.
+  togglePlaying(id: string): void;
   activateTab(id: string): void;
   // Moves a tab within its group, or (with `pinned`) into the pinned or
   // everyday tabs at that spot.

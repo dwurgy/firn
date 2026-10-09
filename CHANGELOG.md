@@ -1,5 +1,16 @@
 # What's new in Firn
 
+## Firn 0.4.0
+
+**See what's playing, and pause it from anywhere.**
+
+Tabs that play sound now show a small speaker, so you always know where that music or video is coming from. And when it's playing in a tab you can't see, a little player at the bottom of the sidebar lets you pause it without going looking.
+
+### New
+
+- **A speaker on tabs playing sound.** Click it to mute the tab, and again to turn the sound back on. You'll also find Mute tab in the tab's right-click menu.
+- **A mini player** appears above the Firn button while a tab you can't see is playing, even in another space. Pause or play it right there, or click it to go to the tab.
+
 ## Firn 0.3.1
 
 **Little labels, in Firn's own style.**

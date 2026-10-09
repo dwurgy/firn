@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { TabView } from '../types';
 import { useIconColor } from './iconColor';
-import { TabIcon, tabTitle } from './TabList';
+import { TabIcon, TabSound, tabTitle } from './TabList';
 
 // Basecamp: a grid of favorite sites at the top of the sidebar, the same in
 // every space (at most 12). Closing one (middle-click) unloads it rather
@@ -303,6 +303,7 @@ function BasecampTile({
       <span className="basecamp-icon">
         <TabIcon tab={tab} />
       </span>
+      <TabSound tab={tab} badge />
     </button>
   );
 }

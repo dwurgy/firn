@@ -25,6 +25,7 @@ import {
   stopAllRecordings,
   stopStrayRecordings,
   takeStill,
+  warmUpScreen,
 } from './lib/capture.mjs';
 import { openCursor } from './lib/cursor.mjs';
 import { createDirector, PACE, seededRandom, ui } from './lib/director.mjs';
@@ -398,6 +399,18 @@ async function main() {
         fs.rmSync(path.join(OUT, 'stills', name));
   wipeProfile();
   stopStrayRecordings(RAW);
+  if (process.platform === 'darwin') {
+    log('Checking that the screen can be recorded…');
+    await warmUpScreen();
+    log(
+      'If macOS asks whether your Terminal may access the screen directly ("bypass the system private window picker"), click Allow. It would otherwise sit in the middle of every clip.',
+    );
+    if (process.stdin.isTTY) {
+      log('Press Return to go on.');
+      await new Promise((resolve) => process.stdin.once('data', resolve));
+      process.stdin.pause();
+    } else await wait(10_000);
+  }
 
   await buildFirn(log);
   server = await startDevServer(log);

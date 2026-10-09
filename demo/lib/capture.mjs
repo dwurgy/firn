@@ -101,6 +101,34 @@ async function macScreenDevice() {
   return match[1];
 }
 
+// A short throwaway recording, before anything is on screen. Newer macOS
+// asks separately (a dialog in the middle of the screen, "…is requesting
+// to bypass the system private window picker…") the first time a
+// recording starts; this makes it ask now, not over a clip.
+export async function warmUpScreen() {
+  if (process.platform !== 'darwin') return;
+  const device = await macScreenDevice();
+  await run(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-nostdin',
+      '-f',
+      'avfoundation',
+      '-framerate',
+      String(FPS),
+      '-i',
+      `${device}:none`,
+      '-t',
+      '2',
+      '-f',
+      'null',
+      '-',
+    ],
+    { encoding: 'utf8', timeout: LIMIT, killSignal: 'SIGKILL' },
+  ).catch(() => {});
+}
+
 // Pixels per point in the recording. On a Mac it's measured: macOS
 // records a scaled screen (e.g. a 4K display at "looks like 2560×1440")
 // at its own size, which isn't always twice the points. `display` is the

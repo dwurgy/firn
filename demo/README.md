@@ -37,6 +37,11 @@ records.
    (Terminal, iTerm, or VS Code): System Settings > Privacy & Security >
    Screen & System Audio Recording, turn it on, and reopen that app. The
    first run may ask on its own; say yes, then run it again.
+4. **Direct screen access** (newer macOS): at the start of a run, macOS may
+   show a dialog saying your Terminal "is requesting to bypass the system
+   private window picker and directly access your screen". Click
+   **Allow**. The demo waits for you (press Return) so the dialog doesn't
+   end up in the middle of every clip. macOS asks again now and then.
 
 That's all. No Accessibility permission is needed: the demo never moves your
 real pointer or presses real keys.

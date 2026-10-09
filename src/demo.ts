@@ -8,6 +8,7 @@
 // - opens at a fixed size (1440×900 inside), centered on the main screen;
 // - is always light, never checks for updates, never contacts Safe
 //   Browsing, and never asks for site permissions (they're refused);
+// - hides Wikipedia's donation banners (the demo's pages are Wikipedia's);
 // - lets the recorder pick an item in a right-click menu it opened, the
 //   one thing its scripted mouse can't click (menus are the system's own).
 
@@ -38,6 +39,14 @@ export function demoBounds() {
   };
 }
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+};
+
 // Remembers the last right-click menu Firn opened, so the recorder can
 // choose one of its items (by the start of its label) after showing it.
 export function installDemoHooks() {
@@ -54,6 +63,15 @@ export function installDemoHooks() {
       console.log(`[demo] Firn got ${signal}`);
       quit();
     });
+  // Wikipedia's donation banners would fill the top of the demo's pages.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('dom-ready', () => {
+      if (!/(^|\.)wikipedia\.org$/.test(hostOf(contents.getURL()))) return;
+      void contents.insertCSS(
+        '#siteNotice, #centralNotice, .cn-fundraising, [class*="frb"], [id^="frb"] { display: none !important; }',
+      );
+    });
+  });
   let lastMenu: Menu | null = null;
   const build = Menu.buildFromTemplate;
   Menu.buildFromTemplate = (template) => {

@@ -3764,14 +3764,6 @@ button {
     0 2px 8px rgba(60, 40, 20, 0.12);
   font-size: 12px;
   line-height: 1.35;
-  /* A long name wraps onto a second line, then ends in "…". */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: normal;
   width: max-content;
   pointer-events: none;
   opacity: 0;
@@ -3779,6 +3771,18 @@ button {
   transition:
     opacity 120ms ease-out,
     transform 120ms ease-out;
+}
+
+/* A long name wraps onto a second line, then ends in "…". (Its own box,
+   inside the label's padding: cut off there, a third line can't show.) */
+.firn-tip-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .firn-tip.is-shown {

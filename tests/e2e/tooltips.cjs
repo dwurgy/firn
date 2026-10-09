@@ -1,6 +1,6 @@
 // Hover labels: Firn's own (not the system's tooltips), after a short
 // pause, inside the sidebar, and only where they add something (not a tab
-// name that's already fully shown).
+// name that's already fully shown), and in the top bar too.
 const { _electron } = require('./playwright.cjs');
 const ROOT = require('path').resolve(__dirname, '../..');
 const fs = require('fs');
@@ -118,14 +118,72 @@ const check = (n, ok, x = '') => {
   check('pressing puts the label away', !(await tip()).shown);
   await ui.mouse.up();
 
-  const native = await top.evaluate(
+  // The top bar ("At the top"): too short to hold a label, so the floating
+  // layer shows it, in a small box of its own below the button.
+  await ui.evaluate(() => window.firn.updateSettings({ addressBar: 'top' }));
+  await wait(1200);
+  const floatingLayer = () =>
+    app.evaluate(({ BrowserWindow }) => {
+      const view = BrowserWindow.getAllWindows()[0].contentView.children.find(
+        (v) => v.webContents?.getURL().includes('view=floating'),
+      );
+      return { visible: view.getVisible(), ...view.getBounds() };
+    });
+  const barTitles = await top.evaluate(
     () => document.querySelectorAll('[title]').length,
   );
+  check('no system tooltips in the top bar either', barTitles === 0, barTitles);
+  const back = await top.evaluate(() => {
+    const r = document
+      .querySelector('.top-bar-nav button[data-tip="Back"]')
+      .getBoundingClientRect();
+    return { x: r.x, y: r.y, bottom: r.bottom, w: r.width };
+  });
+  await top.hover('.top-bar-nav button[data-tip="Back"]');
+  await wait(900);
+  const box = await floatingLayer();
+  const shown = await fl.evaluate(() => {
+    const t = document.querySelector('.firn-tip');
+    return { text: t.textContent, shown: t.classList.contains('is-shown') };
+  });
   check(
-    "the slim top bar keeps the system's tooltips (no room for Firn's)",
-    native > 0,
-    native,
+    "hovering a top bar button: Firn's label, below it, in a small box",
+    box.visible &&
+      shown.shown &&
+      shown.text === 'Back' &&
+      box.y >= 48 &&
+      box.width < 160 &&
+      box.height < 60 &&
+      Math.abs(box.x + box.width / 2 - (back.x + back.w / 2)) < 2,
+    JSON.stringify({ box, back, shown }),
   );
+  execSync(
+    `import -window root -crop 360x120+${o.x}+${o.y} ${SP}/tooltip-bar.png`,
+  );
+  await top.mouse.move(600, 20);
+  await wait(400);
+  check(
+    '...and the box goes away with the pointer',
+    !(await floatingLayer()).visible,
+  );
+  await top.hover('.top-bar-nav button[data-tip="Back"]');
+  await wait(900);
+  await ui.evaluate(() => window.firn.runAction('settings'));
+  await wait(600);
+  const settingsBox = await floatingLayer();
+  const settingsShown = await fl.evaluate(
+    () => !!document.querySelector('.settings-group'),
+  );
+  check(
+    'a panel opening takes over the floating layer from the label',
+    settingsBox.visible && settingsBox.width > 400 && settingsShown,
+    JSON.stringify(settingsBox),
+  );
+  // Back to the usual look, for the checks that run after this one.
+  await ui.evaluate(() =>
+    window.firn.updateSettings({ addressBar: 'sidebar' }),
+  );
+  await wait(500);
   console.log(
     `\n${results.filter(Boolean).length}/${results.length} checks passed`,
   );

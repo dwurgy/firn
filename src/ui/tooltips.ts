@@ -8,8 +8,9 @@
 //
 // A label can't draw outside its own layer: in the sidebar it stays inside
 // the sidebar (wrapping a long name) instead of spilling over the page.
-// The slim top bar has no room under its buttons, so it keeps the system's
-// tooltips (not installed there).
+// The slim top bar is too short to hold one, so it asks the main process,
+// and the floating layer draws it in a small box of its own just below
+// the button (src/main.ts, 'tip:show').
 
 const SHOW_AFTER_MS = 500;
 // Moving straight from one labelled thing to the next shows its label at
@@ -17,6 +18,12 @@ const SHOW_AFTER_MS = 500;
 const QUICK_FOR_MS = 400;
 const GAP = 6;
 const MARGIN = 8;
+// The top bar's labels: the floating layer's box leaves this much room
+// around the label for its shadow, and a little above it (TIP_ROOM and
+// TIP_TOP in src/main.ts).
+const BOX_ROOM = 12;
+const BOX_TOP = 2;
+const BAR_TIP_WIDTH = 280;
 
 export function installTooltips(view: string) {
   const adopt = (el: Element) => {
@@ -104,9 +111,20 @@ export function installTooltips(view: string) {
     tip.style.top = `${Math.round(Math.max(area.top + MARGIN, top))}px`;
   };
 
+  let asked = false;
   const show = (el: Element) => {
     const text = el.getAttribute('data-tip');
     if (!text || !el.isConnected) return;
+    if (view === 'topbar') {
+      const r = el.getBoundingClientRect();
+      asked = true;
+      window.firn.showTip(text, {
+        left: r.left,
+        right: r.right,
+        bottom: r.bottom,
+      });
+      return;
+    }
     tip.textContent = text;
     tip.classList.add('is-placing');
     place(el);
@@ -116,6 +134,11 @@ export function installTooltips(view: string) {
 
   const hide = () => {
     clearTimeout(timer);
+    if (asked) {
+      asked = false;
+      hiddenAt = performance.now();
+      window.firn.hideTip();
+    }
     if (tip.classList.contains('is-shown')) hiddenAt = performance.now();
     tip.classList.remove('is-shown');
     target = null;
@@ -151,4 +174,23 @@ export function installTooltips(view: string) {
   document.addEventListener('scroll', hide, true);
   window.addEventListener('blur', hide);
   document.documentElement.addEventListener('pointerleave', hide);
+
+  // The floating layer draws the top bar's labels: it measures one, and
+  // shows it once its small box is in place.
+  if (view === 'floating')
+    window.firn.onTipState((state) => {
+      if (state.kind === 'measure') {
+        hide();
+        tip.textContent = state.text;
+        tip.classList.add('is-placing');
+        tip.style.maxWidth = `${BAR_TIP_WIDTH}px`;
+        tip.style.left = `${BOX_ROOM}px`;
+        tip.style.top = `${BOX_TOP}px`;
+        window.firn.tipSize(tip.offsetWidth, tip.offsetHeight);
+        tip.classList.remove('is-placing');
+      } else if (state.kind === 'show') {
+        // A frame later, so it fades in once the box is on screen.
+        requestAnimationFrame(() => tip.classList.add('is-shown'));
+      } else tip.classList.remove('is-shown');
+    });
 }

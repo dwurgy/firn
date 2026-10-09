@@ -22,8 +22,8 @@ const LAYERS: Record<string, () => React.JSX.Element | null> = {
   peek: Peek,
 };
 const Root = LAYERS[view] ?? App;
-// Firn's own hover labels (the slim top bar keeps the system's: no room).
-if (view !== 'topbar') installTooltips(view);
+// Firn's own hover labels, in place of the system's tooltips.
+installTooltips(view);
 
 // Light or dark, as the main process says (the system's setting, or the
 // choice in settings); until it does, the system's.

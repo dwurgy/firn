@@ -401,6 +401,7 @@ function CommandBar({
           <input
             ref={inputRef}
             className="command-input"
+            data-testid="command-input"
             spellCheck={false}
             placeholder={
               beside
@@ -422,6 +423,7 @@ function CommandBar({
               <li
                 key={resultKey(result)}
                 className={`result is-${result.kind} ${i === current ? 'is-selected' : ''}`}
+                data-testid="command-result"
                 onMouseMove={() => setSelected(i)}
                 onClick={() => runResult(result)}
               >
@@ -583,6 +585,7 @@ function Lookout({
       >
         <button
           className="lookout-button"
+          data-testid="lookout-close"
           title="Close (Esc)"
           onClick={() => window.firn.closeOverlay()}
         >
@@ -590,6 +593,7 @@ function Lookout({
         </button>
         <button
           className="lookout-button"
+          data-testid="lookout-open-tab"
           title="Open as tab"
           onClick={() => window.firn.expandLookout()}
         >

@@ -1,0 +1,198 @@
+// Recording the screen where Firn's window is, and taking stills.
+//
+// Why the screen and not Playwright's own video: Firn's web pages are
+// separate views (WebContentsView) laid over its window, each with its own
+// renderer. Playwright records one renderer at a time, so its video would
+// show the sidebar with a blank hole where the page is. Recording the
+// screen captures exactly what's shown: the sidebar, the page, panels,
+// menus, and the demo cursor.
+//
+// macOS (the real thing): ffmpeg's AVFoundation screen capture, cropped to
+// the window, at the screen's full (Retina) resolution, 60 frames a
+// second, without the system's pointer. It's first saved quickly with the
+// Mac's hardware encoder, then trimmed and encoded at high quality (H.264,
+// CRF 14, yuv420p). Stills: macOS's `screencapture` of Firn's window
+// alone, at full resolution (no demo cursor, no shadow).
+//
+// Linux (for trying the recorder in a development container): X11 screen
+// capture of the same region.
+
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+const FPS = 60;
+
+export function checkTools() {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+  } catch {
+    throw new Error(
+      'ffmpeg isn’t installed. On a Mac: brew install ffmpeg (see demo/README.md).',
+    );
+  }
+  if (process.platform !== 'darwin' && process.platform !== 'linux')
+    throw new Error(
+      'The demo recorder runs on macOS (and Linux, for testing).',
+    );
+  if (process.platform === 'linux' && !process.env.DISPLAY)
+    throw new Error('On Linux, the demo needs an X display (DISPLAY).');
+}
+
+// The AVFoundation device number of the main screen ("Capture screen 0").
+async function macScreenDevice() {
+  const result = await run(
+    'ffmpeg',
+    ['-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
+    { encoding: 'utf8' },
+  ).catch((error) => error);
+  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  const match = /\[(\d+)\] Capture screen 0/.exec(text);
+  if (!match)
+    throw new Error(
+      'ffmpeg can’t see the screen. Give your Terminal app Screen Recording permission (see demo/README.md).',
+    );
+  return match[1];
+}
+
+// Starts recording `region` (the window, in screen points; `scale` pixels
+// per point). Resolves once frames are arriving, with `stop()`, which
+// resolves to { file, startedAt } (when its first frame was taken, by
+// this computer's clock).
+export async function startRecording(region, scale, rawFile) {
+  fs.rmSync(rawFile, { force: true });
+  const px = (n) => Math.round(n * scale);
+  const even = (n) => n - (n % 2);
+  const w = even(px(region.width));
+  const h = even(px(region.height));
+  let args;
+  if (process.platform === 'darwin') {
+    const device = await macScreenDevice();
+    args = [
+      '-hide_banner',
+      '-f',
+      'avfoundation',
+      '-capture_cursor',
+      '0',
+      '-capture_mouse_clicks',
+      '0',
+      '-framerate',
+      String(FPS),
+      '-i',
+      `${device}:none`,
+      '-vf',
+      `crop=${w}:${h}:${px(region.x)}:${px(region.y)}`,
+      '-c:v',
+      'h264_videotoolbox',
+      '-b:v',
+      '120M',
+      '-r',
+      String(FPS),
+      rawFile,
+    ];
+  } else {
+    args = [
+      '-hide_banner',
+      '-f',
+      'x11grab',
+      '-draw_mouse',
+      '0',
+      '-framerate',
+      String(FPS),
+      '-video_size',
+      `${w}x${h}`,
+      '-i',
+      `${process.env.DISPLAY}+${region.x},${region.y}`,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-crf',
+      '10',
+      rawFile,
+    ];
+  }
+  const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  let log = '';
+  let startedAt = 0;
+  const started = new Promise((resolve, reject) => {
+    ffmpeg.stderr.on('data', (chunk) => {
+      log += chunk;
+      const frames = /frame=\s*(\d+)/.exec(String(chunk));
+      if (!startedAt && frames && Number(frames[1]) > 0) {
+        startedAt = Date.now() - (Number(frames[1]) / FPS) * 1000;
+        resolve();
+      }
+    });
+    ffmpeg.on('exit', () =>
+      reject(
+        new Error(`The screen recording didn’t start:\n${log.slice(-1500)}`),
+      ),
+    );
+  });
+  await started;
+  return {
+    stop: () =>
+      new Promise((resolve, reject) => {
+        ffmpeg.removeAllListeners('exit');
+        ffmpeg.on('exit', () =>
+          fs.existsSync(rawFile)
+            ? resolve({ file: rawFile, startedAt })
+            : reject(
+                new Error(`The recording wasn’t saved:\n${log.slice(-1500)}`),
+              ),
+        );
+        ffmpeg.stdin.write('q');
+      }),
+  };
+}
+
+// The finished clip: `from` to `to` (this computer's clock) of the
+// recording, encoded for keeps.
+export async function finishClip({ file, startedAt }, from, to, outFile) {
+  const start = Math.max(0, (from - startedAt) / 1000);
+  const length = (to - from) / 1000;
+  await run('ffmpeg', [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-i',
+    file,
+    '-ss',
+    start.toFixed(3),
+    '-t',
+    length.toFixed(3),
+    '-c:v',
+    'libx264',
+    '-preset',
+    'slow',
+    '-crf',
+    '14',
+    '-pix_fmt',
+    'yuv420p',
+    '-r',
+    String(FPS),
+    '-movflags',
+    '+faststart',
+    '-an',
+    outFile,
+  ]);
+}
+
+// A still of Firn's window. On a Mac, `windowId` is its window number
+// (macOS captures it alone, at full resolution); elsewhere the region.
+export async function takeStill({ windowId, region }, outFile) {
+  if (process.platform === 'darwin') {
+    await run('screencapture', ['-x', '-o', '-l', String(windowId), outFile]);
+  } else {
+    await run('import', [
+      '-window',
+      'root',
+      '-crop',
+      `${region.width}x${region.height}+${region.x}+${region.y}`,
+      outFile,
+    ]);
+  }
+}

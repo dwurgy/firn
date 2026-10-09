@@ -1,0 +1,350 @@
+// Firn's demo recorder: `npm run demo` records every clip, and
+// `npm run demo -- --clip lookout` just one (repeat --clip for a few). See
+// demo/README.md.
+//
+// Each clip starts from a fresh copy of the demo profile, so every run
+// gives the same result:
+//   1. Firn is built from the source code and its interface served.
+//   2. Warm-up (off camera): the demo profile is seeded with the spaces,
+//      tabs, and Basecamp, and Firn visits every tab once, so each has its
+//      title and icon, and the pages are in the cache.
+//   3. Each clip: that warmed profile (or a fresh one, for the welcome and
+//      the empty page), Firn opened at 1440×900, the soft demo cursor laid
+//      over it, pages settled, then recorded: 1.2s still, the steps, 1.2s
+//      still.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { CLIPS } from './clips/index.mjs';
+import {
+  checkTools,
+  finishClip,
+  startRecording,
+  takeStill,
+} from './lib/capture.mjs';
+import { openCursor } from './lib/cursor.mjs';
+import { createDirector, PACE, seededRandom, ui } from './lib/director.mjs';
+import {
+  buildFirn,
+  DEMO_DIR,
+  launchFirn,
+  PROFILE,
+  runningFirn,
+  startDevServer,
+  wipeProfile,
+} from './lib/firn.mjs';
+import {
+  basecampId,
+  SPACES,
+  tabId,
+  writeSession,
+  writeSettings,
+} from './lib/seed.mjs';
+
+const OUT = path.join(DEMO_DIR, 'out');
+const CACHE = path.join(DEMO_DIR, '.cache');
+const WARM = path.join(CACHE, 'warm-profile');
+const AD_LISTS = 'ad-block-lists.bin';
+const DEV_SERVER = 'http://localhost:5173/';
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const log = (message) => console.log(`[demo] ${message}`);
+
+const { values } = parseArgs({
+  options: {
+    clip: { type: 'string', multiple: true },
+    glass: { type: 'boolean', default: false },
+    list: { type: 'boolean', default: false },
+  },
+});
+
+if (values.list) {
+  for (const clip of CLIPS) console.log(clip.name);
+  process.exit(0);
+}
+const chosen = values.clip?.length
+  ? values.clip.map((name) => {
+      const clip = CLIPS.find((c) => c.name === name);
+      if (!clip) {
+        console.error(
+          `No clip called “${name}”. The clips: ${CLIPS.map((c) => c.name).join(', ')}`,
+        );
+        process.exit(1);
+      }
+      return clip;
+    })
+  : CLIPS;
+
+// --- The ad-block lists ------------------------------------------------------
+// Firn downloads its block lists when it has none (or they're a day old).
+// The demo keeps them between runs, so a run doesn't fetch them again.
+
+const copyKeepingTime = (from, to) => {
+  if (!fs.existsSync(from)) return;
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
+  const { atime, mtime } = fs.statSync(from);
+  fs.utimesSync(to, atime, mtime);
+};
+const keepAdLists = () =>
+  copyKeepingTime(path.join(PROFILE, AD_LISTS), path.join(CACHE, AD_LISTS));
+const giveAdLists = () =>
+  copyKeepingTime(path.join(CACHE, AD_LISTS), path.join(PROFILE, AD_LISTS));
+
+// --- Firn's window --------------------------------------------------------------
+
+const windowInfo = (app) =>
+  app.evaluate(({ BrowserWindow, screen }, devServer) => {
+    const win = BrowserWindow.getAllWindows().find(
+      (w) => w.webContents.getURL() === devServer,
+    );
+    const bounds = win.getContentBounds();
+    const display = screen.getDisplayMatching(bounds);
+    return {
+      bounds,
+      scale: display.scaleFactor,
+      workArea: display.workArea,
+      windowId: Number(win.getMediaSourceId().split(':')[1]),
+    };
+  }, DEV_SERVER);
+
+const bringToFront = (app) =>
+  app.evaluate(({ app, BrowserWindow }, devServer) => {
+    const win = BrowserWindow.getAllWindows().find(
+      (w) => w.webContents.getURL() === devServer,
+    );
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    win.show();
+    win.focus();
+  }, DEV_SERVER);
+
+// Saves Firn's session (as closing its window does), then quits; if it
+// hasn't quit a few seconds later, it's stopped.
+async function quitFirn(app) {
+  const child = app.process();
+  const exited = new Promise((resolve) => {
+    if (child.exitCode !== null) resolve();
+    child.once('exit', resolve);
+  });
+  await app
+    .evaluate(({ app }) => {
+      app.quit();
+    })
+    .catch(() => {});
+  await Promise.race([exited, wait(6000)]);
+  if (child.exitCode === null) {
+    child.kill('SIGKILL');
+    await Promise.race([exited, wait(2000)]);
+  }
+  // (Chromium's helper processes finish writing a moment later.)
+  await wait(700);
+  running.delete(app);
+}
+
+// Firns started by this run, stopped if the run is interrupted.
+const running = new Set();
+const launch = async () => {
+  const firn = await launchFirn({ glass: values.glass });
+  running.add(firn.app);
+  return firn;
+};
+
+// Copies a profile, leaving out Chromium's "already open" lock files.
+const copyProfile = (from, to) => {
+  fs.rmSync(to, { recursive: true, force: true, maxRetries: 10 });
+  fs.cpSync(from, to, {
+    recursive: true,
+    filter: (file) => !path.basename(file).startsWith('Singleton'),
+  });
+};
+
+// The real pointer (left out of the recording) would still light up what
+// it rests on, so it must be off the window.
+async function waitForPointerOff(app, bounds) {
+  if (process.platform !== 'darwin') return;
+  let asked = false;
+  for (;;) {
+    const p = await app.evaluate(({ screen }) => screen.getCursorScreenPoint());
+    const inside =
+      p.x >= bounds.x - 4 &&
+      p.x <= bounds.x + bounds.width + 4 &&
+      p.y >= bounds.y - 4 &&
+      p.y <= bounds.y + bounds.height + 4;
+    if (!inside) return;
+    if (!asked) log('Move your mouse pointer off the Firn window to continue…');
+    asked = true;
+    await wait(300);
+  }
+}
+
+// --- Warm-up --------------------------------------------------------------------
+
+async function warmUp() {
+  log('Warming up: visiting every demo page once (off camera)…');
+  wipeProfile();
+  giveAdLists();
+  writeSettings();
+  writeSession();
+  const { app } = await launch();
+  const d = createDirector({ app, random: Math.random });
+  const sidebar = ui('body');
+  const visit = async (id) => {
+    await d.run(sidebar, `window.firn.activateTab(${JSON.stringify(id)})`);
+    await wait(300);
+    await d.settle();
+  };
+  for (let s = SPACES.length - 1; s >= 0; s--) {
+    await d.run(
+      sidebar,
+      `window.firn.switchSpace(${JSON.stringify(SPACES[s].id)})`,
+    );
+    await wait(500);
+    // Last tab first, so each space comes back on its first tab.
+    for (let i = SPACES[s].tabs.length - 1; i >= 0; i--)
+      await visit(tabId(s, i));
+  }
+  for (let i = 2; i >= 0; i--) await visit(basecampId(i));
+  await visit(tabId(0, 0));
+  await quitFirn(app);
+  keepAdLists();
+  copyProfile(PROFILE, WARM);
+}
+
+function prepareProfile(seed) {
+  if (seed === 'tabs') {
+    copyProfile(WARM, PROFILE);
+    return;
+  }
+  wipeProfile();
+  giveAdLists();
+  if (seed === 'welcome') writeSettings({ onboarded: false });
+  else {
+    writeSettings();
+    writeSession({ withTabs: false });
+  }
+}
+
+// --- One clip ------------------------------------------------------------------
+
+async function record(clip) {
+  log(`Recording ${clip.name}…`);
+  prepareProfile(clip.seed);
+  const { app } = await launch();
+  try {
+    await wait(1000);
+    await bringToFront(app);
+    const info = await windowInfo(app);
+    if (info.workArea.width < 1440 || info.workArea.height < 900)
+      throw new Error(
+        `The main screen is too small for a 1440×900 window (it has ${info.workArea.width}×${info.workArea.height} free). Use a larger display, or a "More Space" setting in System Settings > Displays.`,
+      );
+    if (process.platform === 'darwin' && info.scale < 2)
+      log(
+        `Note: the main screen isn’t Retina (scale ${info.scale}), so clips will be ${info.bounds.width * info.scale}×${info.bounds.height * info.scale}.`,
+      );
+    const cursor = await openCursor(app, info.bounds);
+    let stillNumber = 0;
+    // Stills are taken in the background, so the clip flows on.
+    const stills = [];
+    const d = createDirector({
+      app,
+      cursor,
+      random: seededRandom(clip.name),
+      takeStill: () => {
+        stillNumber++;
+        const file = path.join(
+          OUT,
+          'stills',
+          `${clip.name}-${stillNumber}.png`,
+        );
+        stills.push(
+          takeStill(
+            { windowId: info.windowId, region: info.bounds },
+            file,
+          ).then(() => log(`  still: ${path.relative(DEMO_DIR, file)}`)),
+        );
+      },
+    });
+    await clip.setup?.(d);
+    await d.settle();
+    await bringToFront(app);
+    // (And the cursor's window back above it.)
+    await app.evaluate(() => globalThis.__demoCursor.moveTop());
+    await waitForPointerOff(app, info.bounds);
+
+    if (clip.video === false) {
+      await clip.run(d);
+      await Promise.all(stills);
+      return;
+    }
+    const raw = path.join(OUT, '.raw', `${clip.name}.mkv`);
+    fs.mkdirSync(path.dirname(raw), { recursive: true });
+    const recording = await startRecording(info.bounds, info.scale, raw);
+    await wait(400);
+    const from = Date.now();
+    await wait(PACE.lead);
+    await clip.run(d);
+    await wait(PACE.lead);
+    const to = Date.now();
+    await wait(300);
+    const saved = await recording.stop();
+    await Promise.all(stills);
+    const file = path.join(OUT, 'clips', `${clip.name}.mp4`);
+    await finishClip(saved, from, to, file);
+    fs.rmSync(raw, { force: true });
+    log(
+      `  clip: ${path.relative(DEMO_DIR, file)} (${((to - from) / 1000).toFixed(1)}s)`,
+    );
+  } finally {
+    await quitFirn(app);
+  }
+}
+
+// --- The run -----------------------------------------------------------------------
+
+async function main() {
+  checkTools();
+  const running = runningFirn();
+  if (running) {
+    console.error(
+      `[demo] Firn is already running. Quit it first (Firn > Quit Firn, or Cmd+Q), then run the demo again.\n       (Found: ${running})`,
+    );
+    process.exit(1);
+  }
+  fs.mkdirSync(path.join(OUT, 'clips'), { recursive: true });
+  fs.mkdirSync(path.join(OUT, 'stills'), { recursive: true });
+  // This run's stills replace the last run's.
+  for (const clip of chosen)
+    for (const name of fs.readdirSync(path.join(OUT, 'stills')))
+      if (name.startsWith(`${clip.name}-`))
+        fs.rmSync(path.join(OUT, 'stills', name));
+  wipeProfile();
+
+  await buildFirn(log);
+  const server = await startDevServer(log);
+  // Ctrl+C (or a crash) still stops Firn and the interface server.
+  const stopAll = async () => {
+    for (const app of running) app.process().kill('SIGKILL');
+    await server.stop();
+  };
+  for (const signal of ['SIGINT', 'SIGTERM'])
+    process.once(signal, () => {
+      console.error('\n[demo] Stopped.');
+      void stopAll().then(() => process.exit(130));
+    });
+  try {
+    if (chosen.some((clip) => clip.seed === 'tabs')) await warmUp();
+    for (const clip of chosen) await record(clip);
+  } finally {
+    await stopAll();
+  }
+  log(
+    `Done. Clips and stills are in ${path.relative(process.cwd(), OUT) || OUT}`,
+  );
+}
+
+main().catch((error) => {
+  console.error(`[demo] ${error instanceof Error ? error.message : error}`);
+  process.exit(1);
+});

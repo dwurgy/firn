@@ -1,5 +1,21 @@
 # What's new in Firn
 
+## Firn 0.5.0
+
+**Drag a tab onto the page to see two side by side.**
+
+Pick up any tab and pull it out over the page: the page makes room, and when you let go, the two sit side by side. It works with pinned tabs and Basecamp too, which stay right where they are.
+
+### New
+
+- **Drag a tab into split view.** The tab stays under your pointer as you carry it, and the page shows where it will open. Let go on the left or the right half, or go back to the sidebar to change your mind.
+- **Swap sides, or take one out.** Rest your pointer near the top of a page in split view and a small handle appears. Drag it to the other side to swap the two, or click its × to take that page out of split view (the tab stays in your sidebar).
+
+### Better
+
+- **Tabs open when you let go** of the click, so you can pick one up to move it without switching to it.
+- **Works with the sidebar hidden**, too: bring it out at the left edge and drag from there.
+
 ## Firn 0.4.0
 
 **See what's playing, and pause it from anywhere.**

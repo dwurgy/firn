@@ -5,6 +5,7 @@ import { Floating } from './Floating';
 import { Peek } from './Peek';
 import { TopBar } from './TopBar';
 import './styles.css';
+import { installTooltips } from './tooltips';
 
 // The same UI code runs in several layers; `?view=` says which one this is.
 const view = new URLSearchParams(location.search).get('view') ?? 'main';
@@ -21,6 +22,8 @@ const LAYERS: Record<string, () => React.JSX.Element | null> = {
   peek: Peek,
 };
 const Root = LAYERS[view] ?? App;
+// Firn's own hover labels (the slim top bar keeps the system's: no room).
+if (view !== 'topbar') installTooltips(view);
 
 // Light or dark, as the main process says (the system's setting, or the
 // choice in settings); until it does, the system's.

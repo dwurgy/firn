@@ -3400,3 +3400,70 @@ button {
 .panel[tabindex='-1']:focus {
   outline: none;
 }
+
+/* --- Hover labels (src/ui/tooltips.ts) ------------------------------------ */
+
+/* Firn's own, in place of the system's tooltips: a small, soft label. */
+.firn-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  box-sizing: border-box;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--tip-bg);
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 2px 8px rgba(60, 40, 20, 0.12);
+  font-size: 12px;
+  line-height: 1.35;
+  /* A long name wraps onto a second line, then ends in "…". */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  width: max-content;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.firn-tip.is-shown {
+  opacity: 1;
+  transform: none;
+  transition-duration: 160ms;
+}
+
+/* Measured where it will be, without gliding there. */
+.firn-tip.is-placing {
+  transition: none;
+}
+
+:root {
+  --tip-bg: #fbfaf8;
+}
+
+:root[data-theme='dark'] {
+  --tip-bg: #4a4643;
+}
+
+:root[data-theme='dark'] .firn-tip {
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .firn-tip {
+    transform: none;
+    transition: opacity 120ms linear;
+  }
+}

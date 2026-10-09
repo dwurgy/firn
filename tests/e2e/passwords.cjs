@@ -212,7 +212,7 @@ const check = (n, ok, x = '') => {
     `import -window root -crop ${o.width}x${o.height}+${o.x}+${o.y} ${SP}/pw-panel.png`,
   );
   await fl.locator('.password-row').hover();
-  await fl.click('.password-row button[title="Show"]');
+  await fl.click('.password-row button[data-tip="Show"]');
   await wait(300);
   check(
     'Show reveals the (updated) password',
@@ -220,14 +220,14 @@ const check = (n, ok, x = '') => {
       () => document.querySelector('.password-secret').textContent,
     )) === 'new-secret-456',
   );
-  await fl.click('.password-row button[title="Copy password"]');
+  await fl.click('.password-row button[data-tip="Copy password"]');
   await wait(300);
   check(
     'Copy puts it on the clipboard',
     (await app.evaluate(({ clipboard }) => clipboard.readText())) ===
       'new-secret-456',
   );
-  await fl.click('.password-row button[title="Delete"]');
+  await fl.click('.password-row button[data-tip="Delete"]');
   await wait(800);
   check(
     'Delete (after you confirm) removes it',

@@ -394,7 +394,7 @@ const check = (name, ok, extra = '') => {
   check('peek tucks away after leaving', !(await peekShown()));
   warp(o.x + 3, o.y + 400);
   await wait(400);
-  await pk.click('.sidebar-top button[title^="Keep sidebar open"]');
+  await pk.click('.sidebar-top button[data-tip^="Keep sidebar open"]');
   await wait(80);
   const settling = await pk.evaluate(() =>
     document.querySelector('.peek').classList.contains('is-docking'),

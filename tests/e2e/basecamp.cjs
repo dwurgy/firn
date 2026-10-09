@@ -65,7 +65,7 @@ const check = (n, ok, x = '') => {
   const order = () =>
     ui.evaluate(() =>
       [...document.querySelectorAll('.basecamp-tile')].map((t) =>
-        t.title.replace(' site', ''),
+        t.dataset.tip.replace(' site', ''),
       ),
     );
   const boxes = () =>
@@ -155,9 +155,9 @@ const check = (n, ok, x = '') => {
   const clicked = await ui.evaluate(() => ({
     active: document
       .querySelector('.basecamp-tile.is-active')
-      ?.title.replace(' site', ''),
+      ?.dataset.tip.replace(' site', ''),
     order: [...document.querySelectorAll('.basecamp-tile')]
-      .map((t) => t.title.replace(' site', ''))
+      .map((t) => t.dataset.tip.replace(' site', ''))
       .join(','),
   }));
   check(

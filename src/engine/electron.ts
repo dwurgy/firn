@@ -450,12 +450,14 @@ class ElectronPage implements Page {
     if (web.isDestroyed()) return 0;
     const code = MEDIA_SCRIPT(action);
     const top = web.mainFrame;
-    const counts = await Promise.all([
-      web.executeJavaScriptInIsolatedWorld(MEDIA_WORLD_ID, [{ code }], true),
-      ...top.framesInSubtree
-        .filter((frame) => frame !== top && !frame.isDestroyed())
-        .map((frame) => frame.executeJavaScript(code, true)),
-    ].map((run) => run.catch(() => 0)));
+    const counts = await Promise.all(
+      [
+        web.executeJavaScriptInIsolatedWorld(MEDIA_WORLD_ID, [{ code }], true),
+        ...top.framesInSubtree
+          .filter((frame) => frame !== top && !frame.isDestroyed())
+          .map((frame) => frame.executeJavaScript(code, true)),
+      ].map((run) => run.catch(() => 0)),
+    );
     return counts.reduce<number>(
       (sum, n) => sum + (typeof n === 'number' ? n : 0),
       0,

@@ -373,6 +373,8 @@ async function record(clip) {
 
 // --- The run -----------------------------------------------------------------------
 
+const failed = [];
+
 async function main() {
   checkTools();
   const running = runningFirn();
@@ -406,9 +408,21 @@ async function main() {
     });
   try {
     if (chosen.some((clip) => clip.seed === 'tabs')) await warmUp();
-    for (const clip of chosen) await record(clip);
+    // A clip that fails is noted and skipped; the others still record.
+    for (const clip of chosen)
+      await record(clip).catch((error) => {
+        failed.push(clip.name);
+        console.error(`[demo] ${clip.name} failed: ${error?.message ?? error}`);
+      });
   } finally {
     await stopAll();
+  }
+  if (failed.length) {
+    console.error(
+      `[demo] Done, except: ${failed.join(', ')} (see above). Run just those again with --clip.`,
+    );
+    process.exitCode = 1;
+    return;
   }
   log(
     `Done. Clips and stills are in ${path.relative(process.cwd(), OUT) || OUT}`,

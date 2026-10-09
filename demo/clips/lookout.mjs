@@ -9,9 +9,10 @@ export default {
     await d.placeCursor(900, 700);
   },
   async run(d) {
-    // The first ordinary article link in the opening paragraphs.
+    // The first ordinary article link.
     const link = web(
-      '#mw-content-text .mw-parser-output > p a[href^="/wiki/"]:not([href*=":"])',
+      // (Wikipedia wraps paragraphs in sections, so any paragraph.)
+      '#mw-content-text p a[href^="/wiki/"]:not([href*=":"])',
       { url: '/wiki/Firn' },
     );
     await d.click(link, { shift: true });

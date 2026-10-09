@@ -1,5 +1,16 @@
 # What's new in Firn
 
+## Firn 0.3.1
+
+**Little labels, in Firn's own style.**
+
+The small labels that appear when you rest the pointer on a button now look like the rest of Firn: soft, rounded, and calm, instead of the system's plain boxes.
+
+### Better
+
+- **Hover labels** fade in gently below buttons, tiles, and tabs, in the sidebar and the top bar.
+- **Tabs** only show their label when the name is cut off, so nothing repeats what you can already read.
+
 ## Firn 0.3.0
 
 **Make Firn your default browser.**

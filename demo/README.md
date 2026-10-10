@@ -85,7 +85,7 @@ the last line shows where it stopped.
 
 ```
 npm run demo:try-pages                       # the candidates in try-pages.mjs
-npm run demo:try-pages -- https://example.com/ https://…   # and these too
+npm run demo:try-pages -- https://example.com/ https://…   # just these
 ```
 
 Opens each candidate page in Firn's demo mode, takes a picture of it, and

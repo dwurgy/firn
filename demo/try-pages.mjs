@@ -1,7 +1,8 @@
 // Trying pages for the demo: `npm run demo:try-pages` opens each candidate
 // page in Firn's demo mode, takes a picture of it, and notes any pop-up
 // it finds, then makes a contact sheet (demo/out/try-pages/index.html) to
-// pick the prettiest from. Add pages to try after the command:
+// pick the prettiest from. To try other pages instead of the candidates
+// below, put them after the command:
 // `npm run demo:try-pages -- https://example.com/ https://…`.
 //
 // The demo's own pages are in lib/seed.mjs; this only helps choose them.
@@ -60,10 +61,9 @@ const CANDIDATES = [
   'https://firnbrowser.com/release-notes',
 ];
 
-const pages = [
-  ...CANDIDATES,
-  ...process.argv.slice(2).filter((a) => /^https?:\/\//.test(a)),
-];
+// Pages given after the command, or else the candidates.
+const given = process.argv.slice(2).filter((a) => /^https?:\/\//.test(a));
+const pages = given.length ? given : CANDIDATES;
 
 const windowInfo = (app) =>
   app.evaluate(() => {

@@ -242,14 +242,18 @@ const UI_WEB_PREFERENCES = {
 type LayerView = 'floating' | 'topbar' | 'peek';
 
 function loadUi(web: WebContents, view?: LayerView) {
+  const query: Record<string, string> = view ? { view } : {};
+  // (The checks see a Mac's own hover labels elsewhere: src/ui/tooltips.ts.)
+  if (process.env.FIRN_NATIVE_TIPS_TEST === '1') query.tips = 'native';
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     const url = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-    if (view) url.searchParams.set('view', view);
+    for (const [key, value] of Object.entries(query))
+      url.searchParams.set(key, value);
     web.loadURL(url.toString());
   } else {
     web.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-      view ? { query: { view } } : undefined,
+      Object.keys(query).length ? { query } : undefined,
     );
   }
 }

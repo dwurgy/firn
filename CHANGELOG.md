@@ -1,5 +1,15 @@
 # What's new in Firn
 
+## Firn 0.6.1
+
+**Firn on a Mac now keeps itself up to date.**
+
+Updates now reach Macs the way they already reach Windows: quietly in the background, ready the next time you open Firn.
+
+### Fixed
+
+- **Automatic updates on a Mac.** Firn on a Mac wasn't finding new versions. From this one on, it updates itself like it does on Windows (when it's in your Applications folder).
+
 ## Firn 0.6.0
 
 **Learn Firn's keyboard shortcuts.**

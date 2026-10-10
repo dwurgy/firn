@@ -10,9 +10,12 @@
 // like Firn); the next time Firn is opened, it's the new version. No
 // questions, nothing to click.
 //
-// On a Mac, the download is the release's Mac zip (one app for Apple-chip
-// and Intel Macs, "Firn-darwin-universal-<version>.zip": the service hands
-// it to both). macOS only accepts it because it's signed with the same
+// On a Mac, the download is the release's Mac zip: one app for Apple-chip
+// and Intel Macs, attached under each kind's name
+// ("Firn-darwin-arm64-<version>.zip" and "Firn-darwin-x64-<version>.zip",
+// which the service matches to "darwin-arm64" and "darwin-x64"; its
+// "-universal" name alone wasn't handed to either, so through 0.6.0 Macs
+// didn't update). macOS only accepts it because it's signed with the same
 // Developer ID as the Firn already there. Linux packages are updated by
 // the system, so Linux is skipped.
 

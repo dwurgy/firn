@@ -37,6 +37,7 @@ export const DEFAULT_SIDEBAR: SidebarState = {
   pageLeft: 260,
   peeking: false,
   docking: false,
+  aside: false,
 };
 
 // The live state every sidebar needs, kept in step with the main process.
@@ -47,6 +48,7 @@ export function useSidebarData() {
     activeTabId: null,
     splits: [],
     player: null,
+    dropPreview: null,
   });
   const [sidebar, setSidebar] = useState<SidebarState>(DEFAULT_SIDEBAR);
   const [spaces, setSpaces] = useState<SpacesState>({

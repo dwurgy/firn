@@ -1,5 +1,45 @@
 # What's new in Firn
 
+## Firn 0.6.1
+
+**Firn on a Mac now keeps itself up to date.**
+
+Updates now reach Macs the way they already reach Windows: quietly in the background, ready the next time you open Firn.
+
+### Fixed
+
+- **Automatic updates on a Mac.** Firn on a Mac wasn't finding new versions. From this one on, it updates itself like it does on Windows (when it's in your Applications folder).
+
+## Firn 0.6.0
+
+**Learn Firn's keyboard shortcuts.**
+
+Settings now has a page that lists every keyboard shortcut, grouped and in plain words, for anyone who likes to keep their hands on the keys.
+
+### New
+
+- **Keyboard shortcuts** in Settings, also from the command bar (type "shortcuts"). On a Mac it shows ⌘ where Windows shows Ctrl.
+
+### Fixed
+
+- **Long hover labels** now end neatly after two lines, instead of a third line peeking out at the bottom.
+
+## Firn 0.5.0
+
+**Drag a tab onto the page to see two side by side.**
+
+Pick up any tab and pull it out over the page: the page makes room, and when you let go, the two sit side by side. It works with pinned tabs and Basecamp too, which stay right where they are.
+
+### New
+
+- **Drag a tab into split view.** The tab stays under your pointer as you carry it, and the page shows where it will open. Let go on the left or the right half, or go back to the sidebar to change your mind.
+- **Swap sides, or take one out.** Rest your pointer near the top of a page in split view and a small handle appears. Drag it to the other side to swap the two, or click its × to take that page out of split view (the tab stays in your sidebar).
+
+### Better
+
+- **Tabs open when you let go** of the click, so you can pick one up to move it without switching to it.
+- **Works with the sidebar hidden**, too: bring it out at the left edge and drag from there.
+
 ## Firn 0.4.0
 
 **See what's playing, and pause it from anywhere.**

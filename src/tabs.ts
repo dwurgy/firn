@@ -67,6 +67,30 @@ export const SPLIT_GAP = 8;
 const SPLIT_MIN = 0.2;
 
 // Where each side of a split view sits within the page's area.
+// How long a page takes to glide to a new place (matches --motion in
+// src/ui/styles.css).
+const GLIDE_MS = 200;
+
+const sameBounds = (a: PageBounds, b: PageBounds) =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
+// Where a gliding page is now (easing out).
+function currentBounds(glide: {
+  from: PageBounds;
+  to: PageBounds;
+  start: number;
+}): PageBounds {
+  const t = Math.min(1, (Date.now() - glide.start) / GLIDE_MS);
+  const eased = 1 - Math.pow(1 - t, 3);
+  const at = (a: number, b: number) => Math.round(a + (b - a) * eased);
+  return {
+    x: at(glide.from.x, glide.to.x),
+    y: at(glide.from.y, glide.to.y),
+    width: at(glide.from.width, glide.to.width),
+    height: at(glide.from.height, glide.to.height),
+  };
+}
+
 export function splitRects(area: PageBounds, sizes: number[]): PageBounds[] {
   const first = Math.round((area.width - SPLIT_GAP) * sizes[0]);
   return [
@@ -247,6 +271,7 @@ export class TabManager {
         (split) => split.spaceId === this.spaceId,
       ),
       player: this.player(),
+      dropPreview: this.dropPreview,
     };
   }
 
@@ -716,6 +741,102 @@ export class TabManager {
     }
   }
 
+  // --- Dragging a tab into split view ----------------------------------------
+  // While a tab from the sidebar is dragged over the page, the page on
+  // screen makes room: it moves to one half, and the other half shows where
+  // the tab will open (drawn by the sidebar's layer, below the page).
+  // Dropping it there opens the two side by side. Any tab can be dragged
+  // in: a Basecamp or pinned tab stays where it is, and a copy of it joins
+  // the split (in the everyday tabs), so they're never moved by accident.
+
+  private dropPreview: { tabId: string; side: 'left' | 'right' } | null = null;
+
+  // A tab is being dragged over the page, and the page has made room.
+  get isPreviewingDrop() {
+    return this.dropPreview !== null;
+  }
+
+  // Can `id` be dropped beside what's on screen?
+  private canDropToSplit(id: string) {
+    const entry = this.active;
+    if (!entry || this.fullscreen || !this.entries.has(id)) return false;
+    if (id === entry.tab.id) return false;
+    // Already one side of the split on screen: it's there.
+    return !this.splitOf(entry.tab.id)?.tabIds.includes(id);
+  }
+
+  // The tab dragged over the page at window position `x` (null: it left the
+  // page, or the drag ended).
+  previewDrop(id: string | null, x = 0) {
+    let next: typeof this.dropPreview = null;
+    if (id && this.canDropToSplit(id)) {
+      const area = this.options.pageBounds();
+      next = {
+        tabId: id,
+        side: x < area.x + area.width / 2 ? 'left' : 'right',
+      };
+    }
+    const now = this.dropPreview;
+    if (now?.tabId === next?.tabId && now?.side === next?.side) return;
+    this.dropPreview = next;
+    this.glideNext = true;
+    this.layout();
+    this.emitTabs();
+  }
+
+  // Drops the dragged tab where its preview is: a split view of it and
+  // what was on screen (on a split view, it takes that side's place, and
+  // the tab that was there carries on as an ordinary tab).
+  dropToSplit() {
+    const drop = this.dropPreview;
+    this.dropPreview = null;
+    if (!drop || !this.canDropToSplit(drop.tabId)) {
+      this.glideNext = true;
+      this.layout();
+      this.emitTabs();
+      return;
+    }
+    const activeId = this.activeId!;
+    const current = this.splitOf(activeId);
+    // What stays: the other side of the split on screen, or the tab.
+    const stays = current
+      ? current.tabIds[drop.side === 'left' ? 1 : 0]
+      : activeId;
+    if (current) this.separate(activeId);
+    this.separate(drop.tabId);
+    const stayId = this.everydayCopyOf(stays);
+    const dropId = this.everydayCopyOf(drop.tabId, stayId);
+    const split: SplitGroup = {
+      id: randomUUID(),
+      spaceId: this.spaceId,
+      tabIds: drop.side === 'left' ? [dropId, stayId] : [stayId, dropId],
+      layout: 'columns',
+      sizes: [0.5, 0.5],
+    };
+    this.splits.set(split.id, split);
+    for (const tabId of split.tabIds)
+      this.entries.get(tabId)!.tab.splitGroupId = split.id;
+    // The two sides sit next to each other, where the one that stays was.
+    this.order.splice(this.order.indexOf(dropId), 1);
+    const at = this.order.indexOf(stayId);
+    this.order.splice(drop.side === 'left' ? at : at + 1, 0, dropId);
+    this.renumber();
+    this.activate(dropId);
+  }
+
+  // `id` itself if it's an everyday tab of this space; otherwise (a
+  // Basecamp or pinned tab) a copy of it among the everyday tabs, below
+  // `after` if given.
+  private everydayCopyOf(id: string, after?: string) {
+    const { tab } = this.entries.get(id)!;
+    if (groupOf(tab) === EVERYDAY && tab.spaceId === this.spaceId) return id;
+    const copy = this.create(tab.url, { activate: false, after });
+    const copied = this.entries.get(copy)!.tab;
+    copied.title = tab.title;
+    copied.favicon = tab.favicon;
+    return copy;
+  }
+
   // Dragging the gap between the two sides: `ratio` is the left side's
   // share of the width.
   resizeSplit(splitId: string, ratio: number) {
@@ -725,6 +846,72 @@ export class TabManager {
     split.sizes = [left, 1 - left];
     this.layout();
     this.emitTabs();
+  }
+
+  // --- Rearranging a split view from its handle ------------------------------
+  // Each side of a split view has a small handle at its top (drawn by the
+  // floating layer; see src/main.ts). Dragging it over the other side
+  // swaps them: while it's over there, the two glide past each other to
+  // show it, and letting go keeps it. Its × takes that side out of the
+  // split (the tab stays, as an ordinary tab).
+
+  // The split view on screen: its tabs left to right, where each one sits
+  // (swapped while a swap is shown), and where the two halves meet.
+  splitOnScreen() {
+    const entry = this.active;
+    if (!entry || this.fullscreen || this.dropPreview) return null;
+    const split = this.splitOf(entry.tab.id);
+    if (!split) return null;
+    const area = this.options.pageBounds();
+    const swapped = this.swapPreview === split.id;
+    const sizes = swapped ? [split.sizes[1], split.sizes[0]] : split.sizes;
+    const rects = splitRects(area, sizes);
+    const ids = swapped ? [split.tabIds[1], split.tabIds[0]] : split.tabIds;
+    return {
+      id: split.id,
+      tabIds: [...split.tabIds],
+      rects: Object.fromEntries(ids.map((id, i) => [id, rects[i]])),
+      middle: area.x + area.width * split.sizes[0],
+    };
+  }
+
+  private swapPreview: string | null = null;
+
+  // Shows the split view on screen with its sides swapped (or not).
+  previewSwap(on: boolean) {
+    const split = this.active && this.splitOf(this.active.tab.id);
+    const next = on && split ? split.id : null;
+    if (next === this.swapPreview) return;
+    this.swapPreview = next;
+    this.glideNext = true;
+    this.layout();
+  }
+
+  // Keeps the swap that's shown.
+  swapSides() {
+    const split = this.swapPreview && this.splits.get(this.swapPreview);
+    this.swapPreview = null;
+    if (!split) return;
+    split.tabIds.reverse();
+    split.sizes.reverse();
+    // The sidebar row lists them in the same order.
+    const [a, b] = split.tabIds;
+    const first = Math.min(this.order.indexOf(a), this.order.indexOf(b));
+    this.order = this.order.filter((id) => id !== a && id !== b);
+    this.order.splice(first, 0, a, b);
+    this.renumber();
+    this.layout();
+    this.emitTabs();
+  }
+
+  // Takes one side out of its split view: it carries on as an ordinary
+  // tab, and the other side fills the page.
+  takeOutOfSplit(id: string) {
+    const split = this.splitOf(id);
+    if (!split) return;
+    const other = split.tabIds.find((t) => t !== id)!;
+    this.separate(id);
+    this.activate(other);
   }
 
   // Clicking into one side makes it the current tab (the address bar and
@@ -1032,12 +1219,16 @@ export class TabManager {
   // --- Layout ---------------------------------------------------------------
 
   layout() {
+    // (A glide is asked for just before the layout it's for.)
+    const glide = this.glideNext;
+    this.glideNext = false;
     const entry = this.active;
     if (!entry) return;
     const split = this.splitOf(entry.tab.id);
     if (this.fullscreen) {
       // A fullscreen video fills the window; a split's other side waits.
       const { width, height } = this.engine.windowSize();
+      this.stopGlides();
       entry.page.place({ x: 0, y: 0, width, height }, 0);
       for (const id of this.onScreen)
         if (id !== entry.tab.id) this.entries.get(id)?.page.hide();
@@ -1045,14 +1236,109 @@ export class TabManager {
       return;
     }
     const area = this.options.pageBounds();
-    const ids = split ? split.tabIds : [entry.tab.id];
-    const rects = split ? splitRects(area, split.sizes) : [area];
+    const drop = this.dropPreview;
+    if (drop) {
+      // A tab is dragged over the page: what stays moves to the other
+      // half (on a split view, the side being replaced steps away).
+      const half = splitRects(area, [0.5, 0.5]);
+      const stays = split
+        ? split.tabIds[drop.side === 'left' ? 1 : 0]
+        : entry.tab.id;
+      for (const id of this.onScreen) {
+        const page = this.entries.get(id)?.page;
+        if (!page) continue;
+        if (id !== stays) page.hide();
+        else {
+          this.put(id, page, half[drop.side === 'left' ? 1 : 0], glide);
+          page.show();
+        }
+      }
+      return;
+    }
+    const swapped = !!split && this.swapPreview === split.id;
+    const ids = split
+      ? swapped
+        ? [split.tabIds[1], split.tabIds[0]]
+        : split.tabIds
+      : [entry.tab.id];
+    const rects = split
+      ? splitRects(
+          area,
+          swapped ? [split.sizes[1], split.sizes[0]] : split.sizes,
+        )
+      : [area];
     ids.forEach((id, i) => {
       const page = this.entries.get(id)?.page;
       if (!page) return;
-      page.place(rects[i], this.options.pageRadius);
+      this.put(id, page, rects[i], glide);
       page.show();
     });
+  }
+
+  // --- Gliding pages ---------------------------------------------------------
+  // When a tab dragged over the page makes room for itself (or the drag
+  // goes back to the sidebar), the page glides to its new place instead of
+  // jumping there: 200ms, easing out, like the rest of Firn.
+
+  private glideNext = false;
+  // Where each page was last put (what a glide starts from).
+  private placed = new Map<string, PageBounds>();
+  private glides = new Map<
+    string,
+    { page: Page; from: PageBounds; to: PageBounds; start: number }
+  >();
+  private glideTimer: ReturnType<typeof setInterval> | undefined;
+
+  // Puts a page at `to`, gliding there from where it was if `glide`. A
+  // page already gliding to `to` carries on; any other layout puts it
+  // there at once (so a resize mid-glide isn't fought).
+  private put(id: string, page: Page, to: PageBounds, glide: boolean) {
+    const moving = this.glides.get(id);
+    if (moving && sameBounds(moving.to, to)) return;
+    const from = moving ? currentBounds(moving) : this.placed.get(id);
+    this.placed.set(id, to);
+    if (moving) this.endGlide(id);
+    if (!glide || !from || sameBounds(from, to)) {
+      page.place(to, this.options.pageRadius);
+      return;
+    }
+    // The site keeps the larger of the two sizes while it glides (what
+    // doesn't fit is hidden), rather than re-fitting on every step.
+    page.holdLayout({
+      width: Math.max(from.width, to.width),
+      height: Math.max(from.height, to.height),
+    });
+    this.glides.set(id, { page, from, to, start: Date.now() });
+    page.place(from, this.options.pageRadius);
+    this.glideTimer ??= setInterval(() => this.stepGlides(), 8);
+  }
+
+  private stepGlides() {
+    for (const [id, glide] of this.glides) {
+      // (Its tab closed, or its page was replaced, mid-glide.)
+      if (this.entries.get(id)?.page !== glide.page) {
+        this.glides.delete(id);
+        continue;
+      }
+      glide.page.place(currentBounds(glide), this.options.pageRadius);
+      if (Date.now() - glide.start >= GLIDE_MS) this.endGlide(id);
+    }
+    if (!this.glides.size) {
+      clearInterval(this.glideTimer);
+      this.glideTimer = undefined;
+    }
+  }
+
+  private endGlide(id: string) {
+    const glide = this.glides.get(id);
+    if (!glide) return;
+    this.glides.delete(id);
+    glide.page.place(glide.to, this.options.pageRadius);
+    glide.page.holdLayout(null);
+  }
+
+  private stopGlides() {
+    for (const id of this.glides.keys()) this.endGlide(id);
   }
 
   // Where the page would sit with its top edge at `top`.
@@ -1084,6 +1370,8 @@ export class TabManager {
   }
 
   destroy() {
+    clearInterval(this.glideTimer);
+    this.glides.clear();
     for (const { page } of this.entries.values()) page.destroy();
     this.entries.clear();
     this.order = [];

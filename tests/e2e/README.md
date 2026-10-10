@@ -47,6 +47,10 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `sound`        | The speaker on tabs playing sound: muting and unmuting               |
 | `player`       | The mini player: shown for sound off screen, pause and play, going there |
 | `demo`         | Demo mode for the demo recorder: its own data folder, 1440×900, light; a normal start unchanged |
+| `splitdrag`    | Dragging a tab (or a Basecamp tile or pin) onto the page opens it in split view (the page glides aside; also from the peeking sidebar); a tab opens on click |
+| `realdrag`     | The same drags with a real system mouse (through the window system): the carried tab stays under the mouse, in front of the page |
+| `splithandle` | A split view's handle (real mouse): it comes out near the top middle of a side; drag it to swap the sides, × takes a side out |
+| `shortcuts`   | Settings > Keyboard shortcuts: the page, its key caps, every key on it does what it says (Windows and Mac), and a few pressed for real |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

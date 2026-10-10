@@ -113,6 +113,37 @@ const check = (n, ok, x = '') => {
   execSync(
     `import -window root -crop 300x220+${o.x}+${o.y + Math.round(t2.below) - 80} ${SP}/tooltip-tab.png`,
   );
+  // A name far too long for two lines: it stops after two, ending in "…",
+  // and nothing more peeks out below.
+  await ui.click('.new-tab');
+  await wait(300);
+  await fl.keyboard.type('127.0.0.1:8765/longertitle.html');
+  await fl.keyboard.press('Enter');
+  await wait(1200);
+  await ui.hover('.space-tabs .tab:has-text("Release notes")');
+  await wait(800);
+  const t3 = await ui.evaluate(() => {
+    const t = document.querySelector('.firn-tip');
+    const w = t.querySelector('.firn-tip-text');
+    const line = parseFloat(getComputedStyle(w).lineHeight);
+    return {
+      shown: t.classList.contains('is-shown'),
+      lines: Math.round(w.clientHeight / line),
+      cut: w.scrollHeight > w.clientHeight + 1,
+      // The label is just its two lines and its padding.
+      snug: Math.abs(t.offsetHeight - w.clientHeight - 10) <= 1,
+    };
+  });
+  check(
+    'a name too long for two lines: it ends there, nothing peeks out below',
+    t3.shown && t3.lines === 2 && t3.cut && t3.snug,
+    JSON.stringify(t3),
+  );
+  execSync(
+    `import -window root -crop 300x260+${o.x}+${o.y + 120} ${SP}/tooltip-longer.png`,
+  );
+  await ui.hover('.space-tabs .tab:not(:has-text("Red site"))');
+  await wait(800);
   await ui.mouse.down();
   await wait(100);
   check('pressing puts the label away', !(await tip()).shown);

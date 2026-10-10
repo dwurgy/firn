@@ -51,7 +51,9 @@ import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
 import { DEMO, demoBounds, installDemoHooks, useDemoProfile } from './demo';
 import { macMenuTemplate } from './menu';
+import { matchShortcut, menuAccelerator } from './shortcuts';
 import type {
+  CarryTab,
   CommandAction,
   FrameState,
   NavCommand,
@@ -114,7 +116,6 @@ if (process.platform === 'win32' && !started) {
 const HOME_URL = 'https://duckduckgo.com';
 // History: Ctrl+H on Windows and Linux; Cmd+Y on a Mac, like Safari and
 // Chrome there (Cmd+H hides the app on a Mac).
-const HISTORY_KEY = process.platform === 'darwin' ? 'y' : 'h';
 
 // Start with FIRN_DEBUG=1 to log what the window's layers are doing.
 const DEBUG = Boolean(process.env.FIRN_DEBUG);
@@ -589,6 +590,37 @@ const createWindow = () => {
       if (!web.isDestroyed()) web.send(channel, ...args);
   };
 
+  // A tab pulled out of the sidebar, carried under the pointer: the
+  // floating layer draws it across the whole window, in front of the page
+  // (the sidebar is drawn behind the page, so it can't).
+  let carried: CarryTab | null = null;
+  let carryHideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The handle at the top of one side of a split view: a small pill with a
+  // grip (drag it over the other side to swap them) and a × (take that side
+  // out of the split). It shows while the mouse is near the top middle of
+  // a side, drawn by the floating layer in a small box of its own (`at`:
+  // the pill's middle, in the window); dragged, it follows the pointer.
+  let splitHandle: {
+    tabId: string;
+    at: { x: number; y: number };
+    dragging: boolean;
+  } | null = null;
+  let splitHandleHideTimer: ReturnType<typeof setTimeout> | undefined;
+  // It comes out only once the mouse rests near there a moment (sites
+  // often keep a logo, a search box, or a menu up there, and a mouse just
+  // passing on its way to them shouldn't bring it out).
+  let splitHandleWait: { tabId: string; since: number } | null = null;
+  const HANDLE_DELAY_MS = 350;
+  const HANDLE_WIDTH = 76;
+  const HANDLE_HEIGHT = 28;
+  const HANDLE_ROOM = 20; // for its soft shadow
+  const HANDLE_TOP = 8; // below the page's top edge
+  // Where the mouse brings it out: this far either side of the middle, and
+  // this far down from the top.
+  const HANDLE_ZONE_ACROSS = 130;
+  const HANDLE_ZONE_DOWN = 48;
+
   // The top bar's hover labels. The bar is too short to hold them, so the
   // floating layer draws them: shown as just the label's own small box
   // below the button (so nothing else on the page is covered), and only
@@ -608,6 +640,18 @@ const createWindow = () => {
 
   const boundsFor = (layer: WebContentsView) => {
     const [width, height] = win.getContentSize();
+    if (
+      layer === floating &&
+      overlay.mode === 'hidden' &&
+      !carried &&
+      splitHandle
+    )
+      return {
+        x: Math.round(splitHandle.at.x - HANDLE_WIDTH / 2 - HANDLE_ROOM),
+        y: Math.round(splitHandle.at.y - HANDLE_HEIGHT / 2 - HANDLE_ROOM),
+        width: HANDLE_WIDTH + HANDLE_ROOM * 2,
+        height: HANDLE_HEIGHT + HANDLE_ROOM * 2,
+      };
     if (layer === floating && overlay.mode === 'hidden' && barTip?.size) {
       const w = barTip.size.width + TIP_ROOM * 2;
       const h = barTip.size.height + TIP_TOP + TIP_ROOM;
@@ -728,10 +772,15 @@ const createWindow = () => {
       shownLogin = null;
     if (overlay.mode === 'danger' && state.mode !== 'danger')
       shownDanger = null;
-    // A panel replaces the top bar's hover label.
+    // A panel replaces the top bar's hover label (and a split view's
+    // handle).
     if (barTip) {
       barTip = null;
       floating.webContents.send('tip:state', { kind: 'hide' });
+    }
+    if (splitHandle) {
+      splitHandle = null;
+      floating.webContents.send('split-handle:state', { kind: 'hide' });
     }
     overlay = state;
     send('overlay:state', state);
@@ -1759,6 +1808,7 @@ const createWindow = () => {
       pageLeft,
       peeking,
       docking,
+      aside: peekAside,
     });
 
   // Slides the page's left edge (and the sidebar with it) to a new spot.
@@ -1869,6 +1919,11 @@ const createWindow = () => {
 
   // Typing in the peeking sidebar (it says so; see src/ui/Peek.tsx).
   let peekTyping = false;
+  // The mouse button held down in it (a drag, maybe out onto the page).
+  let peekHolding = false;
+  // A tab dragged out of it is over the page: it steps aside (sliding out
+  // of view), but its layer stays to finish the drag.
+  let peekAside = false;
 
   const showPeek = () => {
     if (!windowState.sidebarCollapsed || peeking || isFullscreen()) return;
@@ -1883,7 +1938,7 @@ const createWindow = () => {
       if (win.isDestroyed()) return;
       // Stay while the mouse is over it, or while typing in it (its address
       // bar or a space's name).
-      if (mouseIsOverPeek() || peekTyping) lastOver = Date.now();
+      if (mouseIsOverPeek() || peekTyping || peekHolding) lastOver = Date.now();
       else {
         // Gone far off to the left: a little more patience than when
         // coming back over the page.
@@ -1914,6 +1969,8 @@ const createWindow = () => {
     peeking = false;
     docking = dock;
     peekTyping = false;
+    peekHolding = false;
+    peekAside = false;
     clearInterval(peekWatch);
     sendSidebar();
     // Let it slide away (or settle, then fade: see styles.css) before the
@@ -1931,6 +1988,78 @@ const createWindow = () => {
       },
       dock ? GLIDE_MS + 140 : GLIDE_MS + 60,
     );
+  };
+
+  // --- A split view's handles -------------------------------------------------
+
+  const hideSplitHandle = () => {
+    if (!splitHandle) return;
+    splitHandle = null;
+    clearTimeout(splitHandleHideTimer);
+    splitHandleHideTimer = undefined;
+    // It fades, then the layer goes (unless something else is on it).
+    floating.webContents.send('split-handle:state', { kind: 'hide' });
+    setTimeout(() => {
+      if (!splitHandle && !carried && !barTip && overlay.mode === 'hidden')
+        hideLayer(floating);
+    }, 180);
+  };
+
+  // Brings out (or keeps, or moves along) the handle of the side the mouse
+  // is near the top middle of (`x`, `y`: the mouse, in the window).
+  const watchSplitHandle = (x: number, y: number) => {
+    if (splitHandle?.dragging) return;
+    const split =
+      overlay.mode === 'hidden' && !carried && readyUi.has(floating.webContents)
+        ? tabs.splitOnScreen()
+        : null;
+    if (!split) return hideSplitHandle();
+    const near = split.tabIds.find((id) => {
+      const r = split.rects[id];
+      return (
+        Math.abs(x - (r.x + r.width / 2)) <= HANDLE_ZONE_ACROSS &&
+        y >= r.y - 4 &&
+        y <= r.y + HANDLE_ZONE_DOWN
+      );
+    });
+    if (!near) splitHandleWait = null;
+    if (!near) {
+      // A moment's grace, so it doesn't flicker at the zone's edge.
+      if (splitHandle && !splitHandleHideTimer)
+        splitHandleHideTimer = setTimeout(hideSplitHandle, 250);
+      return;
+    }
+    clearTimeout(splitHandleHideTimer);
+    splitHandleHideTimer = undefined;
+    if (!splitHandle) {
+      if (splitHandleWait?.tabId !== near)
+        splitHandleWait = { tabId: near, since: Date.now() };
+      if (Date.now() - splitHandleWait.since < HANDLE_DELAY_MS) return;
+    }
+    const r = split.rects[near];
+    const at = {
+      x: Math.round(r.x + r.width / 2),
+      y: Math.round(r.y + HANDLE_TOP + HANDLE_HEIGHT / 2),
+    };
+    if (
+      splitHandle?.tabId === near &&
+      splitHandle.at.x === at.x &&
+      splitHandle.at.y === at.y
+    )
+      return;
+    const fresh = splitHandle?.tabId !== near;
+    if (barTip) {
+      barTip = null;
+      floating.webContents.send('tip:state', { kind: 'hide' });
+    }
+    splitHandle = { tabId: near, at, dragging: false };
+    if (shownLayers.has(floating)) floating.setBounds(boundsFor(floating));
+    else showLayer(floating);
+    if (fresh)
+      floating.webContents.send('split-handle:state', {
+        kind: 'show',
+        tabId: near,
+      });
   };
 
   // Reaching the window's edges reveals things: the left edge brings the
@@ -1971,6 +2100,7 @@ const createWindow = () => {
       debug('top edge reached: top bar');
       revealTopBar(true);
     }
+    watchSplitHandle(cursor.x - content.x, cursor.y - content.y);
   }, EDGE_CHECK_MS);
 
   // Right-click menu for a web page: only the few things that fit what was
@@ -2418,6 +2548,9 @@ const createWindow = () => {
       case 'whats-new':
         openWhatsNew('');
         break;
+      case 'shortcuts':
+        showOverlay({ mode: 'shortcuts', openId: ++commandOpenId });
+        break;
     }
   };
 
@@ -2538,6 +2671,93 @@ const createWindow = () => {
     'tabs:toggle-playing': (_sender, id) => {
       if (typeof id === 'string') void tabs.togglePlaying(id);
     },
+    // Dragging a tab onto the page (split view): the pointer, from the
+    // sidebar's layer (the window itself, or the peeking sidebar).
+    'tabs:drag-to-split': (sender, id, x) => {
+      if (typeof id !== 'string' || typeof x !== 'number') return;
+      const fromPeek = sender === peek.webContents;
+      const origin = fromPeek ? boundsFor(peek) : { x: 0 };
+      tabs.previewDrop(id, x + origin.x);
+      // Out of the peeking sidebar: it steps aside, so the page (and the
+      // card for the tab) can be seen whole.
+      const aside = fromPeek && peeking && tabs.isPreviewingDrop;
+      if (aside !== peekAside) {
+        peekAside = aside;
+        sendSidebar();
+      }
+    },
+    'tabs:carry': (sender, carry) => {
+      if (sender !== win.webContents && sender !== peek.webContents) return;
+      if (carry === null) {
+        if (!carried) return;
+        carried = null;
+        // It fades as it's let go, then the layer goes (unless something
+        // else has opened on it meanwhile).
+        floating.webContents.send('carry:state', null);
+        clearTimeout(carryHideTimer);
+        carryHideTimer = setTimeout(() => {
+          if (!carried && overlay.mode === 'hidden' && !barTip)
+            hideLayer(floating);
+        }, 180);
+        return;
+      }
+      const c = carry as Partial<Record<keyof CarryTab, unknown>>;
+      const numbers = [
+        c.x,
+        c.y,
+        c.grabX,
+        c.grabY,
+        c.width,
+        c.fromX,
+        c.fromY,
+      ] as const;
+      if (
+        typeof c.tabId !== 'string' ||
+        !numbers.every((n) => typeof n === 'number' && Number.isFinite(n))
+      )
+        return;
+      // A panel is open on the floating layer: the tab isn't carried.
+      if (overlay.mode !== 'hidden' || !readyUi.has(floating.webContents))
+        return;
+      const origin =
+        sender === peek.webContents ? boundsFor(peek) : { x: 0, y: 0 };
+      const first = !carried;
+      const at = carry as CarryTab;
+      carried = {
+        ...at,
+        x: at.x + origin.x,
+        y: at.y + origin.y,
+        fromX: at.fromX + origin.x,
+        fromY: at.fromY + origin.y,
+      };
+      if (first) {
+        clearTimeout(carryHideTimer);
+        // The top bar's hover label (or a split view's handle) makes way.
+        if (barTip) {
+          barTip = null;
+          floating.webContents.send('tip:state', { kind: 'hide' });
+        }
+        if (splitHandle) {
+          splitHandle = null;
+          floating.webContents.send('split-handle:state', { kind: 'hide' });
+        }
+        showLayer(floating);
+      }
+      floating.webContents.send('carry:state', carried);
+    },
+    'tabs:end-drag-to-split': (_sender, drop) => {
+      if (drop === true) tabs.dropToSplit();
+      else tabs.previewDrop(null);
+      // (Dropped: the button was let go, wherever that was.)
+      if (drop === true) peekHolding = false;
+      if (peekAside) {
+        peekAside = false;
+        // Dropped on the page: it's done, so it goes (it's already out of
+        // sight). Back over it: it comes back.
+        if (drop === true) hidePeek();
+        else sendSidebar();
+      }
+    },
     'spaces:switch': (_sender, id) => {
       if (typeof id === 'string') switchSpace(id);
     },
@@ -2629,7 +2849,7 @@ const createWindow = () => {
         { type: 'separator' },
         {
           label: 'History',
-          accelerator: `CmdOrCtrl+${HISTORY_KEY.toUpperCase()}`,
+          accelerator: menuAccelerator('history', process.platform),
           click: () => openHistory(),
         },
         { label: 'Passwords', click: () => openPasswords() },
@@ -2753,6 +2973,38 @@ const createWindow = () => {
     'split:separate': (_sender, tabId) => {
       if (typeof tabId === 'string') tabs.unsplit(tabId);
     },
+    // A split view side's handle, dragged: it follows the pointer, and
+    // over the other side the two swap places (shown until it's let go).
+    'split:handle-drag': (sender, screenX, screenY) => {
+      if (sender !== floating.webContents || !splitHandle) return;
+      if (typeof screenX !== 'number' || typeof screenY !== 'number') return;
+      const split = tabs.splitOnScreen();
+      if (!split) return;
+      const content = win.getContentBounds();
+      const x = screenX - content.x;
+      const y = screenY - content.y;
+      if (!splitHandle.dragging) {
+        splitHandle.dragging = true;
+        clearTimeout(splitHandleHideTimer);
+        splitHandleHideTimer = undefined;
+        floating.webContents.send('split-handle:state', { kind: 'drag' });
+      }
+      splitHandle.at = { x: Math.round(x), y: Math.round(y) };
+      floating.setBounds(boundsFor(floating));
+      const side = x < split.middle ? 0 : 1;
+      tabs.previewSwap(side !== split.tabIds.indexOf(splitHandle.tabId));
+    },
+    'split:handle-drop': (sender) => {
+      if (sender !== floating.webContents || !splitHandle?.dragging) return;
+      // Over the other side: swapped. Back on its own: they glide back.
+      tabs.swapSides();
+      hideSplitHandle();
+    },
+    'split:take-out': (sender, tabId) => {
+      if (sender !== floating.webContents || typeof tabId !== 'string') return;
+      hideSplitHandle();
+      tabs.takeOutOfSplit(tabId);
+    },
     'overlay:close': () => {
       if (switcher) endSwitcher(false);
       hideOverlay();
@@ -2776,6 +3028,7 @@ const createWindow = () => {
       if (!topBar || sender !== topBar.webContents) return;
       if (overlay.mode !== 'hidden' || !readyUi.has(floating.webContents))
         return;
+      if (carried) return;
       const a = anchor as { left?: unknown; right?: unknown; bottom?: unknown };
       if (
         typeof text !== 'string' ||
@@ -2816,10 +3069,13 @@ const createWindow = () => {
       if (!topBar || sender !== topBar.webContents || !barTip) return;
       barTip = null;
       floating.webContents.send('tip:state', { kind: 'hide' });
-      if (overlay.mode === 'hidden') hideLayer(floating);
+      if (overlay.mode === 'hidden' && !carried) hideLayer(floating);
     },
     'peek:typing': (sender, typing) => {
       if (sender === peek.webContents) peekTyping = typing === true;
+    },
+    'peek:holding': (sender, holding) => {
+      if (sender === peek.webContents) peekHolding = holding === true;
     },
     'sidebar:width': (_sender, width) => {
       if (typeof width === 'number' && Number.isFinite(width))
@@ -2942,72 +3198,97 @@ const createWindow = () => {
       return;
     }
     if (input.type !== 'keyDown') return;
-    if (input.type !== 'keyDown') return;
-    const mod = process.platform === 'darwin' ? input.meta : input.control;
-    const key = input.key.toLowerCase();
-
+    // Which shortcut it is: see src/shortcuts.ts (the same list Settings'
+    // Keyboard shortcuts page shows).
+    const hit = matchShortcut(input, process.platform);
     let handled = true;
-    if (input.control && key === 'tab') {
-      stepSwitcher(input.shift ? -1 : 1);
-      // Blocking a key here also hides the matching key release from that
-      // same view, so let the switcher layer keep its own key events.
-      if (source === floating.webContents) handled = false;
-    } else if (lookout && key === 'escape') {
-      closeLookout();
-    } else if (switcher && key === 'escape') {
-      endSwitcher(false);
-    } else if (mod && input.shift && key === 'd') {
-      printDiagnostics();
-    } else if (mod && key === 'd') {
-      if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
-    } else if (mod && key === 's') {
-      setSidebarCollapsed(!windowState.sidebarCollapsed);
-    } else if (mod && key === 'l') {
-      focusAddress();
-    } else if (mod && key === 'f') {
-      openFind();
-    } else if (mod && key === HISTORY_KEY) {
-      openHistory();
-    } else if (mod && key === ',') {
-      openSettings();
-    } else if (key === 'f3' || (mod && key === 'g')) {
-      // Next (or, with Shift, previous) match of the last search.
-      if (overlay.mode !== 'find') openFind();
-      else if (lastFindText) tabs.find(lastFindText, !input.shift, false);
-    } else if (mod && (key === '=' || key === '+')) {
-      tabs.zoom(1);
-    } else if (mod && (key === '-' || key === '_')) {
-      tabs.zoom(-1);
-    } else if (mod && key === '0') {
-      tabs.zoom(0);
-    } else if (mod && input.shift && key === 't') {
-      tabs.reopenClosed();
-    } else if (mod && key === 't') {
-      openCommandBar();
-    } else if (mod && key === 'w') {
-      if (tabs.activeTabId) tabs.close(tabs.activeTabId);
-    } else if (mod && input.shift && /^Digit[1-9]$/.test(input.code)) {
-      // Ctrl+Shift+1…9 switch to that space.
-      const space = spaces[Number(input.code.slice(5)) - 1];
-      if (space) switchSpace(space.id);
-    } else if (mod && /^[1-9]$/.test(key)) {
-      // Ctrl+1…8 jump to that tab; Ctrl+9 always means the last one.
-      tabs.activateIndex(key === '9' ? -1 : Number(key) - 1);
-    } else if ((input.alt && key === 'arrowleft') || (mod && key === '[')) {
-      tabs.command('back');
-    } else if ((input.alt && key === 'arrowright') || (mod && key === ']')) {
-      tabs.command('forward');
-    } else if (key === 'f5' || (mod && key === 'r')) {
-      if (input.shift) tabs.hardReload();
-      else tabs.command('reload');
-    } else if (
-      key === 'f12' ||
-      (mod && input.shift && key === 'i') ||
-      (input.meta && input.alt && key === 'i')
-    ) {
-      tabs.toggleDevTools();
-    } else {
-      handled = false;
+    switch (hit?.id) {
+      case 'next-tab':
+      case 'previous-tab':
+        stepSwitcher(hit.id === 'previous-tab' ? -1 : 1);
+        // Blocking a key here also hides the matching key release from
+        // that same view, so let the switcher layer keep its own events.
+        if (source === floating.webContents) handled = false;
+        break;
+      case 'escape':
+        if (lookout) closeLookout();
+        else if (switcher) endSwitcher(false);
+        else handled = false;
+        break;
+      case 'diagnostics':
+        printDiagnostics();
+        break;
+      case 'pin':
+        if (tabs.activeTabId) tabs.togglePin(tabs.activeTabId);
+        break;
+      case 'sidebar':
+        setSidebarCollapsed(!windowState.sidebarCollapsed);
+        break;
+      case 'address':
+        focusAddress();
+        break;
+      case 'find':
+        openFind();
+        break;
+      case 'history':
+        openHistory();
+        break;
+      case 'settings':
+        openSettings();
+        break;
+      case 'find-next':
+      case 'find-previous':
+        // The next (or previous) match of the last search.
+        if (overlay.mode !== 'find') openFind();
+        else if (lastFindText)
+          tabs.find(lastFindText, hit.id === 'find-next', false);
+        break;
+      case 'zoom-in':
+        tabs.zoom(1);
+        break;
+      case 'zoom-out':
+        tabs.zoom(-1);
+        break;
+      case 'zoom-reset':
+        tabs.zoom(0);
+        break;
+      case 'reopen-tab':
+        tabs.reopenClosed();
+        break;
+      case 'new-tab':
+        openCommandBar();
+        break;
+      case 'close-tab':
+        if (tabs.activeTabId) tabs.close(tabs.activeTabId);
+        break;
+      case 'space-number': {
+        const space = spaces[(hit.number ?? 0) - 1];
+        if (space) switchSpace(space.id);
+        break;
+      }
+      case 'tab-number':
+        tabs.activateIndex((hit.number ?? 1) - 1);
+        break;
+      case 'last-tab':
+        tabs.activateIndex(-1);
+        break;
+      case 'back':
+        tabs.command('back');
+        break;
+      case 'forward':
+        tabs.command('forward');
+        break;
+      case 'reload':
+        tabs.command('reload');
+        break;
+      case 'hard-reload':
+        tabs.hardReload();
+        break;
+      case 'dev-tools':
+        tabs.toggleDevTools();
+        break;
+      default:
+        handled = false;
     }
     if (handled) event.preventDefault();
   };

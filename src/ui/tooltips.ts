@@ -60,6 +60,11 @@ export function installTooltips(view: string) {
   tip.className = 'firn-tip';
   tip.setAttribute('role', 'tooltip');
   tip.setAttribute('aria-hidden', 'true');
+  // The words sit in a box of their own, which stops after two lines (the
+  // label's padding is outside it, so no third line peeks through there).
+  const words = document.createElement('span');
+  words.className = 'firn-tip-text';
+  tip.append(words);
   document.body.append(tip);
 
   let target: Element | null = null;
@@ -125,7 +130,7 @@ export function installTooltips(view: string) {
       });
       return;
     }
-    tip.textContent = text;
+    words.textContent = text;
     tip.classList.add('is-placing');
     place(el);
     tip.classList.remove('is-placing');
@@ -181,7 +186,7 @@ export function installTooltips(view: string) {
     window.firn.onTipState((state) => {
       if (state.kind === 'measure') {
         hide();
-        tip.textContent = state.text;
+        words.textContent = state.text;
         tip.classList.add('is-placing');
         tip.style.maxWidth = `${BAR_TIP_WIDTH}px`;
         tip.style.left = `${BOX_ROOM}px`;

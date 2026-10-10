@@ -85,13 +85,19 @@ export function writeSettings({ onboarded = true } = {}) {
 
 // The three spaces, their tabs, and Basecamp (`withTabs: false`: the
 // spaces alone).
-export function writeSession({ withTabs = true } = {}) {
+// (`spaces` and `basecamp`: others than the demo's own, e.g. the pages
+// to try, demo/try-pages.mjs.)
+export function writeSession({
+  withTabs = true,
+  spaces = SPACES,
+  basecamp = BASECAMP,
+} = {}) {
   const tabs = [];
   if (withTabs) {
-    BASECAMP.forEach((url, i) =>
-      tabs.push(tab(basecampId(i), SPACES[0].id, url, i, { basecamp: true })),
+    basecamp.forEach((url, i) =>
+      tabs.push(tab(basecampId(i), spaces[0].id, url, i, { basecamp: true })),
     );
-    SPACES.forEach((space, s) =>
+    spaces.forEach((space, s) =>
       space.tabs.forEach((url, i) =>
         // Earlier tabs count as more recent, so each space opens on its
         // first tab.
@@ -103,7 +109,7 @@ export function writeSession({ withTabs = true } = {}) {
   }
   write('session.json', {
     version: 2,
-    spaces: SPACES.map(({ id, name, icon, color }, order) => ({
+    spaces: spaces.map(({ id, name, icon, color }, order) => ({
       id,
       name,
       icon,
@@ -114,7 +120,7 @@ export function writeSession({ withTabs = true } = {}) {
     splits: [],
     window: {
       id: '1',
-      activeSpaceId: SPACES[0].id,
+      activeSpaceId: spaces[0].id,
       activeTabId: withTabs ? tabId(0, 0) : null,
       sidebarWidth: 260,
       sidebarCollapsed: false,

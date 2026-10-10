@@ -81,6 +81,18 @@ the last line shows where it stopped.
 - **"Firn didn't finish opening"**: `demo/out/firn-log.txt` has what Firn
   printed.
 
+## Choosing the pages
+
+```
+npm run demo:try-pages                       # the candidates in try-pages.mjs
+npm run demo:try-pages -- https://example.com/ https://…   # and these too
+```
+
+Opens each candidate page in Firn's demo mode, takes a picture of it, and
+notes any pop-up it finds, then opens a contact sheet
+(`demo/out/try-pages/index.html`). Pick the prettiest, and they go into the
+spaces in `lib/seed.mjs`.
+
 ## The clips
 
 | Clip            | What it shows                                                                                          |

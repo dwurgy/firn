@@ -28,6 +28,7 @@ import {
   warmUpScreen,
 } from './lib/capture.mjs';
 import { openCursor } from './lib/cursor.mjs';
+import { findPopups } from './lib/popups.mjs';
 import { createDirector, PACE, seededRandom, ui } from './lib/director.mjs';
 import {
   buildFirn,
@@ -267,43 +268,10 @@ async function within(step, seconds, promise) {
   }
 }
 
-// Anything large fixed over a page (a pop-up, banner, or prompt that got
-// past demo mode's hiding, src/demo.ts) is said in the log, so that clip
-// can be looked at, and the page swapped or the pop-up added to the list.
+// Anything big stuck over a page (a pop-up that got past demo mode's
+// hiding) is said in the log, so that clip can be looked at.
 async function lookForPopups(app, when) {
-  const found = await app
-    .evaluate(async () => {
-      const drive = globalThis.__demoDrive;
-      const out = [];
-      for (const layer of drive.layers()) {
-        if (!layer.shown || layer.url.startsWith('http://localhost:5173/'))
-          continue;
-        const big = await drive.js(
-          layer.id,
-          `(() => {
-            const vw = innerWidth, vh = innerHeight;
-            return [...document.querySelectorAll('body *')].filter((el) => {
-              const s = getComputedStyle(el);
-              if (s.position !== 'fixed' || s.display === 'none' ||
-                  s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
-              const b = el.getBoundingClientRect();
-              const w = Math.max(0, Math.min(b.right, vw) - Math.max(b.left, 0));
-              const h = Math.max(0, Math.min(b.bottom, vh) - Math.max(b.top, 0));
-              // (A bar along the top is the site's own header.)
-              return b.top > 4 && w * h > vw * vh * 0.08;
-            }).slice(0, 3).map((el) => el.tagName.toLowerCase() +
-              (el.id ? '#' + el.id : '') +
-              (typeof el.className === 'string' && el.className
-                ? '.' + el.className.trim().split(/\\s+/)[0] : ''));
-          })()`,
-          3000,
-        );
-        if (big?.length) out.push(`${layer.url} (${big.join(', ')})`);
-      }
-      return out;
-    })
-    .catch(() => []);
-  for (const page of found)
+  for (const page of await findPopups(app))
     log(
       `  heads-up (${when}): something big is stuck over the page, maybe a pop-up: ${page}`,
     );

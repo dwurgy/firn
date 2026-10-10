@@ -35,12 +35,21 @@ const HTML = `<!doctype html>
     glide(nx, ny, ms) {
       const fx = x, fy = y, start = performance.now();
       return new Promise((done) => {
+        let ended = false;
+        const end = () => {
+          if (ended) return;
+          ended = true; x = nx; y = ny; place(); done();
+        };
         const step = (now) => {
+          if (ended) return;
           const t = Math.min(1, (now - start) / ms);
           x = fx + (nx - fx) * ease(t); y = fy + (ny - fy) * ease(t); place();
-          if (t < 1) requestAnimationFrame(step); else done();
+          if (t < 1) requestAnimationFrame(step); else end();
         };
         requestAnimationFrame(step);
+        // (Where frames don't come, e.g. a window the system thinks is
+        // hidden, it still ends on time, in place.)
+        setTimeout(end, ms + 150);
       });
     },
     press(down) {

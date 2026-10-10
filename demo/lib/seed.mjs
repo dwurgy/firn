@@ -34,7 +34,7 @@ export const SPACES = [
     icon: 'work',
     color: SAGE,
     tabs: [
-      'https://github.com/dwurgy/firn',
+      'https://en.wikipedia.org/wiki/Web_browser',
       'https://developer.mozilla.org/en-US/docs/Web/CSS/backdrop-filter',
       'https://firnbrowser.com/release-notes',
     ],
@@ -45,17 +45,19 @@ export const SPACES = [
     icon: 'mountain',
     color: SAND,
     tabs: [
-      'https://www.nps.gov/crla/index.htm',
+      'https://en.wikipedia.org/wiki/Crater_Lake',
       'https://en.wikipedia.org/wiki/Three_Sisters_(Oregon)',
       'https://en.wikipedia.org/wiki/Coffee',
     ],
   },
 ];
 
+// (No Wikipedia Main Page: it shows the day's news and photos of real
+// people. No pages with sign-up prompts or ads for other browsers.)
 export const BASECAMP = [
   'https://firnbrowser.com/',
-  'https://github.com/dwurgy/firn',
-  'https://en.wikipedia.org/wiki/Main_Page',
+  'https://en.wikipedia.org/wiki/Crater_Lake',
+  'https://en.wikipedia.org/wiki/Sisters,_Oregon',
 ];
 
 // A fixed clock for the seeded tabs, so every run starts the same.

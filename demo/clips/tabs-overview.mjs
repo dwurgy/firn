@@ -1,5 +1,7 @@
 // Personal space: the pointer runs down the vertical tabs, opens a new tab,
-// and searches for "three sisters oregon".
+// types "three sisters oregon", and picks the Three Sisters (Oregon)
+// article from the command bar's suggestions (not a web search: a search
+// page can show ads for other browsers).
 import { floating, ui } from '../lib/director.mjs';
 
 const tab = (nth) =>
@@ -24,7 +26,11 @@ export default {
       'three sisters oregon',
     );
     await d.step();
-    await d.press(floating('[data-testid="command-input"]'), 'Enter');
+    await d.click(
+      floating('[data-testid="command-result"]', {
+        text: 'Three Sisters (Oregon)',
+      }),
+    );
     await d.pause(500);
     await d.settle(2500);
     await d.still();

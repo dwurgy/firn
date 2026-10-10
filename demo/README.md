@@ -11,6 +11,7 @@ npm run demo -- --clip lookout        # just one
 npm run demo -- --clip spaces --clip basecamp   # a few
 npm run demo -- --list                # the clips' names
 npm run demo -- --glass               # keep the see-through glass (see below)
+npm run demo -- --no-stills           # clips only, no still pictures
 ```
 
 What you get:
@@ -84,18 +85,26 @@ the last line shows where it stopped.
 
 | Clip            | What it shows                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------ |
-| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, and searches for "three sisters oregon"     |
+| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "three sisters oregon", picks the article |
 | `spaces`        | Personal → Work → Weekend with the space buttons, pausing on each                                      |
 | `basecamp`      | Clicking between the three Basecamp tiles, then right-click a tab > Add to Basecamp                    |
+| `split-view`    | Drag "Sisters, Oregon" onto the page's right half: the two side by side; then ease the divider          |
 | `lookout`       | On the Firn article: Shift+click a link (Lookout), scroll it a little, close it                        |
 | `welcome`       | The First light welcome on a fresh profile, from hello to "Welcome in."                                |
 | `empty-page`    | Each space with nothing open: the snow and the mark in each space's color                               |
 | `hero`          | A still only: Personal, the Firn article open, the sidebar beside it                                   |
 
-The split view clip (`clips/split-view.mjs`) is on hold until Firn lets you
-drag a tab to one side of the window to split it; it'll be redone with the
-drag then. Right-click menus are drawn by macOS, not Firn: when a clip uses
-one, the cursor glides to the item, and the demo chooses it.
+Right-click menus are drawn by macOS, not Firn: when a clip uses one, the
+cursor glides to the item, and the demo chooses it.
+
+**No pop-ups in a clip.** In demo mode Firn hides Wikipedia's donation
+banners, the usual cookie and consent boxes, and MDN's banners (`src/demo.ts`).
+Before and after each clip the recorder looks for anything big still stuck
+over a page and says so ("heads-up: … maybe a pop-up"); then swap that page
+in `lib/seed.mjs`, or add the pop-up to the list in `src/demo.ts`. The demo
+pages are chosen to have none: no search result pages, nothing that
+advertises another browser, no Wikipedia Main Page (it shows the day's news
+and photos of real people).
 
 ## How it works
 
@@ -109,7 +118,7 @@ one, the cursor glides to the item, and the demo chooses it.
 - **The demo profile** is written in Firn's own formats (`session.json` and
   `settings.json`, see `lib/seed.mjs`): Personal (Glacier), Work (Sage), and
   Weekend (Sand), each with its three tabs, and Basecamp with firnbrowser.com,
-  Firn on GitHub, and Wikipedia.
+  and Wikipedia's Crater Lake and Sisters, Oregon.
 - **Warm-up**: before the clips, Firn visits every demo page once, off
   camera, so every tab has its title and icon and the pages are cached.
   Each clip then starts from a copy of that warmed profile (the welcome and
@@ -146,8 +155,8 @@ Electron's debugging switch turned off, so the demo couldn't drive it.
 
 Each clip starts from the same profile, with the same window size and place,
 light look, cursor path, and typing rhythm. Two things can still differ:
-the websites themselves (Wikipedia, GitHub, and the others change over time,
-and the search results for "three sisters oregon" with them), and a clip's
+the websites themselves (Wikipedia, MDN, and firnbrowser.com change over
+time), and a clip's
 length by a fraction of a second when a page takes longer to load.
 
 ## Adding a clip

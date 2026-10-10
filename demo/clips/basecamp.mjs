@@ -15,9 +15,9 @@ export default {
     }
     await d.settle(2500);
     await d.still();
-    // Then "Sisters, Oregon": right-click > Add to Basecamp.
+    // Then the Firn article: right-click > Add to Basecamp.
     const tab = ui('[data-testid="tab"][data-kind="everyday"]', {
-      nth: 1,
+      nth: 0,
       at: [0.4, 0.5],
     });
     await d.click(tab, { button: 'right' });

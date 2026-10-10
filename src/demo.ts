@@ -8,7 +8,9 @@
 // - opens at a fixed size (1440×900 inside), centered on the main screen;
 // - is always light, never checks for updates, never contacts Safe
 //   Browsing, and never asks for site permissions (they're refused);
-// - hides Wikipedia's donation banners (the demo's pages are Wikipedia's);
+// - hides Wikipedia's donation banners, and cookie and sign-up pop-ups
+//   (the common consent tools' boxes, and MDN's banners), so no clip
+//   shows one;
 // - lets the recorder pick an item in a right-click menu it opened, the
 //   one thing its scripted mouse can't click (menus are the system's own).
 
@@ -39,6 +41,28 @@ export function demoBounds() {
   };
 }
 
+// The usual cookie and consent boxes (OneTrust, Cookiebot, Didomi,
+// Sourcepoint, Funding Choices, Osano, Cookie Consent, Quantcast).
+const POPUPS = [
+  '#onetrust-banner-sdk',
+  '#onetrust-consent-sdk',
+  '#CybotCookiebotDialog',
+  '#didomi-host',
+  '[id^="sp_message_container"]',
+  '.fc-consent-root',
+  '.osano-cm-window',
+  '.cc-window',
+  '.qc-cmp2-container',
+];
+const WIKIPEDIA_POPUPS = [
+  '#siteNotice',
+  '#centralNotice',
+  '.cn-fundraising',
+  '[class*="frb"]',
+  '[id^="frb"]',
+];
+const MDN_POPUPS = ['.top-banner', '.mdn-cta-container', '.place.top'];
+
 const hostOf = (url: string) => {
   try {
     return new URL(url).hostname;
@@ -63,12 +87,16 @@ export function installDemoHooks() {
       console.log(`[demo] Firn got ${signal}`);
       quit();
     });
-  // Wikipedia's donation banners would fill the top of the demo's pages.
+  // Pop-ups that would sit in a clip: Wikipedia's donation banners, the
+  // common cookie-consent tools' boxes, and MDN's banners.
   app.on('web-contents-created', (_event, contents) => {
     contents.on('dom-ready', () => {
-      if (!/(^|\.)wikipedia\.org$/.test(hostOf(contents.getURL()))) return;
+      const host = hostOf(contents.getURL());
+      const hide = [...POPUPS];
+      if (/(^|\.)wikipedia\.org$/.test(host)) hide.push(...WIKIPEDIA_POPUPS);
+      if (/(^|\.)mozilla\.org$/.test(host)) hide.push(...MDN_POPUPS);
       void contents.insertCSS(
-        '#siteNotice, #centralNotice, .cn-fundraising, [class*="frb"], [id^="frb"] { display: none !important; }',
+        `${hide.join(', ')} { display: none !important; }`,
       );
     });
   });

@@ -383,6 +383,12 @@ export function createDirector({ app, cursor, random, takeStill }) {
     },
 
     // Presses on a target, moves it by (dx, dy) slowly, and lets go.
+    // Drags a target to a spot in the window (`x`, `y`, in points).
+    async dragTo(target, x, y, ms = 1400) {
+      const spot = await spotOf(target);
+      return this.drag(target, x - spot.window.x, y - spot.window.y, ms);
+    },
+
     async drag(target, dx, dy, ms = 900) {
       const spot = await spotOf(target);
       await glideTo(spot);

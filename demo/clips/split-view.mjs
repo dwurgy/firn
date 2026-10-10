@@ -1,7 +1,12 @@
-// Right-click a tab > "Split view with current tab", then ease the divider
-// over a little. (Firn starts split view from a tab's right-click menu; it
-// has no drag-a-tab-into-split.)
+// Drag "Sisters, Oregon" out of the sidebar onto the page's right half:
+// the tab stays under the pointer, the Firn article glides over to make
+// room, and letting go opens the two side by side. Then ease the divider
+// over a little.
 import { ui, web } from '../lib/director.mjs';
+
+// The window is 1440×900 inside, the sidebar 260 wide: the page's right
+// half is around here.
+const RIGHT_HALF = { x: 1140, y: 470 };
 
 export default {
   name: 'split-view',
@@ -10,13 +15,11 @@ export default {
     await d.placeCursor(700, 600);
   },
   async run(d) {
-    // "Sisters, Oregon", beside the Firn article on screen.
     const tab = ui('[data-testid="tab"][data-kind="everyday"]', {
       nth: 1,
       at: [0.4, 0.5],
     });
-    await d.click(tab, { button: 'right' });
-    await d.chooseMenuItem('Split view with current tab');
+    await d.dragTo(tab, RIGHT_HALF.x, RIGHT_HALF.y, 1600);
     await d.waitFor(ui('[data-testid="split-divider"]'));
     await d.settle(2500);
     await d.pause(1000);

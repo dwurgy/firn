@@ -28,9 +28,10 @@ export default {
     await d.still();
     await d.drag(ui('[data-testid="split-divider"]'), -90, 0);
     await d.step();
-    // Off the divider (so its hover label fades), then the still. (The
-    // whole page: the wind map's body has no height, it's all canvas.)
-    await d.hover(web('html', { notUrl: 'crl-2026', at: [0.6, 0.6] }));
+    // Off the divider (so its hover label fades), then the still. (Onto
+    // the page's area: the wind map is all canvas, with no element that
+    // has a size.)
+    await d.hover(web(':page', { notUrl: 'crl-2026', at: [0.6, 0.6] }));
     await d.step();
     await d.still();
   },

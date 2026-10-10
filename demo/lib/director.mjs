@@ -37,6 +37,7 @@ export const floating = (selector, options = {}) => ({
 });
 // `url`: part of the page's address; `notUrl`: a part it doesn't have;
 // `top`: the page in front (Lookout's preview) rather than the biggest.
+// The selector ':page' means the page's whole area.
 export const web = (selector, options = {}) => ({
   layer: 'web',
   selector,
@@ -132,6 +133,20 @@ export async function installDriver(app) {
       async spot(target, share) {
         const layer = layerFor(target);
         if (!layer) return null;
+        // ':page': the page's area itself, whatever's in it (some pages,
+        // all canvas, have no element with a size).
+        if (target.selector === ':page') {
+          const local = {
+            x: layer.width * share[0],
+            y: layer.height * share[1],
+          };
+          return {
+            id: layer.id,
+            local,
+            window: { x: local.x + layer.x, y: local.y + layer.y },
+            offset: { x: layer.x, y: layer.y },
+          };
+        }
         const code = `(() => {
           // Only things that are shown (and, with inView, on screen).
           const shown = (el) => {

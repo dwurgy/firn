@@ -27,7 +27,6 @@ export const SPACES = [
     tabs: [
       'https://firnbrowser.com/',
       'https://www.metmuseum.org/art/collection/search/436535',
-      'https://agnestoth.com/',
       'https://culturedcode.com/things/',
     ],
   },
@@ -49,7 +48,7 @@ export const SPACES = [
     icon: 'mountain',
     color: SAND,
     tabs: [
-      'https://earth.nullschool.net/',
+      'https://agnestoth.com/',
       'https://crl-2026.webflow.io/',
       'https://www.nts.live/',
       'https://www.apple.com/macbook-air/',

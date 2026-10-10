@@ -97,10 +97,10 @@ spaces in `lib/seed.mjs`.
 
 | Clip            | What it shows                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------ |
-| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "earth", picks the wind map tab (in Weekend) |
+| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "nts", picks NTS Radio (in Weekend) |
 | `spaces`        | Personal → Work → Weekend with the space buttons, pausing on each                                      |
 | `basecamp`      | Clicking between the three Basecamp tiles, then right-click a tab > Add to Basecamp                    |
-| `split-view`    | In Weekend, drag crl-2026 onto the page's right half beside the wind map: the two side by side; then ease the divider          |
+| `split-view`    | In Weekend, drag crl-2026 onto the page's right half beside agnestoth.com: the two side by side; then ease the divider          |
 | `lookout`       | On firnbrowser.com: Shift+click a link (Lookout), scroll it a little, close it                        |
 | `welcome`       | The First light welcome on a fresh profile, from hello to "Welcome in."                                |
 | `empty-page`    | Each space with nothing open: the snow and the mark in each space's color                               |
@@ -129,7 +129,7 @@ and photos of real people).
   this.
 - **The demo profile** is written in Firn's own formats (`session.json` and
   `settings.json`, see `lib/seed.mjs`): Personal (Glacier), Work (Sage), and
-  Weekend (Sand), each with four tabs, and Basecamp with Firn's release
+  Weekend (Sand), each with three or four tabs, and Basecamp with Firn's release
   notes, mijobello.com, and Things (David's picks from `npm run demo:try-pages`).
 - **Each clip opens on its own page** (`start` in the clip: a space and a
   tab), set up off camera, so the clips don't all begin on the same picture.

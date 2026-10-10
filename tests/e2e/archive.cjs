@@ -38,8 +38,9 @@ const tab = (id, spaceId, name, order, lastActiveAt, extra = {}) => ({
   ...extra,
 });
 
-// Firn was used on each of the last 10 days; four tabs were last looked at
-// 30 days ago (and one 40).
+// Firn was used on each of the last 40 days; four tabs were last looked at
+// 30 days ago (and one 40). The Archive already holds a tab put away 35
+// days ago (forgotten after 30 days of use) and one from 3 days ago.
 const session = {
   version: 2,
   spaces: [
@@ -63,7 +64,18 @@ const session = {
     sidebarCollapsed: false,
   },
   recentlyClosed: [],
-  daysUsed: Array.from({ length: 10 }, (_, i) => dayOf(now - (i + 1) * DAY)),
+  daysUsed: Array.from({ length: 40 }, (_, i) => dayOf(now - (i + 1) * DAY)),
+  archive: [
+    ['ancient', 35],
+    ['recent', 3],
+  ].map(([id, days]) => ({
+    id,
+    url: page(id === 'ancient' ? 'two' : 'glance'),
+    title: id === 'ancient' ? 'Ancient site' : 'Recent site',
+    favicon: '',
+    spaceId: 'sp-a',
+    archivedAt: now - days * DAY,
+  })),
 };
 
 // Started plainly and checked over CDP: Playwright's launcher waits forever
@@ -75,14 +87,21 @@ const launch = async () => {
     ['--no-sandbox', '--remote-debugging-port=9222', '.'],
     { cwd: ROOT, stdio: 'ignore' },
   );
-  // The first tidy comes 8 seconds after Firn opens.
-  await wait(12000);
+  const started = Date.now();
   const { evalIn } = await require('./cdp.cjs').cdp();
-  return {
-    p,
-    ui: (expr) => evalIn((u) => u.endsWith(':5173/'), expr),
-    fl: (expr) => evalIn((u) => u.includes('view=floating'), expr),
-  };
+  const ui = (expr) => evalIn((u) => u.endsWith(':5173/'), expr);
+  const fl = (expr) => evalIn((u) => u.includes('view=floating'), expr);
+  // Until the sidebar is there (the first start compiles it), then past the
+  // first tidy, 8 seconds after Firn opens.
+  for (let i = 0; i < 60; i++) {
+    await wait(1000);
+    const ready = await ui(
+      `!!document.querySelector('[data-testid="archive-box"]')`,
+    ).catch(() => false);
+    if (ready === true) break;
+  }
+  await wait(Math.max(2000, 12000 - (Date.now() - started)));
+  return { p, ui, fl };
 };
 
 (async () => {
@@ -111,7 +130,27 @@ const launch = async () => {
     after.join(', '),
   );
 
-  await ui(`window.firn.runAction('archive')`);
+  // The archive box, at the right of the spaces (which stay centered),
+  // gave its little pulse.
+  const box = await ui(`(() => {
+    const box = document.querySelector('[data-testid="archive-box"]').getBoundingClientRect();
+    const spaces = document.querySelector('.space-switcher').getBoundingClientRect();
+    const side = document.querySelector('.sidebar-bottom').getBoundingClientRect();
+    return {
+      right: box.left >= spaces.right - 1,
+      centered: Math.abs((spaces.left + spaces.right) / 2 - (side.left + side.right) / 2) < 2,
+      pulsed: !!document.querySelector('.archive-icon.is-pulsing') &&
+        !!document.querySelector('.archive-ring'),
+    };
+  })()`);
+  check(
+    'the archive box sits at the bottom right, the spaces centered',
+    box?.right && box?.centered,
+    JSON.stringify(box),
+  );
+  check('...and it pulsed when tabs were tidied away', box?.pulsed);
+
+  await ui(`document.querySelector('[data-testid="archive-box"]').click()`);
   await wait(800);
   const listed = async () =>
     (await fl(
@@ -119,11 +158,16 @@ const launch = async () => {
     )) ?? [];
   let archived = await listed();
   check(
-    'the Archive lists it, and another space’s older tab, by space',
-    archived.length === 2 &&
+    'clicking the box opens the Archive: it lists it, and another space’s older tab',
+    archived.length === 3 &&
       archived.some((r) => /blue/i.test(r)) &&
       archived.some((r) => /long/i.test(r)),
     archived.join(' | '),
+  );
+  check(
+    '...an archived tab from 3 days ago stays, one from 35 days of use ago is forgotten',
+    archived.some((r) => /recent/i.test(r)) &&
+      !archived.some((r) => /ancient/i.test(r)),
   );
   check(
     '...but not a space’s most recent tab, though just as old',
@@ -175,8 +219,9 @@ const launch = async () => {
   const saved = JSON.parse(fs.readFileSync(`${DATA}/session.json`, 'utf8'));
   check(
     'it’s saved: the Archive, and today as a day Firn was used',
-    saved.archive?.length === 1 &&
-      /long/.test(saved.archive[0].url) &&
+    saved.archive?.length === 2 &&
+      saved.archive.some((a) => /long/.test(a.url)) &&
+      !saved.archive.some((a) => /blue/.test(a.url)) &&
       saved.daysUsed?.includes(dayOf(Date.now())),
     JSON.stringify({
       archive: saved.archive?.map((a) => a.url),
@@ -189,7 +234,7 @@ const launch = async () => {
   archived = await listed();
   check(
     '...and back after a restart',
-    archived.length === 1,
+    archived.length === 2,
     archived.join(' | '),
   );
   p.kill();

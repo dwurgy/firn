@@ -408,7 +408,10 @@ export interface FirnBridge {
   listArchive(): Promise<ArchivedTab[]>;
   restoreArchived(id: string): void;
   removeArchived(id: string): void;
-  onArchiveChanged(listener: () => void): () => void;
+  // (With how many tabs were just tidied away, when that's the change.)
+  onArchiveChanged(listener: (tidied: number) => void): () => void;
+  // The archive box's right-click menu.
+  showArchiveMenu(): void;
   // Saved passwords: the answer to "save password?", and the passwords
   // panel (the list never includes passwords; showing one asks for it).
   answerSavePassword(answer: 'save' | 'dismiss'): void;

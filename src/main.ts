@@ -51,7 +51,7 @@ import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
 import { macMenuTemplate } from './menu';
 import { matchShortcut, menuAccelerator } from './shortcuts';
-import { isOld, noteDayUsed } from './archive';
+import { ARCHIVE_CHOICES, isOld, noteDayUsed } from './archive';
 import type {
   CarryTab,
   CommandAction,
@@ -134,6 +134,8 @@ const GLIDE_MS = 200; // matches --motion in styles.css
 // opens (out of the way of the start), then every hour.
 const TIDY_FIRST_MS = 8000;
 const TIDY_EVERY_MS = 60 * 60 * 1000;
+// Archived tabs are forgotten after this many days of use (still in History).
+const ARCHIVE_KEEP_DAYS = 30;
 // The peeking sidebar is forgiving to the left and quick to the right:
 // anywhere to its left (even off the window, onto another screen) counts as
 // "on it", but once the mouse is this far past its right edge, back over the
@@ -2872,6 +2874,21 @@ const createWindow = () => {
         },
         { label: "What's new", click: () => openWhatsNew('') },
       ]).popup({ window: win }),
+    // The archive box's right-click menu: open it, or choose how long.
+    'archive:menu': () =>
+      Menu.buildFromTemplate([
+        { label: 'Show archived tabs', click: () => runAction('archive', '') },
+        { type: 'separator' },
+        {
+          label: "Archive tabs you haven't used for",
+          submenu: ARCHIVE_CHOICES.map((days) => ({
+            label: days === 0 ? 'Never' : days === 1 ? '1 day' : `${days} days`,
+            type: 'radio' as const,
+            checked: settings.archiveAfter === days,
+            click: () => changeSettings({ archiveAfter: days }),
+          })),
+        },
+      ]).popup({ window: win }),
     // The Archive: bring a tab back (in its space, if that's still there),
     // or forget it.
     'archive:restore': (_sender, id) => {
@@ -3499,9 +3516,13 @@ const createWindow = () => {
     const archived = tabs.archiveOld((lastActiveAt) =>
       isOld(lastActiveAt, daysUsed, settings.archiveAfter),
     );
-    if (archived) {
-      debug(`archived ${archived} old tab(s)`);
-      send('archive:changed');
+    const forgotten = tabs.forgetArchived((archivedAt) =>
+      isOld(archivedAt, daysUsed, ARCHIVE_KEEP_DAYS),
+    );
+    if (archived || forgotten) {
+      debug(`archived ${archived} old tab(s), forgot ${forgotten}`);
+      // (The archive box in the sidebar gives a little pulse.)
+      send('archive:changed', archived);
     }
     saver.schedule();
   };

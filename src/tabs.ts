@@ -489,6 +489,14 @@ export class TabManager {
   }
 
   // Takes a tab out of the Archive (to bring it back, or to forget it).
+  // Forgets archived tabs that have rested long enough (they stay in
+  // History); returns how many.
+  forgetArchived(isOld: (archivedAt: number) => boolean) {
+    const before = this.archived.length;
+    this.archived = this.archived.filter((tab) => !isOld(tab.archivedAt));
+    return before - this.archived.length;
+  }
+
   takeArchived(id: string): ArchivedTab | undefined {
     const index = this.archived.findIndex((tab) => tab.id === id);
     if (index < 0) return undefined;

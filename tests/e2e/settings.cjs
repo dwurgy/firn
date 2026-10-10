@@ -85,6 +85,43 @@ const check = (n, ok, x = '') => {
       "New tab|New space|—|History|Archived tabs|Passwords|Downloads|—|Settings|What's new",
     labels.join(' | '),
   );
+  // the archive box, at the bottom right: its right-click menu opens the
+  // Archive or chooses how long until tabs are tidied away
+  await ui.click('[data-testid="archive-box"]', { button: 'right' });
+  await wait(300);
+  const boxMenu = await app.evaluate(() =>
+    globalThis.__menu.map((i) =>
+      i.type === 'separator'
+        ? '—'
+        : i.submenu
+          ? `${i.label}: ${i.submenu.map((c) => (c.checked ? `[${c.label}]` : c.label)).join(', ')}`
+          : i.label,
+    ),
+  );
+  check(
+    "the archive box's right-click menu: show, and how long (30 days at first)",
+    boxMenu.join(' | ') ===
+      "Show archived tabs | — | Archive tabs you haven't used for: 1 day, 7 days, [30 days], Never",
+    boxMenu.join(' | '),
+  );
+  await app.evaluate(() =>
+    globalThis.__menu[2].submenu.find((i) => i.label === '7 days').click(),
+  );
+  await wait(300);
+  check(
+    '...choosing 7 days there changes the setting',
+    saved().archiveAfter === 7,
+    String(saved().archiveAfter),
+  );
+  // (back to 30 days for the checks after this one)
+  await ui.click('[data-testid="archive-box"]', { button: 'right' });
+  await wait(300);
+  await app.evaluate(() =>
+    globalThis.__menu[2].submenu.find((i) => i.label === '30 days').click(),
+  );
+  await wait(300);
+  await ui.click('.firn-menu-button');
+  await wait(300);
   await app.evaluate(() =>
     globalThis.__menu.find((i) => i.label === 'Settings').click(),
   );

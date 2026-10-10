@@ -40,6 +40,10 @@ const bridge: FirnBridge = {
   removeHistory: (url) => ipcRenderer.send('history:remove', url),
   showClearHistoryMenu: () => ipcRenderer.send('history:clear-menu'),
   onHistoryChanged: (listener) => listen('history:changed', () => listener()),
+  listArchive: () => ipcRenderer.invoke('archive:list'),
+  restoreArchived: (id) => ipcRenderer.send('archive:restore', id),
+  removeArchived: (id) => ipcRenderer.send('archive:remove', id),
+  onArchiveChanged: (listener) => listen('archive:changed', () => listener()),
   answerSavePassword: (answer) => ipcRenderer.send('password:answer', answer),
   answerDanger: (answer) => ipcRenderer.send('danger:answer', answer),
   finishWelcome: (basecampUrls) =>

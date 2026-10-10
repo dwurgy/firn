@@ -50,6 +50,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `realdrag`     | The same drags with a real system mouse (through the window system): the carried tab stays under the mouse, in front of the page |
 | `splithandle` | A split view's handle (real mouse): it comes out near the top middle of a side; drag it to swap the sides, × takes a side out |
 | `shortcuts`   | Settings > Keyboard shortcuts: the page, its key caps, every key on it does what it says (Windows and Mac), and a few pressed for real |
+| `archive`     | Archiving old tabs: an everyday tab unused for the chosen days of use goes to the Archive (pinned, Basecamp, the current tab, and each space's latest stay), the Archive panel by space, bringing one back, Settings, and a restart |
 
 `site/` is a tiny test website the checks visit (served on this computer
 only). `cdp.cjs`, `playwright.cjs` and `warp.py` are small helpers.

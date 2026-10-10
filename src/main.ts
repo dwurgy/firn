@@ -51,6 +51,7 @@ import { BASECAMP_MAX, TabManager } from './tabs';
 import { startUpdates } from './updates';
 import { macMenuTemplate } from './menu';
 import { matchShortcut, menuAccelerator } from './shortcuts';
+import { isOld, noteDayUsed } from './archive';
 import type {
   CarryTab,
   CommandAction,
@@ -129,6 +130,10 @@ const SIDEBAR_WIDTH = 260;
 const SIDEBAR_MIN = process.platform === 'darwin' ? 224 : 200;
 const SIDEBAR_MAX = 360;
 const GLIDE_MS = 200; // matches --motion in styles.css
+// Archiving old tabs (src/archive.ts): the first look a little after Firn
+// opens (out of the way of the start), then every hour.
+const TIDY_FIRST_MS = 8000;
+const TIDY_EVERY_MS = 60 * 60 * 1000;
 // The peeking sidebar is forgiving to the left and quick to the right:
 // anywhere to its left (even off the window, onto another screen) counts as
 // "on it", but once the mouse is this far past its right edge, back over the
@@ -1529,6 +1534,8 @@ const createWindow = () => {
     saveSettings(settingsFile, settings);
     send('settings:state', settingsState());
     syncTopBar();
+    // (A shorter time may make some tabs old right away.)
+    tidyOldTabs();
   };
 
   // Downloads go straight to the Downloads folder; the sidebar shows them.
@@ -2544,6 +2551,9 @@ const createWindow = () => {
       case 'shortcuts':
         showOverlay({ mode: 'shortcuts', openId: ++commandOpenId });
         break;
+      case 'archive':
+        showOverlay({ mode: 'archive', openId: ++commandOpenId });
+        break;
     }
   };
 
@@ -2845,6 +2855,10 @@ const createWindow = () => {
           accelerator: menuAccelerator('history', process.platform),
           click: () => openHistory(),
         },
+        {
+          label: 'Archived tabs',
+          click: () => runAction('archive', ''),
+        },
         { label: 'Passwords', click: () => openPasswords() },
         {
           label: 'Downloads',
@@ -2858,6 +2872,23 @@ const createWindow = () => {
         },
         { label: "What's new", click: () => openWhatsNew('') },
       ]).popup({ window: win }),
+    // The Archive: bring a tab back (in its space, if that's still there),
+    // or forget it.
+    'archive:restore': (_sender, id) => {
+      if (typeof id !== 'string') return;
+      const tab = tabs.takeArchived(id);
+      if (!tab) return;
+      hideOverlay();
+      if (spaces.some((s) => s.id === tab.spaceId)) switchSpace(tab.spaceId);
+      tabs.create(tab.url);
+      send('archive:changed');
+      saver.schedule();
+    },
+    'archive:remove': (_sender, id) => {
+      if (typeof id !== 'string' || !tabs.takeArchived(id)) return;
+      send('archive:changed');
+      saver.schedule();
+    },
     'history:remove': (_sender, url) => {
       if (typeof url !== 'string') return;
       history.remove(url);
@@ -3145,6 +3176,9 @@ const createWindow = () => {
       ? passwords.reveal(id)
       : null,
   );
+  ipcMain.handle('archive:list', (event: IpcMainInvokeEvent) =>
+    uiContents.includes(event.sender) ? tabs.archive : [],
+  );
   ipcMain.handle('history:list', (event: IpcMainInvokeEvent, query: unknown) =>
     uiContents.includes(event.sender) && typeof query === 'string'
       ? history.list(query.slice(0, 200), 400)
@@ -3372,6 +3406,11 @@ const createWindow = () => {
   };
   nativeTheme.on('updated', onThemeChange);
 
+  // The days Firn was used (for archiving old tabs: src/archive.ts).
+  let daysUsed = noteDayUsed(saved?.daysUsed ?? [], Date.now());
+  // (Set once the tabs are back, below.)
+  let tidyOldTabs = () => {};
+
   // Save the whole session at once, a moment after anything changes, and
   // right away when the window closes.
   const saver = new SaveScheduler(() => {
@@ -3387,6 +3426,8 @@ const createWindow = () => {
       recentlyClosed: tabs.closedUrls,
       splits: tabs.splitGroups,
       siteZoom: tabs.siteZooms,
+      archive: tabs.archive,
+      daysUsed,
     });
   });
   for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const)
@@ -3409,6 +3450,7 @@ const createWindow = () => {
     ipcMain.removeHandler('command:tabs');
     ipcMain.removeHandler('history:search');
     ipcMain.removeHandler('history:list');
+    ipcMain.removeHandler('archive:list');
     ipcMain.removeHandler('passwords:list');
     ipcMain.removeHandler('passwords:reveal');
     nativeTheme.removeListener('updated', onThemeChange);
@@ -3448,6 +3490,31 @@ const createWindow = () => {
     tabs.create(tab.url, { restore: tab, activate: false });
   }
   tabs.restoreSplits(saved?.splits);
+  tabs.restoreArchive(saved?.archive);
+  // Old everyday tabs tidy themselves away into the Archive: a little after
+  // Firn opens, then every hour (each check also notes that today Firn was
+  // used, for a window left open overnight).
+  tidyOldTabs = () => {
+    daysUsed = noteDayUsed(daysUsed, Date.now());
+    const archived = tabs.archiveOld((lastActiveAt) =>
+      isOld(lastActiveAt, daysUsed, settings.archiveAfter),
+    );
+    if (archived) {
+      debug(`archived ${archived} old tab(s)`);
+      send('archive:changed');
+    }
+    saver.schedule();
+  };
+  const tidyTimer = setTimeout(() => {
+    if (!win.isDestroyed()) tidyOldTabs();
+  }, TIDY_FIRST_MS);
+  const tidyEvery = setInterval(() => {
+    if (!win.isDestroyed()) tidyOldTabs();
+  }, TIDY_EVERY_MS);
+  win.on('closed', () => {
+    clearTimeout(tidyTimer);
+    clearInterval(tidyEvery);
+  });
   console.log(
     savedTabs.length
       ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`

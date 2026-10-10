@@ -80,9 +80,9 @@ const check = (n, ok, x = '') => {
     globalThis.__menu.map((i) => (i.type === 'separator' ? '—' : i.label)),
   );
   check(
-    "the sidebar's ⋯ menu: new tab, new space, history, downloads, settings, what's new",
+    "the sidebar's ⋯ menu: new tab, new space, history, archived tabs, passwords, downloads, settings, what's new",
     labels.join('|') ===
-      "New tab|New space|—|History|Passwords|Downloads|—|Settings|What's new",
+      "New tab|New space|—|History|Archived tabs|Passwords|Downloads|—|Settings|What's new",
     labels.join(' | '),
   );
   await app.evaluate(() =>

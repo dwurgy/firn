@@ -5,6 +5,8 @@ import { ui } from '../lib/director.mjs';
 export default {
   name: 'basecamp',
   seed: 'tabs',
+  // Opens on twks.ch in Work.
+  start: { space: 'Work', tab: 1 },
   async setup(d) {
     await d.placeCursor(420, 300);
   },
@@ -15,7 +17,7 @@ export default {
     }
     await d.settle(2500);
     await d.still();
-    // Then firnbrowser.com: right-click > Add to Basecamp.
+    // Then Work's first tab (Linear): right-click > Add to Basecamp.
     const tab = ui('[data-testid="tab"][data-kind="everyday"]', {
       nth: 0,
       at: [0.4, 0.5],

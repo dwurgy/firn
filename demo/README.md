@@ -100,7 +100,7 @@ spaces in `lib/seed.mjs`.
 | `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "earth", picks the wind map tab (in Weekend) |
 | `spaces`        | Personal → Work → Weekend with the space buttons, pausing on each                                      |
 | `basecamp`      | Clicking between the three Basecamp tiles, then right-click a tab > Add to Basecamp                    |
-| `split-view`    | Drag Van Gogh at the Met onto the page's right half: the two side by side; then ease the divider          |
+| `split-view`    | In Weekend, drag crl-2026 onto the page's right half beside the wind map: the two side by side; then ease the divider          |
 | `lookout`       | On firnbrowser.com: Shift+click a link (Lookout), scroll it a little, close it                        |
 | `welcome`       | The First light welcome on a fresh profile, from hello to "Welcome in."                                |
 | `empty-page`    | Each space with nothing open: the snow and the mark in each space's color                               |
@@ -131,6 +131,8 @@ and photos of real people).
   `settings.json`, see `lib/seed.mjs`): Personal (Glacier), Work (Sage), and
   Weekend (Sand), each with four tabs, and Basecamp with Firn's release
   notes, mijobello.com, and Things (David's picks from `npm run demo:try-pages`).
+- **Each clip opens on its own page** (`start` in the clip: a space and a
+  tab), set up off camera, so the clips don't all begin on the same picture.
 - **Warm-up**: before the clips, Firn visits every demo page once, off
   camera, so every tab has its title and icon and the pages are cached.
   Each clip then starts from a copy of that warmed profile (the welcome and

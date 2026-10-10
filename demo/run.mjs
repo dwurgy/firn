@@ -334,6 +334,29 @@ async function record(clip) {
         );
       },
     });
+    // Each clip opens on its own space and page (`start`), so the clips
+    // don't all begin on the same picture.
+    if (clip.start) {
+      const s = SPACES.findIndex((space) => space.name === clip.start.space);
+      if (s < 0) throw new Error(`No space called ${clip.start.space}.`);
+      log(`  opening ${clip.start.space}, tab ${clip.start.tab + 1}…`);
+      await within(
+        'opening its first page',
+        30,
+        (async () => {
+          await d.run(
+            ui('body'),
+            `window.firn.switchSpace(${JSON.stringify(SPACES[s].id)})`,
+          );
+          await wait(400);
+          await d.run(
+            ui('body'),
+            `window.firn.activateTab(${JSON.stringify(tabId(s, clip.start.tab))})`,
+          );
+          await wait(400);
+        })(),
+      );
+    }
     log('  setting up the clip…');
     await within('setting up the clip', 60, clip.setup?.(d));
     await within('waiting for pages to load', 60, d.settle());

@@ -10,6 +10,8 @@ const tab = (nth) =>
 export default {
   name: 'tabs-overview',
   seed: 'tabs',
+  // Opens on agnestoth.com.
+  start: { space: 'Personal', tab: 2 },
   async setup(d) {
     await d.placeCursor(150, 640);
   },

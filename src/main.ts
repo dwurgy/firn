@@ -23,7 +23,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import started from 'electron-squirrel-startup';
 import { loadSession, SaveScheduler, saveSession, sessionPath } from './store';
 import type { Page, PageContextMenu } from './engine/engine';
 import { ElectronEngine } from './engine/electron';
@@ -33,8 +32,9 @@ import { AdBlocker } from './adblock';
 import {
   askToBeDefault,
   defaultBrowserState,
-  handleWindowsInstallerEvent,
   linksFromArguments,
+  registerWindowsBrowser,
+  unregisterWindowsBrowser,
   type DefaultBrowserState,
 } from './defaultBrowser';
 import { SafeBrowsing, type Threat } from './safebrowsing';
@@ -52,6 +52,7 @@ import { startUpdates } from './updates';
 import { macMenuTemplate } from './menu';
 import { matchShortcut, menuAccelerator } from './shortcuts';
 import { ARCHIVE_CHOICES, isOld, noteDayUsed } from './archive';
+import { handleInstallerEvent } from './installer';
 import type {
   CarryTab,
   CommandAction,
@@ -63,10 +64,13 @@ import type {
   WindowState,
 } from './types';
 
-// Windows: the installer's events also list Firn among the browsers (or
-// take it off the list), before the shortcuts are made and Firn quits.
-handleWindowsInstallerEvent();
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
+// Windows: started by the installer (install, update, or uninstall), Firn
+// makes or removes its Start menu entry and its place among the browsers,
+// and quits (src/installer.ts).
+const started = handleInstallerEvent({
+  register: registerWindowsBrowser,
+  unregister: unregisterWindowsBrowser,
+});
 if (started) {
   app.quit();
 }
@@ -83,9 +87,8 @@ const receiveLinks = (urls: string[]) => {
   if (app.isReady() && !BrowserWindow.getAllWindows().length) createWindow();
 };
 
-// Windows: Firn's taskbar button and pins belong with the Start menu and
-// desktop shortcuts the installer makes (the installer's own name for
-// Firn). And Windows' list of installed apps shows Firn's own icon: the
+// Windows: Firn's taskbar button and pins belong with the Start menu
+// entry the installer makes (the installer's own name for Firn). And Windows' list of installed apps shows Firn's own icon: the
 // installer fetches it from the web while installing (see
 // forge.config.mts), and in case that failed, Firn also points the list
 // at its own app file.

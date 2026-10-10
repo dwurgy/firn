@@ -27,7 +27,7 @@ export default {
         );
     await d.click(link, { shift: true });
     // The preview: the page in front.
-    const preview = web('body', { top: true });
+    const preview = web('html', { top: true });
     await d.waitFor(floating('[data-testid="lookout-close"]'));
     await d.settle(2500);
     await d.step();

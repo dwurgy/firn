@@ -1,7 +1,7 @@
 // Archiving old tabs: everyday tabs not looked at for a while tidy
 // themselves away into the Archive (Firn menu, command bar), where any of
-// them can be brought back. Settings decides how long: 1, 7, or 30 days
-// (the default), or never.
+// them can be brought back. Settings decides how long: 1, 7 (the default),
+// or 30 days, or never.
 //
 // Days are the days Firn was used, not calendar days, so a week away
 // doesn't empty the sidebar: Firn notes each day it's open (`daysUsed`, in

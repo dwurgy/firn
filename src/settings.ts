@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   adsAllowedSites: [],
   onboarded: false,
   lastVersion: '',
-  archiveAfter: 30,
+  archiveAfter: 7,
 };
 
 export function loadSettings(file: string): Settings {

@@ -80,7 +80,7 @@ const session = {
 
 // Started plainly and checked over CDP: Playwright's launcher waits forever
 // on restored tabs that haven't loaded yet.
-const launch = async () => {
+const launch = async (tidies) => {
   const { spawn } = require('child_process');
   const p = spawn(
     require('path').join(ROOT, 'node_modules/electron/dist/electron'),
@@ -100,6 +100,15 @@ const launch = async () => {
     ).catch(() => false);
     if (ready === true) break;
   }
+  // Then until the first tidy (8 seconds after Firn opens) when it has
+  // something to put away (the box pulses), or past it.
+  for (let i = 0; tidies && i < 30; i++) {
+    const pulsed = await ui(
+      `!!document.querySelector('.archive-icon.is-pulsing')`,
+    ).catch(() => false);
+    if (pulsed === true) break;
+    await wait(1000);
+  }
   await wait(Math.max(2000, 12000 - (Date.now() - started)));
   return { p, ui, fl };
 };
@@ -109,10 +118,11 @@ const launch = async () => {
   const settings = JSON.parse(fs.readFileSync(`${DATA}/settings.json`, 'utf8'));
   fs.writeFileSync(
     `${DATA}/settings.json`,
-    JSON.stringify({ ...settings, archiveAfter: 7 }),
+    // (No choice made: the default, 7 days.)
+    JSON.stringify({ ...settings, archiveAfter: undefined }),
   );
 
-  let { p, ui, fl } = await launch();
+  let { p, ui, fl } = await launch(true);
   const rows = () =>
     ui(`[...document.querySelectorAll('.space-tabs .tab, .basecamp-tile')].map(
       (t) => t.getAttribute('data-tip') || t.getAttribute('aria-label') || t.textContent.trim())`);
@@ -206,7 +216,7 @@ const launch = async () => {
     return row?.querySelector('.dropdown-button')?.textContent ?? null;
   })()`);
   check(
-    'Settings: "Archive tabs you haven’t used for" (here 7 days)',
+    'Settings: "Archive tabs you haven’t used for" (7 days by default)',
     setting === '7 days',
     setting,
   );

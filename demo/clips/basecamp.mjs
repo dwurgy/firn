@@ -15,7 +15,7 @@ export default {
     }
     await d.settle(2500);
     await d.still();
-    // Then the Firn article: right-click > Add to Basecamp.
+    // Then firnbrowser.com: right-click > Add to Basecamp.
     const tab = ui('[data-testid="tab"][data-kind="everyday"]', {
       nth: 0,
       at: [0.4, 0.5],

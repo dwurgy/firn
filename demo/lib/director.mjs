@@ -35,7 +35,8 @@ export const floating = (selector, options = {}) => ({
   selector,
   ...options,
 });
-// `url`: part of the page's address; `notUrl`: a part it doesn't have.
+// `url`: part of the page's address; `notUrl`: a part it doesn't have;
+// `top`: the page in front (Lookout's preview) rather than the biggest.
 export const web = (selector, options = {}) => ({
   layer: 'web',
   selector,
@@ -100,15 +101,17 @@ export async function installDriver(app) {
       if (target.layer === 'ui') return all[0];
       if (target.layer === 'floating')
         return all.find((l) => l.url.includes('view=floating'));
-      return all
-        .filter(
-          (l) =>
-            l.shown &&
-            !l.url.startsWith(DEV) &&
-            (!target.url || l.url.includes(target.url)) &&
-            (!target.notUrl || !l.url.includes(target.notUrl)),
-        )
-        .sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      const pages = all.filter(
+        (l) =>
+          l.shown &&
+          !l.url.startsWith(DEV) &&
+          (!target.url || l.url.includes(target.url)) &&
+          (!target.notUrl || !l.url.includes(target.notUrl)),
+      );
+      // `top`: the page in front (e.g. Lookout's preview); otherwise the
+      // biggest.
+      if (target.top) return pages.at(-1);
+      return pages.sort((a, b) => b.width * b.height - a.width * a.height)[0];
     };
     // Runs code in a layer; null if it doesn't answer in time (a page that
     // hasn't been created yet never does).

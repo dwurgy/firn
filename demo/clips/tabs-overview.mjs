@@ -1,7 +1,7 @@
 // Personal space: the pointer runs down the vertical tabs, opens a new tab,
-// types "three sisters oregon", and picks the Three Sisters (Oregon)
-// article from the command bar's suggestions (not a web search: a search
-// page can show ads for other browsers).
+// types "earth", and picks the wind map (open in Weekend) from the command
+// bar's suggestions, which goes there (not a web search: a search page can
+// show ads for other browsers).
 import { floating, ui } from '../lib/director.mjs';
 
 const tab = (nth) =>
@@ -21,16 +21,10 @@ export default {
     await d.click(ui('[data-testid="new-tab"]'));
     await d.waitFor(floating('[data-testid="command-input"]'));
     await d.step();
-    await d.type(
-      floating('[data-testid="command-input"]'),
-      'three sisters oregon',
-    );
+    await d.type(floating('[data-testid="command-input"]'), 'earth');
     await d.step();
-    await d.click(
-      floating('[data-testid="command-result"]', {
-        text: 'Three Sisters (Oregon)',
-      }),
-    );
+    // The first open tab it found (the search row comes first).
+    await d.click(floating('[data-testid="command-result"].is-tab'));
     await d.pause(500);
     await d.settle(2500);
     await d.still();

@@ -1,6 +1,8 @@
-// On the Firn article: Shift+click a link to preview it in Lookout, scroll
+// On firnbrowser.com: Shift+click a link to preview it in Lookout, scroll
 // it a little, and close it.
 import { floating, web } from '../lib/director.mjs';
+
+const HOME = 'firnbrowser.com';
 
 export default {
   name: 'lookout',
@@ -9,28 +11,24 @@ export default {
     await d.placeCursor(900, 700);
   },
   async run(d) {
-    // The first ordinary article link that's on screen. (Wikipedia wraps
-    // paragraphs in sections, and some are hidden, so any shown one. Its
-    // links can be full addresses, so pages like File: are left out by
-    // name, not by any colon.)
-    const link = web(
-      '#mw-content-text p a[href*="/wiki/"]' +
-        [
-          '/wiki/File:',
-          '/wiki/Help:',
-          '/wiki/Special:',
-          '/wiki/Wikipedia:',
-          'redlink',
-          '#',
-        ]
-          .map((part) => `:not([href*="${part}"])`)
-          .join(''),
-      { url: '/wiki/Firn', inView: true },
+    // The release notes link if it's on screen; otherwise the first link
+    // on screen to another page (not a download, not the page itself).
+    const notes = web('a[href*="release-notes"]', { url: HOME, inView: true });
+    const page = web('body', { url: HOME });
+    const hasNotes = await d.run(
+      page,
+      `[...document.querySelectorAll('a[href*="release-notes"]')].some((a) => { const r = a.getBoundingClientRect(); return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight; })`,
     );
+    const link = hasNotes
+      ? notes
+      : web(
+          'a[href]:not([href^="#"]):not([href$=".exe"]):not([href$=".zip"]):not([href$=".dmg"]):not([href="/"])',
+          { url: HOME, inView: true },
+        );
     await d.click(link, { shift: true });
-    // The preview: the web page on screen that isn't the article.
-    const preview = web('body', { notUrl: '/wiki/Firn' });
-    await d.waitFor(preview);
+    // The preview: the page in front.
+    const preview = web('body', { top: true });
+    await d.waitFor(floating('[data-testid="lookout-close"]'));
     await d.settle(2500);
     await d.step();
     await d.scroll(preview, 320);

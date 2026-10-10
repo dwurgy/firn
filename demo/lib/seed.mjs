@@ -16,6 +16,8 @@ const GLACIER = '#7f9cb0';
 const SAGE = '#8fae8b';
 const SAND = '#c9a27e';
 
+// David's picks from the try-pages contact sheet: pages with color and
+// imagery (Wikipedia's white was too much), no pop-ups.
 export const SPACES = [
   {
     id: 'demo-personal',
@@ -23,9 +25,9 @@ export const SPACES = [
     icon: 'home',
     color: GLACIER,
     tabs: [
-      'https://en.wikipedia.org/wiki/Firn',
-      'https://en.wikipedia.org/wiki/Sisters,_Oregon',
       'https://firnbrowser.com/',
+      'https://www.metmuseum.org/art/collection/search/436535',
+      'https://culturedcode.com/things/',
     ],
   },
   {
@@ -34,9 +36,9 @@ export const SPACES = [
     icon: 'work',
     color: SAGE,
     tabs: [
-      'https://en.wikipedia.org/wiki/Web_browser',
-      'https://developer.mozilla.org/en-US/docs/Web/CSS/backdrop-filter',
-      'https://firnbrowser.com/release-notes',
+      'https://linear.app/',
+      'https://stripe.com/',
+      'https://www.raycast.com/',
     ],
   },
   {
@@ -45,19 +47,17 @@ export const SPACES = [
     icon: 'mountain',
     color: SAND,
     tabs: [
-      'https://en.wikipedia.org/wiki/Crater_Lake',
-      'https://en.wikipedia.org/wiki/Three_Sisters_(Oregon)',
-      'https://en.wikipedia.org/wiki/Coffee',
+      'https://earth.nullschool.net/',
+      'https://www.nts.live/',
+      'https://www.apple.com/macbook-air/',
     ],
   },
 ];
 
-// (No Wikipedia Main Page: it shows the day's news and photos of real
-// people. No pages with sign-up prompts or ads for other browsers.)
 export const BASECAMP = [
-  'https://firnbrowser.com/',
-  'https://en.wikipedia.org/wiki/Crater_Lake',
-  'https://en.wikipedia.org/wiki/Sisters,_Oregon',
+  'https://firnbrowser.com/release-notes',
+  'https://culturedcode.com/things/',
+  'https://www.nts.live/',
 ];
 
 // A fixed clock for the seeded tabs, so every run starts the same.

@@ -1,5 +1,5 @@
-// Drag "Sisters, Oregon" out of the sidebar onto the page's right half:
-// the tab stays under the pointer, the Firn article glides over to make
+// Drag Van Gogh at the Met out of the sidebar onto the page's right half:
+// the tab stays under the pointer, firnbrowser.com glides over to make
 // room, and letting go opens the two side by side. Then ease the divider
 // over a little.
 import { ui, web } from '../lib/director.mjs';
@@ -27,7 +27,7 @@ export default {
     await d.drag(ui('[data-testid="split-divider"]'), -90, 0);
     await d.step();
     // Off the divider (so its hover label fades), then the still.
-    await d.hover(web('body', { notUrl: 'Sisters', at: [0.6, 0.6] }));
+    await d.hover(web('body', { notUrl: 'metmuseum', at: [0.6, 0.6] }));
     await d.step();
     await d.still();
   },

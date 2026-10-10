@@ -97,14 +97,14 @@ spaces in `lib/seed.mjs`.
 
 | Clip            | What it shows                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------ |
-| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "three sisters oregon", picks the article |
+| `tabs-overview` | Personal: the pointer runs down the tabs, opens a new tab, types "earth", picks the wind map tab (in Weekend) |
 | `spaces`        | Personal → Work → Weekend with the space buttons, pausing on each                                      |
 | `basecamp`      | Clicking between the three Basecamp tiles, then right-click a tab > Add to Basecamp                    |
-| `split-view`    | Drag "Sisters, Oregon" onto the page's right half: the two side by side; then ease the divider          |
-| `lookout`       | On the Firn article: Shift+click a link (Lookout), scroll it a little, close it                        |
+| `split-view`    | Drag Van Gogh at the Met onto the page's right half: the two side by side; then ease the divider          |
+| `lookout`       | On firnbrowser.com: Shift+click a link (Lookout), scroll it a little, close it                        |
 | `welcome`       | The First light welcome on a fresh profile, from hello to "Welcome in."                                |
 | `empty-page`    | Each space with nothing open: the snow and the mark in each space's color                               |
-| `hero`          | A still only: Personal, the Firn article open, the sidebar beside it                                   |
+| `hero`          | A still only: Personal, firnbrowser.com open, the sidebar beside it                                   |
 
 Right-click menus are drawn by macOS, not Firn: when a clip uses one, the
 cursor glides to the item, and the demo chooses it.
@@ -129,8 +129,8 @@ and photos of real people).
   this.
 - **The demo profile** is written in Firn's own formats (`session.json` and
   `settings.json`, see `lib/seed.mjs`): Personal (Glacier), Work (Sage), and
-  Weekend (Sand), each with its three tabs, and Basecamp with firnbrowser.com,
-  and Wikipedia's Crater Lake and Sisters, Oregon.
+  Weekend (Sand), each with its three tabs, and Basecamp with Firn's release
+  notes, Things, and NTS Radio (David's picks from `npm run demo:try-pages`).
 - **Warm-up**: before the clips, Firn visits every demo page once, off
   camera, so every tab has its title and icon and the pages are cached.
   Each clip then starts from a copy of that warmed profile (the welcome and
@@ -167,8 +167,7 @@ Electron's debugging switch turned off, so the demo couldn't drive it.
 
 Each clip starts from the same profile, with the same window size and place,
 light look, cursor path, and typing rhythm. Two things can still differ:
-the websites themselves (Wikipedia, MDN, and firnbrowser.com change over
-time), and a clip's
+the websites themselves (they change over time), and a clip's
 length by a fraction of a second when a page takes longer to load.
 
 ## Adding a clip

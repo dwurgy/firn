@@ -1,4 +1,4 @@
-// The hero still: Personal, the Firn article open, the sidebar beside it.
+// The hero still: Personal, firnbrowser.com open, the sidebar beside it.
 export default {
   name: 'hero',
   seed: 'tabs',

@@ -14,7 +14,7 @@ export default {
     await d.placeCursor(150, 640);
   },
   async run(d) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       await d.hover(tab(i));
       await d.pause(300);
     }

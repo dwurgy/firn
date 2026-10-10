@@ -27,6 +27,7 @@ export const SPACES = [
     tabs: [
       'https://firnbrowser.com/',
       'https://www.metmuseum.org/art/collection/search/436535',
+      'https://agnestoth.com/',
       'https://culturedcode.com/things/',
     ],
   },
@@ -37,6 +38,7 @@ export const SPACES = [
     color: SAGE,
     tabs: [
       'https://linear.app/',
+      'https://twks.ch/en',
       'https://stripe.com/',
       'https://www.raycast.com/',
     ],
@@ -48,6 +50,7 @@ export const SPACES = [
     color: SAND,
     tabs: [
       'https://earth.nullschool.net/',
+      'https://crl-2026.webflow.io/',
       'https://www.nts.live/',
       'https://www.apple.com/macbook-air/',
     ],
@@ -56,8 +59,8 @@ export const SPACES = [
 
 export const BASECAMP = [
   'https://firnbrowser.com/release-notes',
+  'https://mijobello.com/',
   'https://culturedcode.com/things/',
-  'https://www.nts.live/',
 ];
 
 // A fixed clock for the seeded tabs, so every run starts the same.

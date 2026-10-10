@@ -129,8 +129,8 @@ and photos of real people).
   this.
 - **The demo profile** is written in Firn's own formats (`session.json` and
   `settings.json`, see `lib/seed.mjs`): Personal (Glacier), Work (Sage), and
-  Weekend (Sand), each with its three tabs, and Basecamp with Firn's release
-  notes, Things, and NTS Radio (David's picks from `npm run demo:try-pages`).
+  Weekend (Sand), each with four tabs, and Basecamp with Firn's release
+  notes, mijobello.com, and Things (David's picks from `npm run demo:try-pages`).
 - **Warm-up**: before the clips, Firn visits every demo page once, off
   camera, so every tab has its title and icon and the pages are cached.
   Each clip then starts from a copy of that warmed profile (the welcome and

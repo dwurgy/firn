@@ -1,0 +1,151 @@
+import Foundation
+import Observation
+import Testing
+@testable import FirnCore
+
+/// A page that remembers what it was asked to do, without WebKit.
+@MainActor
+@Observable
+private final class FakePage: PageController {
+    let dataStoreID: UUID
+    var url: URL?
+    var title = ""
+    var canGoBack = false
+    var canGoForward = false
+    var isLoading = false
+    var stopped = false
+
+    init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }
+
+    func load(_ url: URL) { self.url = url }
+    func goBack() {}
+    func goForward() {}
+    func reload() {}
+    func stopLoading() { stopped = true }
+    func focus() {}
+}
+
+@MainActor
+struct BrowserStoreTests {
+    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+
+    private func makeStore() -> BrowserStore {
+        BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) })
+    }
+
+    private func url(_ name: String) -> URL { URL(string: "https://\(name).example")! }
+
+    private func titles(_ store: BrowserStore) -> [String] {
+        store.openTabs.map { $0.url?.host() ?? "" }
+    }
+
+    @Test func newTabOpensAtTheEndAndIsShown() {
+        let store = makeStore()
+        store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        #expect(titles(store) == ["a.example", "b.example"])
+        #expect(store.activeTabID == b.id)
+        #expect(b.page?.url == url("b"))
+    }
+
+    @Test func pagesUseTheirSpacesDataStore() {
+        let store = makeStore()
+        let tab = store.openTab(url("a"))
+        #expect((tab.page as? FakePage)?.dataStoreID == space.dataStoreID)
+    }
+
+    @Test func linkOpensRightBelowItsOpener() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        let c = store.openTab(url("c"), opener: a)
+        #expect(titles(store) == ["a.example", "c.example", "b.example"])
+        #expect(c.openerTabID == a.id)
+    }
+
+    @Test func closingTheShownTabShowsTheOneBelow() {
+        let store = makeStore()
+        store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        store.select(b)
+        let page = b.page as? FakePage
+        store.close(b)
+        #expect(titles(store) == ["a.example", "c.example"])
+        #expect(store.activeTabID == c.id)
+        #expect(page?.stopped == true)
+        #expect(b.page == nil)
+    }
+
+    @Test func closingTheLastTabInTheListShowsTheOneAbove() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        store.close(b)
+        #expect(store.activeTabID == a.id)
+    }
+
+    @Test func closingABackgroundTabKeepsTheShownOne() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        store.close(a)
+        #expect(store.activeTabID == b.id)
+    }
+
+    @Test func closingEveryTabLeavesNothingShown() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.close(a)
+        #expect(store.openTabs.isEmpty)
+        #expect(store.activeTabID == nil)
+        #expect(store.activeTab == nil)
+    }
+
+    @Test func numberShortcutsAndCycling() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        store.selectTab(at: 0)
+        #expect(store.activeTabID == a.id)
+        store.selectTab(at: 8) // ⌘9 means the last tab
+        #expect(store.activeTabID == c.id)
+        store.selectTab(by: 1)
+        #expect(store.activeTabID == a.id)
+        store.selectTab(by: -1)
+        #expect(store.activeTabID == c.id)
+        store.selectTab(by: -1)
+        #expect(store.activeTabID == b.id)
+    }
+
+    @Test func moveReorders() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        store.move(c, to: 0)
+        #expect(titles(store) == ["c.example", "a.example", "b.example"])
+        store.move(a, to: 3)
+        #expect(titles(store) == ["c.example", "b.example", "a.example"])
+        store.move(a, to: 1)
+        #expect(titles(store) == ["c.example", "a.example", "b.example"])
+    }
+
+    @Test func switchingUpdatesLastActive() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let store = BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) }, now: { clock })
+        let a = store.openTab(url("a"))
+        clock = Date(timeIntervalSince1970: 100)
+        store.openTab(url("b"))
+        #expect(a.lastActiveAt == Date(timeIntervalSince1970: 100)) // left at 100
+    }
+
+    @Test func titleFallsBackToHost() {
+        let store = makeStore()
+        let tab = store.openTab(url("a"))
+        #expect(tab.title == "a.example")
+        (tab.page as? FakePage)?.title = "Hello"
+        #expect(tab.title == "Hello")
+    }
+}

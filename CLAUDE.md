@@ -236,7 +236,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 ### Where we are
 
-- **Phase 1: not started.**
+- **Phase 1: built** (window, address bar, back, forward, reload; sandboxed, hardened runtime). Waiting on David's 10-minute browse.
 
 ---
 
@@ -257,8 +257,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
   - **Quiet output.** `xcodebuild` is very loud: pipe it through `tail` or `grep -E "error|warning: |BUILD"`. Never dump a whole log.
   - **Stuck rule.** After two failed attempts at the same fix, stop. Say what's known, what's been ruled out, and whether a fresh session or Opus would help.
 - **Build and test from the command line** (on David's Mac, with Xcode installed):
-  - `swift build` and `swift test` inside `FirnCore` for logic.
-  - `xcodebuild -scheme Firn -destination 'platform=macOS' build` for the app, and `xcodebuild test` before committing.
+  - `swift test --scratch-path ~/Library/Caches/FirnCore-build` inside `FirnCore` for logic (building inside `~/Documents` leaves Finder metadata that breaks code signing).
+  - `xcodebuild -scheme Firn -destination 'platform=macOS' build` for the app, and `xcodebuild test -scheme FirnCore -destination 'platform=macOS'` inside `FirnCore` before committing (then delete the `FirnCore/.swiftpm` it leaves).
   - You can't see the running app. After each step, tell David exactly what to open and look at (light and dark, sidebar shown and hidden, Reduce Motion on).
 - **Design is half the job.** Follow the principles and tokens above; flag anything that would look cramped, loud, or like a web page in a box.
 - Ask before adding dependencies; prefer Apple's frameworks.

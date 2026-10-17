@@ -236,7 +236,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 ### Where we are
 
-- **Phase 1: built** (window, address bar, back, forward, reload; sandboxed, hardened runtime). Waiting on David's 10-minute browse.
+- **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
+- **Phase 2: not started.**
 
 ---
 

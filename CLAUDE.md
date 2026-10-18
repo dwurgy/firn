@@ -253,7 +253,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
   - **Keep searching out of this conversation.** For broad questions, use the Explore agent. Don't spawn agents for anything else.
   - **Plan before multi-file work.** Say the plan in a few lines and wait for David's OK.
   - **One task per conversation, small steps.**
-  - **Checkpoints.** When a step works and is committed, say so and suggest "/clear" (next task unrelated) or "/compact" (same feature continues). Anything worth keeping goes in a commit or a short note here first.
+  - **Checkpoints.** When a step works and is committed, say so and always recommend one, with a one-line reason: "/clear" when everything that matters is saved (commits, this file, `docs/HISTORY.md`, memory), even if the same feature continues; "/compact" only when something important lives only in the conversation (a half-done change, an undocumented decision, a bug mid-hunt). Anything worth keeping goes in a commit or a short note here first.
   - **Short replies.** After a change: what changed, where, and how to test it, in a few lines. Don't recap the diff or paste whole files. Use Edit, not rewrites.
   - **Quiet output.** `xcodebuild` is very loud: pipe it through `tail` or `grep -E "error|warning: |BUILD"`. Never dump a whole log.
   - **Stuck rule.** After two failed attempts at the same fix, stop. Say what's known, what's been ruled out, and whether a fresh session or Opus would help.

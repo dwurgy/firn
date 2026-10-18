@@ -27,6 +27,7 @@ final class WebKitPageController: NSObject, PageController {
     /// (or changes nothing) doesn't fetch its icon again.
     @ObservationIgnored private var iconCandidates: [URL] = []
     @ObservationIgnored private var iconTask: Task<Void, Never>?
+    @ObservationIgnored private var iconRecheckPending = false
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -53,6 +54,7 @@ final class WebKitPageController: NSObject, PageController {
         webView.allowsBackForwardNavigationGestures = true
         webView.isInspectable = true // The Web Inspector is Firn's only developer tool.
         observeWebView()
+        IconChangeWatcher.shared.watch(webView, for: self)
         #if os(macOS)
         ClickRecorder.start() // Before the first click, or it would be missed.
         #endif
@@ -179,7 +181,7 @@ extension WebKitPageController: WKNavigationDelegate {
 extension WebKitPageController {
     /// Firn's own scripts run here, never in the page's world, so the page
     /// can't see them, change them, or reach Firn through them.
-    private static let firnWorld = WKContentWorld.world(name: "Firn")
+    static let firnWorld = WKContentWorld.world(name: "Firn")
 
     /// Reads the page's icon links in Firn's world, then fetches the best one
     /// (see `SiteIcon`). Results arriving after the page moved to another
@@ -200,6 +202,74 @@ extension WebKitPageController {
                 self.icon = png
             }
         }
+    }
+
+    /// The page changed its icon links, or light and dark mode flipped (GitHub
+    /// swaps in its dark icon by script after loading). Looks again a second
+    /// later, so a busy page can't make Firn fetch over and over; `findIcon`
+    /// only fetches if the list really changed.
+    fileprivate func iconLinksMayHaveChanged(from origin: WKSecurityOrigin) {
+        guard let url, origin.protocol == url.scheme?.lowercased(),
+              origin.host.lowercased() == url.host()?.lowercased(), !iconRecheckPending else { return }
+        iconRecheckPending = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self else { return }
+            self.iconRecheckPending = false
+            self.findIcon()
+        }
+    }
+}
+
+/// Tells pages when their icon links change. Its script and message channel
+/// live only in Firn's content world, so the page can't post to it; even so,
+/// a message counts only from the main frame, from the page's real origin
+/// (WebKit's, not anything claimed), and only as the exact word "changed".
+/// One watcher serves every page: popups share their opener's content
+/// controller, and a handler can't be added to it twice.
+@MainActor
+private final class IconChangeWatcher: NSObject, WKScriptMessageHandler {
+    static let shared = IconChangeWatcher()
+    private static let name = "firnIconsChanged"
+    private static let script = """
+        (function () {
+            var timer = null;
+            function changed() {
+                clearTimeout(timer);
+                timer = setTimeout(function () {
+                    window.webkit.messageHandlers.firnIconsChanged.postMessage('changed');
+                }, 300);
+            }
+            if (document.head) {
+                new MutationObserver(changed).observe(document.head, {
+                    childList: true, subtree: true,
+                    attributes: true, attributeFilter: ['href', 'rel', 'media', 'sizes', 'type']
+                });
+            }
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', changed);
+        })();
+        """
+
+    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
+
+    func watch(_ webView: WKWebView, for page: WebKitPageController) {
+        pages.setObject(page, forKey: webView)
+        let controller = webView.configuration.userContentController
+        guard !controllers.contains(controller) else { return }
+        controllers.add(controller)
+        let world = WebKitPageController.firnWorld
+        controller.add(self, contentWorld: world, name: Self.name)
+        controller.addUserScript(WKUserScript(
+            source: Self.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world
+        ))
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.world.name == WebKitPageController.firnWorld.name,
+              message.body as? String == "changed",
+              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
+        page.iconLinksMayHaveChanged(from: message.frameInfo.securityOrigin)
     }
 }
 

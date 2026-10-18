@@ -173,7 +173,7 @@ struct BrowserStoreTests {
         #expect(store.activeTabID == tab.id)
     }
 
-    @Test func backgroundLinksLoadInOrderWithoutSwitching() {
+    @Test func backgroundLinksWaitInOrderWithoutSwitching() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
@@ -183,7 +183,9 @@ struct BrowserStoreTests {
 
         #expect(titles(store) == ["a.example", "c1.example", "c2.example", "b.example"])
         #expect(store.activeTabID == a.id)
-        #expect(store.openTabs[1].page?.url == url("c1")) // Already loading.
+        #expect(store.openTabs[1].page == nil) // Loads when first shown.
+        store.select(store.openTabs[1])
+        #expect(store.openTabs[1].page?.url == url("c1"))
     }
 
     @Test func popupClosingItselfHandsBackToItsOpener() {

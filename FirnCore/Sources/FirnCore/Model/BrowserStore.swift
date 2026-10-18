@@ -45,8 +45,9 @@ public final class BrowserStore {
 
     // MARK: - Opening and closing
 
-    /// Opens `url` in a new tab and shows it, or with `inBackground` starts
-    /// it loading and stays put. With an `opener`, the tab joins the opener's
+    /// Opens `url` in a new tab and shows it, or with `inBackground` stays
+    /// put; the tab then loads the first time it's shown. (Pages loaded before
+    /// they've ever been on screen took seconds to appear when shown.) With an `opener`, the tab joins the opener's
     /// space below it (after any tabs it opened before); otherwise it goes at
     /// the end of the current space.
     @discardableResult
@@ -82,7 +83,7 @@ public final class BrowserStore {
         } else {
             tabs.append(tab)
         }
-        if inBackground { wake(tab) } else { select(tab) }
+        if !inBackground { select(tab) }
     }
 
     /// Closes a tab and lets its page go. If it was on screen, `next` is

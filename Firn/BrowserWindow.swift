@@ -165,6 +165,11 @@ struct BrowserWindow: View {
     /// While peeking, the sidebar is a card floating just inside the window
     /// edge, so it and its traffic lights sit this much further in.
     private var peekShift: CGFloat { window.isPeeking ? Theme.peekInset : 0 }
+    /// Hidden, the sidebar keeps its card look (wider by the page inset, with a
+    /// shadow up to 24pt blur and 4pt across), so it slides that much further out.
+    private var hiddenOffset: CGFloat {
+        -(window.sidebarWidth + (window.sidebarCollapsed ? Theme.pageInset + 32 : 0))
+    }
 
     /// The sidebar always stays in the view tree and slides by an offset, so a
     /// slide can reverse midway (a quick peek in and out) without a jump.
@@ -174,7 +179,7 @@ struct BrowserWindow: View {
                 .frame(width: window.sidebarWidth)
                 .background(alignment: .leading) { sidebarBackground }
                 .contentShape(Rectangle())
-                .offset(x: reduceMotion || showsSidebar ? peekShift : -window.sidebarWidth)
+                .offset(x: reduceMotion || showsSidebar ? peekShift : hiddenOffset)
                 .opacity(reduceMotion && !showsSidebar ? 0 : 1)
                 .allowsHitTesting(showsSidebar)
                 .accessibilityHidden(!showsSidebar)
@@ -188,7 +193,9 @@ struct BrowserWindow: View {
     /// page's edge, its corners nesting with the page's: a little wider than the
     /// sidebar, so its buttons have room at the right, with a soft shadow.
     private var sidebarBackground: some View {
-        let floating = window.isPeeking
+        // Held for the whole slide, not just while the pointer is near, so the
+        // edge and shadow travel with the card as it leaves instead of fading early.
+        let floating = window.sidebarCollapsed
         let radius = floating ? Theme.peekCornerRadius : 0
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return ZStack {
@@ -197,7 +204,8 @@ struct BrowserWindow: View {
         }
         .clipShape(shape)
         .overlay {
-            if floating {
+            // Always drawn, so it never has to fade in or out apart from the card.
+            Group {
                 // A glass edge: a hairline to define the card, a lit rim just inside it.
                 shape.strokeBorder(Theme.peekEdgeLine, lineWidth: 0.5)
                 shape.inset(by: 0.5).strokeBorder(
@@ -206,6 +214,7 @@ struct BrowserWindow: View {
                     lineWidth: 1
                 )
             }
+            .opacity(floating ? 1 : 0)
         }
         .shadow(color: floating ? Theme.shadowPeek : .clear, radius: 24, x: 4, y: 8)
         .shadow(color: floating ? Theme.shadowPeek.opacity(0.5) : .clear, radius: 3, y: 1)

@@ -62,7 +62,7 @@ Don't imitate the Electron app's DOM or CSS. Use what Apple's frameworks do best
 Sidebar width:        260pt default (resizable 200–360pt), collapsible to 0
 Tab row height:       36pt, padding 8pt × 12pt, 4pt apart
 Section spacing:      20pt
-Corner radius:        10pt tabs, tiles, and rows; 14pt panels (Lookout,
+Corner radius:        10pt tabs and rows; 9pt Basecamp tiles (crisper, so the glass reads as ice); 14pt panels (Lookout,
                       command bar, cards); 8pt small buttons and fields
 Page inset:           the page floats 8pt inside the frame, 12pt corners
                       (8pt on macOS 26+, matching Liquid Glass window corners)
@@ -246,8 +246,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Only work in `dwurgy/firn-swift-test`.** The Electron app (`dwurgy/firn`) and the website (`dwurgy/firn-site`) have their own sessions. Never attach, clone, or change another repository, even when the plan is to move this code into `dwurgy/firn` later: that move is its own step, done by David. You may describe how the Electron app does something only if David pastes it in.
 - **Pick the model before starting** (David is on the Pro plan and wants his limits to last the week). Before any task, say in one line which model it needs and why: "Sonnet is fine: <reason>" or "This needs Opus: <reason>. Switch with /model, then say go." If it needs Opus and you're on Sonnet, stop and wait. If you're on Opus and Sonnet would do, say so and wait. If a Sonnet task turns out harder than it looked, stop and say so rather than guessing on.
-  - **Sonnet:** SwiftUI views and layout, styling and token tuning, SF Symbol choices, copy and wording, README edits, a setting or menu item following an existing pattern, adding or updating a test, a bug in one file with a clear cause, renames and tidying, and questions about the code.
-  - **Opus:** core architecture and the data model, per-space data stores and sharing, the engine layer and `WKWebView` delegates (navigation, UI delegate, downloads, script messages), multi-window and app lifecycle, sandbox and entitlements, anything security-related (passwords, content worlds, permissions, content blocking, URL handling), performance work, signing, notarization, and updates, sync, and "look back" reviews.
+  - **Sonnet (only the most basic tasks):** copy and wording, README edits, renames, and simple questions about the code. David's rule (2026-10-18): Sonnet wasted his time on design work, so anything visual, any SwiftUI view or layout, and anything else goes to Opus.
+  - **Opus:** all design and SwiftUI work, core architecture and the data model, per-space data stores and sharing, the engine layer and `WKWebView` delegates (navigation, UI delegate, downloads, script messages), multi-window and app lifecycle, sandbox and entitlements, anything security-related (passwords, content worlds, permissions, content blocking, URL handling), performance work, signing, notarization, and updates, sync, and "look back" reviews.
   - When unsure, say which way it leans and why, in one line, and let David pick.
 - **Spend David's budget carefully.** The aim is less bloat and less rehashing, never lower quality. Never skip reading code before editing it, building and testing before a commit, the security rules, or asking David at a real fork.
   - **Read less.** Find with Grep and Glob, then Read only the part you need. Don't re-read a file already read in this conversation unless it changed.

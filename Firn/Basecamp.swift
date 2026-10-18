@@ -32,26 +32,26 @@ struct BasecampGrid: View {
     }
 }
 
-/// Places tiles by `BasecampLayout` (balanced rows, never-tiny tiles), left-aligned.
+/// Places tiles by `BasecampLayout`: balanced rows, the longest filling
+/// the width, shorter rows starting at the left.
 private struct BasecampFlow: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let layout = BasecampLayout.make(count: subviews.count, width: proposal.width ?? 240)
-        let rows = CGFloat(layout.rows.count)
-        let width = layout.rows.first.map { CGFloat($0) * layout.tileSize + CGFloat($0 - 1) * BasecampLayout.gap } ?? 0
-        return CGSize(width: width, height: rows * layout.tileSize + max(rows - 1, 0) * BasecampLayout.gap)
+        let width = proposal.width ?? 240
+        let layout = BasecampLayout.make(count: subviews.count, width: width)
+        return CGSize(width: width, height: layout.height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let layout = BasecampLayout.make(count: subviews.count, width: bounds.width)
-        let size = CGFloat(layout.tileSize)
+        let size = ProposedViewSize(width: layout.tileWidth, height: BasecampLayout.tileHeight)
         var index = 0
         for (row, count) in layout.rows.enumerated() {
             for column in 0..<count {
                 subviews[index].place(
                     at: CGPoint(
-                        x: bounds.minX + CGFloat(column) * (size + BasecampLayout.gap),
-                        y: bounds.minY + CGFloat(row) * (size + BasecampLayout.gap)),
-                    proposal: ProposedViewSize(width: size, height: size))
+                        x: bounds.minX + CGFloat(column) * (layout.tileWidth + BasecampLayout.gap),
+                        y: bounds.minY + CGFloat(row) * (BasecampLayout.tileHeight + BasecampLayout.gap)),
+                    proposal: size)
                 index += 1
             }
         }
@@ -65,31 +65,22 @@ private struct BasecampTile: View {
     let goHome: () -> Void
     let remove: () -> Void
     let close: () -> Void
-    @State private var hovering = false
 
-    /// The site's first letter, until its own icon is read from the page (3c).
-    private var initial: String {
+    private var site: String {
         let host = (tab.homeURL ?? tab.url)?.host(percentEncoded: false) ?? ""
-        let site = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        return site.first.map { String($0).uppercased() } ?? "•"
-    }
-
-    private var siteName: String {
-        let host = (tab.homeURL ?? tab.url)?.host(percentEncoded: false) ?? tab.title
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 
     var body: some View {
         Button(action: select) {
-            Text(initial)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                .opacity(tab.isResting && !isActive ? 0.6 : 1)
+            SiteMark(site: site)
+                // A tile that's resting (its page let go) waits quietly.
+                .opacity(tab.isResting && !isActive ? 0.55 : 1)
+                .saturation(tab.isResting && !isActive ? 0.6 : 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TileButtonStyle(isActive: isActive))
-        .help(siteName)
-        .onHover { hovering = $0 }
+        .buttonStyle(TileButtonStyle(isActive: isActive, accent: Theme.siteColor(for: site)))
+        .help(tab.title)
         .contextMenu {
             if tab.isAwayFromHome {
                 Button("Go Back to Home", action: goHome)
@@ -98,30 +89,88 @@ private struct BasecampTile: View {
             Divider()
             Button("Close", action: close)
         }
-        .accessibilityLabel(siteName)
+        .accessibilityLabel(site.isEmpty ? tab.title : site)
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 
-/// A rounded tile: a quiet wash at rest, warm wash on hover and press, lifted when on screen.
+/// The site's mark, the size of a favicon: a soft rounded square in a calm
+/// color with the site's first letter. Stands in until the site's own icon
+/// is read from the page (3c).
+private struct SiteMark: View {
+    let site: String
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(Theme.siteColor(for: site).gradient)
+            .frame(width: 18, height: 18)
+            .overlay {
+                Text(site.first.map { String($0).uppercased() } ?? "")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A tile of frosted ice: Liquid Glass with a cool snowy tint and a crisp
+/// edge on macOS 26 and later, a frosted fill and lit rim before it.
+/// Brighter on hover, a gentle press. The chosen tile takes the site's
+/// color, as in Dia but quieter: a soft wash, a fine outline, and a faint glow.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
+    let accent: Color
     @State private var hovering = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+    }
+
+    private var dark: Bool { colorScheme == .dark }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .fill(fill(pressed: configuration.isPressed))
-                    .shadow(color: isActive ? Theme.shadowSoft : .clear, radius: 1, y: 1)
+                if isActive { chosen } else { resting }
             }
-            .contentShape(RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous))
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
             .onHover { hovering = $0 }
     }
 
-    private func fill(pressed: Bool) -> Color {
-        if isActive { return Theme.activeTab }
-        if pressed { return Theme.press }
-        return hovering ? Theme.press : Theme.hover
+    /// The page on screen: page white washed with the site's color, outlined in it.
+    private var chosen: some View {
+        shape.fill(Theme.page)
+            .overlay { shape.fill(accent.opacity(dark ? 0.24 : 0.14)) }
+            .overlay { shape.strokeBorder(accent.opacity(dark ? 0.85 : 0.7), lineWidth: 1.5) }
+            .shadow(color: accent.opacity(dark ? 0.35 : 0.3), radius: 5)
+    }
+
+    @ViewBuilder private var resting: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else if #available(macOS 26, *) {
+            // Glass on the plain frame (the sidebar itself isn't glass), so
+            // it never stacks glass on glass.
+            shape.fill(hovering ? Theme.tileFillHover : .clear)
+                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
+                .glassEffect(.regular.tint(Theme.tileFrost), in: shape)
+        } else {
+            shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(-0.5) }
+                .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+        }
     }
 }

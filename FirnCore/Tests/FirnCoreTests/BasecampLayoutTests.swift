@@ -24,14 +24,20 @@ import Testing
         #expect(rows(12, 192) == [3, 3, 3, 3])
     }
 
-    @Test func tilesNeverGetSmall() {
+    @Test func theLongestRowFillsTheWidth() {
+        let layout = BasecampLayout.make(count: 3, width: 252)
+        #expect(layout.tileWidth * 3 + BasecampLayout.gap * 2 == 252)
+        #expect(BasecampLayout.make(count: 6, width: 252).height == 40 * 2 + 6)
+    }
+
+    @Test func tilesNeverGetNarrow() {
         for width in stride(from: 170.0, through: 352.0, by: 2.0) {
             for count in 1...12 {
                 let layout = BasecampLayout.make(count: count, width: width)
-                #expect(layout.tileSize >= BasecampLayout.minimumTile, "\(count) in \(width)")
+                #expect(layout.tileWidth >= BasecampLayout.minimumWidth, "\(count) in \(width)")
                 #expect(layout.rows.reduce(0, +) == count)
                 let widest = Double(layout.rows[0])
-                #expect(widest * layout.tileSize + (widest - 1) * BasecampLayout.gap <= width)
+                #expect(widest * layout.tileWidth + (widest - 1) * BasecampLayout.gap <= width + 0.001)
                 #expect((layout.rows.max()! - layout.rows.min()!) <= 1)
             }
         }

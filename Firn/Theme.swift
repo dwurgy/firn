@@ -26,6 +26,35 @@ enum Theme {
     static let peekEdgeLine = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.40)
     static let peekEdgeRim = Color(light: 0xFFFFFF, lightOpacity: 0.70, dark: 0xFFFFFF, darkOpacity: 0.16)
 
+    /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
+    /// Used under macOS 26's Liquid Glass, and on their own before it.
+    static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xF5F1EC, darkOpacity: 0.08)
+    static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xF5F1EC, darkOpacity: 0.13)
+    /// With Reduce Transparency: the same tile, solid.
+    static let tileSolid = Color(light: 0xF4F0EA, dark: 0x45413D)
+    /// A tile's edge: lit along the top, a warm hairline around.
+    static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
+    static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)
+    static let tileHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.30)
+    /// A cool, snowy tint that turns Liquid Glass from a bubble into frosted
+    /// ice, and the crisp edge that goes with it.
+    static let tileFrost = Color(light: 0xF4F8FA, lightOpacity: 0.35, dark: 0xA0C4D6, darkOpacity: 0.08)
+    static let tileFrostEdge = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xC8DCE6, darkOpacity: 0.14)
+    /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
+    static let tileRadius: CGFloat = 9
+
+    /// A calm color for a site: its letter mark, and the wash and outline of
+    /// its Basecamp tile when chosen. Picked steadily from the address so it
+    /// never changes. (When site icons arrive, their own color can take over.)
+    static func siteColor(for site: String) -> Color {
+        let palette: [UInt32] = [0x7F9CB0, 0xC9A27E, 0x8FAE8B, 0xB88A9E, 0xC4A95B, 0x8E8FB8, 0xB07F6A, 0x6FA3A0]
+        // FNV-1a: stable across launches, unlike Swift's hashValue.
+        var hash: UInt32 = 2_166_136_261
+        for byte in site.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+        let hex = palette[Int(hash % UInt32(palette.count))]
+        return Color(light: hex, dark: hex)
+    }
+
     /// A space's color, by name (Space.color). Unknown names fall back to Glacier.
     static func spaceColor(_ name: String) -> Color {
         Color(light: spaceHex(name), dark: spaceHex(name))

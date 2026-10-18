@@ -1,27 +1,30 @@
-/// How Basecamp's square tiles are arranged: as few rows as fit, rows
-/// balanced (5 tiles are 3 + 2, never 4 + 1), and tiles never too small.
+/// How Basecamp's tiles are arranged: as few rows as fit, rows balanced
+/// (5 tiles are 3 + 2, never 4 + 1), and tiles never too narrow. Tiles are
+/// wide and short, all the same width: the longest row fills the sidebar.
 public struct BasecampLayout: Equatable, Sendable {
     /// Tiles in each row, top to bottom; the longest row comes first.
     public let rows: [Int]
-    /// The side of every tile, in points.
-    public let tileSize: Double
+    public let tileWidth: Double
 
-    public static let gap = 8.0
-    /// Tiles never shrink below this; narrower sidebars use fewer columns.
-    public static let minimumTile = 48.0
-    /// Nor grow past this, so one or two tiles stay tile-sized.
-    public static let maximumTile = 72.0
+    public static let gap = 6.0
+    public static let tileHeight = 40.0
+    /// Tiles never get narrower than this; narrower sidebars use fewer columns.
+    public static let minimumWidth = 52.0
     public static let maximumColumns = 4
 
-    public init(rows: [Int], tileSize: Double) {
+    public init(rows: [Int], tileWidth: Double) {
         self.rows = rows
-        self.tileSize = tileSize
+        self.tileWidth = tileWidth
+    }
+
+    public var height: Double {
+        rows.isEmpty ? 0 : Double(rows.count) * Self.tileHeight + Double(rows.count - 1) * Self.gap
     }
 
     /// The layout for `count` tiles in `width` points.
     public static func make(count: Int, width: Double) -> BasecampLayout {
-        guard count > 0, width > 0 else { return BasecampLayout(rows: [], tileSize: 0) }
-        let fitting = Int((width + gap) / (minimumTile + gap))
+        guard count > 0, width > 0 else { return BasecampLayout(rows: [], tileWidth: 0) }
+        let fitting = Int((width + gap) / (minimumWidth + gap))
         let widest = min(max(fitting, 1), maximumColumns)
         let rowCount = (count + widest - 1) / widest
         // Spread the tiles evenly: rows differ by at most one.
@@ -29,7 +32,6 @@ public struct BasecampLayout: Equatable, Sendable {
         let extra = count % rowCount
         let rows = (0..<rowCount).map { base + ($0 < extra ? 1 : 0) }
         let columns = Double(rows[0])
-        let tile = (width - (columns - 1) * gap) / columns
-        return BasecampLayout(rows: rows, tileSize: min(tile, maximumTile).rounded(.down))
+        return BasecampLayout(rows: rows, tileWidth: (width - (columns - 1) * gap) / columns)
     }
 }

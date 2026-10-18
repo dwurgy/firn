@@ -20,6 +20,24 @@ public protocol PageController: AnyObject, Observable {
     func stopLoading()
     /// Gives the page keyboard focus, so arrow keys and space scroll it.
     func focus()
+
+    /// Where the page sends what it asks of the browser (new tabs, closing).
+    /// Set by whoever owns the page; nil means nobody is listening.
+    var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
+}
+
+/// Something a page asks of the browser. Always started by a click: sites
+/// can't open windows on their own.
+@MainActor
+public enum PageRequest {
+    /// A link meant for a new window, or `window.open`. The page already
+    /// exists and stays connected to its opener (sign-in popups need that),
+    /// so it must be shown as is, never reloaded elsewhere.
+    case openPage(any PageController, inBackground: Bool)
+    /// A ⌘-click or middle-click: this address, in a new tab.
+    case openURL(URL, inBackground: Bool)
+    /// A page opened as a popup closed itself (`window.close`).
+    case close
 }
 
 /// Makes pages. The only place that knows which engine Firn uses.

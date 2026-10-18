@@ -14,6 +14,7 @@ private final class FakePage: PageController {
     var canGoForward = false
     var isLoading = false
     var stopped = false
+    var onRequest: (@MainActor (PageRequest) -> Void)?
 
     init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }
 
@@ -147,5 +148,64 @@ struct BrowserStoreTests {
         #expect(tab.title == "a.example")
         (tab.page as? FakePage)?.title = "Hello"
         #expect(tab.title == "Hello")
+    }
+
+    // MARK: - Pages asking for tabs
+
+    /// Has `tab`'s page ask the browser for something, as WebKit would.
+    private func request(_ request: PageRequest, from tab: Tab) {
+        (tab.page as? FakePage)?.onRequest?(request)
+    }
+
+    @Test func popupBecomesATabBelowItsOpenerAndIsShownAsIs() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        store.select(a)
+        let popup = FakePage(dataStoreID: space.dataStoreID)
+        request(.openPage(popup, inBackground: false), from: a)
+
+        let tab = store.openTabs[1]
+        #expect(tab.page === popup)
+        #expect(popup.url == nil) // WebKit loads it; Firn mustn't load it again.
+        #expect(tab.openerTabID == a.id)
+        #expect(tab.spaceID == a.spaceID)
+        #expect(store.activeTabID == tab.id)
+    }
+
+    @Test func backgroundLinksLoadInOrderWithoutSwitching() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        store.select(a)
+        request(.openURL(url("c1"), inBackground: true), from: a)
+        request(.openURL(url("c2"), inBackground: true), from: a)
+
+        #expect(titles(store) == ["a.example", "c1.example", "c2.example", "b.example"])
+        #expect(store.activeTabID == a.id)
+        #expect(store.openTabs[1].page?.url == url("c1")) // Already loading.
+    }
+
+    @Test func popupClosingItselfHandsBackToItsOpener() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        store.select(a)
+        request(.openPage(FakePage(dataStoreID: space.dataStoreID), inBackground: false), from: a)
+        let popup = store.openTabs[1]
+        request(.close, from: popup)
+
+        #expect(titles(store) == ["a.example", "b.example"])
+        #expect(store.activeTabID == a.id) // Not b, the neighbor.
+    }
+
+    @Test func closedTabsCantAskForAnything() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        let page = a.page as? FakePage
+        store.close(a)
+        page?.onRequest?(.openURL(url("c"), inBackground: false))
+        #expect(titles(store) == ["b.example"])
     }
 }

@@ -45,26 +45,50 @@ public final class BrowserStore {
 
     // MARK: - Opening and closing
 
-    /// Opens `url` in a new tab and shows it. The tab goes right below
-    /// `opener` if given, otherwise at the end of the list.
+    /// Opens `url` in a new tab and shows it, or with `inBackground` starts
+    /// it loading and stays put. With an `opener`, the tab joins the opener's
+    /// space below it (after any tabs it opened before); otherwise it goes at
+    /// the end of the current space.
     @discardableResult
-    public func openTab(_ url: URL, opener: Tab? = nil) -> Tab {
+    public func openTab(_ url: URL, opener: Tab? = nil, inBackground: Bool = false) -> Tab {
         let tab = Tab(
-            spaceID: activeSpaceID, url: url,
+            spaceID: opener?.spaceID ?? activeSpaceID, url: url,
             openerTabID: opener?.id, lastActiveAt: now()
         )
-        if let opener, let index = tabs.firstIndex(where: { $0.id == opener.id }) {
-            tabs.insert(tab, at: index + 1)
-        } else {
-            tabs.append(tab)
-        }
-        select(tab)
+        add(tab, below: opener, inBackground: inBackground)
         return tab
     }
 
-    /// Closes a tab and lets its page go. If it was on screen, the tab below
-    /// it is shown next (or the one above, if it was last).
-    public func close(_ tab: Tab) {
+    /// Takes in a page a tab's page opened (a link meant for a new window, or
+    /// a popup). It already exists and stays connected to its opener, so it
+    /// is shown as is; it shares the opener's space and data store.
+    @discardableResult
+    func adopt(_ page: any PageController, opener: Tab, inBackground: Bool) -> Tab {
+        let tab = Tab(
+            spaceID: opener.spaceID, url: nil,
+            openerTabID: opener.id, lastActiveAt: now(), page: page
+        )
+        connect(page, to: tab)
+        add(tab, below: opener, inBackground: inBackground)
+        return tab
+    }
+
+    private func add(_ tab: Tab, below opener: Tab?, inBackground: Bool) {
+        if let opener, let index = tabs.firstIndex(where: { $0.id == opener.id }) {
+            // Several links from one tab stay in the order they were opened.
+            var position = index + 1
+            while position < tabs.count, tabs[position].openerTabID == opener.id { position += 1 }
+            tabs.insert(tab, at: position)
+        } else {
+            tabs.append(tab)
+        }
+        if inBackground { wake(tab) } else { select(tab) }
+    }
+
+    /// Closes a tab and lets its page go. If it was on screen, `next` is
+    /// shown if it's still in the list; otherwise the tab below (or the one
+    /// above, if it was last).
+    public func close(_ tab: Tab, showing next: Tab? = nil) {
         let visible = openTabs
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tab.sleep()
@@ -73,10 +97,34 @@ public final class BrowserStore {
         guard activeTabID == tab.id else { return }
         let position = visible.firstIndex { $0.id == tab.id } ?? 0
         let remaining = openTabs
-        if remaining.isEmpty {
+        if let next, remaining.contains(where: { $0.id == next.id }) {
+            select(next)
+        } else if remaining.isEmpty {
             activeTabID = nil
         } else {
             select(remaining[min(position, remaining.count - 1)])
+        }
+    }
+
+    // MARK: - What pages ask for
+
+    private func connect(_ page: any PageController, to tab: Tab) {
+        page.onRequest = { [weak self, weak tab] request in
+            guard let self, let tab else { return }
+            self.handle(request, from: tab)
+        }
+    }
+
+    func handle(_ request: PageRequest, from tab: Tab) {
+        guard tabs.contains(where: { $0.id == tab.id }) else { return }
+        switch request {
+        case let .openPage(page, inBackground):
+            adopt(page, opener: tab, inBackground: inBackground)
+        case let .openURL(url, inBackground):
+            openTab(url, opener: tab, inBackground: inBackground)
+        case .close:
+            // A popup that's done (a sign-in, say) hands back to its opener.
+            close(tab, showing: tabs.first { $0.id == tab.openerTabID })
         }
     }
 
@@ -84,11 +132,20 @@ public final class BrowserStore {
 
     public func select(_ tab: Tab) {
         guard tabs.contains(where: { $0.id == tab.id }) else { return }
-        let dataStoreID = spaces.first { $0.id == tab.spaceID }?.dataStoreID ?? activeSpace.dataStoreID
         activeTab?.lastActiveAt = now()
-        tab.wake { makePage(dataStoreID) }
+        wake(tab)
         tab.lastActiveAt = now()
         activeTabID = tab.id
+    }
+
+    /// Makes the tab's page, in its own space's data store, if it has none.
+    private func wake(_ tab: Tab) {
+        let dataStoreID = spaces.first { $0.id == tab.spaceID }?.dataStoreID ?? activeSpace.dataStoreID
+        tab.wake {
+            let page = makePage(dataStoreID)
+            connect(page, to: tab)
+            return page
+        }
     }
 
     /// Shows the tab at `position` (0-based) in the list; past the end means the last one.

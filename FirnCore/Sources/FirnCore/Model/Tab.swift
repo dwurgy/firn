@@ -27,7 +27,8 @@ public final class Tab: Identifiable {
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
-        url: URL?, title: String = "", openerTabID: UUID? = nil, lastActiveAt: Date
+        url: URL?, title: String = "", openerTabID: UUID? = nil, lastActiveAt: Date,
+        page: (any PageController)? = nil
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -36,6 +37,7 @@ public final class Tab: Identifiable {
         self.lastActiveAt = lastActiveAt
         self.restingURL = url
         self.restingTitle = title
+        self.page = page
     }
 
     /// The committed address, or where the tab rests if it has no page yet.

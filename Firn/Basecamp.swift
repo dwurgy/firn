@@ -78,7 +78,7 @@ private struct BasecampTile: View {
             SiteMark(site: site, icon: tab.icon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TileButtonStyle(isActive: isActive, accent: Theme.siteColor(for: site)))
+        .buttonStyle(TileButtonStyle(isActive: isActive, accent: Theme.tileAccent(site: site, icon: tab.icon)))
         .help(tab.title)
         .contextMenu {
             if tab.isAwayFromHome {
@@ -118,8 +118,8 @@ private struct SiteMark: View {
 
 /// A tile of frosted ice: Liquid Glass with a cool snowy tint and a crisp
 /// edge on macOS 26 and later, a frosted fill and lit rim before it.
-/// Brighter on hover, a gentle press. The chosen tile takes the site's
-/// color, as in Dia but quieter: a soft wash, a fine outline, and a faint glow.
+/// Brighter on hover, a gentle press. The chosen tile takes the color of
+/// the site's icon, as in Dia but quieter: a soft wash, a fine outline, and a faint glow.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let accent: Color
@@ -144,6 +144,7 @@ private struct TileButtonStyle: ButtonStyle {
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: configuration.isPressed)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
             .onHover { hovering = $0 }
     }
 

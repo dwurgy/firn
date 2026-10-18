@@ -1,4 +1,5 @@
 import AppKit
+import FirnCore
 import SwiftUI
 
 /// Firn's colors and sizes, in one place (CLAUDE.md, Design tokens).
@@ -43,9 +44,17 @@ enum Theme {
     /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
     static let tileRadius: CGFloat = 9
 
-    /// A calm color for a site: its letter mark, and the wash and outline of
-    /// its Basecamp tile when chosen. Picked steadily from the address so it
-    /// never changes. (When site icons arrive, their own color can take over.)
+    /// The wash and outline of a chosen Basecamp tile: the site icon's own
+    /// color, calmed; a warm neutral for black, white, or grey icons; and
+    /// the address's color while there's no icon (matching its letter mark).
+    @MainActor static func tileAccent(site: String, icon: Data?) -> Color {
+        guard let icon else { return siteColor(for: site) }
+        guard let rgb = siteIconColor(icon) else { return faint }
+        return Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    /// A calm color for a site's letter mark (and its tile, until the site's
+    /// icon arrives). Picked steadily from the address so it never changes.
     static func siteColor(for site: String) -> Color {
         let palette: [UInt32] = [0x7F9CB0, 0xC9A27E, 0x8FAE8B, 0xB88A9E, 0xC4A95B, 0x8E8FB8, 0xB07F6A, 0x6FA3A0]
         // FNV-1a: stable across launches, unlike Swift's hashValue.

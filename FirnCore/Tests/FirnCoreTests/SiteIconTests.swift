@@ -3,6 +3,7 @@ import Foundation
 import ImageIO
 import Testing
 import UniformTypeIdentifiers
+import WebKit
 @testable import FirnCore
 
 struct SiteIconTests {
@@ -161,5 +162,26 @@ struct TabIconTests {
             """
         let record = try JSONDecoder().decode(TabRecord.self, from: Data(json.utf8))
         #expect(record.icon == nil)
+    }
+}
+
+/// Runs the real page script in a real web view.
+@MainActor
+struct SiteIconScriptTests {
+    @Test func findsIconsAfterManyOtherLinks() async throws {
+        let stylesheets = (0..<120).map { "<link rel='stylesheet' href='/s\($0).css'>" }.joined()
+        let html = "<html><head>\(stylesheets)<link rel='alternate icon' type='image/png' href='/dark.png'></head></html>"
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+        webView.loadHTMLString(html, baseURL: URL(string: "https://site.example/")!)
+        for _ in 0..<100 where webView.isLoading || webView.url == nil {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let urls: [String] = await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(SiteIcon.script, in: nil, in: .world(name: "Firn")) { result in
+                let links = SiteIcon.parse(scriptResult: try? result.get()).links
+                continuation.resume(returning: links.map(\.url.absoluteString))
+            }
+        }
+        #expect(urls == ["https://site.example/dark.png"])
     }
 }

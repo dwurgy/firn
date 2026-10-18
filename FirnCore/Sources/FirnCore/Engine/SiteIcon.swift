@@ -37,10 +37,12 @@ public enum SiteIcon {
 
     /// Run in Firn's own content world, so the page can't see or change it.
     /// Returns plain strings and booleans; anything else is thrown away.
+    /// Only icon links are taken before the cap: GitHub has over a hundred
+    /// stylesheet links ahead of its icons.
     static let script = """
         (function () {
             try {
-                var links = Array.from(document.querySelectorAll('link[rel][href]')).slice(0, 40);
+                var links = Array.from(document.querySelectorAll('link[href][rel*="icon" i]')).slice(0, 40);
                 return {
                     links: links.map(function (link) {
                         var media = link.media;

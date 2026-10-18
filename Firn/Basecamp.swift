@@ -73,10 +73,9 @@ private struct BasecampTile: View {
 
     var body: some View {
         Button(action: select) {
+            // Resting tiles (not loaded yet) look the same as loaded ones, as in
+            // Dia: a faded tile reads as broken, or as a promise of a slow load.
             SiteMark(site: site, icon: tab.icon)
-                // A tile that's resting (its page let go) waits quietly.
-                .opacity(tab.isResting && !isActive ? 0.55 : 1)
-                .saturation(tab.isResting && !isActive ? 0.6 : 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(TileButtonStyle(isActive: isActive, accent: Theme.siteColor(for: site)))

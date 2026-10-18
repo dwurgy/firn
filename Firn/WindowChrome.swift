@@ -1,4 +1,5 @@
 import AppKit
+import FirnCore
 import SwiftUI
 
 /// An empty stretch of frame that moves the window when dragged, and zooms or
@@ -58,6 +59,9 @@ struct WindowSetup: NSViewRepresentable {
 
         required init?(coder: NSCoder) { fatalError("not used") }
 
+        // Invisible; clicks go through to the frame underneath.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard let window else { return }
@@ -108,6 +112,9 @@ struct TrafficLightsMover: NSViewRepresentable {
     }
 
     final class MoverView: NSView {
+        // Invisible; clicks go through to the frame underneath.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
         var offset: CGFloat = 0
         var alpha: CGFloat = 1
         var lightsHidden = false
@@ -270,10 +277,28 @@ struct PointerTracker: NSViewRepresentable {
 
         override func mouseMoved(with event: NSEvent) { report(event) }
         override func mouseEntered(with event: NSEvent) { report(event) }
-        override func mouseExited(with event: NSEvent) { onLeave() }
+        override func mouseExited(with event: NSEvent) {
+            window?.isMovable = true
+            onLeave()
+        }
 
         private func report(_ event: NSEvent) {
             onMove(event.locationInWindow.x)
+            keepPageClickable(at: event.locationInWindow)
+        }
+
+        /// macOS drags the window from anywhere in the title bar's band, even
+        /// over the web page beneath it, before Firn hears about the click.
+        /// So the window can't be moved while the pointer is over a page.
+        private func keepPageClickable(at point: NSPoint) {
+            guard let window, let frame = window.contentView?.superview else { return }
+            var view = frame.hitTest(frame.convert(point, from: nil))
+            var overPage = false
+            while let current = view, !overPage {
+                overPage = current is PageHolder
+                view = current.superview
+            }
+            if window.isMovable == overPage { window.isMovable = !overPage }
         }
     }
 }

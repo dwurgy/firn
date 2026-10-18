@@ -217,26 +217,32 @@ private struct TabList: View {
 
     var body: some View {
         let tabs = store.openTabs
-        ScrollView {
-            VStack(spacing: Theme.rowSpacing) {
-                NewTabRow { window.editAddress(.newTab) }
-                ForEach(tabs) { tab in
-                    TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
-                        store.select(tab)
-                        window.focusPage()
-                    } close: {
-                        store.close(tab)
+        // The list fills the sidebar's height, so the blank space below the
+        // tabs (and the gaps between them) moves the window too.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: Theme.rowSpacing) {
+                    NewTabRow { window.editAddress(.newTab) }
+                    ForEach(tabs) { tab in
+                        TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
+                            store.select(tab)
+                            window.focusPage()
+                        } close: {
+                            store.close(tab)
+                        }
+                        .offset(y: offset(of: tab, in: tabs))
+                        // The dragged row sticks to the pointer; only the others glide.
+                        .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
+                        .zIndex(dragging?.id == tab.id ? 1 : 0)
+                        .simultaneousGesture(drag(tab, in: tabs))
                     }
-                    .offset(y: offset(of: tab, in: tabs))
-                    // The dragged row sticks to the pointer; only the others glide.
-                    .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
-                    .zIndex(dragging?.id == tab.id ? 1 : 0)
-                    .simultaneousGesture(drag(tab, in: tabs))
                 }
+                .padding(.bottom, Theme.pageInset)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                .background { WindowDragArea() }
             }
-            .padding(.bottom, Theme.pageInset)
+            .scrollIndicators(.never)
         }
-        .scrollIndicators(.never)
     }
 
     /// Where the dragged row would land, as a position in the list.

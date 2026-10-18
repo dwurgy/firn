@@ -177,8 +177,10 @@ struct BrowserWindow: View {
         ZStack(alignment: .leading) {
             Sidebar(store: store, window: window, lights: lights)
                 .frame(width: window.sidebarWidth)
+                // Blank sidebar moves the window (as in Dia), and never lets a
+                // click fall through to the page under a peeking card.
+                .background { WindowDragArea() }
                 .background(alignment: .leading) { sidebarBackground }
-                .contentShape(Rectangle())
                 .offset(x: reduceMotion || showsSidebar ? peekShift : hiddenOffset)
                 .opacity(reduceMotion && !showsSidebar ? 0 : 1)
                 .allowsHitTesting(showsSidebar)

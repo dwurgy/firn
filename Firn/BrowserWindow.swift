@@ -196,7 +196,7 @@ struct BrowserWindow: View {
             Theme.frameTint(store.activeSpace.color)
         }
         .clipShape(shape)
-        .shadow(color: floating ? Theme.shadowPageFar : .clear, radius: 10, y: 4)
+        .shadow(color: floating ? Theme.shadowPageFar : .clear, radius: 18, y: 6)
         .frame(width: window.sidebarWidth + (floating ? Theme.pageInset : 0))
         .padding(.vertical, floating ? Theme.peekInset : 0)
         .ignoresSafeArea()
@@ -283,10 +283,11 @@ private struct PageArea: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
         ZStack {
+            // The sidebar covers whatever shadow falls on it, which would leave a hard
+            // line in the gap. So the shadow leans right and down and fades inside the gap.
             shape
                 .fill(Theme.page)
-                .shadow(color: Theme.shadowPageNear, radius: 1.5, y: 1)
-                .shadow(color: Theme.shadowPageFar, radius: 10, y: 6)
+                .shadow(color: Theme.shadowPageFar, radius: 12, x: 4, y: 8)
             if let tab, let page = tab.page {
                 PageView(page: page, cornerRadius: Theme.pageCornerRadius)
                     .overlay {

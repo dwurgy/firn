@@ -19,8 +19,7 @@ enum Theme {
 
     /// Shadows are warm brown in light, never grey.
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)
-    static let shadowPageNear = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.30)
-    static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.20, dark: 0x000000, darkOpacity: 0.35)
+    static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.16)
 
     /// A space's color, by name (Space.color). Unknown names fall back to Glacier.
     static func spaceColor(_ name: String) -> Color {

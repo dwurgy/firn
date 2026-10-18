@@ -15,7 +15,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A10000000000000000000005 /* Firn */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Firn; sourceTree = "<group>"; };
+		A10000000000000000000005 /* Firn */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Firn;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -176,12 +180,12 @@
 		A1000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ENABLE_DEBUG_DYLIB = NO;
 				CODE_SIGN_ENTITLEMENTS = Firn/Firn.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Firn;

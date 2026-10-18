@@ -16,6 +16,7 @@ struct Sidebar: View {
             AddressBar(store: store, window: window)
                 .padding(.top, 8)
                 .padding(.bottom, Theme.sectionSpacing)
+            BasecampGrid(store: store, window: window)
             TabList(store: store, window: window)
         }
         .padding(.leading, Theme.pageInset)
@@ -224,11 +225,13 @@ private struct TabList: View {
                 VStack(spacing: Theme.rowSpacing) {
                     NewTabRow { window.editAddress(.newTab) }
                     ForEach(tabs) { tab in
-                        TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
+                        TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: store.canAddToBasecamp) {
                             store.select(tab)
                             window.focusPage()
                         } close: {
                             store.close(tab)
+                        } addToBasecamp: {
+                            store.addToBasecamp(tab)
                         }
                         .offset(y: offset(of: tab, in: tabs))
                         // The dragged row sticks to the pointer; only the others glide.
@@ -310,8 +313,10 @@ private struct NewTabRow: View {
 private struct TabRow: View {
     let tab: FirnCore.Tab
     let isActive: Bool
+    let canAddToBasecamp: Bool
     let select: () -> Void
     let close: () -> Void
+    let addToBasecamp: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -344,6 +349,10 @@ private struct TabRow: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url.absoluteString, forType: .string)
                 }
+            }
+            if tab.place == .open {
+                Button("Add to Basecamp", action: addToBasecamp)
+                    .disabled(!canAddToBasecamp)
             }
             Divider()
             Button("Close Tab", action: close)

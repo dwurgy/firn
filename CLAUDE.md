@@ -238,7 +238,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
-- **Phase 3: in progress.** 3a (model and saving) done; next 3b (Basecamp and pins in the sidebar), then 3c (site icons, read from the page).
+- **Phase 3: in progress.** 3a (model and saving) done; 3b-i (Basecamp grid) done, next 3b-ii (pins, to be discussed first), then 3c (site icons, read from the page).
 
 ---
 

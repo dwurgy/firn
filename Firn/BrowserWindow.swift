@@ -196,7 +196,19 @@ struct BrowserWindow: View {
             Theme.frameTint(store.activeSpace.color)
         }
         .clipShape(shape)
-        .shadow(color: floating ? Theme.shadowPageFar : .clear, radius: 18, y: 6)
+        .overlay {
+            if floating {
+                // A glass edge: a hairline to define the card, a lit rim just inside it.
+                shape.strokeBorder(Theme.peekEdgeLine, lineWidth: 0.5)
+                shape.inset(by: 0.5).strokeBorder(
+                    LinearGradient(colors: [Theme.peekEdgeRim, Theme.peekEdgeRim.opacity(0.25)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+            }
+        }
+        .shadow(color: floating ? Theme.shadowPeek : .clear, radius: 24, x: 4, y: 8)
+        .shadow(color: floating ? Theme.shadowPeek.opacity(0.5) : .clear, radius: 3, y: 1)
         .frame(width: window.sidebarWidth + (floating ? Theme.pageInset : 0))
         .padding(.vertical, floating ? Theme.peekInset : 0)
         .ignoresSafeArea()

@@ -20,6 +20,11 @@ enum Theme {
     /// Shadows are warm brown in light, never grey.
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)
     static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.16)
+    /// The peeking sidebar floats over the page, so it casts a deeper shadow.
+    static let shadowPeek = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)
+    /// Its glass edge: a hairline that defines the card, and a lit inner rim.
+    static let peekEdgeLine = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.40)
+    static let peekEdgeRim = Color(light: 0xFFFFFF, lightOpacity: 0.70, dark: 0xFFFFFF, darkOpacity: 0.16)
 
     /// A space's color, by name (Space.color). Unknown names fall back to Glacier.
     static func spaceColor(_ name: String) -> Color {

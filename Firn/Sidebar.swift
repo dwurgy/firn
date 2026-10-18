@@ -187,23 +187,87 @@ private struct AddressBar: View {
 private struct TabList: View {
     let store: BrowserStore
     let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The tab being dragged and how far it has moved; nil when nothing is.
+    @State private var dragging: (id: UUID, offset: CGFloat)?
+    /// True while a dropped row slides into its slot.
+    @State private var settling = false
+
+    /// One speed for rows gliding aside and for the dropped row settling.
+    private static let glide = Animation.smooth(duration: 0.2)
+
+    private var step: CGFloat { Theme.rowHeight + Theme.rowSpacing }
 
     var body: some View {
+        let tabs = store.openTabs
         ScrollView {
             VStack(spacing: Theme.rowSpacing) {
                 NewTabRow { window.editAddress(.newTab) }
-                ForEach(store.openTabs) { tab in
+                ForEach(tabs) { tab in
                     TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
                         store.select(tab)
                         window.focusPage()
                     } close: {
                         store.close(tab)
                     }
+                    .offset(y: offset(of: tab, in: tabs))
+                    // The dragged row sticks to the pointer; only the others glide.
+                    .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
+                    .zIndex(dragging?.id == tab.id ? 1 : 0)
+                    .simultaneousGesture(drag(tab, in: tabs))
                 }
             }
             .padding(.bottom, Theme.pageInset)
         }
         .scrollIndicators(.never)
+    }
+
+    /// Where the dragged row would land, as a position in the list.
+    private func target(for id: UUID, offset: CGFloat, in tabs: [FirnCore.Tab]) -> Int {
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return 0 }
+        return min(max(from + Int((offset / step).rounded()), 0), tabs.count - 1)
+    }
+
+    /// The dragged row follows the pointer; rows it passes glide out of the way.
+    private func offset(of tab: FirnCore.Tab, in tabs: [FirnCore.Tab]) -> CGFloat {
+        guard let dragging, let from = tabs.firstIndex(where: { $0.id == dragging.id }),
+              let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return 0 }
+        if tab.id == dragging.id { return dragging.offset }
+        let to = target(for: dragging.id, offset: dragging.offset, in: tabs)
+        if from < to, index > from, index <= to { return -step }
+        if from > to, index >= to, index < from { return step }
+        return 0
+    }
+
+    private func drag(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab]) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                guard !settling else { return }
+                withAnimation(reduceMotion ? nil : Self.glide) {
+                    dragging = (tab.id, value.translation.height)
+                }
+            }
+            .onEnded { value in
+                guard !settling, let from = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+                let position = target(for: tab.id, offset: value.translation.height, in: tabs)
+                // Once the row is exactly over its slot, the move changes nothing you can see.
+                @MainActor func commit() {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        store.move(tab, to: position)
+                        dragging = nil
+                        settling = false
+                    }
+                }
+                if reduceMotion { return commit() }
+                settling = true
+                withAnimation(Self.glide) {
+                    dragging = (tab.id, CGFloat(position - from) * step)
+                } completion: {
+                    commit()
+                }
+            }
     }
 }
 

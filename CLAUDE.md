@@ -237,7 +237,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 ### Where we are
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
-- **Phase 2: in progress.** 2a tab model and 2b sidebar done; next 2c drag to reorder, 2d resize/collapse/peek, 2e links that open new windows become tabs.
+- **Phase 2: in progress.** 2a tab model, 2b sidebar, and 2c drag to reorder done; next 2d resize/collapse/peek, 2e links that open new windows become tabs.
 
 ---
 

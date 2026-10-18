@@ -44,14 +44,30 @@ enum Theme {
     /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
     static let tileRadius: CGFloat = 9
 
-    /// The wash and outline of a chosen Basecamp tile: the site icon's own
-    /// color, calmed; a warm neutral for black, white, or grey icons; and
-    /// the address's color while there's no icon (matching its letter mark).
-    @MainActor static func tileAccent(site: String, icon: Data?) -> Color {
-        guard let icon else { return siteColor(for: site) }
-        guard let rgb = siteIconColor(icon) else { return faint }
-        return Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
+    /// A chosen Basecamp tile's colors: a main color for its wash and glow,
+    /// and a ring of eight for its edge, clockwise from the right.
+    struct TileAccent: Equatable {
+        let main: Color
+        let ring: [Color]
+
+        init(_ color: Color) { main = color; ring = Array(repeating: color, count: 8) }
+        init(main: Color, ring: [Color]) { self.main = main; self.ring = ring }
     }
+
+    /// The site icon's own colors, calmed, each where it sits in the icon; a
+    /// warm neutral for black, white, or grey icons; and the address's color
+    /// while there's no icon (matching its letter mark).
+    @MainActor static func tileAccent(site: String, icon: Data?) -> TileAccent {
+        guard let icon else { return TileAccent(siteColor(for: site)) }
+        guard let colors = siteIconColors(icon) else { return TileAccent(faint) }
+        func color(_ rgb: IconColor.RGB) -> Color { Color(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue) }
+        return TileAccent(main: color(colors.main), ring: colors.ring.map(color))
+    }
+
+    /// The chosen tile's ring is a little thicker than a hairline, so it reads
+    /// as a lip of colored glass; just inside it, a bright edge of ice.
+    static let tileRingWidth: CGFloat = 2.5
+    static let tileLip = Color(light: 0xFFFFFF, lightOpacity: 0.75, dark: 0xFFFFFF, darkOpacity: 0.2)
 
     /// A calm color for a site's letter mark (and its tile, until the site's
     /// icon arrives). Picked steadily from the address so it never changes.

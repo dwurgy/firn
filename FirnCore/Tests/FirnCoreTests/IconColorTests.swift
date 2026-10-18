@@ -50,9 +50,36 @@ struct IconColorTests {
 
     @Test func readsAPNG() throws {
         let png = try #require(Self.png(red: 0.1, green: 0.6, blue: 0.3))
-        let color = try #require(IconColor.from(png: png))
-        #expect(abs(hue(color) - 0.4) < 0.03)
+        let colors = try #require(IconColor.from(png: png))
+        #expect(abs(hue(colors.main) - 0.4) < 0.03)
+        #expect(colors.ring.count == 8)
+        #expect(colors.ring.allSatisfy { abs(hue($0) - 0.4) < 0.03 })
         #expect(IconColor.from(png: Data("not an image".utf8)) == nil)
+    }
+
+    /// A 32 × 32 grid colored by `paint(x, y)`, top row first.
+    private func grid(_ paint: (Int, Int) -> (UInt8, UInt8, UInt8, UInt8)) -> [UInt8] {
+        (0..<32).flatMap { y in (0..<32).flatMap { x in
+            let p = paint(x, y)
+            return [p.0, p.1, p.2, p.3]
+        } }
+    }
+
+    @Test func theRingFollowsWhereEachColorSits() throws {
+        // Red on the left, blue on the right.
+        let colors = try #require(IconColor.colors(rgba: grid { x, _ in x < 16 ? (230, 40, 40, 255) : (40, 80, 230, 255) }))
+        #expect(hue(colors.ring[4]) < 0.03 || hue(colors.ring[4]) > 0.97)  // left: red
+        #expect(abs(hue(colors.ring[0]) - 0.63) < 0.05)  // right: blue
+    }
+
+    @Test func emptySlicesBorrowFromTheirNeighbors() throws {
+        // Yellow on top, nothing below: the bottom of the ring is yellow too.
+        let colors = try #require(IconColor.colors(rgba: grid { _, y in y < 12 ? (240, 200, 40, 255) : (0, 0, 0, 0) }))
+        #expect(colors.ring.allSatisfy { abs(hue($0) - 0.135) < 0.03 })
+    }
+
+    @Test func greyIconsHaveNoRing() {
+        #expect(IconColor.colors(rgba: grid { _, _ in (30, 30, 30, 255) }) == nil)
     }
 
     private static func png(red: CGFloat, green: CGFloat, blue: CGFloat) -> Data? {

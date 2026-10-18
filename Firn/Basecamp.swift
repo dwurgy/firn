@@ -118,11 +118,12 @@ private struct SiteMark: View {
 
 /// A tile of frosted ice: Liquid Glass with a cool snowy tint and a crisp
 /// edge on macOS 26 and later, a frosted fill and lit rim before it.
-/// Brighter on hover, a gentle press. The chosen tile takes the color of
-/// the site's icon, as in Dia but quieter: a soft wash, a fine outline, and a faint glow.
+/// Brighter on hover, a gentle press. The chosen tile keeps its glass and
+/// takes the colors of the site's icon: a soft wash, a ring of colored glass
+/// that follows where each color sits in the icon, and a faint glow.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
-    let accent: Color
+    let accent: Theme.TileAccent
     @State private var hovering = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -148,12 +149,27 @@ private struct TileButtonStyle: ButtonStyle {
             .onHover { hovering = $0 }
     }
 
-    /// The page on screen: page white washed with the site's color, outlined in it.
+    /// The page on screen: the same glass, washed in the icon's main color
+    /// (stronger at the top, like light through ice), ringed in its colors.
     private var chosen: some View {
-        shape.fill(Theme.page)
-            .overlay { shape.fill(accent.opacity(dark ? 0.24 : 0.14)) }
-            .overlay { shape.strokeBorder(accent.opacity(dark ? 0.85 : 0.7), lineWidth: 1.5) }
-            .shadow(color: accent.opacity(dark ? 0.35 : 0.3), radius: 5)
+        resting
+            .overlay {
+                shape.fill(LinearGradient(
+                    colors: [accent.main.opacity(dark ? 0.28 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+            .overlay {
+                // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
+                shape.strokeBorder(
+                    AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
+                    lineWidth: Theme.tileRingWidth)
+                    .opacity(reduceTransparency ? 1 : (dark ? 0.85 : 0.75))
+            }
+            .overlay {
+                shape.inset(by: Theme.tileRingWidth)
+                    .strokeBorder(Theme.tileLip, lineWidth: 0.5)
+            }
+            .shadow(color: accent.main.opacity(dark ? 0.35 : 0.28), radius: 5)
     }
 
     @ViewBuilder private var resting: some View {

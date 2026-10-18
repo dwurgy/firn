@@ -2,9 +2,10 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-/// The color a site's icon is mostly made of, calmed into the range of
-/// Firn's own space colors, so a bright red icon gives a soft terracotta,
-/// never neon. The chosen Basecamp tile washes and outlines itself in it.
+/// The colors a site's icon is made of, calmed into the range of Firn's
+/// own space colors, so a bright red icon gives a soft terracotta, never
+/// neon. The chosen Basecamp tile washes itself in the main color and rings
+/// its edge with the others, each where it sits in the icon.
 public enum IconColor {
     public struct RGB: Equatable, Sendable {
         public let red: Double
@@ -12,17 +13,27 @@ public enum IconColor {
         public let blue: Double
     }
 
-    /// The icon's calmed color, or nil when it has none to speak of (black,
+    public struct Colors: Equatable, Sendable {
+        /// The icon's main color.
+        public let main: RGB
+        /// Eight colors around the icon, clockwise from the right (3 o'clock),
+        /// as on screen; slices without color borrow from the nearest one.
+        public let ring: [RGB]
+    }
+
+    /// The pixel grid the icon is judged on: plenty for a color, and quick.
+    static let side = 32
+    static let slices = 8
+
+    /// The icon's calmed colors, or nil when it has none to speak of (black,
     /// white, or grey icons, like GitHub's octocat), or can't be read.
     /// Expects a small PNG already made safe by `SiteIcon`.
-    public static func from(png data: Data) -> RGB? {
+    public static func from(png data: Data) -> Colors? {
         let noCache = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, noCache),
               let image = CGImageSourceCreateImageAtIndex(source, 0, noCache),
               image.width <= 256, image.height <= 256,
               let sRGB = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        // Drawn small: plenty to judge a color by, and quick.
-        let side = 32
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(
@@ -33,22 +44,59 @@ public enum IconColor {
             context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
             return true
         }
-        return drawn ? pick(rgba: pixels) : nil
+        return drawn ? colors(rgba: pixels) : nil
     }
 
-    /// The main hue among premultiplied RGBA pixels: see-through, grey,
-    /// near-white, and near-black pixels don't count; the rest vote by how
-    /// colorful they are, and the hue with the most weight (with its two
-    /// neighbors) wins. Nil if under 5% of the visible pixels have color.
+    /// Main and ring colors from a `side` × `side` grid of premultiplied
+    /// RGBA pixels, top row first.
+    static func colors(rgba: [UInt8]) -> Colors? {
+        guard let main = pick(rgba: rgba) else { return nil }
+        let center = Double(side) / 2
+        var found = (0..<slices).map { slice -> HSB? in
+            vote(rgba: rgba) { x, y in
+                // y grows downward, so angles run clockwise, as on screen.
+                var angle = atan2(Double(y) + 0.5 - center, Double(x) + 0.5 - center)
+                if angle < 0 { angle += 2 * .pi }
+                return Int((angle / (2 * .pi / Double(slices))).rounded()) % slices == slice
+            }.flatMap { $0.colorful >= 2 ? $0.color : nil }
+        }
+        // Empty slices borrow from the nearest slice with color.
+        let known = found
+        for slice in 0..<slices where known[slice] == nil {
+            for step in 1...slices / 2 {
+                if let near = known[(slice + slices - step) % slices] ?? known[(slice + step) % slices] {
+                    found[slice] = near
+                    break
+                }
+            }
+        }
+        return Colors(main: main, ring: found.map { $0.map(calmed) ?? main })
+    }
+
+    /// The main hue, calmed; nil if under 5% of the visible pixels have color.
     static func pick(rgba: [UInt8]) -> RGB? {
+        guard let result = vote(rgba: rgba, include: { _, _ in true }),
+              Double(result.colorful) / Double(result.visible) >= 0.05,
+              let color = result.color else { return nil }
+        return calmed(color)
+    }
+
+    /// See-through, grey, near-white, and near-black pixels don't count; the
+    /// rest vote by how colorful they are, and the hue with the most weight
+    /// (with its two neighbors) wins. Nil if no pixel is visible.
+    private static func vote(
+        rgba: [UInt8], include: (_ x: Int, _ y: Int) -> Bool
+    ) -> (color: HSB?, visible: Int, colorful: Int)? {
         let bins = 24
         var weights = [Double](repeating: 0, count: bins)
         var sums = [(Double, Double, Double)](repeating: (0, 0, 0), count: bins)
-        var visible = 0.0
-        var colorful = 0.0
+        var visible = 0
+        var colorful = 0
         var index = 0
         while index + 3 < rgba.count {
             defer { index += 4 }
+            let pixel = index / 4
+            guard include(pixel % side, pixel / side) else { continue }
             let alpha = Double(rgba[index + 3]) / 255
             guard alpha >= 0.5 else { continue }
             visible += 1
@@ -65,7 +113,7 @@ public enum IconColor {
             sums[bin].1 += green * weight
             sums[bin].2 += blue * weight
         }
-        guard visible > 0, colorful / visible >= 0.05 else { return nil }
+        guard visible > 0 else { return nil }
 
         func around(_ bin: Int) -> [Int] { [(bin + bins - 1) % bins, bin, (bin + 1) % bins] }
         let best = (0..<bins).max { a, b in
@@ -73,12 +121,12 @@ public enum IconColor {
         } ?? 0
         let near = around(best)
         let total = near.reduce(0) { $0 + weights[$1] }
-        guard total > 0 else { return nil }
+        guard total > 0 else { return (nil, visible, colorful) }
         let average = HSB(
             red: near.reduce(0) { $0 + sums[$1].0 } / total,
             green: near.reduce(0) { $0 + sums[$1].1 } / total,
             blue: near.reduce(0) { $0 + sums[$1].2 } / total)
-        return calmed(average)
+        return (average, visible, colorful)
     }
 
     /// Into the range of Firn's space colors (Glacier, Sand, Clay, ...):

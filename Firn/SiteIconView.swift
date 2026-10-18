@@ -32,11 +32,11 @@ struct SiteIconView<Fallback: View>: View {
     }
 }
 
-/// A site icon's own calmed color (see `IconColor`), or nil for black,
+/// A site icon's own calmed colors (see `IconColor`), or nil for black,
 /// white, or grey icons. Worked out once per icon, not on every redraw.
-@MainActor func siteIconColor(_ png: Data) -> IconColor.RGB? {
+@MainActor func siteIconColors(_ png: Data) -> IconColor.Colors? {
     let key = png as NSData
-    if let known = SiteIconCache.colors.object(forKey: key) { return known.color }
+    if let known = SiteIconCache.colors.object(forKey: key) { return known.colors }
     let color = IconColor.from(png: png)
     SiteIconCache.colors.setObject(SiteIconCache.Found(color), forKey: key)
     return color
@@ -52,8 +52,8 @@ private enum SiteIconCache {
 
     /// NSCache keeps objects, and "no color" is worth remembering too.
     final class Found {
-        let color: IconColor.RGB?
-        init(_ color: IconColor.RGB?) { self.color = color }
+        let colors: IconColor.Colors?
+        init(_ colors: IconColor.Colors?) { self.colors = colors }
     }
 
     static let colors: NSCache<NSData, Found> = {

@@ -15,6 +15,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var canGoBack = false
     private(set) var canGoForward = false
     private(set) var isLoading = false
+    private(set) var icon: Data?
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
 
     @ObservationIgnored let webView: WKWebView
@@ -22,6 +23,10 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private let isPopup: Bool
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var isProvisional = false
+    /// The icon addresses last tried, so a page that finishes loading again
+    /// (or changes nothing) doesn't fetch its icon again.
+    @ObservationIgnored private var iconCandidates: [URL] = []
+    @ObservationIgnored private var iconTask: Task<Void, Never>?
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -141,12 +146,21 @@ extension WebKitPageController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         isProvisional = false
+        let previous = url
         url = webView.url
+        // A different site: its old icon must not linger beside the new title.
+        if previous?.host()?.lowercased() != url?.host()?.lowercased() {
+            iconTask?.cancel()
+            iconTask = nil
+            iconCandidates = []
+            icon = nil
+        }
         syncState()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         syncState()
+        findIcon()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
@@ -157,6 +171,35 @@ extension WebKitPageController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
         syncState()
+    }
+}
+
+// MARK: - Site icon
+
+extension WebKitPageController {
+    /// Firn's own scripts run here, never in the page's world, so the page
+    /// can't see them, change them, or reach Firn through them.
+    private static let firnWorld = WKContentWorld.world(name: "Firn")
+
+    /// Reads the page's icon links in Firn's world, then fetches the best one
+    /// (see `SiteIcon`). Results arriving after the page moved to another
+    /// site are dropped.
+    private func findIcon() {
+        guard let pageURL = url, WebAddress.isWebURL(pageURL) else { return }
+        webView.evaluateJavaScript(SiteIcon.script, in: nil, in: Self.firnWorld) { [weak self] result in
+            guard let self, let current = self.url, Self.sameOrigin(current, pageURL) else { return }
+            let found = SiteIcon.parse(scriptResult: try? result.get())
+            let candidates = SiteIcon.candidates(from: found.links, pageURL: pageURL)
+            guard !candidates.isEmpty, candidates != self.iconCandidates else { return }
+            self.iconCandidates = candidates
+            self.iconTask?.cancel()
+            self.iconTask = Task { [weak self] in
+                let png = await SiteIcon.fetch(candidates, userAgent: found.userAgent)
+                guard !Task.isCancelled, let png, let self,
+                      let current = self.url, Self.sameOrigin(current, pageURL) else { return }
+                self.icon = png
+            }
+        }
     }
 }
 

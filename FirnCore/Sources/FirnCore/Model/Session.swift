@@ -27,6 +27,8 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var place: Tab.Place
     public var url: URL?
     public var title: String
+    /// The site's icon, a small PNG. Missing in files from before 3c.
+    public var icon: Data?
     public var homeURL: URL?
     /// Its position among all tabs (each space's lists keep this order).
     public var order: Int
@@ -35,7 +37,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var lastChangedAt: Date
 
     public init(
-        id: UUID, spaceID: UUID, place: Tab.Place, url: URL?, title: String, homeURL: URL?,
+        id: UUID, spaceID: UUID, place: Tab.Place, url: URL?, title: String, icon: Data? = nil, homeURL: URL?,
         order: Int, lastActiveAt: Date, openerTabID: UUID?, lastChangedAt: Date
     ) {
         self.id = id
@@ -43,6 +45,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.place = place
         self.url = url
         self.title = title
+        self.icon = icon
         self.homeURL = homeURL
         self.order = order
         self.lastActiveAt = lastActiveAt

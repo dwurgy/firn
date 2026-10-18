@@ -73,7 +73,7 @@ private struct BasecampTile: View {
 
     var body: some View {
         Button(action: select) {
-            SiteMark(site: site)
+            SiteMark(site: site, icon: tab.icon)
                 // A tile that's resting (its page let go) waits quietly.
                 .opacity(tab.isResting && !isActive ? 0.55 : 1)
                 .saturation(tab.isResting && !isActive ? 0.6 : 1)
@@ -94,13 +94,17 @@ private struct BasecampTile: View {
     }
 }
 
-/// The site's mark, the size of a favicon: a soft rounded square in a calm
-/// color with the site's first letter. Stands in until the site's own icon
-/// is read from the page (3c).
+/// The site's own icon, or until it's found (or if the site has none), a
+/// soft rounded square in a calm color with the site's first letter.
 private struct SiteMark: View {
     let site: String
+    let icon: Data?
 
     var body: some View {
+        SiteIconView(icon: icon, size: 18) { letterMark }
+    }
+
+    private var letterMark: some View {
         RoundedRectangle(cornerRadius: 5, style: .continuous)
             .fill(Theme.siteColor(for: site).gradient)
             .frame(width: 18, height: 18)

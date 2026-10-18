@@ -11,6 +11,9 @@ public protocol PageController: AnyObject, Observable {
     var canGoBack: Bool { get }
     var canGoForward: Bool { get }
     var isLoading: Bool { get }
+    /// The site's own icon as a small PNG (at most 64px), once found; nil
+    /// until then, or if the site has none.
+    var icon: Data? { get }
 
     /// Opens an http or https address. Anything else is ignored.
     func load(_ url: URL)

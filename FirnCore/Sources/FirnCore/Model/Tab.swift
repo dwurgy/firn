@@ -25,10 +25,11 @@ public final class Tab: Identifiable {
     public private(set) var page: (any PageController)?
     private var restingURL: URL?
     private var restingTitle: String
+    private var restingIcon: Data?
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
-        url: URL?, title: String = "", homeURL: URL? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
+        url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
         page: (any PageController)? = nil
     ) {
         self.id = id
@@ -39,6 +40,7 @@ public final class Tab: Identifiable {
         self.lastActiveAt = lastActiveAt
         self.restingURL = url
         self.restingTitle = title
+        self.restingIcon = icon
         self.page = page
     }
 
@@ -58,6 +60,19 @@ public final class Tab: Identifiable {
         return restingTitle
     }
 
+    /// The site's icon (a small PNG): the page's own once found, or the one
+    /// from last time while it's still on that site.
+    public var icon: Data? {
+        guard let page else { return restingIcon }
+        if let icon = page.icon { return icon }
+        return Self.sameHost(page.url ?? restingURL, restingURL) ? restingIcon : nil
+    }
+
+    private static func sameHost(_ a: URL?, _ b: URL?) -> Bool {
+        guard let a = a?.host()?.lowercased(), let b = b?.host()?.lowercased() else { return false }
+        return a == b
+    }
+
     /// Whether the tab has no page right now (closed pins and Basecamp
     /// tiles rest until clicked, as do tabs not yet shown since launch).
     public var isResting: Bool { page == nil }
@@ -75,6 +90,7 @@ public final class Tab: Identifiable {
         if let page {
             page.load(homeURL)
         } else {
+            if !Self.sameHost(homeURL, restingURL) { restingIcon = nil }
             restingURL = homeURL
             restingTitle = ""
         }
@@ -91,6 +107,7 @@ public final class Tab: Identifiable {
     /// Lets the page go, remembering where it was.
     func sleep() {
         guard let page else { return }
+        restingIcon = icon
         restingURL = page.url ?? restingURL
         restingTitle = page.title
         page.stopLoading()

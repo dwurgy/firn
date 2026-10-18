@@ -297,7 +297,7 @@ public final class BrowserStore {
         let records = tabs.enumerated().map { order, tab in
             var record = TabRecord(
                 id: tab.id, spaceID: tab.spaceID, place: tab.place, url: tab.url,
-                title: tab.savedTitle, homeURL: tab.homeURL, order: order,
+                title: tab.savedTitle, icon: tab.icon, homeURL: tab.homeURL, order: order,
                 lastActiveAt: tab.lastActiveAt, openerTabID: tab.openerTabID, lastChangedAt: stamp
             )
             if let saved = savedRecords[tab.id], saved.sameContent(as: record) {
@@ -315,7 +315,7 @@ public final class BrowserStore {
 
     /// The saved file is Firn's own, but it's checked as if it weren't: only
     /// web addresses come back, tabs must belong to a space, ids are unique,
-    /// and Basecamp holds no more than its limit.
+    /// Basecamp holds no more than its limit, and icons are small PNGs.
     private func restore(_ session: Session) {
         let spaceIDs = Set(spaces.map(\.id))
         var seen = Set<UUID>()
@@ -332,7 +332,8 @@ public final class BrowserStore {
             }
             return Tab(
                 id: record.id, spaceID: record.spaceID, place: place, url: url ?? home,
-                title: record.title, homeURL: place == .open ? nil : home,
+                title: record.title, icon: record.icon.flatMap { SiteIcon.isValidStored($0) ? $0 : nil },
+                homeURL: place == .open ? nil : home,
                 openerTabID: record.openerTabID, lastActiveAt: record.lastActiveAt
             )
         }

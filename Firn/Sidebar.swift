@@ -322,7 +322,11 @@ private struct TabRow: View {
     var body: some View {
         Button(action: select) {
             HStack(spacing: 8) {
-                Label(tab.title, systemImage: "globe")
+                Label {
+                    Text(tab.title)
+                } icon: {
+                    SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }
+                }
                     .labelStyle(RowLabelStyle(color: Theme.ink))
                 Spacer(minLength: 0)
             }

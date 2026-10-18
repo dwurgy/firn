@@ -66,7 +66,7 @@ Corner radius:        10pt tabs, tiles, and rows; 14pt panels (Lookout,
                       command bar, cards); 8pt small buttons and fields
 Page inset:           the page floats 8pt inside the frame, 12pt corners
                       (8pt on macOS 26+, matching Liquid Glass window corners)
-Traffic lights:       76pt clear at the left of the sidebar's top row
+Traffic lights:       placed by macOS (empty toolbar); the top row lines up with them
 Font:                 system font (SF): 13pt tabs, 12pt labels, 11pt hints;
                       Fraunces (soft) only for brand moments: the welcome
                       (30pt), the scam warning (27pt), the empty page (24pt),
@@ -237,7 +237,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 ### Where we are
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
-- **Phase 2: not started.**
+- **Phase 2: in progress.** 2a tab model and 2b sidebar done; next 2c drag to reorder, 2d resize/collapse/peek, 2e links that open new windows become tabs.
 
 ---
 

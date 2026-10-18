@@ -6,7 +6,7 @@ import Testing
 /// A page that remembers what it was asked to do, without WebKit.
 @MainActor
 @Observable
-private final class FakePage: PageController {
+final class FakePage: PageController {
     let dataStoreID: UUID
     var url: URL?
     var title = ""

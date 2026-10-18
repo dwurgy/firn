@@ -12,9 +12,10 @@ public final class Tab: Identifiable {
 
     public let id: UUID
     public let spaceID: UUID
-    public var place: Place
-    /// Where a Basecamp or pinned tab goes back to (Phase 3).
-    public var homeURL: URL?
+    public internal(set) var place: Place
+    /// Where a Basecamp or pinned tab goes back to: its address when it was
+    /// pinned or added to Basecamp.
+    public internal(set) var homeURL: URL?
     /// The tab whose link opened this one, if any.
     public var openerTabID: UUID?
     public internal(set) var lastActiveAt: Date
@@ -27,12 +28,13 @@ public final class Tab: Identifiable {
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
-        url: URL?, title: String = "", openerTabID: UUID? = nil, lastActiveAt: Date,
+        url: URL?, title: String = "", homeURL: URL? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
         page: (any PageController)? = nil
     ) {
         self.id = id
         self.spaceID = spaceID
         self.place = place
+        self.homeURL = homeURL
         self.openerTabID = openerTabID
         self.lastActiveAt = lastActiveAt
         self.restingURL = url
@@ -48,6 +50,34 @@ public final class Tab: Identifiable {
         let title = page?.title ?? restingTitle
         if !title.isEmpty { return title }
         return url?.host() ?? "New Tab"
+    }
+
+    /// The page's own title, or the last one it had; empty if it never had one.
+    var savedTitle: String {
+        if let title = page?.title, !title.isEmpty { return title }
+        return restingTitle
+    }
+
+    /// Whether the tab has no page right now (closed pins and Basecamp
+    /// tiles rest until clicked, as do tabs not yet shown since launch).
+    public var isResting: Bool { page == nil }
+
+    /// A Basecamp or pinned tab that has wandered from its home address.
+    public var isAwayFromHome: Bool {
+        guard let homeURL else { return false }
+        return url != homeURL
+    }
+
+    /// Back to the home address: loaded now if the tab is awake, or where
+    /// it will wake if it's resting.
+    func goHome() {
+        guard let homeURL else { return }
+        if let page {
+            page.load(homeURL)
+        } else {
+            restingURL = homeURL
+            restingTitle = ""
+        }
     }
 
     /// Makes the page (if needed) and starts loading where the tab rests.

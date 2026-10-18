@@ -1,12 +1,32 @@
+import AppKit
 import FirnCore
 import SwiftUI
 
 @main
 struct FirnApp: App {
-    @State private var window = WindowModel(store: BrowserStore(
-        spaces: [PhaseTwo.space],
-        makePage: BrowserEngine.makePage
-    ))
+    @State private var window: WindowModel
+    private let saver: SessionSaver
+
+    /// Picks up where the last session left off, then saves as things change
+    /// and once more at quit.
+    init() {
+        let file = SessionFile.standard
+        let session = file.load()
+        let store = BrowserStore(
+            restoring: session, defaultSpaces: [PhaseTwo.space], makePage: BrowserEngine.makePage
+        )
+        let window = WindowModel(store: store, restoring: session?.window)
+        _window = State(initialValue: window)
+        saver = SessionSaver(file: file) {
+            store.session(sidebarWidth: window.sidebarWidth, sidebarCollapsed: window.sidebarCollapsed)
+        }
+        saver.start()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [saver] _ in
+            MainActor.assumeIsolated { saver.saveNow() }
+        }
+    }
 
     var body: some Scene {
         // One window for now; several windows sharing tabs is its own step.

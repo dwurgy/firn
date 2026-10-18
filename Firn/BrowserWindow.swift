@@ -25,7 +25,15 @@ final class WindowModel {
     private var peekHeldForTyping = false
     private var peekHideTask: Task<Void, Never>?
 
-    init(store: BrowserStore) { self.store = store }
+    init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
+        self.store = store
+        if let saved {
+            if case let .width(width) = SidebarSizing.outcome(forProposedWidth: saved.sidebarWidth) {
+                sidebarWidth = width
+            }
+            sidebarCollapsed = saved.sidebarCollapsed
+        }
+    }
 
     func toggleSidebar() { setSidebarCollapsed(!sidebarCollapsed) }
 

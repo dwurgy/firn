@@ -1,7 +1,8 @@
 import FirnCore
 import SwiftUI
 
-/// The sidebar: the top row (traffic lights, back, forward, reload), the
+/// The sidebar: the top row (traffic lights, the sidebar button, back, and
+/// forward), the
 /// address bar, and the space's tabs.
 struct Sidebar: View {
     let store: BrowserStore
@@ -23,7 +24,12 @@ struct Sidebar: View {
     /// Centered on the traffic lights, which sit at its left.
     private var topRow: some View {
         HStack(spacing: 2) {
-            Spacer(minLength: lights.trailingX + Theme.trafficLightGap - Theme.pageInset)
+            Color.clear.frame(width: lights.trailingX + Theme.trafficLightGap - Theme.pageInset - 2, height: 1)
+            ChromeButton(
+                window.sidebarCollapsed ? "Keep sidebar open (⌘S)" : "Hide sidebar (⌘S)",
+                systemImage: "sidebar.left"
+            ) { window.toggleSidebar() }
+            Spacer(minLength: 0)
             if let page = store.activeTab?.page {
                 NavigationButtons(page: page)
             } else {
@@ -35,7 +41,7 @@ struct Sidebar: View {
     }
 }
 
-// MARK: - Back, forward, and reload
+// MARK: - Back and forward
 
 private struct NavigationButtons: View {
     let page: any PageController
@@ -45,19 +51,12 @@ private struct NavigationButtons: View {
             .disabled(!page.canGoBack)
         ChromeButton("Forward", systemImage: "chevron.right") { page.goForward() }
             .disabled(!page.canGoForward)
-        if page.isLoading {
-            ChromeButton("Stop loading", systemImage: "xmark") { page.stopLoading() }
-        } else {
-            ChromeButton("Reload this page", systemImage: "arrow.clockwise") { page.reload() }
-                .disabled(page.url == nil)
-        }
     }
 
     /// The same buttons, disabled, when no tab is open.
     @ViewBuilder static var placeholder: some View {
         ChromeButton("Back", systemImage: "chevron.left") {}.disabled(true)
         ChromeButton("Forward", systemImage: "chevron.right") {}.disabled(true)
-        ChromeButton("Reload this page", systemImage: "arrow.clockwise") {}.disabled(true)
     }
 }
 
@@ -111,6 +110,11 @@ private struct AddressBar: View {
     @State private var hovering = false
 
     private var url: URL? { window.addressTarget == .newTab ? nil : store.activeTab?.url }
+    /// Reload sits inside the bar, as in Safari, so the top row fits at the narrowest width.
+    private var reloadablePage: (any PageController)? {
+        guard !focused, let page = store.activeTab?.page, page.url != nil else { return nil }
+        return page
+    }
 
     var body: some View {
         TextField("Search or enter address", text: $text)
@@ -118,7 +122,8 @@ private struct AddressBar: View {
             .font(Theme.tabFont)
             .foregroundStyle(Theme.ink)
             .focused($focused)
-            .padding(.horizontal, Theme.rowPadding)
+            .padding(.leading, Theme.rowPadding)
+            .padding(.trailing, reloadablePage == nil ? Theme.rowPadding : Theme.rowPadding + 24)
             .frame(height: Theme.rowHeight)
             .background {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
@@ -128,6 +133,18 @@ private struct AddressBar: View {
                 if focused {
                     RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
                         .strokeBorder(Theme.frost, lineWidth: 2)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if let page = reloadablePage {
+                    Group {
+                        if page.isLoading {
+                            ChromeButton("Stop loading", systemImage: "xmark") { page.stopLoading() }
+                        } else {
+                            ChromeButton("Reload this page", systemImage: "arrow.clockwise") { page.reload() }
+                        }
+                    }
+                    .padding(.trailing, 4)
                 }
             }
             .onHover { hovering = $0 }

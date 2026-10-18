@@ -55,13 +55,33 @@ enum Theme {
         if #available(macOS 26, *) { 8 } else { 12 }
     }
 
-    static let sidebarWidth: CGFloat = 260
     static let rowHeight: CGFloat = 36
     /// Air between the traffic lights and the first button after them.
     static let trafficLightGap: CGFloat = 16
     static let rowSpacing: CGFloat = 4
     static let rowPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 20
+    /// How the sidebar slides in and out. The traffic lights follow the same
+    /// curve (see `WindowSetup`), so the two stay together.
+    static let slideDuration = 0.2
+    static func slide(reduceMotion: Bool) -> Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.3)
+            : .timingCurve(0.3, 0, 0.2, 1, duration: slideDuration)
+    }
+
+    static let panelRadius: CGFloat = 14
+
+    /// The peeking sidebar card sits this far inside the window edge: just
+    /// outside the page's inset, as in Dia.
+    static let peekInset: CGFloat = 4
+    /// Its corners run parallel to the page's (same center, larger by the
+    /// difference in inset), so window, card, and page corners nest.
+    static var peekCornerRadius: CGFloat { pageCornerRadius + pageInset - peekInset }
+    /// How close to the left edge the pointer must be to bring the card out.
+    static let peekEdgeZone: CGFloat = 8
+    /// How far past the card's right edge the pointer may drift before it hides.
+    static let peekLeaveMargin: CGFloat = 16
     static let tabRadius: CGFloat = 10
     static let fieldRadius: CGFloat = 8
     static let smallRadius: CGFloat = 6

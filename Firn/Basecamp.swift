@@ -155,7 +155,7 @@ private struct TileButtonStyle: ButtonStyle {
         resting
             .overlay {
                 shape.fill(LinearGradient(
-                    colors: [accent.main.opacity(dark ? 0.28 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
+                    colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
             }
             .overlay {
@@ -169,7 +169,7 @@ private struct TileButtonStyle: ButtonStyle {
                 shape.inset(by: Theme.tileRingWidth)
                     .strokeBorder(Theme.tileLip, lineWidth: 0.5)
             }
-            .shadow(color: accent.main.opacity(dark ? 0.35 : 0.28), radius: 5)
+            .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
     }
 
     @ViewBuilder private var resting: some View {

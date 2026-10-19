@@ -28,7 +28,7 @@ Dia, Arc, and Zen have great ideas, but they're built for power users or early a
 - **Discoverable, not memorized.** Anything important can be found by looking or right-clicking; keyboard shortcuts are a bonus, never the only way.
 - **Nothing hidden.** If Firn tidies something away, you can see where it went (the archive is a group in the sidebar, not a box to discover).
 - **Privacy by default.** Data stays on the device unless the person chooses otherwise. No tracking, no telemetry, and privacy claims are only made when they're true.
-- **Names: plain words win.** Keep a familiar word when it's already plain English (Spaces, Pins, Archived). Give something our own name when other browsers' word is their brand coinage or unclear (Basecamp instead of Essentials, Lookout instead of Glance).
+- **Names: plain words win.** Keep a familiar word when it's already plain English (Spaces, Groups, Archived). Give something our own name when other browsers' word is their brand coinage or unclear (Basecamp instead of Essentials, Lookout instead of Glance).
 - **Serial (Oxford) comma, always.** In a list of three or more, a comma goes before the final "and" or "or": "tabs, color, and icon", "macOS, Windows, and Linux". Everywhere people read Firn's words: the interface, the welcome, warnings, menus, the README, and release notes. (Two items take no comma: "mail and calendar".)
 - **Opinionated: two looks, never more.** Vertical tabs in the sidebar, the page as the star. The one choice is where the address bar sits ("In the sidebar" or "At the top"), at onboarding and in settings. No top-bar tabs, no icon-only sidebar. Wanting more room is answered by hiding the sidebar (it peeks at the left edge), not by more layouts.
   - *In the sidebar* (default): no title bar. The window's top edge is the grip; the traffic lights sit in the sidebar's top row.
@@ -113,9 +113,9 @@ Firn's brand moments use the "First light" look: sunrise in a snowy cabin near S
 
 Each space is its own browser. This is the heart of the prototype; get it right before polishing anything else.
 
-- **Always the space's own:** Basecamp tiles, pinned tabs, open tabs, and the Archived group. Nothing in the sidebar is shared between spaces.
+- **Always the space's own:** Basecamp tiles, groups, loose tabs, and the Archived group. Nothing in the sidebar is shared between spaces.
 - **Separate by default:** each new space has its own sign-ins, cookies, site data, history, and saved passwords. Signing into Gmail in Work doesn't sign you into Personal.
-- **Sharing is one choice, made when creating a space:** "Keep this space separate" (the default, recommended) or "Share sign-ins with [another space]." Sharing joins that space's sign-ins, cookies, site data, history, and saved passwords. The new space still gets its own empty Basecamp, pins, and tabs.
+- **Sharing is one choice, made when creating a space:** "Keep this space separate" (the default, recommended) or "Share sign-ins with [another space]." Sharing joins that space's sign-ins, cookies, site data, history, and saved passwords. The new space still gets its own empty Basecamp, groups, and tabs.
 - **Plain words in the "New space" sheet:** a separate space says it starts signed out of everything; a shared one says which space it shares with.
 - **Later changes:** a shared space can "Stop sharing" (it starts fresh and signed out, after a confirmation). Two separate spaces can't be merged.
 - **Deleting a space** deletes its tabs and its browser data, after a confirmation that says so. Shared data stays as long as another space still uses it.
@@ -127,10 +127,14 @@ Each space is its own browser. This is the heart of the prototype; get it right 
 ## Features (build in the roadmap's order)
 
 - **Vertical tabs:** favicon and title; close button on hover; drag to reorder with rows gliding into place; sidebar collapses and peeks at the left edge.
-- **Basecamp:** the grid of everyday sites at the top of each space (up to 12), different in every space.
-- **Pins:** per space, under the space's name. Basecamp and pinned tabs remember their home address; closing one lets it rest until clicked; "Go back to home" resets it.
+- **Basecamp:** the grid of everyday sites at the top of each space (up to 12), different in every space. Tiles remember their home address; closing one lets it rest until clicked; "Go back to home" resets it.
+- **Groups** (replace pins; David, 2026-10-18): the way to keep tabs. Two tiers: what's kept (Basecamp, then groups) sits above a clear divider, loose tabs below it.
+  - A group is a name and a flat set of tabs (no nesting), shown as a soft frosted card tinted by the space's color: the name, a space-color dot, and a fold arrow; folded, it shows a count. No emoji or custom icons, no indenting.
+  - Groups always sit above the divider. A new group appears at the bottom of the groups, just above the divider (the tab barely moves); drag to reorder groups, drag tabs between them, and drag a tab below the divider to take it out. A group of one is fine; closing its last tab ends it.
+  - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group (no always-visible close button).
+  - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive.
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.
-- **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default and shows a count; open it to see them, click one to bring it back. Never archived: Basecamp and pinned tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
+- **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default and shows a count; open it to see them, click one to bring it back. Never archived: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
 - **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab.
 - **Split view:** two pages side by side, each with its own address and back/forward; drag the gap to resize; one row in the sidebar.
 - **Command bar:** one shortcut opens a centered bar: type an address, search, jump to an open tab in this space, or run an action by name.
@@ -152,7 +156,7 @@ Keyboard shortcuts match the Mac version of the Electron app unless David decide
 - **Engine:** `WKWebView`, wrapped with `NSViewRepresentable` (and `UIViewRepresentable` on iOS). On macOS 26 and later, SwiftUI's own `WebView`/`WebPage` may replace the wrapper; decide that as its own step.
 - **Engine layer:** two rules, as on Electron:
   1. Views never talk to `WKWebView` directly; they talk to a small `BrowserEngine` / `PageController` protocol.
-  2. App logic (tabs, spaces, Basecamp, pins, archive, session) never touches WebKit; only the engine's implementation does. Each tab owns its controller; the model owns no views.
+  2. App logic (tabs, spaces, Basecamp, groups, archive, session) never touches WebKit; only the engine's implementation does. Each tab owns its controller; the model owns no views.
 - **Per-space data:** each space has a `dataStoreId`. Separate spaces get a new one; a shared space uses the same id as the space it shares with. Every web view in a space, including Lookout and split view, uses `WKWebsiteDataStore(forIdentifier: dataStoreId)`, never `.default()`. Firn's own history and saved passwords are stored per `dataStoreId` too. Deleting the last space that uses an id removes its store (`WKWebsiteDataStore.remove(forIdentifier:)`).
 - **State:** one observable store (`@Observable`) for the tab model, saved to disk as Codable JSON in Application Support so sessions survive restarts. Keep it sync-ready (stable ids, a last-changed time on every record), but no sync now.
 
@@ -161,8 +165,9 @@ Keyboard shortcuts match the Mac version of the Electron app unless David decide
 ```
 Space      { id, name, icon, color, order, dataStoreId }
 Tab        { id, spaceId, url, title, favicon,
-             place (basecamp, pinned, open, or archived),
-             homeUrl?, order, lastActiveAt, openerTabId?, splitGroupId? }
+             place (basecamp, open, or archived), groupId?,
+             homeUrl? (Basecamp only), order, lastActiveAt, openerTabId?, splitGroupId? }
+TabGroup   { id, spaceId, name, order, folded }
 SplitGroup { id, spaceId, tabIds[], layout, sizes[] }
 Window     { id, activeSpaceId, activeTabId, sidebarWidth, sidebarCollapsed }
 ```
@@ -200,16 +205,16 @@ Don't add these without David asking again.
 - Boosts (restyling websites, forcing dark mode).
 - A developer mode (the Web Inspector is enough).
 - Profiles or containers on top of spaces: spaces already are both.
-- Tab folders. (Tab groups are a separate, open question: see "Open questions.")
+- Tab folders: groups stay flat, never nested.
+- Pins: groups do their job (David, 2026-10-18).
 - More layouts than the two looks.
 
 ---
 
 ## Open questions (David hasn't decided; don't build these)
 
-- **Tab groups:** a light, good-looking way to gather a few related tabs in a space's tab list, like Dia's: flat, collapsible, and named by the person. Not folders: no nesting, and no hiding tabs inside other things. If David decides to try it, it's its own step with a plan first. The Firn version would be a name and the space's color dot, with no emoji or custom icons (Firn uses its own line icons) and no cloud-based auto-naming (naming on the device is fine; see the next question). Things to weigh then: how it sits beside Basecamp, pins, split view (already one combined row), and Archived without adding a layer people have to learn.
-- **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for tab groups if groups happen. Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
-- **Optional sync across devices (iCloud):** tabs, spaces, Basecamp, and pins appear on a person's other Macs and, later, their iPhone. Off by default, and a plain-words choice when turned on: the data goes only to the person's own iCloud (CloudKit), never to Firn or any server of ours. Saved passwords would use iCloud Keychain, not our own sync. Cookies and sign-ins can't sync (WebKit doesn't allow it), so each device signs in on its own; the setting should say so. Each space's separation rules carry over: a separate space stays separate on every device. Sync changes "your data stays on your device" for people who turn it on, so any wording about it needs David's OK. It's its own step with a plan first, on Opus, after the core browser feels right.
+- **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups. Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
+- **Optional sync across devices (iCloud):** tabs, spaces, Basecamp, and groups appear on a person's other Macs and, later, their iPhone. Off by default, and a plain-words choice when turned on: the data goes only to the person's own iCloud (CloudKit), never to Firn or any server of ours. Saved passwords would use iCloud Keychain, not our own sync. Cookies and sign-ins can't sync (WebKit doesn't allow it), so each device signs in on its own; the setting should say so. Each space's separation rules carry over: a separate space stays separate on every device. Sync changes "your data stays on your device" for people who turn it on, so any wording about it needs David's OK. It's its own step with a plan first, on Opus, after the core browser feels right.
 
 ---
 
@@ -219,7 +224,7 @@ Each phase has a "done" test. Don't start the next until the current one passes.
 
 1. **Window that browses:** a native window, one `WKWebView`, address bar, back, forward, and reload. *Done:* David browses normally in it for 10 minutes.
 2. **Sidebar and vertical tabs:** tab model, sidebar, new, close, switch, and reorder; tokens applied. *Done:* it already looks calm and feels smoother than the Electron app.
-3. **Pins, Basecamp, and persistence:** *Done:* quit and reopen; everything comes back exactly as it was.
+3. **Basecamp, groups, and persistence:** *Done:* quit and reopen; everything comes back exactly as it was.
 4. **Spaces, truly separate:** create, switch, color, and delete spaces, each with its own data store and Basecamp, plus the "share sign-ins" choice. *Done:* two spaces signed into two different Google accounts at once, and a shared space that's already signed in.
 5. **Archived, Lookout, split view, and the command bar:** *Done:* used daily without reaching for another browser.
 6. **First light and the two looks:** the welcome, the empty page, and the address bar setting.
@@ -238,7 +243,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
-- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; next 3b-ii (pins, to be discussed first).
+- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); next 3b-ii (groups: model and saving, then the look with a mockup first).
 
 ---
 

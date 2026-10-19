@@ -210,6 +210,8 @@ private struct TabList: View {
     @State private var dragging: (id: UUID, offset: CGFloat)?
     /// True while a dropped row slides into its slot.
     @State private var settling = false
+    /// The group whose name is being edited, if any.
+    @State private var renamingGroupID: UUID?
 
     /// One speed for rows gliding aside and for the dropped row settling.
     private static let glide = Animation.smooth(duration: 0.2)
@@ -218,26 +220,36 @@ private struct TabList: View {
 
     var body: some View {
         let tabs = store.looseTabs
+        let groups = store.tabGroups
         // The list fills the sidebar's height, so the blank space below the
         // tabs (and the gaps between them) moves the window too.
         GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: Theme.rowSpacing) {
                     NewTabRow { window.editAddress(.newTab) }
-                    ForEach(tabs) { tab in
-                        TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: store.canAddToBasecamp) {
-                            store.select(tab)
-                            window.focusPage()
-                        } close: {
-                            store.close(tab)
-                        } addToBasecamp: {
-                            store.addToBasecamp(tab)
+                    if !groups.isEmpty {
+                        VStack(spacing: Theme.groupSpacing) {
+                            ForEach(groups) { group in
+                                GroupCard(
+                                    group: group,
+                                    color: Theme.spaceColor(store.activeSpace.color),
+                                    renaming: $renamingGroupID,
+                                    store: store
+                                ) {
+                                    let members = store.tabs(in: group)
+                                    ForEach(members) { tab in
+                                        row(tab, in: members) { store.move(tab, into: group, at: $0) }
+                                    }
+                                }
+                            }
                         }
-                        .offset(y: offset(of: tab, in: tabs))
-                        // The dragged row sticks to the pointer; only the others glide.
-                        .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
-                        .zIndex(dragging?.id == tab.id ? 1 : 0)
-                        .simultaneousGesture(drag(tab, in: tabs))
+                        // The cards' own edges keep them apart from the loose
+                        // tabs; a little extra air below lets that read.
+                        .padding(.top, Theme.groupSpacing - Theme.rowSpacing)
+                        .padding(.bottom, Theme.groupSpacing)
+                    }
+                    ForEach(tabs) { tab in
+                        row(tab, in: tabs) { store.move(tab, to: $0) }
                     }
                 }
                 .padding(.bottom, Theme.pageInset)
@@ -246,6 +258,30 @@ private struct TabList: View {
             }
             .scrollIndicators(.never)
         }
+    }
+
+    /// A tab row that can be dragged to a new place among `tabs`.
+    private func row(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab], move: @escaping (Int) -> Void) -> some View {
+        TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: store.canAddToBasecamp) {
+            store.select(tab)
+            window.focusPage()
+        } close: {
+            store.close(tab)
+        } addToBasecamp: {
+            store.addToBasecamp(tab)
+        } newGroup: {
+            withAnimation(reduceMotion ? nil : Self.glide) {
+                // A new group asks for its name straight away.
+                renamingGroupID = store.newGroup(with: tab)?.id
+            }
+        } takeOutOfGroup: {
+            withAnimation(reduceMotion ? nil : Self.glide) { store.takeOutOfGroup(tab) }
+        }
+        .offset(y: offset(of: tab, in: tabs))
+        // The dragged row sticks to the pointer; only the others glide.
+        .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
+        .zIndex(dragging?.id == tab.id ? 1 : 0)
+        .simultaneousGesture(drag(tab, in: tabs, move: move))
     }
 
     /// Where the dragged row would land, as a position in the list.
@@ -265,7 +301,7 @@ private struct TabList: View {
         return 0
     }
 
-    private func drag(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab]) -> some Gesture {
+    private func drag(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab], move: @escaping (Int) -> Void) -> some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
                 guard !settling else { return }
@@ -281,7 +317,7 @@ private struct TabList: View {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        store.move(tab, to: position)
+                        move(position)
                         dragging = nil
                         settling = false
                     }
@@ -317,6 +353,8 @@ private struct TabRow: View {
     let select: () -> Void
     let close: () -> Void
     let addToBasecamp: () -> Void
+    let newGroup: () -> Void
+    let takeOutOfGroup: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -357,12 +395,158 @@ private struct TabRow: View {
             if tab.place == .open {
                 Button("Add to Basecamp", action: addToBasecamp)
                     .disabled(!canAddToBasecamp)
+                if tab.groupID == nil {
+                    Button("New Group with This Tab", action: newGroup)
+                } else {
+                    Button("Remove from Group", action: takeOutOfGroup)
+                }
             }
             Divider()
             Button("Close Tab", action: close)
         }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
+    }
+}
+
+// MARK: - Groups
+
+/// A group: a soft frosted card tinted by the space's color, with its name,
+/// a dot in the space's color, and a fold arrow. The close button shows
+/// only while the pointer is on the name line.
+private struct GroupCard<Rows: View>: View {
+    let group: TabGroup
+    let color: Color
+    @Binding var renaming: UUID?
+    let store: BrowserStore
+    @ViewBuilder let rows: Rows
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @State private var hovering = false
+    @State private var draft = ""
+    @FocusState private var nameFocused: Bool
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous) }
+    private var isRenaming: Bool { renaming == group.id }
+
+    var body: some View {
+        VStack(spacing: Theme.rowSpacing) {
+            header
+            if !group.folded {
+                rows
+            }
+        }
+        // Rows sit 4pt inside the card, so their 10pt corners nest in its 14pt.
+        .padding(.horizontal, Theme.panelRadius - Theme.tabRadius)
+        .padding(.bottom, group.folded ? 0 : Theme.panelRadius - Theme.tabRadius)
+        .background { card }
+        .contextMenu {
+            Button("Rename", action: startRenaming)
+            Button("Ungroup") { animate { store.ungroup(group) } }
+            Divider()
+            Button("Close Group") { animate { store.close(group) } }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .padding(.trailing, 2)
+                .accessibilityHidden(true)
+            if isRenaming {
+                nameField
+            } else {
+                Text(group.name)
+                    .font(Theme.groupNameFont)
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Theme.faint)
+                    .rotationEffect(.degrees(group.folded ? -90 : 0))
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: 0)
+            if hovering, !isRenaming {
+                Button("Close group", systemImage: "xmark") { animate { store.close(group) } }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(CloseButtonStyle())
+                    .help("Close group")
+            }
+        }
+        .padding(.leading, Theme.rowPadding)
+        .padding(.trailing, 4)
+        .frame(height: Theme.groupHeaderHeight)
+        .contentShape(Rectangle())
+        .onTapGesture { if !isRenaming { toggleFold() } }
+        .onHover { hovering = $0 }
+        // While renaming, VoiceOver reaches the name field itself.
+        .accessibilityElement(children: isRenaming ? .contain : .ignore)
+        .accessibilityLabel(group.name)
+        .accessibilityValue(group.folded ? "Folded" : "Open")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(group.folded ? "Shows the group's tabs" : "Hides the group's tabs")
+        .accessibilityAction { toggleFold() }
+        .accessibilityAction(named: "Rename", startRenaming)
+        .accessibilityAction(named: "Close group") { animate { store.close(group) } }
+    }
+
+    private var nameField: some View {
+        TextField("Group name", text: $draft)
+            .textFieldStyle(.plain)
+            .font(Theme.groupNameFont)
+            .foregroundStyle(Theme.ink)
+            .focused($nameFocused)
+            .onSubmit(finishRenaming)
+            .onExitCommand { renaming = nil }
+            .onChange(of: nameFocused) { _, focused in if !focused { finishRenaming() } }
+            .onAppear {
+                draft = group.name
+                nameFocused = true
+            }
+    }
+
+    /// The same frosted glass as the Basecamp tiles, washed with the space's color.
+    @ViewBuilder private var card: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear)
+                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
+                .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
+        } else {
+            shape.fill(Theme.groupFill)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        }
+    }
+
+    private func toggleFold() {
+        animate { store.setFolded(group, !group.folded) }
+    }
+
+    private func startRenaming() {
+        renaming = group.id
+    }
+
+    private func finishRenaming() {
+        guard isRenaming else { return }
+        store.rename(group, to: draft)
+        renaming = nil
+    }
+
+    private func animate(_ change: () -> Void) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2), change)
     }
 }
 

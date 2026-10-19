@@ -44,6 +44,11 @@ enum Theme {
     /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
     static let tileRadius: CGFloat = 9
 
+    /// Group cards: frosted like the tiles, a touch more see-through, and
+    /// washed with the space's color.
+    static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xF5F1EC, darkOpacity: 0.05)
+    static let groupTint = 0.10
+
     /// A chosen Basecamp tile's colors: a main color for its wash and glow,
     /// and a ring of eight for its edge, clockwise from the right.
     struct TileAccent: Equatable {
@@ -119,6 +124,10 @@ enum Theme {
     static let rowSpacing: CGFloat = 4
     static let rowPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 20
+    /// Air between group cards. Their name line is shorter than a tab row,
+    /// so it reads as a label, not another tab.
+    static let groupSpacing: CGFloat = 6
+    static let groupHeaderHeight: CGFloat = 30
     /// How the sidebar slides in and out. The traffic lights follow the same
     /// curve (see `WindowSetup`), so the two stay together.
     static let slideDuration = 0.2
@@ -148,6 +157,7 @@ enum Theme {
 
     static let tabFont = Font.system(size: 13)
     static let labelFont = Font.system(size: 12)
+    static let groupNameFont = Font.system(size: 12, weight: .medium)
 
     // MARK: Motion
 

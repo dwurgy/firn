@@ -129,9 +129,9 @@ Each space is its own browser. This is the heart of the prototype; get it right 
 - **Vertical tabs:** favicon and title; close button on hover; drag to reorder with rows gliding into place; sidebar collapses and peeks at the left edge.
 - **Basecamp:** the grid of everyday sites at the top of each space (up to 12), different in every space. Tiles remember their home address; closing one lets it rest until clicked; "Go back to home" resets it.
 - **Groups** (replace pins; David, 2026-10-18): the way to keep tabs. Two tiers in one clean sidebar, top to bottom: the address bar, Basecamp tiles, then the tab list (groups first, then loose tabs). No divider line: the groups' frosted cards already set what's kept apart from loose tabs.
-  - A group is a name and a flat set of tabs (no nesting), shown as a soft frosted card tinted by the space's color: the name, a space-color dot, and a fold arrow; folded, it shows a count. No emoji or custom icons, no indenting.
+  - A group is a name and a flat set of tabs (no nesting), shown as a soft frosted card tinted by the space's color: a space-color dot, the name, and a fold arrow just after it; no count, even folded (David, 2026-10-18). No emoji or custom icons, no indenting: the card already sets the tabs apart.
   - Groups always sit above the loose tabs. A new group appears below the other groups, just above the loose tabs (the tab barely moves); drag to reorder groups, drag tabs between them, and drag a tab out of its card to take it out. A group of one is fine; closing its last tab ends it.
-  - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group (no always-visible close button).
+  - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group. A close button shows only while the pointer is on the group's name line; ⇧⌘T brings a closed group back whole, with all its tabs (once ⇧⌘T exists).
   - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive.
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.
 - **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default and shows a count; open it to see them, click one to bring it back. Never archived: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
@@ -243,7 +243,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
-- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); 3b-ii groups: model and saving done; next, the look (a mockup first).
+- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); 3b-ii groups: model and saving done; the look built (cards, fold, rename, hover close); next, dragging between groups and loose tabs, then ⇧⌘T for tabs and whole groups.
 
 ---
 

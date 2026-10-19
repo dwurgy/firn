@@ -135,7 +135,7 @@ Each space is its own browser. This is the heart of the prototype; get it right 
   - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive.
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.
 - **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default and shows a count; open it to see them, click one to bring it back. Never archived: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
-- **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab.
+- **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab (at the top of the loose tabs). Links clicked in a Basecamp tile, and maybe in a group, should open as a Lookout first, so you glance before keeping (David, 2026-10-18); until Lookout exists they open at the top of the loose tabs.
 - **Split view:** two pages side by side, each with its own address and back/forward; drag the gap to resize; one row in the sidebar.
 - **Command bar:** one shortcut opens a centered bar: type an address, search, jump to an open tab in this space, or run an action by name.
 - **Later, as on Electron:** sleeping tabs, sound and the mini player, downloads, find in page, zoom, permissions, saved passwords, ad and tracker blocking, and scam warnings.
@@ -213,7 +213,7 @@ Don't add these without David asking again.
 
 ## Open questions (David hasn't decided; don't build these)
 
-- **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups. Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
+- **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups (David wants to explore this one, 2026-10-18: off unless chosen, and always renamable; groups start as "New Group"). Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
 - **Optional sync across devices (iCloud):** tabs, spaces, Basecamp, and groups appear on a person's other Macs and, later, their iPhone. Off by default, and a plain-words choice when turned on: the data goes only to the person's own iCloud (CloudKit), never to Firn or any server of ours. Saved passwords would use iCloud Keychain, not our own sync. Cookies and sign-ins can't sync (WebKit doesn't allow it), so each device signs in on its own; the setting should say so. Each space's separation rules carry over: a separate space stays separate on every device. Sync changes "your data stays on your device" for people who turn it on, so any wording about it needs David's OK. It's its own step with a plan first, on Opus, after the core browser feels right.
 
 ---
@@ -243,7 +243,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
-- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); next 3b-ii (groups: model and saving, then the look with a mockup first).
+- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); 3b-ii groups: model and saving done; next, the look (a mockup first).
 
 ---
 

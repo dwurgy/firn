@@ -217,7 +217,7 @@ private struct TabList: View {
     private var step: CGFloat { Theme.rowHeight + Theme.rowSpacing }
 
     var body: some View {
-        let tabs = store.openTabs
+        let tabs = store.looseTabs
         // The list fills the sidebar's height, so the blank space below the
         // tabs (and the gaps between them) moves the window too.
         GeometryReader { proxy in

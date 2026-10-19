@@ -3,7 +3,7 @@ import Testing
 @testable import FirnCore
 
 @MainActor
-struct PinsAndSessionTests {
+struct BasecampAndSessionTests {
     private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore(restoring session: Session? = nil, now: @escaping () -> Date = Date.init) -> BrowserStore {
@@ -20,26 +20,26 @@ struct PinsAndSessionTests {
         store.session(sidebarWidth: 300, sidebarCollapsed: true)
     }
 
-    // MARK: - Pins and Basecamp
+    // MARK: - Basecamp
 
-    @Test func pinningMovesATabToThePinsWithItsAddressAsHome() {
+    @Test func addingToBasecampMakesTheAddressHome() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
-        store.pin(a)
-        #expect(hosts(store.pinnedTabs) == ["a.example"])
+        store.addToBasecamp(a)
+        #expect(hosts(store.basecampTabs) == ["a.example"])
         #expect(hosts(store.openTabs) == ["b.example"])
         #expect(a.homeURL == url("a"))
         #expect(hosts(store.sidebarTabs) == ["a.example", "b.example"])
     }
 
-    @Test func closingAPinRestsItAndShowsTheLastTabSeen() {
+    @Test func closingATileRestsItAndShowsTheLastTabSeen() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         let b = store.openTab(url("b"))
-        store.pin(b)
+        store.addToBasecamp(b)
         store.close(b)
-        #expect(store.pinnedTabs.map(\.id) == [b.id])
+        #expect(store.basecampTabs.map(\.id) == [b.id])
         #expect(b.isResting)
         #expect(store.activeTabID == a.id)
         store.select(b)
@@ -60,7 +60,7 @@ struct PinsAndSessionTests {
     @Test func goingHomeWhileRestingWakesAtHome() {
         let store = makeStore()
         let a = store.openTab(url("a"))
-        store.pin(a)
+        store.addToBasecamp(a)
         a.page?.load(url("elsewhere"))
         store.close(a)
         store.goHome(a)
@@ -79,34 +79,34 @@ struct PinsAndSessionTests {
         #expect(extra.place == .open)
     }
 
-    @Test func unpinningAnAwakeTabKeepsItAtTheTopOfTheTabs() {
+    @Test func removingAnAwakeTileKeepsItAtTheTopOfTheTabs() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
-        store.pin(a)
-        store.unpin(a)
+        store.addToBasecamp(a)
+        store.removeFromBasecamp(a)
         #expect(hosts(store.openTabs) == ["a.example", "b.example"])
         #expect(a.homeURL == nil)
     }
 
-    @Test func unpinningARestingTabRemovesIt() {
+    @Test func removingARestingTileRemovesIt() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
-        store.pin(a)
+        store.addToBasecamp(a)
         store.close(a)
-        store.unpin(a)
-        #expect(store.pinnedTabs.isEmpty)
+        store.removeFromBasecamp(a)
+        #expect(store.basecampTabs.isEmpty)
         #expect(hosts(store.openTabs) == ["b.example"])
     }
 
-    @Test func linksFromAPinOpenAtTheTopOfTheTabs() {
+    @Test func linksFromATileOpenAtTheTopOfTheTabs() {
         let store = makeStore()
         store.openTab(url("a"))
-        let pin = store.openTab(url("pin"))
-        store.pin(pin)
-        store.openTab(url("b"), opener: pin, inBackground: true)
-        store.openTab(url("c"), opener: pin, inBackground: true)
+        let tile = store.openTab(url("tile"))
+        store.addToBasecamp(tile)
+        store.openTab(url("b"), opener: tile, inBackground: true)
+        store.openTab(url("c"), opener: tile, inBackground: true)
         #expect(hosts(store.openTabs) == ["b.example", "c.example", "a.example"])
     }
 
@@ -115,10 +115,10 @@ struct PinsAndSessionTests {
         let a = store.openTab(url("a"))
         let b = store.openTab(url("b"))
         store.openTab(url("c"))
-        store.pin(a)
-        store.pin(b)
+        store.addToBasecamp(a)
+        store.addToBasecamp(b)
         store.move(b, to: 0)
-        #expect(hosts(store.pinnedTabs) == ["b.example", "a.example"])
+        #expect(hosts(store.basecampTabs) == ["b.example", "a.example"])
         #expect(hosts(store.openTabs) == ["c.example"])
     }
 
@@ -130,16 +130,14 @@ struct PinsAndSessionTests {
         let b = store.openTab(url("b"))
         let c = store.openTab(url("c"))
         store.addToBasecamp(a)
-        store.pin(b)
         (c.page as? FakePage)?.title = "Page C"
         store.select(b)
 
         let restored = makeStore(restoring: save(store))
         #expect(hosts(restored.basecampTabs) == ["a.example"])
-        #expect(hosts(restored.pinnedTabs) == ["b.example"])
-        #expect(hosts(restored.openTabs) == ["c.example"])
-        #expect(restored.openTabs.first?.title == "Page C")
-        #expect(restored.pinnedTabs.first?.homeURL == url("b"))
+        #expect(hosts(restored.openTabs) == ["b.example", "c.example"])
+        #expect(restored.openTabs.last?.title == "Page C")
+        #expect(restored.basecampTabs.first?.homeURL == url("a"))
         #expect(restored.activeTabID == b.id)
         #expect(save(restored).window == save(store).window)
     }
@@ -159,7 +157,7 @@ struct PinsAndSessionTests {
         let b = store.openTab(url("b"), inBackground: true)
         let first = save(store)
         clock += 60
-        store.pin(b) // Stays last, so a's order doesn't change.
+        store.addToBasecamp(b) // Stays last, so a's order doesn't change.
         let second = save(store)
         let changed = Dictionary(uniqueKeysWithValues: second.tabs.map { ($0.url!.host()!, $0.lastChangedAt) })
         #expect(changed["a.example"] == first.tabs[0].lastChangedAt)

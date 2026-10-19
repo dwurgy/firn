@@ -7,15 +7,16 @@ import Observation
 @Observable
 public final class Tab: Identifiable {
     public enum Place: String, Codable, Sendable {
-        case basecamp, pinned, open, archived
+        case basecamp, open, archived
     }
 
     public let id: UUID
     public let spaceID: UUID
     public internal(set) var place: Place
-    /// Where a Basecamp or pinned tab goes back to: its address when it was
-    /// pinned or added to Basecamp.
+    /// Where a Basecamp tile goes back to: its address when it was added.
     public internal(set) var homeURL: URL?
+    /// The group an everyday tab is kept in, if any.
+    public internal(set) var groupID: UUID?
     /// The tab whose link opened this one, if any.
     public var openerTabID: UUID?
     public internal(set) var lastActiveAt: Date
@@ -29,13 +30,14 @@ public final class Tab: Identifiable {
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
-        url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
+        url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, groupID: UUID? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
         page: (any PageController)? = nil
     ) {
         self.id = id
         self.spaceID = spaceID
         self.place = place
         self.homeURL = homeURL
+        self.groupID = groupID
         self.openerTabID = openerTabID
         self.lastActiveAt = lastActiveAt
         self.restingURL = url
@@ -73,11 +75,11 @@ public final class Tab: Identifiable {
         return a == b
     }
 
-    /// Whether the tab has no page right now (closed pins and Basecamp
-    /// tiles rest until clicked, as do tabs not yet shown since launch).
+    /// Whether the tab has no page right now (closed Basecamp tiles rest
+    /// until clicked, as do tabs not yet shown since launch).
     public var isResting: Bool { page == nil }
 
-    /// A Basecamp or pinned tab that has wandered from its home address.
+    /// A Basecamp tile that has wandered from its home address.
     public var isAwayFromHome: Bool {
         guard let homeURL else { return false }
         return url != homeURL

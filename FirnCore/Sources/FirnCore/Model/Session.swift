@@ -1,6 +1,6 @@
 import Foundation
 
-/// Everything Firn remembers between launches: spaces, tabs, and the window.
+/// Everything Firn remembers between launches: spaces, groups, tabs, and the window.
 /// Saved as JSON (see `SessionFile`). Every record has a stable id and a
 /// last-changed time, so it can be synced one day; nothing syncs now.
 public struct Session: Codable, Equatable, Sendable {
@@ -9,14 +9,57 @@ public struct Session: Codable, Equatable, Sendable {
 
     public var version: Int
     public var spaces: [Space]
+    /// Missing in files from before groups, which simply had none.
+    public var groups: [GroupRecord]
     public var tabs: [TabRecord]
     public var window: WindowRecord
 
-    public init(version: Int = currentVersion, spaces: [Space], tabs: [TabRecord], window: WindowRecord) {
+    public init(
+        version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], tabs: [TabRecord], window: WindowRecord
+    ) {
         self.version = version
         self.spaces = spaces
+        self.groups = groups
         self.tabs = tabs
         self.window = window
+    }
+
+    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        spaces = try container.decode([Space].self, forKey: .spaces)
+        groups = try container.decodeIfPresent([GroupRecord].self, forKey: .groups) ?? []
+        tabs = try container.decode([TabRecord].self, forKey: .tabs)
+        window = try container.decode(WindowRecord.self, forKey: .window)
+    }
+}
+
+/// A group as saved.
+public struct GroupRecord: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var spaceID: UUID
+    public var name: String
+    /// Its position among all groups (each space's groups keep this order).
+    public var order: Int
+    public var folded: Bool
+    public var lastChangedAt: Date
+
+    public init(id: UUID, spaceID: UUID, name: String, order: Int, folded: Bool, lastChangedAt: Date) {
+        self.id = id
+        self.spaceID = spaceID
+        self.name = name
+        self.order = order
+        self.folded = folded
+        self.lastChangedAt = lastChangedAt
+    }
+
+    /// The same group, ignoring when it last changed.
+    func sameContent(as other: GroupRecord) -> Bool {
+        var other = other
+        other.lastChangedAt = lastChangedAt
+        return self == other
     }
 }
 
@@ -30,6 +73,8 @@ public struct TabRecord: Codable, Equatable, Sendable {
     /// The site's icon, a small PNG. Missing in files from before 3c.
     public var icon: Data?
     public var homeURL: URL?
+    /// The group it's kept in, if any. Missing in files from before groups.
+    public var groupID: UUID?
     /// Its position among all tabs (each space's lists keep this order).
     public var order: Int
     public var lastActiveAt: Date
@@ -38,7 +83,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
 
     public init(
         id: UUID, spaceID: UUID, place: Tab.Place, url: URL?, title: String, icon: Data? = nil, homeURL: URL?,
-        order: Int, lastActiveAt: Date, openerTabID: UUID?, lastChangedAt: Date
+        groupID: UUID? = nil, order: Int, lastActiveAt: Date, openerTabID: UUID?, lastChangedAt: Date
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -47,6 +92,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.title = title
         self.icon = icon
         self.homeURL = homeURL
+        self.groupID = groupID
         self.order = order
         self.lastActiveAt = lastActiveAt
         self.openerTabID = openerTabID

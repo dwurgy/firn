@@ -128,9 +128,9 @@ Each space is its own browser. This is the heart of the prototype; get it right 
 
 - **Vertical tabs:** favicon and title; close button on hover; drag to reorder with rows gliding into place; sidebar collapses and peeks at the left edge.
 - **Basecamp:** the grid of everyday sites at the top of each space (up to 12), different in every space. Tiles remember their home address; closing one lets it rest until clicked; "Go back to home" resets it.
-- **Groups** (replace pins; David, 2026-10-18): the way to keep tabs. Two tiers: what's kept (Basecamp, then groups) sits above a clear divider, loose tabs below it.
+- **Groups** (replace pins; David, 2026-10-18): the way to keep tabs. Two tiers in one clean sidebar, top to bottom: the address bar, Basecamp tiles, then the tab list (groups first, then loose tabs). No divider line: the groups' frosted cards already set what's kept apart from loose tabs.
   - A group is a name and a flat set of tabs (no nesting), shown as a soft frosted card tinted by the space's color: the name, a space-color dot, and a fold arrow; folded, it shows a count. No emoji or custom icons, no indenting.
-  - Groups always sit above the divider. A new group appears at the bottom of the groups, just above the divider (the tab barely moves); drag to reorder groups, drag tabs between them, and drag a tab below the divider to take it out. A group of one is fine; closing its last tab ends it.
+  - Groups always sit above the loose tabs. A new group appears below the other groups, just above the loose tabs (the tab barely moves); drag to reorder groups, drag tabs between them, and drag a tab out of its card to take it out. A group of one is fine; closing its last tab ends it.
   - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group (no always-visible close button).
   - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive.
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.

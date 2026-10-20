@@ -386,6 +386,13 @@ struct BrowserCommands: Commands {
             Button("Close Tab") { if let tab = store.activeTab { store.close(tab) } }
                 .keyboardShortcut("w")
                 .disabled(store.activeTab == nil)
+            Button(store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab") {
+                let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                withAnimation(Theme.glide(reduceMotion: reduceMotion)) { store.reopenClosed() }
+                window.focusPage()
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
+            .disabled(store.nextToReopen == nil)
             Button("Close Window") { NSApp.keyWindow?.performClose(nil) }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
         }

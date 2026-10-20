@@ -22,6 +22,11 @@ public final class BrowserStore {
     /// Where new tabs go in a space's tab list (a setting; the app keeps it).
     /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
     public var newTabPlacement: NewTabPlacement = .bottom
+    /// What ⇧⌘T can bring back, oldest first, each in its own space. Kept
+    /// only while Firn runs, like a browser's closed-tab list.
+    private var closed: [ClosedItem] = []
+    /// How many closed tabs and groups are kept, across all spaces.
+    static let closedLimit = 30
 
     @ObservationIgnored private let makePage: @MainActor (_ dataStoreID: UUID) -> any PageController
     @ObservationIgnored private let now: () -> Date
@@ -239,9 +244,16 @@ public final class BrowserStore {
     /// group or the loose tabs (or above, if it was last); failing that, the
     /// tab in this space that was on screen most recently.
     public func close(_ tab: Tab, showing next: Tab? = nil) {
+        close(tab, showing: next, remembering: true)
+    }
+
+    /// `remembering`: whether ⇧⌘T can bring it back (not a popup that
+    /// closed itself).
+    private func close(_ tab: Tab, showing next: Tab?, remembering: Bool) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         let siblings = siblings(of: tab)
         let position = tab.place == .open ? siblings.firstIndex { $0.id == tab.id } : nil
+        if remembering { rememberClosing(tab) }
         tab.sleep()
         if tab.place != .basecamp {
             tabs.remove(at: index)
@@ -415,6 +427,9 @@ public final class BrowserStore {
         guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
         let members = tabs(in: group)
         let wasShowing = members.contains { $0.id == activeTabID }
+        // So the tab on screen is the one shown again if the group comes back.
+        if wasShowing { activeTab?.lastActiveAt = now() }
+        rememberClosing(groups[index], members: members)
         for tab in members { tab.sleep() }
         tabs.removeAll { $0.groupID == group.id }
         groups.remove(at: index)
@@ -428,6 +443,75 @@ public final class BrowserStore {
     private func endIfEmpty(_ groupID: UUID?) {
         guard let groupID, !tabs.contains(where: { $0.groupID == groupID }) else { return }
         groups.removeAll { $0.id == groupID }
+    }
+
+    // MARK: - Reopening
+
+    /// What ⇧⌘T would bring back in the current space, if anything.
+    public var nextToReopen: ReopenKind? {
+        switch closed.last(where: { $0.spaceID == activeSpaceID }) {
+        case .tab: .tab
+        case .group: .group
+        case nil: nil
+        }
+    }
+
+    /// Brings back the tab or group closed most recently in the current
+    /// space, where it was, and shows it. A tab goes back into its group
+    /// if the group is still there (or loose, where it was, if not); a
+    /// group comes back whole, open, showing the tab last on screen.
+    /// Closed tabs come back asleep, so they load again from their address.
+    public func reopenClosed() {
+        guard let index = closed.lastIndex(where: { $0.spaceID == activeSpaceID }) else { return }
+        switch closed.remove(at: index) {
+        case let .tab(tab, position):
+            if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
+                insert(tab, at: position, in: tabs(in: group), fallback: arrivalIndex(in: tab.spaceID))
+                setFolded(group, false)
+            } else {
+                tab.groupID = nil
+                insertInTabList([tab], at: position, fallback: arrivalIndex(in: tab.spaceID))
+            }
+            select(tab)
+        case let .group(group, members, position):
+            guard !groups.contains(where: { $0.id == group.id }) else { return }
+            var group = group
+            group.folded = false
+            groups.append(group)
+            insertInTabList(members, at: position, fallback: arrivalIndex(in: group.spaceID))
+            if let recent = members.max(by: { $0.lastActiveAt < $1.lastActiveAt }) { select(recent) }
+        }
+    }
+
+    /// Remembers an everyday tab about to close. The last tab of a group
+    /// ends the group, so the group is remembered instead, whole.
+    private func rememberClosing(_ tab: Tab) {
+        guard tab.place == .open, tab.url != nil else { return }
+        if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
+            let members = tabs(in: group)
+            if members.count == 1 { return rememberClosing(group, members: members) }
+            remember(.tab(tab, position: members.firstIndex { $0.id == tab.id } ?? members.count))
+        } else {
+            remember(.tab(tab, position: tabListPosition(of: tab.id, in: tab.spaceID)))
+        }
+    }
+
+    private func rememberClosing(_ group: TabGroup, members: [Tab]) {
+        let members = members.filter { $0.url != nil }
+        guard !members.isEmpty else { return }
+        remember(.group(group, members, position: tabListPosition(of: group.id, in: group.spaceID)))
+    }
+
+    private func remember(_ item: ClosedItem) {
+        closed.append(item)
+        if closed.count > Self.closedLimit { closed.removeFirst(closed.count - Self.closedLimit) }
+    }
+
+    /// Where a loose tab or group sits in its space's tab list (each group
+    /// counting as one).
+    private func tabListPosition(of id: UUID, in spaceID: UUID) -> Int {
+        let items = items(in: spaceID)
+        return items.firstIndex { $0.id == id } ?? items.count
     }
 
     // MARK: - What pages ask for
@@ -448,7 +532,7 @@ public final class BrowserStore {
             openTab(url, opener: tab, inBackground: inBackground)
         case .close:
             // A popup that's done (a sign-in, say) hands back to its opener.
-            close(tab, showing: tabs.first { $0.id == tab.openerTabID })
+            close(tab, showing: tabs.first { $0.id == tab.openerTabID }, remembering: false)
         }
     }
 
@@ -608,6 +692,29 @@ public final class BrowserStore {
 
     private static func webURL(_ url: URL) -> URL? {
         WebAddress.isWebURL(url) ? url : nil
+    }
+}
+
+/// What ⇧⌘T brings back next: a tab, or a whole group.
+public enum ReopenKind: Sendable {
+    case tab, group
+}
+
+/// A closed tab or group ⇧⌘T can bring back, and where it was: a tab's
+/// place among its group's tabs (or in the tab list, if loose), or a
+/// group's place in the tab list. The tabs are the closed ones, asleep.
+@MainActor
+private enum ClosedItem {
+    case tab(Tab, position: Int)
+    case group(TabGroup, [Tab], position: Int)
+
+    /// Each only ever comes back in its own space, so nothing crosses
+    /// between spaces.
+    var spaceID: UUID {
+        switch self {
+        case let .tab(tab, _): tab.spaceID
+        case let .group(group, _, _): group.spaceID
+        }
     }
 }
 

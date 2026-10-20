@@ -90,6 +90,9 @@ enum Theme {
         Color(light: spaceHex(name), dark: spaceHex(name))
     }
 
+    /// Firn's space colors, by name, in the order new spaces take them.
+    static let spaceColorNames = ["glacier", "sand", "sage", "heather", "ochre", "dusk", "clay", "lagoon"]
+
     /// How strongly the active space tints the frame: 16% light, 14% dark.
     static func frameTint(_ name: String) -> Color {
         Color(light: spaceHex(name), lightOpacity: 0.16, dark: spaceHex(name), darkOpacity: 0.14)

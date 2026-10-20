@@ -43,6 +43,25 @@ final class WindowModel {
 
     func toggleSidebar() { setSidebarCollapsed(!sidebarCollapsed) }
 
+    // MARK: Spaces
+
+    /// Changes which space is on screen: the sidebar's tabs fade across and
+    /// the tint cross-fades (`SpaceTint`); Reduce Motion: in place.
+    func showSpace(_ change: () -> Void) {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2), change)
+        focusPage()
+    }
+
+    /// Adds a separate space in the next color not yet taken, and shows it.
+    /// For now; the New space sheet (Phase 4, step 3) takes over.
+    func addSpace() {
+        let taken = Set(store.spaces.map(\.color))
+        let names = Theme.spaceColorNames
+        let color = names.first { !taken.contains($0) } ?? names[store.spaces.count % names.count]
+        showSpace { store.addSpace(name: Space.defaultName, icon: "leaf", color: color) }
+    }
+
     // MARK: Tab actions (the tab's right-click menu and the menu bar)
 
     /// Starts a group with an everyday tab. The tab doesn't move: its card
@@ -195,7 +214,7 @@ struct BrowserWindow: View {
         .background {
             ZStack {
                 Theme.frame
-                Theme.frameTint(store.activeSpace.color)
+                SpaceTint(color: store.activeSpace.color)
                 // Empty frame (around the page, the sidebar's top row) moves the window.
                 WindowDragArea()
                 WindowSetup(lights: $lights)
@@ -267,7 +286,7 @@ struct BrowserWindow: View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return ZStack {
             Theme.frame
-            Theme.frameTint(store.activeSpace.color)
+            SpaceTint(color: store.activeSpace.color)
         }
         .clipShape(shape)
         .overlay {
@@ -499,6 +518,19 @@ struct BrowserCommands: Commands {
             Button("Show Previous Tab") { store.selectTab(by: -1); window.focusPage() }
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
                 .disabled(store.sidebarTabs.count < 2)
+            Divider()
+            // As in Arc: ⌃1–9 for a space, ⌥⌘ and the arrows for the next one.
+            ForEach(Array(store.spaces.prefix(9).enumerated()), id: \.element.id) { index, space in
+                Button(space.name) { window.showSpace { store.selectSpace(space) } }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .control)
+            }
+            Button("Show Next Space") { window.showSpace { store.selectSpace(by: 1) } }
+                .keyboardShortcut(.rightArrow, modifiers: [.option, .command])
+                .disabled(store.spaces.count < 2)
+            Button("Show Previous Space") { window.showSpace { store.selectSpace(by: -1) } }
+                .keyboardShortcut(.leftArrow, modifiers: [.option, .command])
+                .disabled(store.spaces.count < 2)
+            Button("New Space") { window.addSpace() }
             Divider()
         }
     }

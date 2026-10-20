@@ -246,7 +246,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 2: done** (2026-10-18).
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
-- **Phase 4: in progress.** Step 1 (the space rules) done 2026-10-19; next, the space row in the sidebar (Opus). Plan in `docs/HISTORY.md`.
+- **Phase 4: in progress.** Steps 1 (the space rules) and 2 (the space row) done 2026-10-19; next, the New space and Edit sheets (Opus). Plan in `docs/HISTORY.md`.
 
 ---
 

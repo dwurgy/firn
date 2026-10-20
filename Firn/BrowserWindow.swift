@@ -30,6 +30,9 @@ final class WindowModel {
     /// A group just made: its card starts thawed (looking like a loose tab)
     /// and frost forms around its tab (see `TabList`).
     var formingGroupID: UUID?
+    /// The New space or Edit space sheet, while it's open. Here so the menu
+    /// bar's New Space… can open it too.
+    var spaceSheet: SpaceSheetMode?
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -53,13 +56,14 @@ final class WindowModel {
         focusPage()
     }
 
-    /// Adds a separate space in the next color not yet taken, and shows it.
-    /// For now; the New space sheet (Phase 4, step 3) takes over.
-    func addSpace() {
+    /// Opens the New space sheet.
+    func newSpace() { spaceSheet = .new }
+
+    /// The first space color no space has yet (or, with all taken, the next in turn).
+    var freeSpaceColor: String {
         let taken = Set(store.spaces.map(\.color))
         let names = Theme.spaceColorNames
-        let color = names.first { !taken.contains($0) } ?? names[store.spaces.count % names.count]
-        showSpace { store.addSpace(name: Space.defaultName, icon: "leaf", color: color) }
+        return names.first { !taken.contains($0) } ?? names[store.spaces.count % names.count]
     }
 
     // MARK: Tab actions (the tab's right-click menu and the menu bar)
@@ -238,6 +242,9 @@ struct BrowserWindow: View {
         .ignoresSafeArea()
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))
+        .sheet(item: Binding(get: { window.spaceSheet }, set: { window.spaceSheet = $0 })) { mode in
+            SpaceSheet(window: window, mode: mode)
+        }
         .onAppear { window.editAddress(.newTab) }
         .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
         .onChange(of: store.openTabs.isEmpty) {
@@ -530,7 +537,7 @@ struct BrowserCommands: Commands {
             Button("Show Previous Space") { window.showSpace { store.selectSpace(by: -1) } }
                 .keyboardShortcut(.leftArrow, modifiers: [.option, .command])
                 .disabled(store.spaces.count < 2)
-            Button("New Space") { window.addSpace() }
+            Button("New Space…") { window.newSpace() }
             Divider()
         }
     }

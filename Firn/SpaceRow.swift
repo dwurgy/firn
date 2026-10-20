@@ -2,7 +2,7 @@ import FirnCore
 import SwiftUI
 
 /// The row at the bottom of the sidebar: one button per space, in order, and
-/// a button to add one. Until Firn's own space icons arrive (Phase 4, step 4),
+/// a button to add one (the New space sheet). Until Firn's own space icons arrive (Phase 4, step 4),
 /// each space is a soft dot in its color.
 struct SpaceRow: View {
     let store: BrowserStore
@@ -18,7 +18,7 @@ struct SpaceRow: View {
             buttons
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, (Theme.rowHeight - 28) / 2)
-            ChromeButton("New space", systemImage: "plus") { window.addSpace() }
+            ChromeButton("New space", systemImage: "plus") { window.newSpace() }
         }
         .frame(minHeight: Theme.rowHeight)
         .confirmationDialog(
@@ -43,7 +43,8 @@ struct SpaceRow: View {
                     window.showSpace { store.selectSpace(space) }
                 }
                 .contextMenu {
-                    // The last space can't be deleted, so its menu stays empty.
+                    Button("Edit Space…") { window.spaceSheet = .edit(space.id) }
+                    // The last space can't be deleted.
                     if store.spaces.count > 1 {
                         Button("Delete Space…") { deleting = space }
                     }

@@ -161,6 +161,10 @@ enum Theme {
     static let tabFont = Font.system(size: 13)
     static let labelFont = Font.system(size: 12)
     static let groupNameFont = Font.system(size: 12, weight: .medium)
+    static let hintFont = Font.system(size: 11)
+    /// Panel titles. Fraunces at 22pt once it's bundled (Phase 6); the
+    /// system font until then.
+    static let panelTitleFont = Font.system(size: 20, weight: .semibold)
 
     // MARK: Motion
 

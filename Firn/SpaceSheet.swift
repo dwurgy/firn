@@ -9,7 +9,7 @@ enum SpaceSheetMode: Hashable, Identifiable {
     var id: Self { self }
 }
 
-/// The New space and Edit space sheet: a name, a color, and (for a new space)
+/// The New space and Edit space sheet: a name, a color, an icon, and (for a new space)
 /// the one sharing choice (CLAUDE.md, How spaces work). Nothing changes until
 /// Create or Save; Stop Sharing is the exception, after its own confirmation.
 /// A native sheet, so Esc, Return, focus, and VoiceOver come from macOS.
@@ -20,6 +20,7 @@ struct SpaceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var color = Theme.spaceColorNames[0]
+    @State private var icon = SpaceIcon.default
     /// New space only: keep it separate (the default), or share sign-ins.
     @State private var shares = false
     @State private var shareWith: UUID?
@@ -41,6 +42,7 @@ struct SpaceSheet: View {
                 .foregroundStyle(Theme.ink)
             section("Name") { nameField }
             section("Color") { swatches }
+            section("Icon") { icons }
             section("Sign-ins") {
                 if let editing { signInsStatus(of: editing) } else { sharingChoice }
             }
@@ -111,6 +113,16 @@ struct SpaceSheet: View {
         }
     }
 
+    /// Two even rows of eight. The chosen one wears the space's color; the
+    /// rest stay quiet, so one accent leads.
+    private var icons: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
+            ForEach(SpaceIcon.allCases, id: \.self) { choice in
+                IconChoice(icon: choice, color: Theme.spaceColor(color), isSelected: choice == icon) { icon = choice }
+            }
+        }
+    }
+
     /// New space: separate (recommended), or sharing another space's sign-ins.
     private var sharingChoice: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -173,6 +185,7 @@ struct SpaceSheet: View {
         if let editing {
             name = editing.name
             color = editing.color
+            icon = SpaceIcon(stored: editing.icon)
         } else {
             color = window.freeSpaceColor
             shareWith = store.activeSpaceID
@@ -184,12 +197,12 @@ struct SpaceSheet: View {
         guard !finished else { return }
         finished = true
         if let editing {
-            store.updateSpace(editing, name: name, icon: editing.icon, color: color)
+            store.updateSpace(editing, name: name, icon: icon.rawValue, color: color)
             dismiss()
         } else {
             let sharing = shares ? shareTarget : nil
             dismiss()
-            window.showSpace { store.addSpace(name: name, icon: "leaf", color: color, sharingWith: sharing) }
+            window.showSpace { store.addSpace(name: name, icon: icon.rawValue, color: color, sharingWith: sharing) }
         }
     }
 
@@ -227,6 +240,41 @@ private struct ColorSwatch: View {
         .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
         .help(name.capitalized)
         .accessibilityLabel(name.capitalized)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// One icon to pick: quiet ink until chosen, then the space's color on a
+/// soft wash of it, ringed like the chosen color.
+private struct IconChoice: View {
+    let icon: SpaceIcon
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            SpaceIconView(icon: icon, size: 18, color: isSelected ? color : Theme.muted)
+                .frame(width: 34, height: 34)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                        .fill(isSelected ? color.opacity(0.16) : hovering ? Theme.hover : .clear)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                        .strokeBorder(color.opacity(isSelected ? 1 : 0), lineWidth: 1.5)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isSelected)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: color)
+        .help(icon.spokenName)
+        .accessibilityLabel(icon.spokenName)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

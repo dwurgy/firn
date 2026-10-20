@@ -2,8 +2,8 @@ import FirnCore
 import SwiftUI
 
 /// The row at the bottom of the sidebar: one button per space, in order, and
-/// a button to add one (the New space sheet). Until Firn's own space icons arrive (Phase 4, step 4),
-/// each space is a soft dot in its color.
+/// a button to add one (the New space sheet). Each space shows its own icon
+/// in its color.
 struct SpaceRow: View {
     let store: BrowserStore
     let window: WindowModel
@@ -126,7 +126,7 @@ private struct CenteredFlow: Layout {
     }
 }
 
-/// One space in the row: its dot, quiet until hovered, lifted like the tab on
+/// One space in the row: its icon, quiet until hovered, lifted like the tab on
 /// screen when it's the space on screen.
 private struct SpaceButton: View {
     let space: Space
@@ -137,9 +137,7 @@ private struct SpaceButton: View {
 
     var body: some View {
         Button(action: action) {
-            Circle()
-                .fill(Theme.spaceColor(space.color))
-                .frame(width: 10, height: 10)
+            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 16, color: Theme.spaceColor(space.color))
         }
         .buttonStyle(SpaceButtonStyle(isActive: isActive))
         .help(number <= 9 ? "\(space.name) (⌃\(number))" : space.name)
@@ -155,7 +153,7 @@ private struct SpaceButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            // Other spaces' dots sit back a little, so one accent leads.
+            // Other spaces' icons sit back a little, so one accent leads.
             .opacity(isActive || hovering ? 1 : 0.55)
             .frame(width: 28, height: 28)
             .background {

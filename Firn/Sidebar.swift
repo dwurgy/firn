@@ -221,37 +221,22 @@ private struct TabList: View {
     private nonisolated static let space = "tabList"
 
     var body: some View {
-        let groups = store.tabGroups
+        let items = shownItems
         // The list fills the sidebar's height, so the blank space below the
         // tabs (and the gaps between them) moves the window too.
         GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: Theme.rowSpacing) {
                     NewTabRow { window.editAddress(.newTab) }
-                    if !groups.isEmpty {
-                        VStack(spacing: Theme.groupSpacing) {
-                            ForEach(groups) { group in
-                                let members = shownTabs(in: group)
-                                GroupCard(
-                                    group: group,
-                                    hasRows: !members.isEmpty,
-                                    color: Theme.spaceColor(store.activeSpace.color),
-                                    renaming: $renamingGroupID,
-                                    store: store
-                                ) {
-                                    ForEach(members) { tab in row(tab) }
-                                }
-                                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
-                                    frames[group.id] = $0
-                                }
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        Group {
+                            switch item {
+                            case let .group(group): card(group)
+                            case let .tab(tab): row(tab)
                             }
                         }
-                        // The cards' own edges keep them apart from the loose
-                        // tabs; a little extra air below lets that read.
-                        .padding(.top, Theme.groupSpacing - Theme.rowSpacing)
-                        .padding(.bottom, Theme.groupSpacing)
+                        .padding(.top, extraSpace(above: index, in: items))
                     }
-                    ForEach(shownLooseTabs) { tab in row(tab) }
                 }
                 .overlay(alignment: .topLeading) { lifted }
                 .coordinateSpace(.named(Self.space))
@@ -266,6 +251,32 @@ private struct TabList: View {
             }
             .scrollIndicators(.never)
         }
+    }
+
+    private func card(_ group: TabGroup) -> some View {
+        let members = shownTabs(in: group)
+        return GroupCard(
+            group: group,
+            hasRows: !members.isEmpty,
+            color: Theme.spaceColor(store.activeSpace.color),
+            renaming: $renamingGroupID,
+            store: store
+        ) {
+            ForEach(members) { tab in row(tab) }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+            frames[group.id] = $0
+        }
+    }
+
+    /// Air around the group cards, on top of the usual gap between rows.
+    /// The cards' own edges keep them apart from loose tabs; a little extra
+    /// below a card lets that read.
+    private func extraSpace(above index: Int, in items: [TabListItem]) -> CGFloat {
+        let isCard = { (item: TabListItem) in if case .group = item { true } else { false } }
+        let afterCard = index > 0 && isCard(items[index - 1])
+        if afterCard && !isCard(items[index]) { return Theme.groupSpacing }
+        return afterCard || isCard(items[index]) ? Theme.groupSpacing - Theme.rowSpacing : 0
     }
 
     private func row(_ tab: FirnCore.Tab) -> some View {
@@ -304,34 +315,43 @@ private struct TabList: View {
         return list
     }
 
-    private var shownLooseTabs: [FirnCore.Tab] {
-        var list = store.looseTabs
+    /// The tab list as it'd be if the dragged tab landed where it is now.
+    private var shownItems: [TabListItem] {
+        var list = store.tabListItems
         guard let drag else { return list }
         list.removeAll { $0.id == drag.tab.id }
-        if case let .loose(position) = drag.target {
-            list.insert(drag.tab, at: min(position, list.count))
+        if case let .list(position) = drag.target {
+            list.insert(.tab(drag.tab), at: min(position, list.count))
         }
         return list
     }
 
     /// The tab rows on show (folded groups hide theirs).
     private var shownTabs: [FirnCore.Tab] {
-        store.tabGroups.filter { !$0.folded }.flatMap(store.tabs(in:)) + store.looseTabs
+        store.sidebarTabs.filter { $0.place == .open }
     }
 
-    /// Where the dragged tab would land with its middle at `y`. Above the
-    /// bottom of a group card, it goes into that group; below the last
-    /// card, among the loose tabs. Only the other rows count, so the slot
-    /// opening up never pushes the target back and forth.
+    /// Where the dragged tab would land with its middle at `y`. Well inside
+    /// a group card, it goes into that group; near a card's top or bottom
+    /// edge, or between cards and rows, it goes in the tab list there. Only
+    /// the other rows count, so the slot opening up never pushes the target
+    /// back and forth.
     private func target(at y: CGFloat, for tab: FirnCore.Tab) -> DropTarget {
         func position(in list: [FirnCore.Tab]) -> Int {
             list.filter { $0.id != tab.id && (frames[$0.id]?.midY ?? .infinity) < y }.count
         }
-        if let group = store.tabGroups.first(where: { frames[$0.id].map { y <= $0.maxY } ?? false }) {
+        let items = store.tabListItems.filter { $0.id != tab.id }
+        for case let .group(group) in items {
+            guard let card = frames[group.id] else { continue }
+            // Above the middle of the name line means above the group. The
+            // bottom edge is thinner, so dropping at a group's end is easy.
+            let top = group.folded ? card.height / 4 : Theme.rowHeight / 2
+            let bottom = group.folded ? card.height / 4 : Theme.rowHeight / 4
+            guard y > card.minY + top, y < card.maxY - bottom else { continue }
             let members = store.tabs(in: group)
             return .group(group.id, group.folded ? members.filter { $0.id != tab.id }.count : position(in: members))
         }
-        return .loose(position(in: store.looseTabs))
+        return .list(items.filter { (frames[$0.id]?.midY ?? .infinity) < y }.count)
     }
 
     /// The tab's place now, so a drag starts by changing nothing.
@@ -340,7 +360,7 @@ private struct TabList: View {
             let members = store.openTabs.filter { $0.groupID == groupID }
             return .group(groupID, members.firstIndex { $0.id == tab.id } ?? 0)
         }
-        return .loose(store.looseTabs.firstIndex { $0.id == tab.id } ?? 0)
+        return .list(store.tabListItems.firstIndex { $0.id == tab.id } ?? 0)
     }
 
     /// The slot the lifted copy lines up with: the open gap, or the name
@@ -416,7 +436,7 @@ private struct TabList: View {
                     if let group = store.tabGroups.first(where: { $0.id == id }) {
                         store.move(current.tab, toGroup: group, at: position)
                     }
-                case let .loose(position):
+                case let .list(position):
                     store.move(current.tab, toGroup: nil, at: position)
                 }
             }
@@ -434,11 +454,11 @@ private struct TabList: View {
     }
 }
 
-/// Where a dragged tab would land: a place among a group's tabs, or among
-/// the loose tabs (not counting the tab itself).
+/// Where a dragged tab would land: a place among a group's tabs, or in the
+/// tab list, where each group counts as one (not counting the tab itself).
 private enum DropTarget: Equatable {
     case group(UUID, Int)
-    case loose(Int)
+    case list(Int)
 }
 
 private struct TabDrag {

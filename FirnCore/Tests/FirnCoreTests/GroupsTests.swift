@@ -27,7 +27,7 @@ struct GroupsTests {
 
     // MARK: - Making groups
 
-    @Test func aNewGroupHoldsTheTabAboveTheLooseTabs() throws {
+    @Test func aNewGroupStaysWhereItsTabWas() throws {
         let store = makeStore()
         let tabs = open("a", "b", "c", in: store)
         let group = try #require(store.newGroup(with: tabs[1]))
@@ -35,15 +35,48 @@ struct GroupsTests {
         #expect(store.tabGroups.map(\.id) == [group.id])
         #expect(hosts(store.tabs(in: group)) == ["b.example"])
         #expect(hosts(store.looseTabs) == ["a.example", "c.example"])
-        #expect(hosts(store.sidebarTabs) == ["b.example", "a.example", "c.example"])
+        #expect(store.tabListItems.map(\.id) == [tabs[0].id, group.id, tabs[2].id])
+        #expect(hosts(store.sidebarTabs) == ["a.example", "b.example", "c.example"])
     }
 
-    @Test func newGroupsGoBelowTheOtherGroups() throws {
+    @Test func aTabTakenFromAGroupStartsItsNewOneJustBelow() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let first = try #require(store.newGroup(with: tabs[0]))
+        store.group(tabs[1], with: tabs[0])
+        let second = try #require(store.newGroup(with: tabs[0]))
+        #expect(store.tabListItems.map(\.id) == [first.id, second.id, tabs[2].id])
+        #expect(hosts(store.tabs(in: first)) == ["b.example"])
+    }
+
+    @Test func groupsAndLooseTabsShareOneOrder() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let group = try #require(store.newGroup(with: tabs[1]))
+        store.group(tabs[0], with: tabs[1])
+        // c, then the group (b, a).
+        store.move(tabs[2], to: 0)
+        #expect(store.tabListItems.map(\.id) == [tabs[2].id, group.id])
+        // Out of the group, below it; the group itself counts as one.
+        store.move(tabs[0], toGroup: nil, at: 2)
+        #expect(store.tabListItems.map(\.id) == [tabs[2].id, group.id, tabs[0].id])
+        store.move(group, to: 2)
+        #expect(store.tabListItems.map(\.id) == [tabs[2].id, tabs[0].id, group.id])
+        // Tab shortcuts go down the list as it's shown.
+        #expect(hosts(store.sidebarTabs) == ["c.example", "a.example", "b.example"])
+    }
+
+    @Test func linksNeverLandInsideAGroup() throws {
         let store = makeStore()
         let tabs = open("a", "b", in: store)
-        let first = try #require(store.newGroup(with: tabs[0]))
-        let second = try #require(store.newGroup(with: tabs[1]))
-        #expect(store.tabGroups.map(\.id) == [first.id, second.id])
+        let group = try #require(store.newGroup(with: tabs[1]))
+        let first = store.openTab(url("link1"), opener: tabs[0], inBackground: true)
+        store.move(first, into: group, at: 0)
+        // link1 sits right below a, but in the group; link2 stays out of it.
+        store.openTab(url("link2"), opener: tabs[0], inBackground: true)
+        #expect(hosts(store.tabs(in: group)) == ["link1.example", "b.example"])
+        #expect(store.tabListItems.map(\.id).last == group.id)
+        #expect(hosts(store.looseTabs) == ["a.example", "link2.example"])
     }
 
     @Test func droppingATabOnALooseTabStartsAGroupOfTwo() throws {
@@ -125,8 +158,8 @@ struct GroupsTests {
         // Group to group.
         store.move(tabs[2], toGroup: second, at: 0)
         #expect(hosts(store.tabs(in: second)) == ["c.example", "b.example"])
-        // Out of a group, below the loose tab.
-        store.move(tabs[2], toGroup: nil, at: 1)
+        // Out of a group, to the bottom (below both groups and d).
+        store.move(tabs[2], toGroup: nil, at: 3)
         #expect(tabs[2].groupID == nil)
         #expect(hosts(store.looseTabs) == ["d.example", "c.example"])
         // Loose to loose.
@@ -281,6 +314,23 @@ struct GroupsTests {
         let session = try decoder.decode(Session.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(session.groups.isEmpty)
         #expect(hosts(makeStore(restoring: session).looseTabs) == ["a.example"])
+    }
+
+    @Test func restoringPutsAGroupsTabsBackTogether() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.group(tabs[1], with: tabs[0])
+        var session = save(store)
+        // A file where c ended up between the group's tabs.
+        func record(_ name: String) -> Int { session.tabs.firstIndex { $0.url == url(name) }! }
+        session.tabs[record("a")].order = 0
+        session.tabs[record("c")].order = 1
+        session.tabs[record("b")].order = 2
+
+        let restored = makeStore(restoring: session)
+        #expect(restored.tabListItems.map(\.id) == [group.id, tabs[2].id])
+        #expect(hosts(restored.sidebarTabs) == ["a.example", "b.example", "c.example"])
     }
 
     @Test func restoringRefusesGroupsThatDontFit() throws {

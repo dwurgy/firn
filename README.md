@@ -27,7 +27,7 @@ The welcome, the first time you open Firn.
 - **Windows:** [Firn Setup.exe](https://github.com/dwurgy/firn/releases/latest/download/Firn.Setup.exe). Open it and Firn installs in a few seconds, just for you (no administrator rights needed), and adds itself to the Start menu. Firn is signed with its maker's name. While it's new, Windows may still say "Windows protected your PC" the first time: click **More info**, then **Run anyway**.
 - **Mac:** [Firn for Mac](https://github.com/dwurgy/firn/releases/latest/download/Firn.for.Mac.zip), one app for Apple chips and Intel. Unzip it, drag **Firn** into **Applications**, and open it. It's signed and checked by Apple, so macOS only asks once whether to open an app from the internet.
 - **Every version** and its notes: the [Releases page](https://github.com/dwurgy/firn/releases).
-- **Linux:** no download yet; Firn can be built from its source code (see "For developers" below).
+- **Linux:** no download yet; Firn can be built from its source code as an .rpm (Fedora) or .deb (Debian, Ubuntu), and there are recipes for Arch and Void (see `packaging/README.md`).
 
 Firn keeps itself up to date: it checks for a new version a minute after it opens and every few hours, downloads it quietly, and is the new version the next time you open it, with a short **What's new** note. **Settings > Updates** shows where things stand, with a **Check for updates** button. Uninstalling keeps your tabs, history, and passwords, so reinstalling brings everything back.
 
@@ -92,7 +92,7 @@ npm start        # opens Firn
 
 **Windows: if PowerShell says "running scripts is disabled on this system"**, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once and answer `Y` (or use `npm.cmd install` / `npm.cmd start`).
 
-`npm start` runs Firn in development mode: a change in `src/ui/` updates the window by itself; for `src/main.ts` or `src/preload.ts`, type `rs` in the terminal and press Enter. Development mode is slower than the real thing. For a fast copy, run `npm run package` and open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`); it keeps the same tabs and history, but only one Firn can run at a time.
+`npm start` runs Firn in development mode: a change in `src/ui/` updates the window by itself; for `src/main.ts` or `src/preload.ts`, type `rs` in the terminal and press Enter. Development mode is slower than the real thing. For a fast copy, run `npm run package` and open `out\Firn-win32-x64\Firn.exe` (on macOS, `out/Firn-darwin-*/Firn.app`); it keeps the same tabs and history, but only one Firn can run at a time. On Linux, `npm run make:rpm` or `npm run make:deb` builds an installable package in `out/make/` (they need `rpm-build`, or `dpkg` and `fakeroot`).
 
 `npm run make` builds the installer (`out\make\squirrel.windows\x64\Firn Setup.exe` on Windows).
 

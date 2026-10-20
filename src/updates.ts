@@ -57,7 +57,9 @@ const whyNoUpdates = (): string | null => {
     return app.isInApplicationsFolder()
       ? null
       : 'Move Firn to your Applications folder to keep it up to date.';
-  return 'Updated by your system’s software updates.';
+  // Linux: Firn's .rpm and .deb have no update feed of their own (yet), so
+  // saying the system updates it wouldn't be true.
+  return 'On Linux, Firn doesn’t update itself yet: install each new version.';
 };
 
 // Where updates are, for Settings (which also offers "Check for updates"

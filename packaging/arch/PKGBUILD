@@ -1,0 +1,78 @@
+# Maintainer: Your Name <you at example dot com>
+#
+# Firn for Arch Linux (AUR). Bundles the Electron that Electron Forge builds,
+# in /opt/firn, rather than using the system electron44: Forge flips Firn's
+# fuses in that binary (cookie encryption, no extra file:// privileges), and
+# the system binary would drop them.
+pkgname=firn
+pkgver=0.10.2
+pkgrel=1
+pkgdesc='A calm, minimalist desktop browser'
+arch=('x86_64' 'aarch64')
+url='https://firnbrowser.com'
+license=('MPL-2.0')
+depends=('alsa-lib' 'at-spi2-core' 'gtk3' 'hicolor-icon-theme' 'libcups'
+         'libdrm' 'libnotify' 'libsecret' 'libxcb' 'mesa' 'nss' 'xdg-utils')
+optdepends=('org.freedesktop.secrets: keyring for encrypted cookies and saved passwords')
+makedepends=('nodejs' 'npm' 'git')
+options=('!strip' '!debug')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/dwurgy/firn/archive/refs/tags/v$pkgver.tar.gz"
+        'firn.desktop')
+sha256sums=('SKIP'
+            'SKIP')
+
+_forge_arch() {
+  case "$CARCH" in
+    x86_64) echo x64 ;;
+    aarch64) echo arm64 ;;
+  esac
+}
+
+_env() {
+  export npm_config_cache="$srcdir/npm-cache"
+  export electron_config_cache="$srcdir/electron-cache"
+}
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  _env
+  npm ci --no-audit --no-fund
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  _env
+  npx --no-install electron-forge package --platform=linux --arch="$(_forge_arch)"
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  local _out="out/Firn-linux-$(_forge_arch)"
+
+  install -dm755 "$pkgdir/opt/$pkgname"
+  cp -a "$_out/." "$pkgdir/opt/$pkgname/"
+  # Releases before packagerConfig.executableName named the binary "Firn".
+  if [[ -e "$pkgdir/opt/$pkgname/Firn" ]]; then
+    mv "$pkgdir/opt/$pkgname/Firn" "$pkgdir/opt/$pkgname/firn"
+  fi
+
+  # Setuid fallback sandbox, as Arch's electronNN, chromium and signal-desktop.
+  chmod 4755 "$pkgdir/opt/$pkgname/chrome-sandbox"
+
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s "/opt/$pkgname/firn" "$pkgdir/usr/bin/firn"
+
+  install -Dm644 "$srcdir/firn.desktop" -t "$pkgdir/usr/share/applications"
+  local _size
+  for _size in 16 24 32 48 64 128 256 512; do
+    install -Dm644 "brand/app-icons/firn-app-icon-windows-glacier-$_size.png" \
+      "$pkgdir/usr/share/icons/hicolor/${_size}x${_size}/apps/firn.png"
+  done
+  install -Dm644 brand/svg/firn-app-icon-windows-glacier.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/firn.svg"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  ln -s "/opt/$pkgname/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.electron"
+  ln -s "/opt/$pkgname/LICENSES.chromium.html" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSES.chromium.html"
+}

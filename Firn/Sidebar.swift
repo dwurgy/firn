@@ -220,6 +220,8 @@ private struct TabList: View {
     @State private var frames: [UUID: CGRect] = [:]
     /// The group being let go (Ungroup): its card is thawing away around its tabs.
     @State private var releasingGroupID: UUID?
+    /// The group being closed: its frost lifts away, tabs and all.
+    @State private var closingGroupID: UUID?
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -278,9 +280,10 @@ private struct TabList: View {
         NewTabRow { window.editAddress(.newTab) }
     }
 
-    /// A card thawing away, or not yet formed, spaces itself like loose tabs.
+    /// A card thawing away, lifting away, or not yet formed spaces itself
+    /// like loose tabs.
     private func isCard(_ item: TabListItem?) -> Bool {
-        if case let .group(group) = item { !isThawed(group) } else { false }
+        if case let .group(group) = item { !isThawed(group) && group.id != closingGroupID } else { false }
     }
 
     /// A card without its frost: thawing away (Ungroup), or new and about to form.
@@ -322,6 +325,74 @@ private struct TabList: View {
         }
     }
 
+    /// Close Group, as frost lifting: the card folds its tabs up under its
+    /// name line and fades as the list closes the gap; then the store closes
+    /// it (and the next tab shows). Reduce Motion: a plain fade.
+    private func close(_ group: TabGroup) {
+        guard closingGroupID == nil else { return }
+        guard !reduceMotion else {
+            withAnimation(.easeOut(duration: 0.2)) { store.close(group) }
+            return
+        }
+        withAnimation(Theme.thaw) {
+            closingGroupID = group.id
+        } completion: {
+            // The empty slot's last few points close up softly.
+            withAnimation(Self.glide) {
+                store.close(group)
+                closingGroupID = nil
+            }
+        }
+    }
+
+    /// Remove from Group: the tab slips out past the card's bottom edge and
+    /// settles just below it, as when dragged out. The last tab thaws the
+    /// card away instead, like Ungroup.
+    private func takeOut(_ tab: FirnCore.Tab) {
+        guard let group = store.tabGroups.first(where: { $0.id == tab.groupID }) else { return }
+        if store.tabs(in: group).count == 1 { return release(group) }
+        guard let index = store.tabListItems.firstIndex(where: { $0.id == group.id }) else { return }
+        carry(tab, to: .list(index + 1)) { store.takeOutOfGroup(tab) }
+    }
+
+    /// Move to Group: the tab travels to the end of the other group, which
+    /// opens room for it; into a folded group, it fades into the name line
+    /// (unless it's the tab on screen, which opens the group, as the store does).
+    private func move(_ tab: FirnCore.Tab, toEndOf group: TabGroup) {
+        let target = DropTarget.group(group.id, store.tabs(in: group).count)
+        let opens = group.folded && tab.id == store.activeTabID
+        carry(tab, to: target, opening: opens ? group : nil) { store.move(tab, toEndOf: group) }
+    }
+
+    /// A tab moved from its menu travels the way a dropped one settles: a
+    /// copy lifts off exactly over the row (invisibly), the list makes room
+    /// at `target`, the copy follows its slot there, and then `commit`
+    /// changes the store, which looks like nothing. Reduce Motion: a fade.
+    private func carry(_ tab: FirnCore.Tab, to target: DropTarget, opening folded: TabGroup? = nil,
+                       commit: @escaping () -> Void) {
+        guard drag == nil, groupDrag == nil else { return }
+        guard !reduceMotion, let frame = frames[tab.id] else {
+            withAnimation(.easeOut(duration: 0.2), commit)
+            return
+        }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            drag = TabDrag(tab: tab, grab: .zero, location: frame.origin,
+                           target: currentTarget(of: tab), settling: true, follows: true)
+        }
+        withAnimation(Theme.thaw) {
+            if let folded { store.setFolded(folded, false) }
+            drag?.target = target
+        } completion: {
+            // A group the tab left empty fades away.
+            withAnimation(Self.glide) {
+                commit()
+                drag = nil
+            }
+        }
+    }
+
     private func card(_ group: TabGroup) -> some View {
         let members = shownTabs(in: group)
         return GroupCard(
@@ -331,8 +402,10 @@ private struct TabList: View {
             renaming: Bindable(window).renamingGroupID,
             foldLocked: foldLocked,
             thawed: isThawed(group),
+            closing: group.id == closingGroupID,
             store: store,
-            ungroup: { release(group) }
+            ungroup: { release(group) },
+            close: { close(group) }
         ) {
             ForEach(members) { tab in row(tab) }
         }
@@ -470,7 +543,6 @@ private struct TabList: View {
     /// A tab's right-click menu: the few things you'd reach for, as in Dia.
     /// Later: Open as Split (split view) and Move to Space (Phase 4).
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
-        let glide = reduceMotion ? nil : Self.glide
         if tab.place == .open {
             Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
@@ -484,16 +556,14 @@ private struct TabList: View {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .control])
             } else {
-                Button("Remove from Group", systemImage: "folder.badge.minus") {
-                    withAnimation(glide) { store.takeOutOfGroup(tab) }
-                }
+                Button("Remove from Group", systemImage: "folder.badge.minus") { takeOut(tab) }
             }
             // Only this space's groups, so nothing crosses between spaces.
             let others = store.tabGroups.filter { $0.id != tab.groupID }
             if !others.isEmpty {
                 Menu("Move to Group", systemImage: "folder") {
                     ForEach(others) { group in
-                        Button(group.name) { withAnimation(glide) { store.move(tab, toEndOf: group) } }
+                        Button(group.name) { move(tab, toEndOf: group) }
                     }
                 }
             }
@@ -517,7 +587,9 @@ private struct TabList: View {
                 .frame(width: slot.width)
                 .offset(x: slot.minX)
                 .animation(reduceMotion ? nil : Self.glide, value: slot.width)
-                .offset(y: drag.location.y - drag.grab.height)
+                .offset(y: drag.follows ? slot.minY : drag.location.y - drag.grab.height)
+                // Carried from the menu, it glides along as its slot moves.
+                .animation(drag.follows ? Theme.thaw : nil, value: slot.minY)
                 .opacity(drag.settling && intoFoldedGroup ? 0 : 1)
                 // It sticks to the pointer; only settling into place glides.
                 .transaction { if !drag.settling { $0.animation = nil } }
@@ -526,7 +598,7 @@ private struct TabList: View {
         } else if let groupDrag, let slot = frames[groupDrag.group.id] {
             GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
-                      foldLocked: true, thawed: false, store: store, ungroup: {}) {
+                      foldLocked: true, thawed: false, closing: false, store: store, ungroup: {}, close: {}) {
                 ForEach(store.tabs(in: groupDrag.group)) { tab in
                     TabRow(tab: tab, isActive: tab.id == store.activeTabID, select: {}, close: {}) { EmptyView() }
                 }
@@ -664,6 +736,8 @@ private struct TabDrag {
     var target: DropTarget
     /// True while the lifted copy glides into its slot after the drop.
     var settling = false
+    /// True when moved from the menu: the copy follows its slot, not a pointer.
+    var follows = false
 }
 
 private struct GroupDrag {
@@ -747,8 +821,12 @@ private struct GroupCard<Rows: View>: View {
     /// group): no name line, insets, or glass, so its tabs sit exactly
     /// where they do as loose tabs.
     let thawed: Bool
+    /// True while it lifts away (Close Group): it folds up under its name
+    /// line and fades.
+    let closing: Bool
     let store: BrowserStore
     let ungroup: () -> Void
+    let close: () -> Void
     @ViewBuilder let rows: Rows
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -779,12 +857,18 @@ private struct GroupCard<Rows: View>: View {
         .padding(.horizontal, inset)
         .padding(.bottom, (group.folded && !thawed) || !hasRows ? 0 : inset)
         .background { card.opacity(thawed ? 0 : 1) }
-        .allowsHitTesting(!thawed)
+        // Closing, it folds up from the bottom: the tabs go first, the name line last.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(height: closing ? 0 : nil, alignment: .top)
+        // The clip snaps on (it matches the bounds then); only the height moves.
+        .animation(nil) { $0.clipShape(Rectangle().inset(by: closing ? 0 : -Theme.rowHeight)) }
+        .opacity(closing ? 0 : 1)
+        .allowsHitTesting(!thawed && !closing)
         .contextMenu {
             Button("Rename", action: startRenaming)
             Button("Ungroup", action: ungroup)
             Divider()
-            Button("Close Group") { animate { store.close(group) } }
+            Button("Close Group", action: close)
         }
     }
 
@@ -811,7 +895,7 @@ private struct GroupCard<Rows: View>: View {
             }
             Spacer(minLength: 0)
             if hovering, !isRenaming {
-                Button("Close group", systemImage: "xmark") { animate { store.close(group) } }
+                Button("Close group", systemImage: "xmark", action: close)
                     .labelStyle(.iconOnly)
                     .buttonStyle(CloseButtonStyle())
                     .help("Close group")
@@ -831,7 +915,7 @@ private struct GroupCard<Rows: View>: View {
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Hides the group's tabs")
         .accessibilityAction { toggleFold() }
         .accessibilityAction(named: "Rename", startRenaming)
-        .accessibilityAction(named: "Close group") { animate { store.close(group) } }
+        .accessibilityAction(named: "Close group", close)
     }
 
     private var nameField: some View {

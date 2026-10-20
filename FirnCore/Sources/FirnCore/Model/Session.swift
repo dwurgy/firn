@@ -13,18 +13,23 @@ public struct Session: Codable, Equatable, Sendable {
     public var groups: [GroupRecord]
     public var tabs: [TabRecord]
     public var window: WindowRecord
+    /// The days Firn was used, as "yyyy-MM-dd", for archiving. Missing in
+    /// files from before Archived.
+    public var usedDays: [String]
 
     public init(
-        version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], tabs: [TabRecord], window: WindowRecord
+        version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], tabs: [TabRecord], window: WindowRecord,
+        usedDays: [String] = []
     ) {
         self.version = version
         self.spaces = spaces
         self.groups = groups
         self.tabs = tabs
         self.window = window
+        self.usedDays = usedDays
     }
 
-    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window }
+    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window, usedDays }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -33,6 +38,7 @@ public struct Session: Codable, Equatable, Sendable {
         groups = try container.decodeIfPresent([GroupRecord].self, forKey: .groups) ?? []
         tabs = try container.decode([TabRecord].self, forKey: .tabs)
         window = try container.decode(WindowRecord.self, forKey: .window)
+        usedDays = try container.decodeIfPresent([String].self, forKey: .usedDays) ?? []
     }
 }
 

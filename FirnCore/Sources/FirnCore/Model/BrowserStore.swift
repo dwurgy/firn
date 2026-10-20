@@ -22,6 +22,13 @@ public final class BrowserStore {
     /// Where new tabs go in a space's tab list (a setting; the app keeps it).
     /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
     public var newTabPlacement: NewTabPlacement = .bottom
+    /// How long an everyday tab can go unseen before it's archived (a
+    /// setting; the app keeps it).
+    public var archiveAfter: ArchiveAfter = .sevenDays
+    /// The days Firn was used, as "yyyy-MM-dd" in the Mac's calendar, oldest
+    /// first: only as many as the longest setting needs.
+    private var usedDays: [String] = []
+    static let usedDaysKept = 30
     /// What ⇧⌘T can bring back, oldest first, each in its own space. Kept
     /// only while Firn runs, like a browser's closed-tab list.
     private var closed: [ClosedItem] = []
@@ -216,6 +223,8 @@ public final class BrowserStore {
     public var looseTabs: [Tab] { list(.open).filter { $0.groupID == nil } }
     /// All the current space's everyday tabs, grouped or not, in order.
     public var openTabs: [Tab] { list(.open) }
+    /// The current space's archived tabs, the most recently archived first.
+    public var archivedTabs: [Tab] { list(.archived).reversed() }
 
     /// A group's tabs, in order.
     public func tabs(in group: TabGroup) -> [Tab] {
@@ -644,6 +653,7 @@ public final class BrowserStore {
         guard let index = closed.lastIndex(where: { $0.spaceID == activeSpaceID }) else { return }
         switch closed.remove(at: index) {
         case let .tab(tab, position, listPosition):
+            tab.place = .open
             if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
                 insert(tab, at: position, in: tabs(in: group), fallback: arrivalIndex(in: tab.spaceID))
                 setFolded(group, false)
@@ -662,10 +672,10 @@ public final class BrowserStore {
         }
     }
 
-    /// Remembers an everyday tab about to close. The last tab of a group
+    /// Remembers an everyday or archived tab about to close. The last tab of a group
     /// ends the group, so the group is remembered instead, whole.
     private func rememberClosing(_ tab: Tab) {
-        guard tab.place == .open, tab.url != nil else { return }
+        guard tab.place != .basecamp, tab.url != nil else { return }
         if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
             let members = tabs(in: group)
             if members.count == 1 { return rememberClosing(group, members: members) }
@@ -674,7 +684,9 @@ public final class BrowserStore {
                 listPosition: tabListPosition(of: groupID, in: tab.spaceID)
             ))
         } else {
-            let position = tabListPosition(of: tab.id, in: tab.spaceID)
+            // An archived tab comes back where new tabs go.
+            let position = tab.place == .archived && newTabPlacement == .top
+                ? 0 : tabListPosition(of: tab.id, in: tab.spaceID)
             remember(.tab(tab, position: position, listPosition: position))
         }
     }
@@ -719,10 +731,58 @@ public final class BrowserStore {
         }
     }
 
+    // MARK: - Archiving
+
+    /// Counts today as a day Firn was used, then archives every loose tab
+    /// that hasn't been on screen for the set number of those days. Days
+    /// away from Firn don't count. Never archived: Basecamp tiles, grouped
+    /// tabs, and the tab on screen. (Later, also a tab playing sound or in
+    /// split view.) Archived tabs let their pages go, so they cost nothing;
+    /// they keep their address, title, and icon until closed.
+    public func archiveIdleTabs() {
+        let today = Self.day(of: now())
+        if !usedDays.contains(today) {
+            usedDays = Array((usedDays + [today]).sorted().suffix(Self.usedDaysKept))
+        }
+        guard let limit = archiveAfter.days else { return }
+        let idle = tabs.filter { tab in
+            guard tab.place == .open, tab.groupID == nil, tab.id != activeTabID else { return false }
+            let lastSeen = Self.day(of: tab.lastActiveAt)
+            return usedDays.count { $0 > lastSeen } >= limit
+        }
+        guard !idle.isEmpty else { return }
+        let ids = Set(idle.map(\.id))
+        tabs.removeAll { ids.contains($0.id) }
+        for tab in idle {
+            tab.sleep()
+            tab.place = .archived
+        }
+        tabs.append(contentsOf: idle)
+        lastTabBySpace = lastTabBySpace.filter { !ids.contains($0.value) }
+    }
+
+    /// A date's day in the Mac's calendar, as "yyyy-MM-dd" (which sorts by date).
+    private static func day(of date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    /// Keeps only well-formed days, each once, in order.
+    private static func cleanDays(_ days: [String]) -> [String] {
+        let wellFormed = days.filter { $0.wholeMatch(of: /\d{4}-\d{2}-\d{2}/) != nil }
+        return Array(Set(wellFormed).sorted().suffix(usedDaysKept))
+    }
+
     // MARK: - Switching
 
+    /// Shows a tab. An archived one comes back first, where new tabs go.
     public func select(_ tab: Tab) {
-        guard tabs.contains(where: { $0.id == tab.id }) else { return }
+        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        if tab.place == .archived {
+            tabs.remove(at: index)
+            tab.place = .open
+            tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
+        }
         activeTab?.lastActiveAt = now()
         wake(tab)
         tab.lastActiveAt = now()
@@ -809,7 +869,7 @@ public final class BrowserStore {
             spaceTabIDs: lastTabBySpace.filter { $0.key != activeSpaceID },
             sidebarWidth: sidebarWidth, sidebarCollapsed: sidebarCollapsed
         )
-        return Session(spaces: spaces, groups: groupRecords, tabs: records, window: window)
+        return Session(spaces: spaces, groups: groupRecords, tabs: records, window: window, usedDays: usedDays)
     }
 
     /// The saved file is Firn's own, but it's checked as if it weren't: only
@@ -847,7 +907,7 @@ public final class BrowserStore {
             return Tab(
                 id: record.id, spaceID: record.spaceID, place: place, url: url ?? home,
                 title: record.title, icon: record.icon.flatMap { SiteIcon.isValidStored($0) ? $0 : nil },
-                homeURL: place == .open ? nil : home, groupID: groupID,
+                homeURL: place == .basecamp ? home : nil, groupID: groupID,
                 openerTabID: record.openerTabID, lastActiveAt: record.lastActiveAt
             )
         }
@@ -856,6 +916,7 @@ public final class BrowserStore {
         groups = restoredGroups.filter { usedGroups.contains($0.id) }
         savedRecords = Dictionary(session.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         savedGroupRecords = Dictionary(session.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        usedDays = Self.cleanDays(session.usedDays)
         windowID = session.window.id
         if spaceIDs.contains(session.window.activeSpaceID) { activeSpaceID = session.window.activeSpaceID }
         let tabSpaces = Dictionary(tabs.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })
@@ -908,6 +969,21 @@ private enum ClosedItem {
 /// Where new tabs go in the tab list.
 public enum NewTabPlacement: String, CaseIterable, Sendable {
     case top, bottom
+}
+
+/// How long an everyday tab can go unseen before it's archived, counted in
+/// days Firn was used.
+public enum ArchiveAfter: String, CaseIterable, Sendable {
+    case oneDay, sevenDays, thirtyDays, never
+
+    public var days: Int? {
+        switch self {
+        case .oneDay: 1
+        case .sevenDays: 7
+        case .thirtyDays: 30
+        case .never: nil
+        }
+    }
 }
 
 /// One thing in a space's tab list: a group (shown as one card) or a loose tab.

@@ -6,11 +6,13 @@ import SwiftUI
 /// from the session file.
 enum Preference {
     static let newTabPlacement = "newTabPlacement"
+    static let archiveAfter = "archiveAfter"
 }
 
 /// The Settings window (⌘, or Firn › Settings…): a few plain choices, no more.
 struct SettingsView: View {
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
+    @AppStorage(Preference.archiveAfter) private var archiveAfter = ArchiveAfter.sevenDays
 
     var body: some View {
         Form {
@@ -22,6 +24,19 @@ struct SettingsView: View {
                 .pickerStyle(.radioGroup)
             } footer: {
                 Text("The New tab button sits there too. Tabs taken out of a group arrive there as well.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
+                Picker("Archive tabs after", selection: $archiveAfter) {
+                    Text("1 day").tag(ArchiveAfter.oneDay)
+                    Text("7 days").tag(ArchiveAfter.sevenDays)
+                    Text("30 days").tag(ArchiveAfter.thirtyDays)
+                    Text("Never").tag(ArchiveAfter.never)
+                }
+            } footer: {
+                Text("Tabs you haven't looked at move to Archived, at the bottom of the sidebar. Only days you use Firn count. Basecamp and grouped tabs stay put.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)

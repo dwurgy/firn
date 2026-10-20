@@ -224,6 +224,8 @@ private struct TabList: View {
     @State private var releasingGroupID: UUID?
     /// The group being closed: its frost lifts away, tabs and all.
     @State private var closingGroupID: UUID?
+    /// The spaces whose Archived is open; it's folded by default.
+    @State private var openArchives: Set<UUID> = []
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -255,6 +257,7 @@ private struct TabList: View {
                             newTabRow
                                 .padding(.top, isCard(items.last) ? Theme.groupSpacing : 0)
                         }
+                        archived
                     }
                     .overlay(alignment: .topLeading) { lifted }
                     .coordinateSpace(.named(Self.space))
@@ -280,6 +283,25 @@ private struct TabList: View {
 
     private var newTabRow: some View {
         NewTabRow { window.editAddress(.newTab) }
+    }
+
+    /// Archived, last in the list, only once something is in it.
+    @ViewBuilder private var archived: some View {
+        let tabs = store.archivedTabs
+        if !tabs.isEmpty {
+            let spaceID = store.activeSpaceID
+            ArchivedSection(tabs: tabs, open: Binding(
+                get: { openArchives.contains(spaceID) },
+                set: { if $0 { openArchives.insert(spaceID) } else { openArchives.remove(spaceID) } }
+            )) { tab in
+                // It glides back up into the tab list.
+                withAnimation(reduceMotion ? nil : Self.glide) { store.select(tab) }
+                window.focusPage()
+            } close: { tab in
+                window.close(tab)
+            }
+            .padding(.top, Theme.sectionSpacing - Theme.rowSpacing)
+        }
     }
 
     /// A card thawing away, lifting away, or not yet formed spaces itself
@@ -803,6 +825,65 @@ private struct TabRow<MenuItems: View>: View {
         .contextMenu { menu }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
+    }
+}
+
+// MARK: - Archived
+
+/// Archived: the space's loose tabs not looked at for a while, folded away
+/// at the bottom of the tab list. Not a group card: nothing is kept here
+/// on purpose, so it stays quiet. Clicking a tab brings it back.
+private struct ArchivedSection: View {
+    let tabs: [FirnCore.Tab]
+    @Binding var open: Bool
+    let select: (FirnCore.Tab) -> Void
+    let close: (FirnCore.Tab) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: Theme.rowSpacing) {
+            header
+            if open {
+                ForEach(tabs) { tab in
+                    TabRow(tab: tab, isActive: false) { select(tab) } close: { close(tab) } menu: {
+                        Button("Close Tab", systemImage: "xmark") { close(tab) }
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "archivebox")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.faint)
+                .accessibilityHidden(true)
+            Text("Archived")
+                .font(Theme.groupNameFont)
+                .foregroundStyle(Theme.muted)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Theme.faint)
+                .rotationEffect(.degrees(open ? 0 : -90))
+                .accessibilityHidden(true)
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, Theme.rowPadding)
+        .frame(height: Theme.groupHeaderHeight)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggle)
+        .help(open ? "Hide archived tabs" : "Show tabs you haven't looked at for a while")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Archived")
+        .accessibilityValue(open ? "Open" : "Folded")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(open ? "Hides archived tabs" : "Shows tabs you haven't looked at for a while")
+        .accessibilityAction { toggle() }
+    }
+
+    private func toggle() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { open.toggle() }
     }
 }
 

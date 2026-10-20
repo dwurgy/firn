@@ -134,7 +134,7 @@ Each space is its own browser. This is the heart of the prototype; get it right 
   - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group. A close button shows only while the pointer is on the group's name line; ⇧⌘T brings a closed group back whole, with all its tabs (once ⇧⌘T exists).
   - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive. Links from a grouped tab open inside its group, right below it, as in Dia (David, 2026-10-19).
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.
-- **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default and shows a count; open it to see them, click one to bring it back. Never archived: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
+- **Archived:** everyday tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) move into a group named "Archived" at the bottom of the space's tab list. It's folded by default, with no count (David, 2026-10-20); open it to see them, click one to bring it back. Archived tabs stay until closed. David isn't sold on this look yet (an archive box or an overflow menu, as in Dia, are options), so the view is kept thin and separate from the logic. Never archived: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
 - **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab (at the top of the loose tabs). Links clicked in a Basecamp tile should open as a Lookout first, so you glance before keeping (David, 2026-10-18); until Lookout exists they open where new tabs go.
 - **Split view:** two pages side by side, each with its own address and back/forward; drag the gap to resize; one row in the sidebar.
 - **Command bar:** one shortcut opens a centered bar: type an address, search, jump to an open tab in this space, or run an action by name.
@@ -248,7 +248,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 2: done** (2026-10-18).
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
-- **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. Next: Phase 5.
+- **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. 
+- **Phase 5:** Archived built (2026-10-20), waiting on David's look. Then Lookout, split view, and the command bar (after the ⌘T talk).
 
 ---
 

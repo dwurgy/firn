@@ -198,6 +198,7 @@ struct BrowserWindow: View {
     @State private var lights = TrafficLights()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
+    @AppStorage(Preference.archiveAfter) private var archiveAfter = ArchiveAfter.sevenDays
 
     private var store: BrowserStore { window.store }
     private var showsSidebar: Bool { !window.sidebarCollapsed || window.isPeeking }
@@ -252,12 +253,25 @@ struct BrowserWindow: View {
         }
         .onAppear { window.editAddress(.newTab) }
         .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
+        .onChange(of: archiveAfter, initial: true) {
+            store.archiveAfter = archiveAfter
+            archiveIdleTabs()
+        }
+        // Coming back to Firn (on a new day, perhaps) is when tabs get tidied.
+        // Nothing runs on a timer.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            archiveIdleTabs()
+        }
         .onChange(of: store.openTabs.isEmpty) {
             if store.openTabs.isEmpty { window.editAddress(.newTab) }
         }
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }
+
+    private func archiveIdleTabs() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.archiveIdleTabs() }
+    }
     /// While peeking, the sidebar is a card floating just inside the window
     /// edge, so it and its traffic lights sit this much further in.
     private var peekShift: CGFloat { window.isPeeking ? Theme.peekInset : 0 }

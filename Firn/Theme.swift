@@ -163,6 +163,10 @@ enum Theme {
 
     /// About 200ms, easing out (cubic-bezier(0.33, 1, 0.68, 1)). Nil with
     /// Reduce Motion, so things change in place.
+    /// A group letting go of its tabs (Ungroup): a touch slower than a
+    /// glide, since it's a deliberate moment; no bounce.
+    static let thaw = Animation.smooth(duration: 0.3)
+
     static func glide(reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2)
     }

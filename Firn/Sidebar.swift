@@ -218,6 +218,8 @@ private struct TabList: View {
     @GestureState private var dragging = false
     /// Where each tab row and group card sits, in the list's own space.
     @State private var frames: [UUID: CGRect] = [:]
+    /// The group being let go (Ungroup): its card is thawing away around its tabs.
+    @State private var releasingGroupID: UUID?
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -276,8 +278,31 @@ private struct TabList: View {
         NewTabRow { window.editAddress(.newTab) }
     }
 
+    /// A card thawing away already spaces itself like loose tabs.
     private func isCard(_ item: TabListItem?) -> Bool {
-        if case .group = item { true } else { false }
+        if case let .group(group) = item { group.id != releasingGroupID } else { false }
+    }
+
+    /// Ungroup, as frost thawing: the name line folds away, the card's insets
+    /// and glass melt, and the tabs rise into place. The card ends exactly
+    /// where the loose tabs will be, so the store's change that follows is
+    /// invisible. Reduce Motion: a plain fade.
+    private func release(_ group: TabGroup) {
+        guard releasingGroupID == nil else { return }
+        guard !reduceMotion else {
+            withAnimation(.easeOut(duration: 0.2)) { store.ungroup(group) }
+            return
+        }
+        withAnimation(Theme.thaw) {
+            releasingGroupID = group.id
+        } completion: {
+            var settled = Transaction()
+            settled.disablesAnimations = true
+            withTransaction(settled) {
+                store.ungroup(group)
+                releasingGroupID = nil
+            }
+        }
     }
 
     private func card(_ group: TabGroup) -> some View {
@@ -288,7 +313,9 @@ private struct TabList: View {
             color: Theme.spaceColor(store.activeSpace.color),
             renaming: Bindable(window).renamingGroupID,
             foldLocked: foldLocked,
-            store: store
+            releasing: group.id == releasingGroupID,
+            store: store,
+            ungroup: { release(group) }
         ) {
             ForEach(members) { tab in row(tab) }
         }
@@ -480,7 +507,7 @@ private struct TabList: View {
         } else if let groupDrag, let slot = frames[groupDrag.group.id] {
             GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
-                      foldLocked: true, store: store) {
+                      foldLocked: true, releasing: false, store: store, ungroup: {}) {
                 ForEach(store.tabs(in: groupDrag.group)) { tab in
                     TabRow(tab: tab, isActive: tab.id == store.activeTabID, select: {}, close: {}) { EmptyView() }
                 }
@@ -697,7 +724,11 @@ private struct GroupCard<Rows: View>: View {
     @Binding var renaming: UUID?
     /// True while the group is being dragged, so letting go doesn't fold it.
     let foldLocked: Bool
+    /// True while it thaws away (Ungroup): no name line, insets, or glass,
+    /// so its tabs sit exactly where they will as loose tabs.
+    let releasing: Bool
     let store: BrowserStore
+    let ungroup: () -> Void
     @ViewBuilder let rows: Rows
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -709,19 +740,28 @@ private struct GroupCard<Rows: View>: View {
     private var isRenaming: Bool { renaming == group.id }
 
     var body: some View {
-        VStack(spacing: Theme.rowSpacing) {
+        let inset = releasing ? 0 : Theme.panelRadius - Theme.tabRadius
+        VStack(spacing: 0) {
             header
-            if !group.folded {
-                rows
+                // The name line leads the thaw by a hair.
+                .opacity(releasing ? 0 : 1)
+                .animation(releasing ? .easeOut(duration: 0.16) : nil, value: releasing)
+                .frame(height: releasing ? 0 : Theme.groupHeaderHeight, alignment: .top)
+                .clipped()
+                .padding(.bottom, releasing || group.folded ? 0 : Theme.rowSpacing)
+            // A folded group's tabs come out as it thaws.
+            if !group.folded || releasing {
+                VStack(spacing: Theme.rowSpacing) { rows }
             }
         }
         // Rows sit 4pt inside the card, so their 10pt corners nest in its 14pt.
-        .padding(.horizontal, Theme.panelRadius - Theme.tabRadius)
-        .padding(.bottom, group.folded || !hasRows ? 0 : Theme.panelRadius - Theme.tabRadius)
-        .background { card }
+        .padding(.horizontal, inset)
+        .padding(.bottom, (group.folded && !releasing) || !hasRows ? 0 : inset)
+        .background { card.opacity(releasing ? 0 : 1) }
+        .allowsHitTesting(!releasing)
         .contextMenu {
             Button("Rename", action: startRenaming)
-            Button("Ungroup") { animate { store.ungroup(group) } }
+            Button("Ungroup", action: ungroup)
             Divider()
             Button("Close Group") { animate { store.close(group) } }
         }

@@ -338,7 +338,7 @@ public final class BrowserStore {
     @discardableResult
     public func newGroup(with tab: Tab) -> TabGroup? {
         guard tab.place == .open, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return nil }
-        let group = TabGroup(spaceID: tab.spaceID)
+        let group = TabGroup(spaceID: tab.spaceID, name: freeGroupName(in: tab.spaceID))
         groups.append(group)
         let oldGroupID = tab.groupID
         tab.groupID = group.id
@@ -467,6 +467,20 @@ public final class BrowserStore {
             activeTabID = nil
             selectMostRecent()
         }
+    }
+
+    /// "New Group", or "New Group 2", 3, … if this space already has one,
+    /// so Move to Group never lists two the same (until groups name
+    /// themselves). The lowest number not in use, as Finder does.
+    private func freeGroupName(in spaceID: UUID) -> String {
+        let taken = Set(groups.filter { $0.spaceID == spaceID }.map(\.name))
+        var name = TabGroup.defaultName
+        var number = 2
+        while taken.contains(name) {
+            name = "\(TabGroup.defaultName) \(number)"
+            number += 1
+        }
+        return name
     }
 
     /// A group with no tabs left ends.

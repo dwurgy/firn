@@ -27,6 +27,19 @@ struct GroupsTests {
 
     // MARK: - Making groups
 
+    @Test func newGroupsCountUpSoNamesNeverRepeat() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        let first = try #require(store.newGroup(with: tabs[0]))
+        let second = try #require(store.newGroup(with: tabs[1]))
+        let third = try #require(store.newGroup(with: tabs[2]))
+        #expect([first, second, third].map(\.name) == ["New Group", "New Group 2", "New Group 3"])
+        // A renamed group frees its name for the next one.
+        store.rename(second, to: "Trip")
+        let fourth = try #require(store.newGroup(with: tabs[3]))
+        #expect(fourth.name == "New Group 2")
+    }
+
     @Test func aNewGroupStaysWhereItsTabWas() throws {
         let store = makeStore()
         let tabs = open("a", "b", "c", in: store)

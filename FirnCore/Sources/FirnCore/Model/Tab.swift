@@ -51,7 +51,7 @@ public final class Tab: Identifiable {
 
     /// The page's title, falling back to its host, so a row is never blank.
     public var title: String {
-        let title = page?.title ?? restingTitle
+        let title = currentTitle
         if !title.isEmpty { return title }
         return url?.host() ?? "New Tab"
     }
@@ -60,6 +60,13 @@ public final class Tab: Identifiable {
     var savedTitle: String {
         if let title = page?.title, !title.isEmpty { return title }
         return restingTitle
+    }
+
+    /// The page's title, or the last one while a just-woken page hasn't
+    /// arrived yet (so a row doesn't flicker to the bare site and back).
+    private var currentTitle: String {
+        guard let page else { return restingTitle }
+        return page.title.isEmpty && page.url == nil ? restingTitle : page.title
     }
 
     /// The site's icon (a small PNG): the page's own once found, or the one
@@ -110,8 +117,8 @@ public final class Tab: Identifiable {
     func sleep() {
         guard let page else { return }
         restingIcon = icon
+        restingTitle = currentTitle
         restingURL = page.url ?? restingURL
-        restingTitle = page.title
         page.stopLoading()
         self.page = nil
     }

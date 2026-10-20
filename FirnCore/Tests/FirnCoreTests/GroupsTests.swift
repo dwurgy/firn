@@ -455,4 +455,38 @@ struct GroupsTests {
         #expect(looseCopy.groupID == nil)
         #expect(hosts(store.looseTabs) == ["c.example", "c.example"])
     }
+
+    // MARK: - The tab on screen never vanishes
+
+    /// A clock that moves on a second each time it's read.
+    private func ticking() -> () -> Date {
+        var seconds = 0.0
+        return { seconds += 1; return Date(timeIntervalSince1970: seconds) }
+    }
+
+    @Test func closingATilePrefersATabTheSidebarShows() throws {
+        let store = makeStore(now: ticking())
+        let tabs = open("a", "b", "t", in: store)
+        store.addToBasecamp(tabs[2])
+        let group = try #require(store.newGroup(with: tabs[1]))
+        store.select(tabs[0])
+        store.select(tabs[1]) // Seen more recently than a, then folded away.
+        store.setFolded(group, true)
+        store.select(tabs[2])
+        store.close(tabs[2])
+        #expect(store.activeTabID == tabs[0].id)
+        #expect(store.tabGroups.first?.folded == true)
+    }
+
+    @Test func aTabOnlyInAFoldedGroupOpensTheGroup() throws {
+        let store = makeStore(now: ticking())
+        let tabs = open("a", "t", in: store)
+        store.addToBasecamp(tabs[1])
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.setFolded(group, true)
+        store.select(tabs[1])
+        store.close(tabs[1])
+        #expect(store.activeTabID == tabs[0].id)
+        #expect(store.tabGroups.first?.folded == false)
+    }
 }

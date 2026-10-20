@@ -285,13 +285,17 @@ public final class BrowserStore {
         }
     }
 
-    /// Shows the awake tab in this space that was on screen most recently, if any.
+    /// Shows the awake tab in this space that was on screen most recently, if
+    /// any, preferring one the sidebar shows. A tab hidden in a folded group
+    /// opens its group, so the tab on screen never vanishes.
     private func selectMostRecent() {
-        if let recent = tabs
-            .filter({ $0.spaceID == activeSpaceID && !$0.isResting })
-            .max(by: { $0.lastActiveAt < $1.lastActiveAt }) {
-            select(recent)
-        }
+        let awake = tabs.filter { $0.spaceID == activeSpaceID && !$0.isResting }
+        let shown = Set(sidebarTabs.map(\.id))
+        let byRecent = { (a: Tab, b: Tab) in a.lastActiveAt < b.lastActiveAt }
+        guard let recent = awake.filter({ shown.contains($0.id) }).max(by: byRecent) ?? awake.max(by: byRecent)
+        else { return }
+        if let group = groups.first(where: { $0.id == recent.groupID }), group.folded { setFolded(group, false) }
+        select(recent)
     }
 
     // MARK: - Basecamp
@@ -508,13 +512,13 @@ public final class BrowserStore {
     public func reopenClosed() {
         guard let index = closed.lastIndex(where: { $0.spaceID == activeSpaceID }) else { return }
         switch closed.remove(at: index) {
-        case let .tab(tab, position):
+        case let .tab(tab, position, listPosition):
             if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
                 insert(tab, at: position, in: tabs(in: group), fallback: arrivalIndex(in: tab.spaceID))
                 setFolded(group, false)
             } else {
                 tab.groupID = nil
-                insertInTabList([tab], at: position, fallback: arrivalIndex(in: tab.spaceID))
+                insertInTabList([tab], at: listPosition, fallback: arrivalIndex(in: tab.spaceID))
             }
             select(tab)
         case let .group(group, members, position):
@@ -534,9 +538,13 @@ public final class BrowserStore {
         if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
             let members = tabs(in: group)
             if members.count == 1 { return rememberClosing(group, members: members) }
-            remember(.tab(tab, position: members.firstIndex { $0.id == tab.id } ?? members.count))
+            remember(.tab(
+                tab, position: members.firstIndex { $0.id == tab.id } ?? members.count,
+                listPosition: tabListPosition(of: groupID, in: tab.spaceID)
+            ))
         } else {
-            remember(.tab(tab, position: tabListPosition(of: tab.id, in: tab.spaceID)))
+            let position = tabListPosition(of: tab.id, in: tab.spaceID)
+            remember(.tab(tab, position: position, listPosition: position))
         }
     }
 
@@ -745,18 +753,19 @@ public enum ReopenKind: Sendable {
 }
 
 /// A closed tab or group ⇧⌘T can bring back, and where it was: a tab's
-/// place among its group's tabs (or in the tab list, if loose), or a
+/// place among its group's tabs (or in the tab list, if loose) and its
+/// group's place in the tab list (where it goes if the group is gone), or a
 /// group's place in the tab list. The tabs are the closed ones, asleep.
 @MainActor
 private enum ClosedItem {
-    case tab(Tab, position: Int)
+    case tab(Tab, position: Int, listPosition: Int)
     case group(TabGroup, [Tab], position: Int)
 
     /// Each only ever comes back in its own space, so nothing crosses
     /// between spaces.
     var spaceID: UUID {
         switch self {
-        case let .tab(tab, _): tab.spaceID
+        case let .tab(tab, _, _): tab.spaceID
         case let .group(group, _, _): group.spaceID
         }
     }

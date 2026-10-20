@@ -36,6 +36,10 @@ struct FirnApp: App {
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
         .commands { BrowserCommands(window: window) }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 

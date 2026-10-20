@@ -79,14 +79,18 @@ struct BasecampAndSessionTests {
         #expect(extra.place == .open)
     }
 
-    @Test func removingAnAwakeTileKeepsItAtTheTopOfTheTabs() {
+    @Test func removingAnAwakeTileKeepsItWhereNewTabsGo() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
         store.addToBasecamp(a)
         store.removeFromBasecamp(a)
-        #expect(hosts(store.openTabs) == ["a.example", "b.example"])
+        #expect(hosts(store.openTabs) == ["b.example", "a.example"])
         #expect(a.homeURL == nil)
+        store.newTabPlacement = .top
+        store.addToBasecamp(a)
+        store.removeFromBasecamp(a)
+        #expect(hosts(store.openTabs) == ["a.example", "b.example"])
     }
 
     @Test func removingARestingTileRemovesIt() {
@@ -100,14 +104,18 @@ struct BasecampAndSessionTests {
         #expect(hosts(store.openTabs) == ["b.example"])
     }
 
-    @Test func linksFromATileOpenAtTheTopOfTheTabs() {
+    @Test func linksFromATileOpenWhereNewTabsGo() {
         let store = makeStore()
         store.openTab(url("a"))
         let tile = store.openTab(url("tile"))
         store.addToBasecamp(tile)
         store.openTab(url("b"), opener: tile, inBackground: true)
         store.openTab(url("c"), opener: tile, inBackground: true)
-        #expect(hosts(store.openTabs) == ["b.example", "c.example", "a.example"])
+        #expect(hosts(store.openTabs) == ["a.example", "b.example", "c.example"])
+        store.newTabPlacement = .top
+        store.openTab(url("d"), opener: tile, inBackground: true)
+        store.openTab(url("e"), opener: tile, inBackground: true)
+        #expect(hosts(store.openTabs) == ["d.example", "e.example", "a.example", "b.example", "c.example"])
     }
 
     @Test func movingStaysWithinItsOwnList() {

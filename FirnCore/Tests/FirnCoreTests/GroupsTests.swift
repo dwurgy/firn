@@ -124,17 +124,34 @@ struct GroupsTests {
         #expect(hosts(store.tabs(in: group)) == ["b.example", "c.example", "a.example"])
     }
 
-    @Test func takingATabOutPutsItAtTheTopOfTheLooseTabs() throws {
+    @Test func takingATabOutPutsItWhereNewTabsGo() throws {
         let store = makeStore()
-        let tabs = open("a", "b", "c", in: store)
+        let tabs = open("a", "b", "c", "d", in: store)
         let group = try #require(store.newGroup(with: tabs[2]))
         store.group(tabs[0], with: tabs[2])
-        store.takeOutOfGroup(tabs[2])
-        #expect(hosts(store.tabs(in: group)) == ["a.example"])
-        #expect(hosts(store.looseTabs) == ["c.example", "b.example"])
-        store.takeOutOfGroup(tabs[0], to: 2)
-        #expect(hosts(store.looseTabs) == ["c.example", "b.example", "a.example"])
+        store.group(tabs[3], with: tabs[2])
+        store.move(group, to: 0)
+        store.takeOutOfGroup(tabs[2]) // Bottom, by default.
+        #expect(hosts(store.tabs(in: group)) == ["d.example", "a.example"])
+        #expect(hosts(store.looseTabs) == ["b.example", "c.example"])
+        store.newTabPlacement = .top
+        store.takeOutOfGroup(tabs[3])
+        #expect(store.tabListItems.map(\.id) == [tabs[3].id, group.id, tabs[1].id, tabs[2].id])
+        store.takeOutOfGroup(tabs[0], to: 1)
+        #expect(hosts(store.looseTabs) == ["d.example", "a.example", "b.example", "c.example"])
         #expect(store.tabGroups.isEmpty) // Its last tab left.
+    }
+
+    @Test func newTabsGoAtTheTopOrTheBottom() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let group = try #require(store.newGroup(with: tabs[1]))
+        store.openTab(url("c")) // Bottom: below the group.
+        #expect(store.tabListItems.last?.id == store.activeTabID)
+        store.newTabPlacement = .top
+        let d = store.openTab(url("d")) // Top: above everything.
+        #expect(store.tabListItems.map(\.id).prefix(2) == [d.id, tabs[0].id])
+        #expect(hosts(store.tabs(in: group)) == ["b.example"])
     }
 
     @Test func movingTheLastTabToAnotherGroupEndsTheOldOne() throws {
@@ -197,14 +214,18 @@ struct GroupsTests {
         #expect(store.activeTabID == tabs[2].id)
     }
 
-    @Test func linksFromAGroupedTabOpenAtTheTopOfTheLooseTabs() throws {
+    @Test func linksFromAGroupedTabOpenInItsGroupBelowIt() throws {
         let store = makeStore()
-        let tabs = open("a", "b", in: store)
+        let tabs = open("a", "b", "c", in: store)
         let group = try #require(store.newGroup(with: tabs[1]))
+        store.group(tabs[2], with: tabs[1])
         store.openTab(url("link1"), opener: tabs[1], inBackground: true)
         store.openTab(url("link2"), opener: tabs[1], inBackground: true)
-        #expect(hosts(store.tabs(in: group)) == ["b.example"])
-        #expect(hosts(store.looseTabs) == ["link1.example", "link2.example", "a.example"])
+        #expect(hosts(store.tabs(in: group)) == ["b.example", "link1.example", "link2.example", "c.example"])
+        #expect(hosts(store.looseTabs) == ["a.example"])
+        // From the group's last tab, still in the group.
+        store.openTab(url("link3"), opener: tabs[2], inBackground: true)
+        #expect(hosts(store.tabs(in: group)).last == "link3.example")
     }
 
     // MARK: - Whole groups
@@ -243,14 +264,18 @@ struct GroupsTests {
         #expect(hosts(store.sidebarTabs) == ["a.example", "b.example", "c.example"])
     }
 
-    @Test func ungroupingKeepsTheTabsAtTheTopOfTheLooseTabs() throws {
+    @Test func ungroupingPutsTheTabsWhereNewTabsGo() throws {
         let store = makeStore()
-        let tabs = open("a", "b", "c", in: store)
+        let tabs = open("a", "b", "c", "d", in: store)
         let group = try #require(store.newGroup(with: tabs[1]))
         store.group(tabs[2], with: tabs[1])
         store.ungroup(group)
         #expect(store.tabGroups.isEmpty)
-        #expect(hosts(store.looseTabs) == ["b.example", "c.example", "a.example"])
+        #expect(hosts(store.looseTabs) == ["a.example", "d.example", "b.example", "c.example"])
+        store.newTabPlacement = .top
+        let again = try #require(store.newGroup(with: tabs[3]))
+        store.ungroup(again)
+        #expect(hosts(store.looseTabs) == ["d.example", "a.example", "b.example", "c.example"])
     }
 
     @Test func closingAGroupClosesItsTabs() throws {

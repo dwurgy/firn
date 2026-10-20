@@ -222,35 +222,57 @@ private struct TabList: View {
 
     var body: some View {
         let items = shownItems
+        let atTop = store.newTabPlacement == .top
         // The list fills the sidebar's height, so the blank space below the
         // tabs (and the gaps between them) moves the window too.
         GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: Theme.rowSpacing) {
-                    NewTabRow { window.editAddress(.newTab) }
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        Group {
-                            switch item {
-                            case let .group(group): card(group)
-                            case let .tab(tab): row(tab)
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(spacing: Theme.rowSpacing) {
+                        // The New tab button sits where new tabs appear.
+                        if atTop { newTabRow }
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            Group {
+                                switch item {
+                                case let .group(group): card(group)
+                                case let .tab(tab): row(tab)
+                                }
                             }
+                            .padding(.top, extraSpace(above: index, in: items))
                         }
-                        .padding(.top, extraSpace(above: index, in: items))
+                        if !atTop {
+                            newTabRow
+                                .padding(.top, isCard(items.last) ? Theme.groupSpacing : 0)
+                        }
                     }
+                    .overlay(alignment: .topLeading) { lifted }
+                    .coordinateSpace(.named(Self.space))
+                    // One drag for the whole list, so a tab can cross into and out
+                    // of the group cards (a drag on the row itself would stop the
+                    // moment the row moved to another card).
+                    .simultaneousGesture(dragGesture)
+                    .onChange(of: dragging) { if !dragging { drop() } }
+                    .padding(.bottom, Theme.pageInset)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                    .background { WindowDragArea() }
                 }
-                .overlay(alignment: .topLeading) { lifted }
-                .coordinateSpace(.named(Self.space))
-                // One drag for the whole list, so a tab can cross into and out
-                // of the group cards (a drag on the row itself would stop the
-                // moment the row moved to another card).
-                .simultaneousGesture(dragGesture)
-                .onChange(of: dragging) { if !dragging { drop() } }
-                .padding(.bottom, Theme.pageInset)
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                .background { WindowDragArea() }
+                .scrollIndicators(.never)
+                // A tab coming on screen (a new one at the bottom of a long
+                // list, say) scrolls into view, by as little as it takes.
+                .onChange(of: store.activeTabID) {
+                    guard let id = store.activeTabID, store.activeTab?.place == .open else { return }
+                    withAnimation(reduceMotion ? nil : Self.glide) { scroller.scrollTo(id) }
+                }
             }
-            .scrollIndicators(.never)
         }
+    }
+
+    private var newTabRow: some View {
+        NewTabRow { window.editAddress(.newTab) }
+    }
+
+    private func isCard(_ item: TabListItem?) -> Bool {
+        if case .group = item { true } else { false }
     }
 
     private func card(_ group: TabGroup) -> some View {
@@ -273,7 +295,6 @@ private struct TabList: View {
     /// The cards' own edges keep them apart from loose tabs; a little extra
     /// below a card lets that read.
     private func extraSpace(above index: Int, in items: [TabListItem]) -> CGFloat {
-        let isCard = { (item: TabListItem) in if case .group = item { true } else { false } }
         let afterCard = index > 0 && isCard(items[index - 1])
         if afterCard && !isCard(items[index]) { return Theme.groupSpacing }
         return afterCard || isCard(items[index]) ? Theme.groupSpacing - Theme.rowSpacing : 0

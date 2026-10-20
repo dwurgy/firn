@@ -19,6 +19,9 @@ public final class BrowserStore {
     public private(set) var tabs: [Tab] = []
     public private(set) var activeSpaceID: UUID
     public private(set) var activeTabID: UUID?
+    /// Where new tabs go in a space's tab list (a setting; the app keeps it).
+    /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
+    public var newTabPlacement: NewTabPlacement = .bottom
 
     @ObservationIgnored private let makePage: @MainActor (_ dataStoreID: UUID) -> any PageController
     @ObservationIgnored private let now: () -> Date
@@ -120,10 +123,18 @@ public final class BrowserStore {
         }
     }
 
-    /// Where tabs arriving in a space's tab list go: the top, above any group.
-    private func topOfTabList(in spaceID: UUID) -> Int {
-        tabs.firstIndex { $0.spaceID == spaceID && $0.place == .open } ?? tabs.count
+    /// Where tabs arriving in a space's tab list go: the top (above any
+    /// group) or the bottom (below every group), as set.
+    private func arrivalIndex(in spaceID: UUID) -> Int {
+        let isListed = { (tab: Tab) in tab.spaceID == spaceID && tab.place == .open }
+        switch newTabPlacement {
+        case .top: return tabs.firstIndex(where: isListed) ?? tabs.count
+        case .bottom: return tabs.lastIndex(where: isListed).map { $0 + 1 } ?? tabs.count
+        }
     }
+
+    /// The same place, counted in the tab list (each group as one).
+    private var arrivalPosition: Int { newTabPlacement == .top ? 0 : .max }
 
     /// Puts a tab (already out of `tabs`) at `position` in `list` (0-based;
     /// the count, or more, means the end). With an empty list it goes back
@@ -169,9 +180,9 @@ public final class BrowserStore {
 
     /// Opens `url` in a new tab and shows it, or with `inBackground` stays
     /// put; the tab then loads the first time it's shown. (Pages loaded before
-    /// they've ever been on screen took seconds to appear when shown.) With an `opener`, the tab joins the opener's
-    /// space below it (after any tabs it opened before); otherwise it goes at
-    /// the end of the current space.
+    /// they've ever been on screen took seconds to appear when shown.) With
+    /// an `opener`, the tab joins the opener's space (see `add`); otherwise
+    /// it goes at the top or bottom of the current space's tab list, as set.
     @discardableResult
     public func openTab(_ url: URL, opener: Tab? = nil, inBackground: Bool = false) -> Tab {
         let tab = Tab(
@@ -196,22 +207,27 @@ public final class BrowserStore {
         return tab
     }
 
-    /// Links from a loose tab open right below it; links from a Basecamp
-    /// tile or a grouped tab open at the top of the tab list (joining a
-    /// group is a choice, so links don't fill one up). Either way, several
-    /// links from one tab stay in the order they were opened.
+    /// Links from an everyday tab open right below it, in its group if it
+    /// has one (as in Dia); links from a Basecamp tile open at the top or
+    /// bottom of the tab list, as set. Either way, several links from one
+    /// tab stay in the order they were opened.
     private func add(_ tab: Tab, below opener: Tab?, inBackground: Bool) {
         if let opener, let index = tabs.firstIndex(where: { $0.id == opener.id }) {
-            var position = opener.place == .open && opener.groupID == nil
-                ? index + 1
-                : topOfTabList(in: opener.spaceID)
-            // Past the links it opened before, but never into a group.
-            while position < tabs.count, tabs[position].openerTabID == opener.id, tabs[position].groupID == nil {
+            var position: Int
+            if opener.place == .open {
+                tab.groupID = opener.groupID
+                position = index + 1
+            } else {
+                position = arrivalIndex(in: opener.spaceID)
+            }
+            // Past the links it opened before, staying in the same list.
+            while position < tabs.count, tabs[position].openerTabID == opener.id,
+                  tabs[position].groupID == tab.groupID {
                 position += 1
             }
             tabs.insert(tab, at: position)
         } else {
-            tabs.append(tab)
+            tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
         }
         if !inBackground { select(tab) }
     }
@@ -272,7 +288,7 @@ public final class BrowserStore {
         return true
     }
 
-    /// An awake tile becomes a loose tab at the top of the tab list, so its page
+    /// An awake tile becomes a loose tab where new tabs go, so its page
     /// isn't lost. A resting one has nothing open to keep, so it goes.
     public func removeFromBasecamp(_ tab: Tab) {
         guard tab.place == .basecamp, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
@@ -280,7 +296,7 @@ public final class BrowserStore {
         guard !tab.isResting else { return }
         tab.place = .open
         tab.homeURL = nil
-        tabs.insert(tab, at: topOfTabList(in: tab.spaceID))
+        tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
     }
 
     /// Takes a Basecamp tile back to its home address, and shows it.
@@ -335,13 +351,13 @@ public final class BrowserStore {
         if oldGroupID != group.id { endIfEmpty(oldGroupID) }
     }
 
-    /// Takes a tab out of its group, to `position` in the tab list (the top,
-    /// unless dragged somewhere). A group it leaves empty ends.
-    public func takeOutOfGroup(_ tab: Tab, to position: Int = 0) {
+    /// Takes a tab out of its group, to `position` in the tab list (where
+    /// new tabs go, unless dragged somewhere). A group it leaves empty ends.
+    public func takeOutOfGroup(_ tab: Tab, to position: Int? = nil) {
         guard let groupID = tab.groupID, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tab.groupID = nil
-        insertInTabList([tab], at: position, fallback: index)
+        insertInTabList([tab], at: position ?? arrivalPosition, fallback: index)
         endIfEmpty(groupID)
     }
 
@@ -382,14 +398,14 @@ public final class BrowserStore {
         insertInTabList(members, at: position, fallback: from)
     }
 
-    /// Ends a group but keeps its tabs: they go to the top of the tab list,
-    /// in the group's order.
+    /// Ends a group but keeps its tabs: they go where new tabs go, in the
+    /// group's order.
     public func ungroup(_ group: TabGroup) {
         guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
         let members = tabs(in: group)
         tabs.removeAll { $0.groupID == group.id }
         for tab in members { tab.groupID = nil }
-        tabs.insert(contentsOf: members, at: topOfTabList(in: group.spaceID))
+        tabs.insert(contentsOf: members, at: arrivalIndex(in: group.spaceID))
         groups.remove(at: index)
     }
 
@@ -593,6 +609,11 @@ public final class BrowserStore {
     private static func webURL(_ url: URL) -> URL? {
         WebAddress.isWebURL(url) ? url : nil
     }
+}
+
+/// Where new tabs go in the tab list.
+public enum NewTabPlacement: String, CaseIterable, Sendable {
+    case top, bottom
 }
 
 /// One thing in a space's tab list: a group (shown as one card) or a loose tab.

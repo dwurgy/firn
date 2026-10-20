@@ -114,6 +114,7 @@ struct BrowserWindow: View {
     let window: WindowModel
     @State private var lights = TrafficLights()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
 
     private var store: BrowserStore { window.store }
     private var showsSidebar: Bool { !window.sidebarCollapsed || window.isPeeking }
@@ -164,6 +165,7 @@ struct BrowserWindow: View {
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))
         .onAppear { window.editAddress(.newTab) }
+        .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
         .onChange(of: store.openTabs.isEmpty) {
             if store.openTabs.isEmpty { window.editAddress(.newTab) }
         }

@@ -137,7 +137,7 @@ private struct SpaceButton: View {
 
     var body: some View {
         Button(action: action) {
-            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 16, color: Theme.spaceColor(space.color))
+            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 18, color: Theme.spaceColor(space.color))
         }
         .buttonStyle(SpaceButtonStyle(isActive: isActive))
         .help(number <= 9 ? "\(space.name) (⌃\(number))" : space.name)

@@ -113,8 +113,7 @@ struct SpaceSheet: View {
         }
     }
 
-    /// Two even rows of eight. The chosen one wears the space's color; the
-    /// rest stay quiet, so one accent leads.
+    /// Two even rows of eight. The chosen one wears the space's color.
     private var icons: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
             ForEach(SpaceIcon.allCases, id: \.self) { choice in
@@ -244,8 +243,8 @@ private struct ColorSwatch: View {
     }
 }
 
-/// One icon to pick: quiet ink until chosen, then the space's color on a
-/// soft wash of it, ringed like the chosen color.
+/// One icon to pick: ink until chosen, then the space's color on a soft
+/// wash of it, as in the approved draft.
 private struct IconChoice: View {
     let icon: SpaceIcon
     let color: Color
@@ -253,18 +252,15 @@ private struct IconChoice: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: action) {
-            SpaceIconView(icon: icon, size: 18, color: isSelected ? color : Theme.muted)
+            SpaceIconView(icon: icon, size: 22, color: isSelected ? color : Theme.ink)
                 .frame(width: 34, height: 34)
                 .background {
                     RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
-                        .fill(isSelected ? color.opacity(0.16) : hovering ? Theme.hover : .clear)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
-                        .strokeBorder(color.opacity(isSelected ? 1 : 0), lineWidth: 1.5)
+                        .fill(isSelected ? color.opacity(colorScheme == .dark ? 0.22 : 0.18) : hovering ? Theme.hover : .clear)
                 }
                 .contentShape(Rectangle())
         }

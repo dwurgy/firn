@@ -21,7 +21,7 @@ struct BasecampGrid: View {
                     } remove: {
                         store.removeFromBasecamp(tab)
                     } close: {
-                        store.close(tab)
+                        window.close(tab)
                     }
                 }
             }

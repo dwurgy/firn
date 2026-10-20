@@ -221,13 +221,6 @@ extension WebKitPageController {
     }
 }
 
-/// Tells pages when their icon links change. Its script and message channel
-/// live only in Firn's content world, so the page can't post to it; even so,
-/// a message counts only from the main frame, from the page's real origin
-/// (WebKit's, not anything claimed), and only as the exact word "changed".
-/// One watcher serves every page: popups share their opener's content
-/// controller, and a handler can't be added to it twice.
-@MainActor
 /// WKWebView sends keys to the page first, and when the page doesn't use
 /// ⌃Tab, AppKit takes it as "next field" and focuses the address bar, so the
 /// menu's Show Next Tab only worked every other press. Tab switching goes
@@ -246,6 +239,13 @@ private final class FirnWebView: WKWebView {
     #endif
 }
 
+/// Tells pages when their icon links change. Its script and message channel
+/// live only in Firn's content world, so the page can't post to it; even so,
+/// a message counts only from the main frame, from the page's real origin
+/// (WebKit's, not anything claimed), and only as the exact word "changed".
+/// One watcher serves every page: popups share their opener's content
+/// controller, and a handler can't be added to it twice.
+@MainActor
 private final class IconChangeWatcher: NSObject, WKScriptMessageHandler {
     static let shared = IconChangeWatcher()
     private static let name = "firnIconsChanged"

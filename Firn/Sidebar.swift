@@ -432,7 +432,7 @@ private struct TabList: View {
             store.select(tab)
             window.focusPage()
         } close: {
-            store.close(tab)
+            window.close(tab)
         } menu: {
             menu(for: tab)
         }
@@ -574,7 +574,7 @@ private struct TabList: View {
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Divider()
         }
-        Button("Close Tab", systemImage: "xmark") { store.close(tab) }
+        Button("Close Tab", systemImage: "xmark") { window.close(tab) }
             .keyboardShortcut("w")
     }
 

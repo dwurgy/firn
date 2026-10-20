@@ -72,6 +72,14 @@ final class WindowModel {
         if !sidebarCollapsed || isPeeking { renamingGroupID = id }
     }
 
+    /// Closes a tab; if it was on screen, the tab shown next takes keyboard
+    /// focus, so space and the arrow keys scroll it straight away.
+    func close(_ tab: FirnCore.Tab) {
+        let wasShowing = tab.id == store.activeTabID
+        store.close(tab)
+        if wasShowing { focusPage() }
+    }
+
     func duplicate(_ tab: FirnCore.Tab) {
         store.duplicate(tab)
         focusPage()
@@ -416,7 +424,6 @@ private struct TabShortcuts: View {
 /// shortcuts as a bonus.
 struct BrowserCommands: Commands {
     let window: WindowModel
-    @State private var lights = TrafficLights()
 
     private var store: BrowserStore { window.store }
     private var page: (any PageController)? { store.activeTab?.page }
@@ -449,7 +456,7 @@ struct BrowserCommands: Commands {
         }
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {
-            Button("Close Tab") { if let tab = store.activeTab { store.close(tab) } }
+            Button("Close Tab") { if let tab = store.activeTab { window.close(tab) } }
                 .keyboardShortcut("w")
                 .disabled(store.activeTab == nil)
             Button(store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab") {
@@ -481,10 +488,10 @@ struct BrowserCommands: Commands {
         CommandGroup(before: .windowArrangement) {
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }
                 .keyboardShortcut(.tab, modifiers: .control)
-                .disabled(store.openTabs.count < 2)
+                .disabled(store.sidebarTabs.count < 2)
             Button("Show Previous Tab") { store.selectTab(by: -1); window.focusPage() }
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
-                .disabled(store.openTabs.count < 2)
+                .disabled(store.sidebarTabs.count < 2)
             Divider()
         }
     }

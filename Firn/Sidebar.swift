@@ -206,20 +206,21 @@ private struct TabList: View {
     let store: BrowserStore
     let window: WindowModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The tab being dragged and how far it has moved; nil when nothing is.
-    @State private var dragging: (id: UUID, offset: CGFloat)?
-    /// True while a dropped row slides into its slot.
-    @State private var settling = false
+    /// The tab being dragged; nil when nothing is.
+    @State private var drag: TabDrag?
+    /// True while the pointer is down on a drag, so a drag the system
+    /// cancels (no mouse-up) still ends.
+    @GestureState private var dragging = false
+    /// Where each tab row and group card sits, in the list's own space.
+    @State private var frames: [UUID: CGRect] = [:]
     /// The group whose name is being edited, if any.
     @State private var renamingGroupID: UUID?
 
     /// One speed for rows gliding aside and for the dropped row settling.
     private static let glide = Animation.smooth(duration: 0.2)
-
-    private var step: CGFloat { Theme.rowHeight + Theme.rowSpacing }
+    private nonisolated static let space = "tabList"
 
     var body: some View {
-        let tabs = store.looseTabs
         let groups = store.tabGroups
         // The list fills the sidebar's height, so the blank space below the
         // tabs (and the gaps between them) moves the window too.
@@ -230,16 +231,18 @@ private struct TabList: View {
                     if !groups.isEmpty {
                         VStack(spacing: Theme.groupSpacing) {
                             ForEach(groups) { group in
+                                let members = shownTabs(in: group)
                                 GroupCard(
                                     group: group,
+                                    hasRows: !members.isEmpty,
                                     color: Theme.spaceColor(store.activeSpace.color),
                                     renaming: $renamingGroupID,
                                     store: store
                                 ) {
-                                    let members = store.tabs(in: group)
-                                    ForEach(members) { tab in
-                                        row(tab, in: members) { store.move(tab, into: group, at: $0) }
-                                    }
+                                    ForEach(members) { tab in row(tab) }
+                                }
+                                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                                    frames[group.id] = $0
                                 }
                             }
                         }
@@ -248,10 +251,15 @@ private struct TabList: View {
                         .padding(.top, Theme.groupSpacing - Theme.rowSpacing)
                         .padding(.bottom, Theme.groupSpacing)
                     }
-                    ForEach(tabs) { tab in
-                        row(tab, in: tabs) { store.move(tab, to: $0) }
-                    }
+                    ForEach(shownLooseTabs) { tab in row(tab) }
                 }
+                .overlay(alignment: .topLeading) { lifted }
+                .coordinateSpace(.named(Self.space))
+                // One drag for the whole list, so a tab can cross into and out
+                // of the group cards (a drag on the row itself would stop the
+                // moment the row moved to another card).
+                .simultaneousGesture(dragGesture)
+                .onChange(of: dragging) { if !dragging { drop() } }
                 .padding(.bottom, Theme.pageInset)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
                 .background { WindowDragArea() }
@@ -260,8 +268,7 @@ private struct TabList: View {
         }
     }
 
-    /// A tab row that can be dragged to a new place among `tabs`.
-    private func row(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab], move: @escaping (Int) -> Void) -> some View {
+    private func row(_ tab: FirnCore.Tab) -> some View {
         TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: store.canAddToBasecamp) {
             store.select(tab)
             window.focusPage()
@@ -277,60 +284,172 @@ private struct TabList: View {
         } takeOutOfGroup: {
             withAnimation(reduceMotion ? nil : Self.glide) { store.takeOutOfGroup(tab) }
         }
-        .offset(y: offset(of: tab, in: tabs))
-        // The dragged row sticks to the pointer; only the others glide.
-        .transaction { if dragging?.id == tab.id, !settling { $0.animation = nil } }
-        .zIndex(dragging?.id == tab.id ? 1 : 0)
-        .simultaneousGesture(drag(tab, in: tabs, move: move))
+        // While dragged, the row holds its slot open; the lifted copy is what shows.
+        .opacity(drag?.tab.id == tab.id ? 0 : 1)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+            frames[tab.id] = $0
+        }
     }
 
-    /// Where the dragged row would land, as a position in the list.
-    private func target(for id: UUID, offset: CGFloat, in tabs: [FirnCore.Tab]) -> Int {
-        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return 0 }
-        return min(max(from + Int((offset / step).rounded()), 0), tabs.count - 1)
+    // MARK: Where things show while dragging
+
+    /// A group's tabs as they'd be if the dragged tab landed where it is now.
+    private func shownTabs(in group: TabGroup) -> [FirnCore.Tab] {
+        var list = store.tabs(in: group)
+        guard let drag else { return list }
+        list.removeAll { $0.id == drag.tab.id }
+        if case let .group(id, position) = drag.target, id == group.id {
+            list.insert(drag.tab, at: min(position, list.count))
+        }
+        return list
     }
 
-    /// The dragged row follows the pointer; rows it passes glide out of the way.
-    private func offset(of tab: FirnCore.Tab, in tabs: [FirnCore.Tab]) -> CGFloat {
-        guard let dragging, let from = tabs.firstIndex(where: { $0.id == dragging.id }),
-              let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return 0 }
-        if tab.id == dragging.id { return dragging.offset }
-        let to = target(for: dragging.id, offset: dragging.offset, in: tabs)
-        if from < to, index > from, index <= to { return -step }
-        if from > to, index >= to, index < from { return step }
-        return 0
+    private var shownLooseTabs: [FirnCore.Tab] {
+        var list = store.looseTabs
+        guard let drag else { return list }
+        list.removeAll { $0.id == drag.tab.id }
+        if case let .loose(position) = drag.target {
+            list.insert(drag.tab, at: min(position, list.count))
+        }
+        return list
     }
 
-    private func drag(_ tab: FirnCore.Tab, in tabs: [FirnCore.Tab], move: @escaping (Int) -> Void) -> some Gesture {
-        DragGesture(minimumDistance: 6)
+    /// The tab rows on show (folded groups hide theirs).
+    private var shownTabs: [FirnCore.Tab] {
+        store.tabGroups.filter { !$0.folded }.flatMap(store.tabs(in:)) + store.looseTabs
+    }
+
+    /// Where the dragged tab would land with its middle at `y`. Above the
+    /// bottom of a group card, it goes into that group; below the last
+    /// card, among the loose tabs. Only the other rows count, so the slot
+    /// opening up never pushes the target back and forth.
+    private func target(at y: CGFloat, for tab: FirnCore.Tab) -> DropTarget {
+        func position(in list: [FirnCore.Tab]) -> Int {
+            list.filter { $0.id != tab.id && (frames[$0.id]?.midY ?? .infinity) < y }.count
+        }
+        if let group = store.tabGroups.first(where: { frames[$0.id].map { y <= $0.maxY } ?? false }) {
+            let members = store.tabs(in: group)
+            return .group(group.id, group.folded ? members.filter { $0.id != tab.id }.count : position(in: members))
+        }
+        return .loose(position(in: store.looseTabs))
+    }
+
+    /// The tab's place now, so a drag starts by changing nothing.
+    private func currentTarget(of tab: FirnCore.Tab) -> DropTarget {
+        if let groupID = tab.groupID {
+            let members = store.openTabs.filter { $0.groupID == groupID }
+            return .group(groupID, members.firstIndex { $0.id == tab.id } ?? 0)
+        }
+        return .loose(store.looseTabs.firstIndex { $0.id == tab.id } ?? 0)
+    }
+
+    /// The slot the lifted copy lines up with: the open gap, or the name
+    /// line of a folded group it's about to slip into.
+    private func slot(for drag: TabDrag) -> CGRect? {
+        if case let .group(id, _) = drag.target, store.tabGroups.first(where: { $0.id == id })?.folded == true,
+           let card = frames[id] {
+            let inset = Theme.panelRadius - Theme.tabRadius
+            return CGRect(x: card.minX + inset, y: card.minY, width: card.width - 2 * inset, height: Theme.rowHeight)
+        }
+        return frames[drag.tab.id]
+    }
+
+    private var intoFoldedGroup: Bool {
+        guard let drag, case let .group(id, _) = drag.target else { return false }
+        return store.tabGroups.first { $0.id == id }?.folded == true
+    }
+
+    /// The dragged tab, lifted a little above the list; it follows the
+    /// pointer up and down, and takes the width of the slot it's over.
+    @ViewBuilder private var lifted: some View {
+        if let drag, let slot = slot(for: drag) {
+            TabRow(tab: drag.tab, isActive: true, canAddToBasecamp: false,
+                   select: {}, close: {}, addToBasecamp: {}, newGroup: {}, takeOutOfGroup: {})
+                .shadow(color: drag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
+                .frame(width: slot.width)
+                .offset(x: slot.minX)
+                .animation(reduceMotion ? nil : Self.glide, value: slot.width)
+                .offset(y: drag.location.y - drag.grab.height)
+                .opacity(drag.settling && intoFoldedGroup ? 0 : 1)
+                // It sticks to the pointer; only settling into place glides.
+                .transaction { if !drag.settling { $0.animation = nil } }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    // MARK: Dragging
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.space))
+            .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
-                guard !settling else { return }
-                withAnimation(reduceMotion ? nil : Self.glide) {
-                    dragging = (tab.id, value.translation.height)
+                guard var current = drag else {
+                    // Only a drag that starts on a tab row moves a tab.
+                    guard let tab = shownTabs.first(where: { frames[$0.id]?.contains(value.startLocation) == true }),
+                          let frame = frames[tab.id] else { return }
+                    drag = TabDrag(
+                        tab: tab, grab: CGSize(width: 0, height: value.startLocation.y - frame.minY),
+                        location: value.location, target: currentTarget(of: tab))
+                    return
                 }
-            }
-            .onEnded { value in
-                guard !settling, let from = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-                let position = target(for: tab.id, offset: value.translation.height, in: tabs)
-                // Once the row is exactly over its slot, the move changes nothing you can see.
-                @MainActor func commit() {
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        move(position)
-                        dragging = nil
-                        settling = false
-                    }
-                }
-                if reduceMotion { return commit() }
-                settling = true
-                withAnimation(Self.glide) {
-                    dragging = (tab.id, CGFloat(position - from) * step)
-                } completion: {
-                    commit()
+                guard !current.settling else { return }
+                current.location = value.location
+                let target = target(at: value.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
+                if target == current.target {
+                    drag = current
+                } else {
+                    current.target = target
+                    withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
                 }
             }
     }
+
+    /// The lifted copy settles into its slot, then the tab really moves
+    /// there (which looks like nothing, since it's already showing there).
+    private func drop() {
+        guard var current = drag, !current.settling else { return }
+        @MainActor func commit() {
+            if store.openTabs.contains(where: { $0.id == current.tab.id }) {
+                switch current.target {
+                case let .group(id, position):
+                    if let group = store.tabGroups.first(where: { $0.id == id }) {
+                        store.move(current.tab, toGroup: group, at: position)
+                    }
+                case let .loose(position):
+                    store.move(current.tab, toGroup: nil, at: position)
+                }
+            }
+            drag = nil
+        }
+        guard !reduceMotion, let slot = slot(for: current) else { return commit() }
+        current.settling = true
+        current.location.y = slot.minY + current.grab.height
+        withAnimation(Self.glide) {
+            drag = current
+        } completion: {
+            // A group the tab left empty fades away.
+            withAnimation(Self.glide) { commit() }
+        }
+    }
+}
+
+/// Where a dragged tab would land: a place among a group's tabs, or among
+/// the loose tabs (not counting the tab itself).
+private enum DropTarget: Equatable {
+    case group(UUID, Int)
+    case loose(Int)
+}
+
+private struct TabDrag {
+    let tab: FirnCore.Tab
+    /// Where the pointer holds the row, from its top-left.
+    let grab: CGSize
+    /// The pointer, in the list's space.
+    var location: CGPoint
+    var target: DropTarget
+    /// True while the lifted copy glides into its slot after the drop.
+    var settling = false
 }
 
 private struct NewTabRow: View {
@@ -416,6 +535,8 @@ private struct TabRow: View {
 /// only while the pointer is on the name line.
 private struct GroupCard<Rows: View>: View {
     let group: TabGroup
+    /// False while a dragged tab has left it with none to show.
+    let hasRows: Bool
     let color: Color
     @Binding var renaming: UUID?
     let store: BrowserStore
@@ -438,7 +559,7 @@ private struct GroupCard<Rows: View>: View {
         }
         // Rows sit 4pt inside the card, so their 10pt corners nest in its 14pt.
         .padding(.horizontal, Theme.panelRadius - Theme.tabRadius)
-        .padding(.bottom, group.folded ? 0 : Theme.panelRadius - Theme.tabRadius)
+        .padding(.bottom, group.folded || !hasRows ? 0 : Theme.panelRadius - Theme.tabRadius)
         .background { card }
         .contextMenu {
             Button("Rename", action: startRenaming)

@@ -114,6 +114,30 @@ struct GroupsTests {
         #expect(!store.groups.contains { $0.id == first.id })
     }
 
+    @Test func aDraggedTabLandsWhereItIsDropped() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        let first = try #require(store.newGroup(with: tabs[0]))
+        let second = try #require(store.newGroup(with: tabs[1]))
+        // Loose into a group, after its tab.
+        store.move(tabs[2], toGroup: first, at: 1)
+        #expect(hosts(store.tabs(in: first)) == ["a.example", "c.example"])
+        // Group to group.
+        store.move(tabs[2], toGroup: second, at: 0)
+        #expect(hosts(store.tabs(in: second)) == ["c.example", "b.example"])
+        // Out of a group, below the loose tab.
+        store.move(tabs[2], toGroup: nil, at: 1)
+        #expect(tabs[2].groupID == nil)
+        #expect(hosts(store.looseTabs) == ["d.example", "c.example"])
+        // Loose to loose.
+        store.move(tabs[2], toGroup: nil, at: 0)
+        #expect(hosts(store.looseTabs) == ["c.example", "d.example"])
+        // The last tab out of a group ends it.
+        store.move(tabs[0], toGroup: nil, at: 0)
+        #expect(store.tabGroups.map(\.id) == [second.id])
+        #expect(hosts(store.looseTabs) == ["a.example", "c.example", "d.example"])
+    }
+
     @Test func addingAGroupedTabToBasecampTakesItOut() throws {
         let store = makeStore()
         let tabs = open("a", in: store)

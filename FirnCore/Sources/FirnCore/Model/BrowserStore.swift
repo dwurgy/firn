@@ -296,6 +296,20 @@ public final class BrowserStore {
         endIfEmpty(groupID)
     }
 
+    /// Where a dragged everyday tab lands: `position` among a group's tabs,
+    /// or among the loose tabs when `group` is nil (0-based, not counting
+    /// the tab itself; the count means the end). A group it leaves empty ends.
+    public func move(_ tab: Tab, toGroup group: TabGroup?, at position: Int) {
+        guard tab.place == .open else { return }
+        if let group {
+            move(tab, into: group, at: position)
+        } else if tab.groupID != nil {
+            takeOutOfGroup(tab, to: position)
+        } else {
+            move(tab, to: position)
+        }
+    }
+
     /// Renames a group. A name that's blank once tidied changes nothing.
     public func rename(_ group: TabGroup, to name: String) {
         guard let index = groups.firstIndex(where: { $0.id == group.id }),

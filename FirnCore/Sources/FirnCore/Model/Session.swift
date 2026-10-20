@@ -112,14 +112,35 @@ public struct WindowRecord: Codable, Equatable, Sendable {
     public var id: UUID
     public var activeSpaceID: UUID
     public var activeTabID: UUID?
+    /// The tab each other space last had on screen, by space id. Missing in
+    /// files from before spaces.
+    public var spaceTabIDs: [UUID: UUID]
     public var sidebarWidth: Double
     public var sidebarCollapsed: Bool
 
-    public init(id: UUID, activeSpaceID: UUID, activeTabID: UUID?, sidebarWidth: Double, sidebarCollapsed: Bool) {
+    public init(
+        id: UUID, activeSpaceID: UUID, activeTabID: UUID?, spaceTabIDs: [UUID: UUID] = [:],
+        sidebarWidth: Double, sidebarCollapsed: Bool
+    ) {
         self.id = id
         self.activeSpaceID = activeSpaceID
         self.activeTabID = activeTabID
+        self.spaceTabIDs = spaceTabIDs
         self.sidebarWidth = sidebarWidth
         self.sidebarCollapsed = sidebarCollapsed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, activeSpaceID, activeTabID, spaceTabIDs, sidebarWidth, sidebarCollapsed
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        activeSpaceID = try container.decode(UUID.self, forKey: .activeSpaceID)
+        activeTabID = try container.decodeIfPresent(UUID.self, forKey: .activeTabID)
+        spaceTabIDs = try container.decodeIfPresent([UUID: UUID].self, forKey: .spaceTabIDs) ?? [:]
+        sidebarWidth = try container.decode(Double.self, forKey: .sidebarWidth)
+        sidebarCollapsed = try container.decode(Bool.self, forKey: .sidebarCollapsed)
     }
 }

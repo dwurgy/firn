@@ -1,8 +1,11 @@
 import Foundation
 
 /// A space: its own browser, with its own tabs and website data
-/// (CLAUDE.md, How spaces work). Phase 2 has a single built-in space.
+/// (CLAUDE.md, How spaces work). Spaces are ordered by their place in
+/// `BrowserStore.spaces`; `order` mirrors it for saving.
 public struct Space: Identifiable, Codable, Hashable, Sendable {
+    public static let defaultName = "New Space"
+
     public let id: UUID
     public var name: String
     /// Firn's own line icon, by name.
@@ -26,5 +29,11 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
         self.order = order
         self.dataStoreID = dataStoreID
         self.lastChangedAt = lastChangedAt
+    }
+
+    /// A name fit to show, by the same rules as a group's: one line,
+    /// trimmed, not too long; nil if nothing's left.
+    static func cleanName(_ name: String) -> String? {
+        TabGroup.cleanName(name)
     }
 }

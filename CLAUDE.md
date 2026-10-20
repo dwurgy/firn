@@ -143,6 +143,7 @@ Each space is its own browser. This is the heart of the prototype; get it right 
   - **Reading mode:** a calm, text-only view of an article. WebKit has no built-in reader for other browsers, so this likely needs an open-source article parser (a dependency: ask).
   - **Back and skip in the mini player:** previous and next track, not only play and pause. Investigate how the page's media controls can be reached first.
   - **Import passwords** from the export file other browsers and password managers make, then offer to delete that file (it holds every password as plain text). Opus.
+  - **Move a tab to another space** (David, 2026-10-19: wanted, but not in Phase 4). Between separate spaces the tab reloads with the other space's sign-ins, so the menu should say that plainly.
   - **Where a tab came from:** a new tab opened from a link quietly shows which tab it came from (leaning toward a hover echo in the space's color), without a tree, indenting, or extra menus.
 
 Keyboard shortcuts match the Mac version of the Electron app unless David decides otherwise.
@@ -245,7 +246,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 2: done** (2026-10-18).
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
-- **Next:** Phase 4 (plan first, Opus).
+- **Phase 4: in progress.** Step 1 (the space rules) done 2026-10-19; next, the space row in the sidebar (Opus). Plan in `docs/HISTORY.md`.
 
 ---
 

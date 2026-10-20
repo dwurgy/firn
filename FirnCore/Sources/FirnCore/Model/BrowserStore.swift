@@ -27,8 +27,11 @@ public final class BrowserStore {
     private var closed: [ClosedItem] = []
     /// How many closed tabs and groups are kept, across all spaces.
     static let closedLimit = 30
+    /// The tab each space last had on screen, so switching back finds it.
+    private var lastTabBySpace: [UUID: UUID] = [:]
 
     @ObservationIgnored private let makePage: @MainActor (_ dataStoreID: UUID) -> any PageController
+    @ObservationIgnored private let removeData: @MainActor (_ dataStoreID: UUID) -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
@@ -38,17 +41,22 @@ public final class BrowserStore {
 
     /// - Parameters:
     ///   - makePage: Makes a page for a data store; `BrowserEngine.makePage` in the app.
+    ///   - removeData: Erases a data store no space uses any more;
+    ///     `BrowserEngine.removeData` in the app.
     ///   - now: The clock, replaceable in tests.
     public init(
         spaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
+        removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
         now: @escaping () -> Date = Date.init
     ) {
         precondition(!spaces.isEmpty, "Firn always has at least one space")
         self.spaces = spaces
         self.activeSpaceID = spaces[0].id
         self.makePage = makePage
+        self.removeData = removeData
         self.now = now
+        renumberSpaces()
     }
 
     /// Picks up where the saved session left off, or starts with
@@ -58,18 +66,141 @@ public final class BrowserStore {
         restoring session: Session?,
         defaultSpaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
+        removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
         now: @escaping () -> Date = Date.init
     ) {
         var seen = Set<UUID>()
         let saved = (session?.spaces ?? [])
             .sorted { $0.order < $1.order }
             .filter { seen.insert($0.id).inserted }
-        self.init(spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, now: now)
+            .map { space in
+                var space = space
+                space.name = Space.cleanName(space.name) ?? Space.defaultName
+                return space
+            }
+        self.init(
+            spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData, now: now
+        )
         if let session { restore(session) }
     }
 
     public var activeSpace: Space {
         spaces.first { $0.id == activeSpaceID } ?? spaces[0]
+    }
+
+    // MARK: - Spaces
+
+    /// Makes a space and shows it. It starts with no tabs and, unless it
+    /// shares another space's sign-ins, its own empty data store: signed
+    /// out of everything.
+    @discardableResult
+    public func addSpace(name: String, icon: String, color: String, sharingWith other: Space? = nil) -> Space {
+        let shared = other.flatMap { other in spaces.first { $0.id == other.id } }
+        let space = Space(
+            name: Space.cleanName(name) ?? Space.defaultName, icon: icon, color: color,
+            order: spaces.count, dataStoreID: shared?.dataStoreID ?? UUID(), lastChangedAt: now()
+        )
+        spaces.append(space)
+        selectSpace(space)
+        return space
+    }
+
+    /// Shows a space, on the tab it last had on screen (or the awake tab it
+    /// showed most recently, or none).
+    public func selectSpace(_ space: Space) {
+        guard space.id != activeSpaceID, spaces.contains(where: { $0.id == space.id }) else { return }
+        activeTab?.lastActiveAt = now()
+        lastTabBySpace[activeSpaceID] = activeTabID
+        activeSpaceID = space.id
+        activeTabID = nil
+        if let id = lastTabBySpace[space.id], let tab = tabs.first(where: { $0.id == id && $0.spaceID == space.id }) {
+            select(tab)
+        } else {
+            selectMostRecent()
+        }
+    }
+
+    /// Shows the space at `position` (0-based); past the end means the last one.
+    public func selectSpace(at position: Int) {
+        guard position >= 0 else { return }
+        selectSpace(spaces[min(position, spaces.count - 1)])
+    }
+
+    /// Shows the next space (or the previous one with `by: -1`), wrapping around.
+    public func selectSpace(by offset: Int) {
+        guard let current = spaces.firstIndex(where: { $0.id == activeSpaceID }) else { return }
+        let count = spaces.count
+        selectSpace(spaces[((current + offset) % count + count) % count])
+    }
+
+    /// Changes a space's name, icon, and color. An empty name keeps the old one.
+    public func updateSpace(_ space: Space, name: String, icon: String, color: String) {
+        guard let index = spaces.firstIndex(where: { $0.id == space.id }) else { return }
+        var updated = spaces[index]
+        updated.name = Space.cleanName(name) ?? updated.name
+        updated.icon = icon
+        updated.color = color
+        guard updated != spaces[index] else { return }
+        updated.lastChangedAt = now()
+        spaces[index] = updated
+    }
+
+    /// Moves a space to `position` among the spaces (0-based; the count means the end).
+    public func moveSpace(_ space: Space, to position: Int) {
+        guard let from = spaces.firstIndex(where: { $0.id == space.id }) else { return }
+        let moving = spaces.remove(at: from)
+        spaces.insert(moving, at: min(max(position, 0), spaces.count))
+        renumberSpaces()
+    }
+
+    /// The other spaces that share this space's sign-ins, cookies, and site data.
+    public func spacesSharingData(with space: Space) -> [Space] {
+        guard let dataStoreID = spaces.first(where: { $0.id == space.id })?.dataStoreID else { return [] }
+        return spaces.filter { $0.id != space.id && $0.dataStoreID == dataStoreID }
+    }
+
+    /// Gives a shared space a new, empty data store of its own: it starts
+    /// fresh and signed out, and the spaces it shared with keep theirs.
+    /// Its tabs let their pages go; the one on screen loads again at once.
+    public func stopSharing(_ space: Space) {
+        guard !spacesSharingData(with: space).isEmpty,
+              let index = spaces.firstIndex(where: { $0.id == space.id }) else { return }
+        spaces[index].dataStoreID = UUID()
+        spaces[index].lastChangedAt = now()
+        for tab in tabs where tab.spaceID == space.id && !tab.isResting {
+            tab.sleep()
+            if tab.id == activeTabID { wake(tab) }
+        }
+    }
+
+    /// Deletes a space: its tabs, its groups, what ⇧⌘T could bring back in
+    /// it, and, if no other space shares it, its sign-ins, cookies, and site
+    /// data. The last space can't be deleted. If it's on screen, the space
+    /// below it (or above, if it's last) is shown first.
+    public func deleteSpace(_ space: Space) {
+        guard spaces.count > 1, let index = spaces.firstIndex(where: { $0.id == space.id }) else { return }
+        let deleted = spaces[index]
+        if deleted.id == activeSpaceID {
+            selectSpace(spaces[index + 1 < spaces.count ? index + 1 : index - 1])
+        }
+        for tab in tabs where tab.spaceID == deleted.id { tab.sleep() }
+        tabs.removeAll { $0.spaceID == deleted.id }
+        groups.removeAll { $0.spaceID == deleted.id }
+        closed.removeAll { $0.spaceID == deleted.id }
+        lastTabBySpace[deleted.id] = nil
+        spaces.remove(at: index)
+        renumberSpaces()
+        if !spaces.contains(where: { $0.dataStoreID == deleted.dataStoreID }) {
+            removeData(deleted.dataStoreID)
+        }
+    }
+
+    /// Keeps each space's `order` matching its place in `spaces`.
+    private func renumberSpaces() {
+        for index in spaces.indices where spaces[index].order != index {
+            spaces[index].order = index
+            spaces[index].lastChangedAt = now()
+        }
     }
 
     /// The current space's Basecamp tiles, in order.
@@ -675,6 +806,7 @@ public final class BrowserStore {
         savedGroupRecords = Dictionary(groupRecords.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let window = WindowRecord(
             id: windowID, activeSpaceID: activeSpaceID, activeTabID: activeTabID,
+            spaceTabIDs: lastTabBySpace.filter { $0.key != activeSpaceID },
             sidebarWidth: sidebarWidth, sidebarCollapsed: sidebarCollapsed
         )
         return Session(spaces: spaces, groups: groupRecords, tabs: records, window: window)
@@ -726,6 +858,8 @@ public final class BrowserStore {
         savedGroupRecords = Dictionary(session.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         windowID = session.window.id
         if spaceIDs.contains(session.window.activeSpaceID) { activeSpaceID = session.window.activeSpaceID }
+        let tabSpaces = Dictionary(tabs.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })
+        lastTabBySpace = session.window.spaceTabIDs.filter { tabSpaces[$0.value] == $0.key }
         if let id = session.window.activeTabID,
            let tab = tabs.first(where: { $0.id == id && $0.spaceID == activeSpaceID }) {
             select(tab)

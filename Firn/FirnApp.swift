@@ -13,8 +13,15 @@ struct FirnApp: App {
         let file = SessionFile.standard
         let session = file.load()
         let store = BrowserStore(
-            restoring: session, defaultSpaces: [PhaseTwo.space], makePage: BrowserEngine.makePage
+            restoring: session, defaultSpaces: [FirstSpace.space],
+            makePage: BrowserEngine.makePage, removeData: BrowserEngine.removeData
         )
+        // Erase what's left of spaces deleted while their pages were open.
+        // Only after a session really loaded: a fresh start after a damaged
+        // file doesn't know which spaces exist, so it erases nothing.
+        if let session, !session.spaces.isEmpty {
+            BrowserEngine.removeUnusedData(keeping: Set(store.spaces.map(\.dataStoreID)))
+        }
         let window = WindowModel(store: store, restoring: session?.window)
         _window = State(initialValue: window)
         saver = SessionSaver(file: file) {
@@ -43,9 +50,9 @@ struct FirnApp: App {
     }
 }
 
-/// Until spaces arrive (Phase 4), there's one built-in space. It keeps Phase 1's
-/// named data store, never .default(), so sign-ins carry over.
-enum PhaseTwo {
+/// The space Firn starts with. It keeps Phase 1's named data store, never
+/// .default(), so sign-ins carry over.
+enum FirstSpace {
     static let space = Space(
         id: UUID(uuidString: "0B8E5D2C-7A41-4F6E-9D3B-5C2A1E8F7B64")!,
         name: "Personal",

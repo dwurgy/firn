@@ -218,8 +218,8 @@ private struct TabList: View {
     @GestureState private var dragging = false
     /// Where each tab row and group card sits, in the list's own space.
     @State private var frames: [UUID: CGRect] = [:]
-    /// The group whose name is being edited, if any.
-    @State private var renamingGroupID: UUID?
+    /// The group whose name is being edited, if any (kept by the window).
+    private var renamingGroupID: UUID? { window.renamingGroupID }
 
     /// One speed for rows gliding aside and for the dropped row settling.
     private static let glide = Animation.smooth(duration: 0.2)
@@ -286,7 +286,7 @@ private struct TabList: View {
             group: group,
             hasRows: !members.isEmpty,
             color: Theme.spaceColor(store.activeSpace.color),
-            renaming: $renamingGroupID,
+            renaming: Bindable(window).renamingGroupID,
             foldLocked: foldLocked,
             store: store
         ) {
@@ -309,20 +309,13 @@ private struct TabList: View {
     }
 
     private func row(_ tab: FirnCore.Tab) -> some View {
-        TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: store.canAddToBasecamp) {
+        TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
             store.select(tab)
             window.focusPage()
         } close: {
             store.close(tab)
-        } addToBasecamp: {
-            store.addToBasecamp(tab)
-        } newGroup: {
-            withAnimation(reduceMotion ? nil : Self.glide) {
-                // A new group asks for its name straight away.
-                renamingGroupID = store.newGroup(with: tab)?.id
-            }
-        } takeOutOfGroup: {
-            withAnimation(reduceMotion ? nil : Self.glide) { store.takeOutOfGroup(tab) }
+        } menu: {
+            menu(for: tab)
         }
         // While dragged, the row holds its slot open; the lifted copy is what shows.
         .opacity(drag?.tab.id == tab.id ? 0 : 1)
@@ -428,12 +421,52 @@ private struct TabList: View {
         return store.tabGroups.first { $0.id == id }?.folded == true
     }
 
+    /// A tab's right-click menu: the few things you'd reach for, as in Dia.
+    /// Later: Open as Split (split view) and Move to Space (Phase 4).
+    @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
+        let glide = reduceMotion ? nil : Self.glide
+        if tab.place == .open {
+            Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
+                .disabled(!store.canAddToBasecamp)
+            Divider()
+            Button("Duplicate", systemImage: "plus.square.on.square") { window.duplicate(tab) }
+                .disabled(tab.url == nil)
+            Divider()
+            if tab.groupID == nil {
+                Button("New Group with This Tab", systemImage: "folder.badge.plus") {
+                    withAnimation(glide) { window.newGroup(with: tab) }
+                }
+                .keyboardShortcut("n", modifiers: [.command, .control])
+            } else {
+                Button("Remove from Group", systemImage: "folder.badge.minus") {
+                    withAnimation(glide) { store.takeOutOfGroup(tab) }
+                }
+            }
+            // Only this space's groups, so nothing crosses between spaces.
+            let others = store.tabGroups.filter { $0.id != tab.groupID }
+            if !others.isEmpty {
+                Menu("Move to Group", systemImage: "folder") {
+                    ForEach(others) { group in
+                        Button(group.name) { withAnimation(glide) { store.move(tab, toEndOf: group) } }
+                    }
+                }
+            }
+            Divider()
+        }
+        if tab.url != nil {
+            Button("Copy Link", systemImage: "link") { window.copyLink(of: tab) }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+            Divider()
+        }
+        Button("Close Tab", systemImage: "xmark") { store.close(tab) }
+            .keyboardShortcut("w")
+    }
+
     /// The dragged tab, lifted a little above the list; it follows the
     /// pointer up and down, and takes the width of the slot it's over.
     @ViewBuilder private var lifted: some View {
         if let drag, let slot = slot(for: drag) {
-            TabRow(tab: drag.tab, isActive: true, canAddToBasecamp: false,
-                   select: {}, close: {}, addToBasecamp: {}, newGroup: {}, takeOutOfGroup: {})
+            TabRow(tab: drag.tab, isActive: true, select: {}, close: {}) { EmptyView() }
                 .shadow(color: drag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
                 .frame(width: slot.width)
                 .offset(x: slot.minX)
@@ -449,8 +482,7 @@ private struct TabList: View {
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
                       foldLocked: true, store: store) {
                 ForEach(store.tabs(in: groupDrag.group)) { tab in
-                    TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: false,
-                           select: {}, close: {}, addToBasecamp: {}, newGroup: {}, takeOutOfGroup: {})
+                    TabRow(tab: tab, isActive: tab.id == store.activeTabID, select: {}, close: {}) { EmptyView() }
                 }
             }
             .shadow(color: groupDrag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
@@ -613,15 +645,12 @@ private struct NewTabRow: View {
     }
 }
 
-private struct TabRow: View {
+private struct TabRow<MenuItems: View>: View {
     let tab: FirnCore.Tab
     let isActive: Bool
-    let canAddToBasecamp: Bool
     let select: () -> Void
     let close: () -> Void
-    let addToBasecamp: () -> Void
-    let newGroup: () -> Void
-    let takeOutOfGroup: () -> Void
+    @ViewBuilder let menu: MenuItems
     @State private var hovering = false
 
     var body: some View {
@@ -649,28 +678,7 @@ private struct TabRow: View {
             }
         }
         .onHover { hovering = $0 }
-        .contextMenu {
-            if let page = tab.page {
-                Button("Reload") { page.reload() }
-            }
-            if let url = tab.url {
-                Button("Copy Address") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                }
-            }
-            if tab.place == .open {
-                Button("Add to Basecamp", action: addToBasecamp)
-                    .disabled(!canAddToBasecamp)
-                if tab.groupID == nil {
-                    Button("New Group with This Tab", action: newGroup)
-                } else {
-                    Button("Remove from Group", action: takeOutOfGroup)
-                }
-            }
-            Divider()
-            Button("Close Tab", action: close)
-        }
+        .contextMenu { menu }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
     }

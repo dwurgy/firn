@@ -389,4 +389,54 @@ struct GroupsTests {
         #expect(hosts(restored.looseTabs) == ["b.example", "c.example"])
         #expect(restored.basecampTabs.first?.groupID == nil)
     }
+
+    // MARK: - Right-click: Move to Group and Duplicate
+
+    @Test func moveToGroupPutsTheTabAtTheEnd() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.group(tabs[1], with: tabs[0])
+        store.move(tabs[2], toEndOf: group)
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "b.example", "c.example"])
+        #expect(store.looseTabs.isEmpty)
+    }
+
+    @Test func moveToGroupOpensAFoldedGroupForTheTabOnScreen() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.setFolded(group, true)
+        // b isn't on screen (c is), so the group stays folded.
+        store.move(tabs[1], toEndOf: group)
+        #expect(store.tabGroups.first?.folded == true)
+        store.move(tabs[2], toEndOf: group)
+        #expect(store.tabGroups.first?.folded == false)
+    }
+
+    @Test func moveToAnotherGroupEndsTheOldOneIfEmpty() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let first = try #require(store.newGroup(with: tabs[0]))
+        let second = try #require(store.newGroup(with: tabs[1]))
+        store.move(tabs[0], toEndOf: second)
+        #expect(store.tabGroups.map(\.id) == [second.id])
+        #expect(!store.tabGroups.contains { $0.id == first.id })
+    }
+
+    @Test func duplicateOpensRightBelowInTheSameGroupAndShowsIt() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.group(tabs[1], with: tabs[0])
+        let copy = try #require(store.duplicate(tabs[0]))
+        #expect(copy.id != tabs[0].id)
+        #expect(copy.groupID == group.id)
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "a.example", "b.example"])
+        #expect(store.activeTabID == copy.id)
+        // A loose tab's copy stays loose, right below it.
+        let looseCopy = try #require(store.duplicate(tabs[2]))
+        #expect(looseCopy.groupID == nil)
+        #expect(hosts(store.looseTabs) == ["c.example", "c.example"])
+    }
 }

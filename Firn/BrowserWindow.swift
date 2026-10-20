@@ -24,6 +24,9 @@ final class WindowModel {
     /// out, wherever the pointer goes, until typing is done.
     private var peekHeldForTyping = false
     private var peekHideTask: Task<Void, Never>?
+    /// The group whose name is being edited, if any. Here rather than in the
+    /// sidebar so the menu bar's New Group can ask for a name too.
+    var renamingGroupID: UUID?
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -36,6 +39,27 @@ final class WindowModel {
     }
 
     func toggleSidebar() { setSidebarCollapsed(!sidebarCollapsed) }
+
+    // MARK: Tab actions (the tab's right-click menu and the menu bar)
+
+    /// Starts a group with an everyday tab, and asks for its name straight
+    /// away when the sidebar is showing.
+    func newGroup(with tab: FirnCore.Tab) {
+        let group = store.newGroup(with: tab)
+        if !sidebarCollapsed || isPeeking { renamingGroupID = group?.id }
+    }
+
+    func duplicate(_ tab: FirnCore.Tab) {
+        store.duplicate(tab)
+        focusPage()
+    }
+
+    /// Puts the tab's address on the clipboard (only http and https reach a tab).
+    func copyLink(of tab: FirnCore.Tab) {
+        guard let url = tab.url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
 
     func setSidebarCollapsed(_ collapsed: Bool) {
         guard collapsed != sidebarCollapsed else { return }
@@ -373,6 +397,11 @@ struct BrowserCommands: Commands {
 
     private var store: BrowserStore { window.store }
     private var page: (any PageController)? { store.activeTab?.page }
+    /// The tab on screen, if it's an everyday tab (not a Basecamp tile).
+    private var everydayTab: FirnCore.Tab? { store.activeTab.flatMap { $0.place == .open ? $0 : nil } }
+    private var glide: Animation? {
+        Theme.glide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+    }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -380,6 +409,23 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut("t")
             Button("Open Location…") { window.editAddress(.currentTab) }
                 .keyboardShortcut("l")
+            Divider()
+            Button("Duplicate Tab") { if let tab = everydayTab { window.duplicate(tab) } }
+                .disabled(everydayTab?.url == nil)
+            // As in Dia.
+            Button("New Group with This Tab") {
+                if let tab = everydayTab {
+                    withAnimation(glide) { window.newGroup(with: tab) }
+                }
+            }
+            .keyboardShortcut("n", modifiers: [.command, .control])
+            .disabled(everydayTab == nil || everydayTab?.groupID != nil)
+        }
+        // As in Arc and Dia.
+        CommandGroup(after: .pasteboard) {
+            Button("Copy Link") { if let tab = store.activeTab { window.copyLink(of: tab) } }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(store.activeTab?.url == nil)
         }
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {

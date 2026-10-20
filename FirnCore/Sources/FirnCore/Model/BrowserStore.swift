@@ -198,6 +198,22 @@ public final class BrowserStore {
         return tab
     }
 
+    /// Opens a copy of an everyday tab right below it, in its group if it has
+    /// one, and shows it. The copy loads its address fresh (back/forward
+    /// history isn't copied) and stays in the same space and data store.
+    @discardableResult
+    public func duplicate(_ tab: Tab) -> Tab? {
+        guard tab.place == .open, let url = tab.url,
+              let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return nil }
+        let copy = Tab(
+            spaceID: tab.spaceID, url: url, title: tab.title, icon: tab.icon,
+            groupID: tab.groupID, lastActiveAt: now()
+        )
+        tabs.insert(copy, at: index + 1)
+        select(copy)
+        return copy
+    }
+
     /// Takes in a page a tab's page opened (a link meant for a new window, or
     /// a popup). It already exists and stays connected to its opener, so it
     /// is shown as is; it shares the opener's space and data store.
@@ -361,6 +377,18 @@ public final class BrowserStore {
         tab.groupID = group.id
         insert(tab, at: position, in: tabs(in: group), fallback: index)
         if oldGroupID != group.id { endIfEmpty(oldGroupID) }
+    }
+
+    /// Moves an everyday tab to the end of a group (right-click › Move to
+    /// Group). A folded group opens if the tab is the one on screen, so it
+    /// doesn't vanish.
+    public func move(_ tab: Tab, toEndOf group: TabGroup) {
+        guard tab.groupID != group.id else { return }
+        move(tab, into: group, at: tabs(in: group).count)
+        if tab.groupID == group.id, tab.id == activeTabID,
+           groups.first(where: { $0.id == group.id })?.folded == true {
+            setFolded(group, false)
+        }
     }
 
     /// Takes a tab out of its group, to `position` in the tab list (where

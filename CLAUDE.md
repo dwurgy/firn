@@ -138,7 +138,7 @@ Each space is its own browser. This is the heart of the prototype; get it right 
   - **The moment:** when Firn comes back to the front, after a beat so it's seen, idle tabs glide down one after another and settle into a folded group named "Drifted tabs" at the bottom of the tab list (like snow settling; a plain fade with Reduce Motion). No count. Click one to bring it back where new tabs go.
   - **After quitting:** the group holds only this session's drifted tabs; next launch it's gone and they live in the overflow.
   - **The overflow:** one small button in the sidebar's bottom row (with the spaces; no more top-row buttons), opening a calm panel, not a long menu: the space's drifted tabs and Recently closed, and later History (Firn's own per-space history is its own step).
-  - Drifted tabs are deleted after 30 days of using Firn in the overflow (as in Dia), or when closed.
+  - Drifted tabs are deleted 30 calendar days after they drift (as in Dia; David, 2026-10-20), or when closed. Only this cutoff uses calendar days; drifting itself counts days Firn was used.
 - **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab (at the top of the loose tabs). Links clicked in a Basecamp tile should open as a Lookout first, so you glance before keeping (David, 2026-10-18); until Lookout exists they open where new tabs go.
 - **Split view:** two pages side by side, each with its own address and back/forward; drag the gap to resize; one row in the sidebar.
 - **Command bar:** one shortcut opens a centered bar: type an address, search, jump to an open tab in this space, or run an action by name.

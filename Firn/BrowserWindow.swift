@@ -27,6 +27,9 @@ final class WindowModel {
     /// The group whose name is being edited, if any. Here rather than in the
     /// sidebar so the menu bar's New Group can ask for a name too.
     var renamingGroupID: UUID?
+    /// A group just made: its card starts thawed (looking like a loose tab)
+    /// and frost forms around its tab (see `TabList`).
+    var formingGroupID: UUID?
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -42,11 +45,31 @@ final class WindowModel {
 
     // MARK: Tab actions (the tab's right-click menu and the menu bar)
 
-    /// Starts a group with an everyday tab, and asks for its name straight
-    /// away when the sidebar is showing.
+    /// Starts a group with an everyday tab. The tab doesn't move: its card
+    /// appears thawed, in the tab's exact shape, so the change is invisible,
+    /// and then the frost forms (`finishForming`). Reduce Motion: a fade.
     func newGroup(with tab: FirnCore.Tab) {
-        let group = store.newGroup(with: tab)
-        if !sidebarCollapsed || isPeeking { renamingGroupID = group?.id }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let group = withAnimation(.easeOut(duration: 0.2)) { store.newGroup(with: tab) }
+            if let group { askForName(group.id) }
+            return
+        }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            formingGroupID = store.newGroup(with: tab)?.id
+        }
+    }
+
+    /// The frost has formed around a new group: it asks for its name, when
+    /// the sidebar is showing.
+    func finishForming(_ id: UUID) {
+        formingGroupID = nil
+        askForName(id)
+    }
+
+    private func askForName(_ id: UUID) {
+        if !sidebarCollapsed || isPeeking { renamingGroupID = id }
     }
 
     func duplicate(_ tab: FirnCore.Tab) {
@@ -399,9 +422,6 @@ struct BrowserCommands: Commands {
     private var page: (any PageController)? { store.activeTab?.page }
     /// The tab on screen, if it's an everyday tab (not a Basecamp tile).
     private var everydayTab: FirnCore.Tab? { store.activeTab.flatMap { $0.place == .open ? $0 : nil } }
-    private var glide: Animation? {
-        Theme.glide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -415,7 +435,7 @@ struct BrowserCommands: Commands {
             // As in Dia.
             Button("New Group with This Tab") {
                 if let tab = everydayTab {
-                    withAnimation(glide) { window.newGroup(with: tab) }
+                    window.newGroup(with: tab)
                 }
             }
             .keyboardShortcut("n", modifiers: [.command, .control])

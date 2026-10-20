@@ -46,7 +46,7 @@ final class WebKitPageController: NSObject, PageController {
     /// over for a popup, which is a copy of the opener's.
     private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = FirnWebView(frame: .zero, configuration: configuration)
         super.init()
 
         webView.navigationDelegate = self
@@ -228,6 +228,24 @@ extension WebKitPageController {
 /// One watcher serves every page: popups share their opener's content
 /// controller, and a handler can't be added to it twice.
 @MainActor
+/// WKWebView sends keys to the page first, and when the page doesn't use
+/// ⌃Tab, AppKit takes it as "next field" and focuses the address bar, so the
+/// menu's Show Next Tab only worked every other press. Tab switching goes
+/// to the menu first instead, as in other browsers; everything else still
+/// goes to the page.
+private final class FirnWebView: WKWebView {
+    #if os(macOS)
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.shift)
+        if event.type == .keyDown, event.charactersIgnoringModifiers == "\t" || event.charactersIgnoringModifiers == "\u{19}",
+           modifiers == .control, NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+    #endif
+}
+
 private final class IconChangeWatcher: NSObject, WKScriptMessageHandler {
     static let shared = IconChangeWatcher()
     private static let name = "firnIconsChanged"

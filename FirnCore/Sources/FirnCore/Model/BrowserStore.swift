@@ -138,9 +138,6 @@ public final class BrowserStore {
         }
     }
 
-    /// The same place, counted in the tab list (each group as one).
-    private var arrivalPosition: Int { newTabPlacement == .top ? 0 : .max }
-
     /// Puts a tab (already out of `tabs`) at `position` in `list` (0-based;
     /// the count, or more, means the end). With an empty list it goes back
     /// to `fallback`.
@@ -391,13 +388,20 @@ public final class BrowserStore {
         }
     }
 
-    /// Takes a tab out of its group, to `position` in the tab list (where
-    /// new tabs go, unless dragged somewhere). A group it leaves empty ends.
+    /// Takes a tab out of its group: to `position` in the tab list when
+    /// dragged, otherwise right below the group, so it doesn't fly off to
+    /// where new tabs go (David, 2026-10-19). A group it leaves empty ends.
     public func takeOutOfGroup(_ tab: Tab, to position: Int? = nil) {
         guard let groupID = tab.groupID, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tab.groupID = nil
-        insertInTabList([tab], at: position ?? arrivalPosition, fallback: index)
+        if let position {
+            insertInTabList([tab], at: position, fallback: index)
+        } else {
+            // Right below what's left of the group (or where it was).
+            let below = tabs.lastIndex { $0.groupID == groupID }.map { $0 + 1 } ?? index
+            tabs.insert(tab, at: below)
+        }
         endIfEmpty(groupID)
     }
 
@@ -438,14 +442,12 @@ public final class BrowserStore {
         insertInTabList(members, at: position, fallback: from)
     }
 
-    /// Ends a group but keeps its tabs: they go where new tabs go, in the
+    /// Ends a group but keeps its tabs, right where the card was, in the
     /// group's order.
     public func ungroup(_ group: TabGroup) {
         guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
-        let members = tabs(in: group)
-        tabs.removeAll { $0.groupID == group.id }
-        for tab in members { tab.groupID = nil }
-        tabs.insert(contentsOf: members, at: arrivalIndex(in: group.spaceID))
+        // Its tabs stay right where the card was.
+        for tab in tabs(in: group) { tab.groupID = nil }
         groups.remove(at: index)
     }
 

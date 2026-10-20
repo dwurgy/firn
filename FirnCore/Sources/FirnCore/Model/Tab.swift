@@ -7,7 +7,16 @@ import Observation
 @Observable
 public final class Tab: Identifiable {
     public enum Place: String, Codable, Sendable {
-        case basecamp, open, archived
+        case basecamp, open, drifted
+
+        /// Files from before Drifted tabs said "archived".
+        public init(from decoder: any Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            guard let place = Place(rawValue: raw == "archived" ? "drifted" : raw) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown place"))
+            }
+            self = place
+        }
     }
 
     public let id: UUID
@@ -20,6 +29,8 @@ public final class Tab: Identifiable {
     /// The tab whose link opened this one, if any.
     public var openerTabID: UUID?
     public internal(set) var lastActiveAt: Date
+    /// When a drifted tab drifted; it's deleted 30 calendar days later.
+    public internal(set) var driftedAt: Date?
 
     /// The page, once the tab has been shown. Until then the tab only
     /// remembers where it was.
@@ -31,6 +42,7 @@ public final class Tab: Identifiable {
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
         url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, groupID: UUID? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
+        driftedAt: Date? = nil,
         page: (any PageController)? = nil
     ) {
         self.id = id
@@ -40,6 +52,7 @@ public final class Tab: Identifiable {
         self.groupID = groupID
         self.openerTabID = openerTabID
         self.lastActiveAt = lastActiveAt
+        self.driftedAt = driftedAt
         self.restingURL = url
         self.restingTitle = title
         self.restingIcon = icon

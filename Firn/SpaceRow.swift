@@ -2,8 +2,8 @@ import FirnCore
 import SwiftUI
 
 /// The row at the bottom of the sidebar: one button per space, in order, and
-/// a button to add one (the New space sheet). Each space shows its own icon
-/// in its color.
+/// a button to add one (the New space sheet), with the overflow on the left.
+/// Each space shows its own icon in its color.
 struct SpaceRow: View {
     let store: BrowserStore
     let window: WindowModel
@@ -12,9 +12,8 @@ struct SpaceRow: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            // Kept free for a tool someday; as wide as "+", so the spaces
-            // sit truly centered between the two.
-            Color.clear.frame(width: 28, height: 28)
+            // As wide as "+", so the spaces sit truly centered between the two.
+            OverflowButton(store: store, window: window)
             buttons
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, (Theme.rowHeight - 28) / 2)

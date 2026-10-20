@@ -13,7 +13,7 @@ public struct Session: Codable, Equatable, Sendable {
     public var groups: [GroupRecord]
     public var tabs: [TabRecord]
     public var window: WindowRecord
-    /// The days Firn was used, as "yyyy-MM-dd", for archiving. Missing in
+    /// The days Firn was used, as "yyyy-MM-dd", for drifting. Missing in
     /// files from before Archived.
     public var usedDays: [String]
 
@@ -85,11 +85,14 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var order: Int
     public var lastActiveAt: Date
     public var openerTabID: UUID?
+    /// When a drifted tab drifted. Missing in files from before Drifted tabs.
+    public var driftedAt: Date?
     public var lastChangedAt: Date
 
     public init(
         id: UUID, spaceID: UUID, place: Tab.Place, url: URL?, title: String, icon: Data? = nil, homeURL: URL?,
-        groupID: UUID? = nil, order: Int, lastActiveAt: Date, openerTabID: UUID?, lastChangedAt: Date
+        groupID: UUID? = nil, order: Int, lastActiveAt: Date, openerTabID: UUID?, driftedAt: Date? = nil,
+        lastChangedAt: Date
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -102,6 +105,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.order = order
         self.lastActiveAt = lastActiveAt
         self.openerTabID = openerTabID
+        self.driftedAt = driftedAt
         self.lastChangedAt = lastChangedAt
     }
 

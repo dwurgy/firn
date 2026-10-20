@@ -33,6 +33,11 @@ final class WindowModel {
     /// The New space or Edit space sheet, while it's open. Here so the menu
     /// bar's New Space… can open it too.
     var spaceSheet: SpaceSheetMode?
+    /// Idle tabs waiting to drift, one by one, so each is seen going (see
+    /// `TabList`).
+    var driftQueue: [FirnCore.Tab] = []
+    /// Whether the overflow (drifted tabs and Recently closed) is open.
+    var showsOverflow = false
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -198,7 +203,9 @@ struct BrowserWindow: View {
     @State private var lights = TrafficLights()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
-    @AppStorage(Preference.archiveAfter) private var archiveAfter = ArchiveAfter.sevenDays
+    @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
+    /// Waiting out the beat before idle tabs drift.
+    @State private var driftTask: Task<Void, Never>?
 
     private var store: BrowserStore { window.store }
     private var showsSidebar: Bool { !window.sidebarCollapsed || window.isPeeking }
@@ -251,16 +258,20 @@ struct BrowserWindow: View {
         .sheet(item: Binding(get: { window.spaceSheet }, set: { window.spaceSheet = $0 })) { mode in
             SpaceSheet(window: window, mode: mode)
         }
-        .onAppear { window.editAddress(.newTab) }
-        .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
-        .onChange(of: archiveAfter, initial: true) {
-            store.archiveAfter = archiveAfter
-            archiveIdleTabs()
+        .onAppear {
+            window.editAddress(.newTab)
+            // Launching may bring Firn to the front before this window listens.
+            driftIdleTabs(afterABeat: true)
         }
-        // Coming back to Firn (on a new day, perhaps) is when tabs get tidied.
-        // Nothing runs on a timer.
+        .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
+        .onChange(of: driftAfter, initial: true) { old, new in
+            store.driftAfter = driftAfter
+            if old != new { driftIdleTabs(afterABeat: false) }
+        }
+        // Coming back to Firn (on a new day, perhaps, or at launch) is when
+        // tabs drift. Nothing runs on a timer.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            archiveIdleTabs()
+            driftIdleTabs(afterABeat: true)
         }
         .onChange(of: store.openTabs.isEmpty) {
             if store.openTabs.isEmpty { window.editAddress(.newTab) }
@@ -269,8 +280,26 @@ struct BrowserWindow: View {
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }
 
-    private func archiveIdleTabs() {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.archiveIdleTabs() }
+    /// Idle tabs drift. Coming back to Firn, it waits a beat first, so the
+    /// drift is seen. Tabs in the space on screen go one by one while the
+    /// sidebar shows (`TabList` lets each glide down); the rest, and all of
+    /// them with Reduce Motion, simply go (a plain fade).
+    private func driftIdleTabs(afterABeat: Bool) {
+        driftTask?.cancel()
+        driftTask = Task { @MainActor in
+            if afterABeat {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled, NSApp.isActive else { return }
+            }
+            let idle = store.idleTabs()
+            let watched = showsSidebar && !reduceMotion
+                ? idle.filter { $0.spaceID == store.activeSpaceID } : []
+            let watchedIDs = Set(watched.map(\.id))
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : nil) {
+                for tab in idle where !watchedIDs.contains(tab.id) { store.drift(tab) }
+            }
+            window.driftQueue += watched.filter { tab in !window.driftQueue.contains { $0.id == tab.id } }
+        }
     }
     /// While peeking, the sidebar is a card floating just inside the window
     /// edge, so it and its traffic lights sit this much further in.
@@ -532,6 +561,15 @@ struct BrowserCommands: Commands {
             Button("Reload Page") { page?.reload() }
                 .keyboardShortcut("r")
                 .disabled(page?.url == nil)
+            #if DEBUG
+            Divider()
+            // For trying drifting without waiting days; never in a release build.
+            Button("Drift Loose Tabs Now (Debug)") {
+                window.driftQueue += store.looseTabs.filter { tab in
+                    tab.id != store.activeTabID && !window.driftQueue.contains { $0.id == tab.id }
+                }
+            }
+            #endif
         }
         CommandGroup(replacing: .sidebar) {
             Button(window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") { window.toggleSidebar() }

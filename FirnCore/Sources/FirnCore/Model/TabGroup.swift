@@ -2,7 +2,7 @@ import Foundation
 
 /// A group: a name and a flat set of everyday tabs, kept together in the
 /// sidebar above the loose tabs. Its tabs are ordinary tabs that never
-/// archive. Groups are ordered by their place in `BrowserStore.groups`.
+/// drift. Groups are ordered by their place in `BrowserStore.groups`.
 public struct TabGroup: Identifiable, Hashable, Sendable {
     public static let defaultName = "New Group"
     /// Longer names are cut to this many characters.

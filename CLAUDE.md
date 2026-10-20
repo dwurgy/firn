@@ -253,7 +253,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
 - **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. 
-- **Phase 5:** Archive logic built (2026-10-20, as "Archived"). Next: turn it into Drifted tabs (rename, the drift animation, the session-only group, the overflow, the 30-day cutoff). Then Lookout, split view, and the command bar (after the ⌘T talk).
+- **Phase 5:** Drifted tabs built (2026-10-20): the drift, the session-only group, the overflow popover, and the 30-day cutoff; waiting on David's look. Then Lookout, split view, and the command bar (after the ⌘T talk).
 
 ---
 

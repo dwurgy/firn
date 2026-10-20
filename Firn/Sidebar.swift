@@ -224,8 +224,12 @@ private struct TabList: View {
     @State private var releasingGroupID: UUID?
     /// The group being closed: its frost lifts away, tabs and all.
     @State private var closingGroupID: UUID?
-    /// The spaces whose Archived is open; it's folded by default.
-    @State private var openArchives: Set<UUID> = []
+    /// The spaces whose Drifted tabs group is open; it's folded by default.
+    @State private var openDrifted: Set<UUID> = []
+    /// Copies of tabs drifting down into the Drifted tabs group.
+    @State private var drifting: [DriftingTab] = []
+    /// Where the Drifted tabs group sits, so drifting tabs know where to go.
+    @State private var driftedFrame: CGRect?
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -257,9 +261,14 @@ private struct TabList: View {
                             newTabRow
                                 .padding(.top, isCard(items.last) ? Theme.groupSpacing : 0)
                         }
-                        archived
+                        driftedGroup
                     }
-                    .overlay(alignment: .topLeading) { lifted }
+                    .overlay(alignment: .topLeading) {
+                        ZStack(alignment: .topLeading) {
+                            lifted
+                            driftingCopies
+                        }
+                    }
                     .coordinateSpace(.named(Self.space))
                     // One drag for the whole list, so a tab can cross into and out
                     // of the group cards (a drag on the row itself would stop the
@@ -279,20 +288,33 @@ private struct TabList: View {
                 }
             }
         }
+        // Idle tabs drift one after another, a moment apart.
+        .task(id: window.driftQueue.first?.id) {
+            guard let tab = window.driftQueue.first else { return }
+            driftAway(tab)
+            try? await Task.sleep(for: .milliseconds(140))
+            if window.driftQueue.first?.id == tab.id { window.driftQueue.removeFirst() }
+        }
+        // Hidden mid-drift, the rest simply go.
+        .onDisappear {
+            for tab in window.driftQueue { store.drift(tab) }
+            window.driftQueue = []
+        }
     }
 
     private var newTabRow: some View {
         NewTabRow { window.editAddress(.newTab) }
     }
 
-    /// Archived, last in the list, only once something is in it.
-    @ViewBuilder private var archived: some View {
-        let tabs = store.archivedTabs
+    /// Drifted tabs, last in the list, holding the tabs that drifted since
+    /// Firn opened (earlier ones live in the overflow).
+    @ViewBuilder private var driftedGroup: some View {
+        let tabs = store.sessionDriftedTabs
         if !tabs.isEmpty {
             let spaceID = store.activeSpaceID
-            ArchivedSection(tabs: tabs, open: Binding(
-                get: { openArchives.contains(spaceID) },
-                set: { if $0 { openArchives.insert(spaceID) } else { openArchives.remove(spaceID) } }
+            DriftedSection(tabs: tabs, open: Binding(
+                get: { openDrifted.contains(spaceID) },
+                set: { if $0 { openDrifted.insert(spaceID) } else { openDrifted.remove(spaceID) } }
             )) { tab in
                 // It glides back up into the tab list.
                 withAnimation(reduceMotion ? nil : Self.glide) { store.select(tab) }
@@ -301,6 +323,58 @@ private struct TabList: View {
                 window.close(tab)
             }
             .padding(.top, Theme.sectionSpacing - Theme.rowSpacing)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                driftedFrame = $0
+            }
+            .onDisappear { driftedFrame = nil }
+        }
+    }
+
+    /// One idle tab drifts, like snow settling: a copy lifts off exactly
+    /// over its row as the list closes up behind it, glides down to the
+    /// Drifted tabs line, and fades into it. The group folds first, so they
+    /// settle into it. (Reduce Motion never gets here; see `BrowserWindow`.)
+    private func driftAway(_ tab: FirnCore.Tab) {
+        withAnimation(Self.glide) { _ = openDrifted.remove(store.activeSpaceID) }
+        guard tab.spaceID == store.activeSpaceID, drag == nil, groupDrag == nil, let frame = frames[tab.id] else {
+            withAnimation(Self.glide) { store.drift(tab) }
+            return
+        }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { drifting.append(DriftingTab(id: tab.id, tab: tab, from: frame)) }
+        withAnimation(Self.glide) { store.drift(tab) }
+        // Once the group has its place (it may have only just appeared),
+        // the copy sets off. If the tab didn't drift after all (it came
+        // on screen), the copy simply goes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            if let index = drifting.firstIndex(where: { $0.id == tab.id }) {
+                drifting[index].stayed = tab.place != .drifted
+                drifting[index].landed = true
+            }
+            try? await Task.sleep(for: .milliseconds(Int(DriftingTab.duration * 1000) + 50))
+            drifting.removeAll { $0.id == tab.id && $0.landed }
+        }
+    }
+
+    /// Tabs on their way down, each fading as it reaches the group's line.
+    private var driftingCopies: some View {
+        ForEach(drifting) { copy in
+            let landing = copy.stayed ? copy.from.minY : driftedFrame.map {
+                $0.minY + Theme.sectionSpacing - Theme.rowSpacing
+            } ?? copy.from.maxY
+            TabRow(tab: copy.tab, isActive: false, select: {}, close: {}) { EmptyView() }
+                .frame(width: copy.from.width)
+                .scaleEffect(copy.landed && !copy.stayed ? 0.94 : 1, anchor: .top)
+                .offset(x: copy.from.minX, y: copy.landed ? landing : copy.from.minY)
+                .animation(.smooth(duration: DriftingTab.duration), value: copy.landed)
+                // The list closing up moves the group; the copy follows softly.
+                .animation(.smooth(duration: 0.3), value: landing)
+                .opacity(copy.landed ? 0 : 1)
+                .animation(.easeIn(duration: DriftingTab.duration), value: copy.landed)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
@@ -789,7 +863,7 @@ private struct NewTabRow: View {
     }
 }
 
-private struct TabRow<MenuItems: View>: View {
+struct TabRow<MenuItems: View>: View {
     let tab: FirnCore.Tab
     let isActive: Bool
     let select: () -> Void
@@ -828,12 +902,25 @@ private struct TabRow<MenuItems: View>: View {
     }
 }
 
-// MARK: - Archived
+// MARK: - Drifted tabs
 
-/// Archived: the space's loose tabs not looked at for a while, folded away
-/// at the bottom of the tab list. Not a group card: nothing is kept here
-/// on purpose, so it stays quiet. Clicking a tab brings it back.
-private struct ArchivedSection: View {
+/// A tab on its way down into Drifted tabs.
+private struct DriftingTab: Identifiable {
+    static let duration = 0.55
+    let id: UUID
+    let tab: FirnCore.Tab
+    /// Its row, where it lifts off.
+    let from: CGRect
+    var landed = false
+    /// It came on screen before it could drift, so it fades where it is.
+    var stayed = false
+}
+
+/// Drifted tabs: the space's loose tabs not looked at for a while that
+/// drifted since Firn opened, folded away at the bottom of the tab list.
+/// Not a group card: nothing is kept here on purpose, so it stays quiet.
+/// Clicking a tab brings it back.
+private struct DriftedSection: View {
     let tabs: [FirnCore.Tab]
     @Binding var open: Bool
     let select: (FirnCore.Tab) -> Void
@@ -855,11 +942,7 @@ private struct ArchivedSection: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "archivebox")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.faint)
-                .accessibilityHidden(true)
-            Text("Archived")
+            Text("Drifted tabs")
                 .font(Theme.groupNameFont)
                 .foregroundStyle(Theme.muted)
             Image(systemName: "chevron.down")
@@ -873,12 +956,12 @@ private struct ArchivedSection: View {
         .frame(height: Theme.groupHeaderHeight)
         .contentShape(Rectangle())
         .onTapGesture(perform: toggle)
-        .help(open ? "Hide archived tabs" : "Show tabs you haven't looked at for a while")
+        .help(open ? "Hide drifted tabs" : "Tabs you haven't looked at in a while")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Archived")
+        .accessibilityLabel("Drifted tabs")
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint(open ? "Hides archived tabs" : "Shows tabs you haven't looked at for a while")
+        .accessibilityHint(open ? "Hides drifted tabs" : "Shows tabs you haven't looked at in a while")
         .accessibilityAction { toggle() }
     }
 

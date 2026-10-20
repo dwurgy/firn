@@ -59,6 +59,11 @@ final class WindowModel {
     /// Opens the New space sheet.
     func newSpace() { spaceSheet = .new }
 
+    /// The icon a new space starts on, picked the same way as its color.
+    var freeSpaceIcon: SpaceIcon {
+        SpaceIcon.next(after: store.spaces.map(\.icon))
+    }
+
     /// The first space color no space has yet (or, with all taken, the next in turn).
     var freeSpaceColor: String {
         let taken = Set(store.spaces.map(\.color))

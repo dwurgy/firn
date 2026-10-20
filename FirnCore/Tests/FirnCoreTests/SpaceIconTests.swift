@@ -3,16 +3,30 @@ import Testing
 @testable import FirnCore
 
 struct SpaceIconTests {
-    @Test func sixteenIconsAndTheLeafByDefault() {
+    @Test func sixteenIconsAndHomeFirstAndByDefault() {
         #expect(SpaceIcon.allCases.count == 16)
-        #expect(SpaceIcon.default == .leaf)
+        #expect(SpaceIcon.allCases.first == .home)
+        #expect(SpaceIcon.default == .home)
     }
 
-    @Test func unknownNamesFallBackToTheLeaf() {
+    @Test func unknownNamesFallBackToHome() {
         #expect(SpaceIcon(stored: "coffee") == .coffee)
-        #expect(SpaceIcon(stored: "") == .leaf)
-        #expect(SpaceIcon(stored: "🍂") == .leaf)
-        #expect(SpaceIcon(stored: "Coffee") == .leaf)
+        #expect(SpaceIcon(stored: "leaf") == .leaf)
+        #expect(SpaceIcon(stored: "") == .home)
+        #expect(SpaceIcon(stored: "🍂") == .home)
+        #expect(SpaceIcon(stored: "Coffee") == .home)
+    }
+
+    @Test func aNewSpaceStartsOnTheNextIconNotInUse() {
+        #expect(SpaceIcon.next(after: []) == .home)
+        #expect(SpaceIcon.next(after: ["home"]) == .work)
+        #expect(SpaceIcon.next(after: ["home", "work"]) == .reading)
+        // Someone picked coffee for their second space: the gap comes first.
+        #expect(SpaceIcon.next(after: ["home", "coffee"]) == .work)
+        // All sixteen in use: round again.
+        let all = SpaceIcon.allCases.map(\.rawValue)
+        #expect(SpaceIcon.next(after: all) == .home)
+        #expect(SpaceIcon.next(after: all + ["home"]) == .work)
     }
 
     @Test func everyIconHasItsOwnSpokenName() {

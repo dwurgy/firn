@@ -7,13 +7,21 @@ public enum SpaceIcon: String, CaseIterable, Sendable {
     case home, work, reading, family, shopping, pets, coffee, music
     case creative, photos, travel, outdoors, leaf, forest, sun, star
 
-    /// The leaf: what a new space starts with.
-    public static let `default` = SpaceIcon.leaf
+    /// The first one, home: the first space's icon.
+    public static let `default` = SpaceIcon.home
 
-    /// The icon a space stored, or the leaf if the name isn't one Firn knows
-    /// (an older or hand-edited session file).
+    /// The icon a space stored, or home if the name isn't one Firn knows
+    /// (a hand-edited session file).
     public init(stored name: String) {
         self = SpaceIcon(rawValue: name) ?? .default
+    }
+
+    /// The icon the New space sheet starts on: the first one no space uses
+    /// yet, in order (so home, then work, then reading…), the same way the
+    /// next color is picked. With all sixteen in use, it goes round again.
+    public static func next(after taken: [String]) -> SpaceIcon {
+        let used = Set(taken)
+        return allCases.first { !used.contains($0.rawValue) } ?? allCases[taken.count % allCases.count]
     }
 
     /// What VoiceOver says for this icon.

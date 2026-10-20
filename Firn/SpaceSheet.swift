@@ -187,6 +187,7 @@ struct SpaceSheet: View {
             icon = SpaceIcon(stored: editing.icon)
         } else {
             color = window.freeSpaceColor
+            icon = window.freeSpaceIcon
             shareWith = store.activeSpaceID
         }
         nameFocused = true

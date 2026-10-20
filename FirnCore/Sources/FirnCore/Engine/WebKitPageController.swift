@@ -312,6 +312,9 @@ extension WebKitPageController: WKUIDelegate {
               store == webView.configuration.websiteDataStore.identifier else { return nil }
         let page = WebKitPageController(configuration: configuration, isPopup: true)
         onRequest(.openPage(page, inBackground: false))
+        // Only a page a tab took in gets listened to. One nobody took (its
+        // opener was closing, say) is refused, so it never loads unseen.
+        guard page.onRequest != nil else { return nil }
         return page.webView
     }
 

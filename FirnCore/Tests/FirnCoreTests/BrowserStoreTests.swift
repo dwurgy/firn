@@ -211,4 +211,19 @@ struct BrowserStoreTests {
         page?.onRequest?(.openURL(url("c"), inBackground: false))
         #expect(titles(store) == ["b.example"])
     }
+
+    /// The engine hands a popup to WebKit only if a tab took it in, which
+    /// it tells by the page being listened to.
+    @Test func onlyAPopupATabTookInIsListenedTo() {
+        let store = makeStore()
+        let opener = store.openTab(URL(string: "https://a.example")!)
+        let taken = FakePage(dataStoreID: space.dataStoreID)
+        store.handle(.openPage(taken, inBackground: false), from: opener)
+        #expect(taken.onRequest != nil)
+
+        store.close(opener)
+        let refused = FakePage(dataStoreID: space.dataStoreID)
+        store.handle(.openPage(refused, inBackground: false), from: opener)
+        #expect(refused.onRequest == nil)
+    }
 }

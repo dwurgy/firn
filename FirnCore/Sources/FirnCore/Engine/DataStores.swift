@@ -6,6 +6,14 @@ import WebKit
 extension BrowserEngine {
     private static let log = Logger(subsystem: "com.firnbrowser.Firn", category: "data")
 
+    /// WebKit sets itself up when its first object is made. Its data store
+    /// calls answer through that setup, so asked first (at launch, before
+    /// any page exists), they crash. An empty in-memory store wakes it; it
+    /// holds nothing and loads nothing.
+    @MainActor private static func wakeWebKit() {
+        _ = WKWebsiteDataStore.nonPersistent()
+    }
+
     /// Erases a data store no space uses any more. WebKit refuses while a
     /// page still holds the store, so this waits a moment for the deleted
     /// space's pages to let go; if it's still refused, `removeUnusedData`
@@ -13,6 +21,7 @@ extension BrowserEngine {
     public static func removeData(for dataStoreID: UUID) {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
+            wakeWebKit()
             do {
                 try await WKWebsiteDataStore.remove(forIdentifier: dataStoreID)
             } catch {
@@ -27,6 +36,7 @@ extension BrowserEngine {
     /// after a damaged file, or it would erase spaces that still exist.
     public static func removeUnusedData(keeping: Set<UUID>) {
         Task { @MainActor in
+            wakeWebKit()
             let unused = await WKWebsiteDataStore.allDataStoreIdentifiers.filter { !keeping.contains($0) }
             for id in unused {
                 do {

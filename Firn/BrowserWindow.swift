@@ -367,6 +367,7 @@ private struct SidebarResizeHandle: View {
 /// The page on screen, floating in the frame. With no tab open, a calm empty page.
 private struct PageArea: View {
     let tab: FirnCore.Tab?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
@@ -379,11 +380,17 @@ private struct PageArea: View {
             if let tab, let page = tab.page {
                 PageView(page: page, cornerRadius: Theme.pageCornerRadius)
                     .overlay {
-                        // Until something has loaded, show Firn's calm page color, not WebKit's white.
-                        if page.url == nil {
+                        if let error = page.loadError {
+                            LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload)
+                                .clipShape(shape)
+                                .transition(.opacity)
+                        } else if page.url == nil {
+                            // Until something has loaded, show Firn's calm page color, not WebKit's white.
                             shape.fill(Theme.page).allowsHitTesting(false)
                         }
                     }
+                    // A plain fade either way; quicker with Reduce Motion.
+                    .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: page.loadError)
                     .id(tab.id)
             }
         }

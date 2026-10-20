@@ -14,11 +14,15 @@ public protocol PageController: AnyObject, Observable {
     /// The site's own icon as a small PNG (at most 64px), once found; nil
     /// until then, or if the site has none.
     var icon: Data? { get }
+    /// Set when the last address couldn't load (a typo, offline, no answer,
+    /// an unsafe connection); nil once a page loads again.
+    var loadError: LoadError? { get }
 
     /// Opens an http or https address. Anything else is ignored.
     func load(_ url: URL)
     func goBack()
     func goForward()
+    /// Loads the page again, or tries the address that failed once more.
     func reload()
     func stopLoading()
     /// Gives the page keyboard focus, so arrow keys and space scroll it.

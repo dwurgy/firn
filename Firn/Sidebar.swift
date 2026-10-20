@@ -113,7 +113,7 @@ private struct AddressBar: View {
     private var url: URL? { window.addressTarget == .newTab ? nil : store.activeTab?.url }
     /// Reload sits inside the bar, as in Safari, so the top row fits at the narrowest width.
     private var reloadablePage: (any PageController)? {
-        guard !focused, let page = store.activeTab?.page, page.url != nil else { return nil }
+        guard !focused, let page = store.activeTab?.page, page.url != nil || page.loadError != nil else { return nil }
         return page
     }
 

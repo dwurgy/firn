@@ -16,6 +16,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var canGoForward = false
     private(set) var isLoading = false
     private(set) var icon: Data?
+    private(set) var loadError: LoadError?
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
 
     @ObservationIgnored let webView: WKWebView
@@ -23,6 +24,8 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private let isPopup: Bool
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var isProvisional = false
+    /// Where the load in progress is headed, in case its error doesn't say.
+    @ObservationIgnored private var provisionalURL: URL?
     /// The icon addresses last tried, so a page that finishes loading again
     /// (or changes nothing) doesn't fetch its icon again.
     @ObservationIgnored private var iconCandidates: [URL] = []
@@ -67,7 +70,15 @@ final class WebKitPageController: NSObject, PageController {
 
     func goBack() { webView.goBack() }
     func goForward() { webView.goForward() }
-    func reload() { webView.reload() }
+    func reload() {
+        // After a failed load, the web view still holds the page before it,
+        // so trying again means loading the address that failed.
+        if let loadError {
+            webView.load(URLRequest(url: loadError.url))
+        } else {
+            webView.reload()
+        }
+    }
     func stopLoading() { webView.stopLoading() }
 
     func focus() {
@@ -143,11 +154,14 @@ extension WebKitPageController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isProvisional = true
+        provisionalURL = webView.url
         syncState()
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         isProvisional = false
+        provisionalURL = nil
+        loadError = nil
         let previous = url
         url = webView.url
         // A different site: its old icon must not linger beside the new title.
@@ -166,12 +180,17 @@ extension WebKitPageController: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
-        // The old page stays, and so does its address.
+        // Nothing new committed, so `url` stays the old page's. The error
+        // page covers it, and the tab shows the address that failed instead.
         isProvisional = false
+        if let failure = LoadError(error, fallbackURL: provisionalURL) { loadError = failure }
+        provisionalURL = nil
         syncState()
     }
 
+    /// The page had started arriving, then the connection gave out.
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        if let failure = LoadError(error, fallbackURL: url) { loadError = failure }
         syncState()
     }
 }

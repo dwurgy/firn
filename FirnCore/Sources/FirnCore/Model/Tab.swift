@@ -47,7 +47,9 @@ public final class Tab: Identifiable {
     }
 
     /// The committed address, or where the tab rests if it has no page yet.
-    public var url: URL? { page?.url ?? restingURL }
+    /// After a failed load it's the address that failed: the error page
+    /// covers the old page, so its address must not claim it's on screen.
+    public var url: URL? { page?.loadError?.url ?? page?.url ?? restingURL }
 
     /// The page's title, falling back to its host, so a row is never blank.
     public var title: String {
@@ -58,6 +60,7 @@ public final class Tab: Identifiable {
 
     /// The page's own title, or the last one it had; empty if it never had one.
     var savedTitle: String {
+        if page?.loadError != nil { return "" }
         if let title = page?.title, !title.isEmpty { return title }
         return restingTitle
     }
@@ -66,6 +69,8 @@ public final class Tab: Identifiable {
     /// arrived yet (so a row doesn't flicker to the bare site and back).
     private var currentTitle: String {
         guard let page else { return restingTitle }
+        // The old page's title would name a page that isn't showing.
+        if let failed = page.loadError { return failed.site }
         return page.title.isEmpty && page.url == nil ? restingTitle : page.title
     }
 
@@ -73,6 +78,10 @@ public final class Tab: Identifiable {
     /// from last time while it's still on that site.
     public var icon: Data? {
         guard let page else { return restingIcon }
+        // After a failed load, an icon only if it's the very site that failed.
+        if let failed = page.loadError {
+            return Self.sameHost(failed.url, page.url) ? page.icon : Self.sameHost(failed.url, restingURL) ? restingIcon : nil
+        }
         if let icon = page.icon { return icon }
         return Self.sameHost(page.url ?? restingURL, restingURL) ? restingIcon : nil
     }
@@ -117,8 +126,8 @@ public final class Tab: Identifiable {
     func sleep() {
         guard let page else { return }
         restingIcon = icon
-        restingTitle = currentTitle
-        restingURL = page.url ?? restingURL
+        restingTitle = page.loadError == nil ? currentTitle : ""
+        restingURL = url
         page.stopLoading()
         self.page = nil
     }

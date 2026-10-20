@@ -14,6 +14,7 @@ final class FakePage: PageController {
     var canGoForward = false
     var isLoading = false
     var icon: Data?
+    var loadError: LoadError?
     var stopped = false
     var onRequest: (@MainActor (PageRequest) -> Void)?
 

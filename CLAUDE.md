@@ -244,7 +244,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
-- **Next:** a look back over Phase 3, then Phase 4 (plan first, Opus).
+- **Look back over Phase 3: done** (2026-10-19).
+- **Next:** Phase 4 (plan first, Opus).
 
 ---
 

@@ -12,17 +12,15 @@ struct SpaceRow: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            // Side by side while they fit; with many spaces in a narrow
-            // sidebar, they scroll sideways rather than squeeze.
-            ViewThatFits(in: .horizontal) {
-                buttons
-                ScrollView(.horizontal) { buttons }
-                    .scrollIndicators(.never)
-            }
-            Spacer(minLength: 0)
+            // Kept free for a tool someday; as wide as "+", so the spaces
+            // sit truly centered between the two.
+            Color.clear.frame(width: 28, height: 28)
+            buttons
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, (Theme.rowHeight - 28) / 2)
             ChromeButton("New space", systemImage: "plus") { window.addSpace() }
         }
-        .frame(height: Theme.rowHeight)
+        .frame(minHeight: Theme.rowHeight)
         .confirmationDialog(
             deleting.map { "Delete “\($0.name)”?" } ?? "",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -37,8 +35,9 @@ struct SpaceRow: View {
         }
     }
 
+    /// Centered; when they don't fit on one line, they stack onto more.
     private var buttons: some View {
-        HStack(spacing: 2) {
+        CenteredFlow(spacing: 2, lineSpacing: Theme.rowSpacing) {
             ForEach(Array(store.spaces.enumerated()), id: \.element.id) { index, space in
                 SpaceButton(space: space, number: index + 1, isActive: space.id == store.activeSpaceID) {
                     window.showSpace { store.selectSpace(space) }
@@ -61,6 +60,68 @@ struct SpaceRow: View {
             return "\(goes) Its sign-ins stay, because “\(other.name)” still uses them."
         }
         return "\(goes) So will its sign-ins, cookies, and site data. This can’t be undone."
+    }
+}
+
+/// Lays its views out in centered lines. When they don't all fit on one,
+/// they stack onto as few lines as it takes, shared out evenly (seven become
+/// four and three, not five and two).
+private struct CenteredFlow: Layout {
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = lines(of: subviews, in: proposal.width ?? .infinity)
+        let height = lines.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(lines.count - 1, 0))
+        return CGSize(width: proposal.width ?? lines.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for line in lines(of: subviews, in: bounds.width) {
+            var x = bounds.midX - line.width / 2
+            for index in line.indexes {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y + (line.height - size.height) / 2),
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + spacing
+            }
+            y += line.height + lineSpacing
+        }
+    }
+
+    private struct Line {
+        var indexes: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func lines(of subviews: Subviews, in width: CGFloat) -> [Line] {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        // How many lines filling each as full as it goes would take…
+        var count = 1
+        var used: CGFloat = 0
+        for size in sizes {
+            let needed = used == 0 ? size.width : used + spacing + size.width
+            if needed > width, used > 0 {
+                count += 1
+                used = size.width
+            } else {
+                used = needed
+            }
+        }
+        // …then the same number of lines, shared out evenly.
+        let perLine = max(Int((Double(sizes.count) / Double(count)).rounded(.up)), 1)
+        var lines: [Line] = []
+        for (index, size) in sizes.enumerated() {
+            if index % perLine == 0 { lines.append(Line()) }
+            lines[lines.count - 1].width += (lines[lines.count - 1].indexes.isEmpty ? 0 : spacing) + size.width
+            lines[lines.count - 1].height = max(lines[lines.count - 1].height, size.height)
+            lines[lines.count - 1].indexes.append(index)
+        }
+        return lines
     }
 }
 

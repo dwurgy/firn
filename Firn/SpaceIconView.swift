@@ -50,8 +50,10 @@ struct SpaceIconShape: Shape {
         case rect(CGFloat, CGFloat, CGFloat, CGFloat, radius: CGFloat)
     }
 
-    /// The set David approved on 2026-10-19, copied exactly from the SVG
-    /// draft (viewBox 0 0 24 24, stroke 1.6, round caps and joins). Also
+    /// The set David approved on 2026-10-19 (viewBox 0 0 24 24, stroke 1.6,
+    /// round caps and joins), with one pass to even out their sizes: the
+    /// mountains, leaf, paw, and star made larger, the briefcase, camera,
+    /// bag, and palette a touch smaller, the pine a little wider. Also
     /// kept as a picture in docs/space-icons.svg. Change these only with
     /// David's OK, and update that file to match.
     private static func source(_ icon: SpaceIcon) -> [Part] {
@@ -59,39 +61,39 @@ struct SpaceIconShape: Shape {
         case .home:
             [.path("M4.5 10.5 12 4.5l7.5 6"), .path("M6.5 9v9.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"), .path("M10 19.5V15h4v4.5")]
         case .work:
-            [.rect(3.5, 7.5, 17, 12, radius: 2.5), .path("M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5"), .path("M3.5 12.5h17")]
+            [.rect(4, 7.5, 16, 12, radius: 2.5), .path("M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5"), .path("M4 12.5h16")]
         case .reading:
             [.path("M12 6.8C10 5.2 7 5 4 5.6v12.8c3-.6 6-.4 8 1.2 2-1.6 5-1.8 8-1.2V5.6c-3-.6-6-.4-8 1.2Z"), .path("M12 6.8v12.8")]
         case .family:
             [.path("M12 19C5.5 14.8 3.8 11.6 3.8 9.1c0-2.4 1.9-4.2 4.1-4.2 1.7 0 3.2 1 4.1 2.5.9-1.5 2.4-2.5 4.1-2.5 2.2 0 4.1 1.8 4.1 4.2 0 2.5-1.7 5.7-8.2 9.9Z")]
         case .shopping:
-            [.path("M5.5 8.5h13l-1 10.6a1.5 1.5 0 0 1-1.5 1.4H8a1.5 1.5 0 0 1-1.5-1.4Z"), .path("M9 10.5V7a3 3 0 0 1 6 0v3.5")]
+            [.path("M5.5 8.5h13l-.95 10.1a1.5 1.5 0 0 1-1.5 1.4H7.95a1.5 1.5 0 0 1-1.5-1.4Z"), .path("M9 10.5v-3a3 3 0 0 1 6 0v3")]
         case .pets:
-            [.circle(6.8, 11, 1.6), .circle(9.8, 7, 1.7), .circle(14.2, 7, 1.7), .circle(17.2, 11, 1.6),
-             .path("M12 12.5c-2.4 0-4.8 2.8-4.8 4.9 0 1.5 1.2 2.2 2.5 1.9 1-.2 1.5-.6 2.3-.6s1.3.4 2.3.6c1.3.3 2.5-.4 2.5-1.9 0-2.1-2.4-4.9-4.8-4.9Z")]
+            [.circle(6.3, 10.6, 1.75), .circle(9.6, 6.2, 1.85), .circle(14.4, 6.2, 1.85), .circle(17.7, 10.6, 1.75),
+             .path("M12 12.2c-2.64 0-5.28 3.08-5.28 5.39 0 1.65 1.32 2.42 2.75 2.09 1.1-.22 1.65-.66 2.53-.66s1.43.44 2.53.66c1.43.33 2.75-.44 2.75-2.09 0-2.31-2.64-5.39-5.28-5.39Z")]
         case .coffee:
             [.path("M5 9.5h11v5a4.5 4.5 0 0 1-4.5 4.5h-2A4.5 4.5 0 0 1 5 14.5Z"), .path("M16 11h1.2a2.2 2.2 0 0 1 0 4.4H16"),
              .path("M9 4c-.7.9.7 1.5 0 2.6M12.5 4c-.7.9.7 1.5 0 2.6")]
         case .music:
             [.path("M9 17.5V6.2l10-2v11.3"), .path("M9 9.2l10-2"), .circle(6.8, 17.5, 2.2), .circle(16.8, 15.5, 2.2)]
         case .creative:
-            [.path("M12 3.8a8.2 8.2 0 0 0 0 16.4c1.1 0 1.8-.7 1.8-1.6 0-.6-.3-1-.6-1.4-.3-.4-.5-.8-.5-1.3 0-1 .8-1.8 1.8-1.8h2a4 4 0 0 0 4-4c0-3.5-3.8-6.3-8.5-6.3Z"),
-             .circle(7.8, 11.2, 0.9), .circle(9.8, 7.6, 0.9), .circle(14.2, 7.4, 0.9)]
+            [.path("M12 4.3a7.7 7.7 0 0 0 0 15.4c1.03 0 1.69-.66 1.69-1.5 0-.56-.28-.94-.56-1.32-.28-.38-.47-.75-.47-1.22 0-.94.75-1.69 1.69-1.69h1.88a3.76 3.76 0 0 0 3.76-3.76c0-3.29-3.57-5.92-7.99-5.92Z"),
+             .circle(8.05, 11.25, 0.85), .circle(9.95, 7.85, 0.85), .circle(14.05, 7.65, 0.85)]
         case .photos:
-            [.rect(3.5, 7, 17, 12.5, radius: 2.5), .path("M8.5 7l1.3-2.2h4.4L15.5 7"), .circle(12, 13.2, 3.3)]
+            [.rect(4, 7, 16, 12.5, radius: 2.5), .path("M8.5 7l1.3-2.2h4.4L15.5 7"), .circle(12, 13.2, 3.3)]
         case .travel:
             [.path("M12 3.8c.8 0 1.4.8 1.4 1.9v3.9l6.4 3.9v1.7l-6.4-2v3.5l1.9 1.5v1.3l-3.3-.9-3.3.9v-1.3l1.9-1.5v-3.5l-6.4 2v-1.7l6.4-3.9V5.7c0-1.1.6-1.9 1.4-1.9Z")]
         case .outdoors:
-            [.path("M3.5 19 9.5 9l3.4 5.3 2.3-3.1 5.3 7.8Z"), .path("m7.7 12 1.8 1.1 1.8-1.1")]
+            [.path("M3.5 19 9.5 6l3.5 7.5 2.5-3.5 5 9Z"), .path("M7.7 10l1.8 1.2 1.8-1.2")]
         case .leaf:
-            [.path("M5.5 18.5C5.5 10.5 10 5.5 18.5 5.5c0 8.5-5 13-13 13Z"), .path("M5.5 18.5 13 11")]
+            [.path("M4.8 19.2C4.8 10.4 9.8 4.8 19.2 4.8c0 9.4-5 14.4-14.4 14.4Z"), .path("M4.8 19.2 13.1 10.9")]
         case .forest:
-            [.path("M12 4 7.2 10.2h2.5L5.8 15.5h12.4l-3.9-5.3h2.5Z"), .path("M12 15.5v4.5")]
+            [.path("M12 4 7 10.3h2.6l-4.3 5.5h13.4l-4.3-5.5H17Z"), .path("M12 15.8V20")]
         case .sun:
             [.circle(12, 12, 3.6),
              .path("M12 4v1.6M12 18.4V20M4 12h1.6M18.4 12H20M6.3 6.3l1.1 1.1M16.6 16.6l1.1 1.1M6.3 17.7l1.1-1.1M16.6 7.4l1.1-1.1")]
         case .star:
-            [.path("M12 4.5c.5 3.8 3.4 6.9 7.5 7.5-4.1.6-7 3.7-7.5 7.5-.5-3.8-3.4-6.9-7.5-7.5 4.1-.6 7-3.7 7.5-7.5Z")]
+            [.path("M12 4c.53 4.05 3.63 7.36 8 8-4.37.64-7.47 3.95-8 8-.53-4.05-3.63-7.36-8-8 4.37-.64 7.47-3.95 8-8Z")]
         }
     }
 }

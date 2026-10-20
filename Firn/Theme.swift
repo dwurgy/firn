@@ -98,6 +98,23 @@ enum Theme {
         Color(light: spaceHex(name), lightOpacity: 0.16, dark: spaceHex(name), darkOpacity: 0.14)
     }
 
+    /// The space row's one icon color: the active space's color, deepened
+    /// toward ink so it reads clearly on the tinted frame (half ink in light,
+    /// a third in dark). Every icon uses it, so the row never turns rainbow.
+    static func spaceIconInk(_ name: String) -> Color {
+        let hex = spaceHex(name)
+        return Color(light: mix(hex, 0x241F1B, 0.5), dark: mix(hex, 0xF5F1EC, 0.35))
+    }
+
+    /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
+    private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {
+        func channel(_ shift: UInt32) -> UInt32 {
+            let x = Double((a >> shift) & 0xFF), y = Double((b >> shift) & 0xFF)
+            return UInt32((x + (y - x) * amount).rounded()) << shift
+        }
+        return channel(16) | channel(8) | channel(0)
+    }
+
     private static func spaceHex(_ name: String) -> UInt32 {
         switch name {
         case "sand": 0xC9A27E

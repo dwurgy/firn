@@ -246,7 +246,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 2: done** (2026-10-18).
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
-- **Phase 4: in progress.** Steps 1 (the space rules) and 2 (the space row) done 2026-10-19; step 3 (the New space and Edit sheets) and step 4 (Firn's own space icons) done 2026-10-20, step 4 waiting on David's look; next, the done test. Plan in `docs/HISTORY.md`.
+- **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. Next: Phase 5.
 
 ---
 

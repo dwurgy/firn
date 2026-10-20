@@ -39,7 +39,10 @@ struct SpaceRow: View {
     private var buttons: some View {
         CenteredFlow(spacing: 2, lineSpacing: Theme.rowSpacing) {
             ForEach(Array(store.spaces.enumerated()), id: \.element.id) { index, space in
-                SpaceButton(space: space, number: index + 1, isActive: space.id == store.activeSpaceID) {
+                SpaceButton(
+                    space: space, number: index + 1, isActive: space.id == store.activeSpaceID,
+                    tint: store.activeSpace.color
+                ) {
                     window.showSpace { store.selectSpace(space) }
                 }
                 .contextMenu {
@@ -126,18 +129,24 @@ private struct CenteredFlow: Layout {
     }
 }
 
-/// One space in the row: its icon, quiet until hovered, lifted like the tab on
-/// screen when it's the space on screen.
+/// One space in the row: its icon, drawn in the space on screen's color (so
+/// the row is one color, never a rainbow), lifted like the tab on screen when
+/// it's the space on screen.
 private struct SpaceButton: View {
     let space: Space
     /// Its place in the row, from 1; ⌃1–9 show the first nine.
     let number: Int
     let isActive: Bool
+    /// The color of the space on screen, which every icon in the row takes.
+    let tint: String
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
-            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 18, color: Theme.spaceColor(space.color))
+            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 18, color: Theme.spaceIconInk(tint))
+                // Cross-fades with the frame's tint when the space changes.
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: tint)
         }
         .buttonStyle(SpaceButtonStyle(isActive: isActive))
         .help(number <= 9 ? "\(space.name) (⌃\(number))" : space.name)
@@ -153,8 +162,6 @@ private struct SpaceButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            // Other spaces' icons sit back a little, so one accent leads.
-            .opacity(isActive || hovering ? 1 : 0.55)
             .frame(width: 28, height: 28)
             .background {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)

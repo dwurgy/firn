@@ -243,7 +243,8 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 - **Phase 1: done** (2026-10-17). Swipe back/forward still untested (no trackpad yet).
 - **Phase 2: done** (2026-10-18).
-- **Phase 3: in progress.** 3a (model and saving), 3b-i (Basecamp grid), and 3c (site icons, and tile colors from them) done; pins dropped for groups (2026-10-18); 3b-ii groups: model and saving done; the look built (cards, fold, rename, hover close); dragging tabs between groups and loose tabs built (being tested); one shared order for groups and loose tabs built (being tested); the top-or-bottom setting built, in a new Settings window (being tested); dragging whole groups by their name line built (being tested); ⇧⌘T for tabs and whole groups built (being tested).
+- **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
+- **Next:** a look back over Phase 3, then Phase 4 (plan first, Opus).
 
 ---
 

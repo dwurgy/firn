@@ -208,6 +208,11 @@ private struct TabList: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The tab being dragged; nil when nothing is.
     @State private var drag: TabDrag?
+    /// The group being dragged by its name line; nil when none is.
+    @State private var groupDrag: GroupDrag?
+    /// True from a group drag's start until just after its drop, so letting
+    /// go on the name line doesn't also fold the group.
+    @State private var foldLocked = false
     /// True while the pointer is down on a drag, so a drag the system
     /// cancels (no mouse-up) still ends.
     @GestureState private var dragging = false
@@ -282,10 +287,13 @@ private struct TabList: View {
             hasRows: !members.isEmpty,
             color: Theme.spaceColor(store.activeSpace.color),
             renaming: $renamingGroupID,
+            foldLocked: foldLocked,
             store: store
         ) {
             ForEach(members) { tab in row(tab) }
         }
+        // While dragged, the card holds its slot open; the lifted copy is what shows.
+        .opacity(groupDrag?.group.id == group.id ? 0 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
             frames[group.id] = $0
         }
@@ -339,6 +347,11 @@ private struct TabList: View {
     /// The tab list as it'd be if the dragged tab landed where it is now.
     private var shownItems: [TabListItem] {
         var list = store.tabListItems
+        if let groupDrag {
+            list.removeAll { $0.id == groupDrag.group.id }
+            list.insert(.group(groupDrag.group), at: min(groupDrag.target, list.count))
+            return list
+        }
         guard let drag else { return list }
         list.removeAll { $0.id == drag.tab.id }
         if case let .list(position) = drag.target {
@@ -373,6 +386,21 @@ private struct TabList: View {
             return .group(group.id, group.folded ? members.filter { $0.id != tab.id }.count : position(in: members))
         }
         return .list(items.filter { (frames[$0.id]?.midY ?? .infinity) < y }.count)
+    }
+
+    /// Where the dragged group would land in the tab list (not counting
+    /// itself). An item above its slot stays above until the lifted card's
+    /// top passes its middle; one below moves above once the card's bottom
+    /// passes its middle. So a tall card swaps with a row as soon as it
+    /// overlaps half of it, the same going up or down.
+    private func target(of drag: GroupDrag) -> Int {
+        guard let slot = frames[drag.group.id] else { return drag.target }
+        let top = drag.location.y - drag.grab.height
+        let bottom = top + slot.height
+        return store.tabListItems.filter { item in
+            guard item.id != drag.group.id, let frame = frames[item.id] else { return false }
+            return frame.midY < slot.midY ? top >= frame.midY : bottom > frame.midY
+        }.count
     }
 
     /// The tab's place now, so a drag starts by changing nothing.
@@ -416,6 +444,21 @@ private struct TabList: View {
                 .transaction { if !drag.settling { $0.animation = nil } }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+        } else if let groupDrag, let slot = frames[groupDrag.group.id] {
+            GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
+                      color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
+                      foldLocked: true, store: store) {
+                ForEach(store.tabs(in: groupDrag.group)) { tab in
+                    TabRow(tab: tab, isActive: tab.id == store.activeTabID, canAddToBasecamp: false,
+                           select: {}, close: {}, addToBasecamp: {}, newGroup: {}, takeOutOfGroup: {})
+                }
+            }
+            .shadow(color: groupDrag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
+            .frame(width: slot.width)
+            .offset(x: slot.minX, y: groupDrag.location.y - groupDrag.grab.height)
+            .transaction { if !groupDrag.settling { $0.animation = nil } }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 
@@ -425,7 +468,10 @@ private struct TabList: View {
         DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.space))
             .updating($dragging) { _, state, _ in state = true }
             .onChanged { value in
+                if groupDrag != nil { return moveGroup(to: value.location) }
                 guard var current = drag else {
+                    // A drag that starts on a group's name line moves the whole group.
+                    if startGroupDrag(at: value.startLocation, pointer: value.location) { return }
                     // Only a drag that starts on a tab row moves a tab.
                     guard let tab = shownTabs.first(where: { frames[$0.id]?.contains(value.startLocation) == true }),
                           let frame = frames[tab.id] else { return }
@@ -446,9 +492,58 @@ private struct TabList: View {
             }
     }
 
+    /// Starts dragging a group if `start` is on its name line (and it isn't
+    /// being renamed).
+    private func startGroupDrag(at start: CGPoint, pointer: CGPoint) -> Bool {
+        guard let group = store.tabGroups.first(where: { group in
+            guard group.id != renamingGroupID, let card = frames[group.id] else { return false }
+            return start.y >= card.minY && start.y < card.minY + Theme.groupHeaderHeight
+                && start.x >= card.minX && start.x <= card.maxX
+        }), let card = frames[group.id],
+              let index = store.tabListItems.firstIndex(where: { $0.id == group.id }) else { return false }
+        foldLocked = true
+        groupDrag = GroupDrag(group: group, grab: CGSize(width: 0, height: start.y - card.minY),
+                              location: pointer, target: index)
+        return true
+    }
+
+    private func moveGroup(to location: CGPoint) {
+        guard var current = groupDrag, !current.settling else { return }
+        current.location = location
+        let target = target(of: current)
+        if target == current.target {
+            groupDrag = current
+        } else {
+            current.target = target
+            withAnimation(reduceMotion ? nil : Self.glide) { groupDrag = current }
+        }
+    }
+
+    /// The lifted card settles into its slot, then the group really moves there.
+    private func dropGroup() {
+        guard var current = groupDrag, !current.settling else { return }
+        @MainActor func commit() {
+            if let group = store.tabGroups.first(where: { $0.id == current.group.id }) {
+                store.move(group, to: current.target)
+            }
+            groupDrag = nil
+            // After this mouse-up's tap on the name line has come and gone.
+            Task { @MainActor in foldLocked = false }
+        }
+        guard !reduceMotion, let slot = frames[current.group.id] else { return commit() }
+        current.settling = true
+        current.location.y = slot.minY + current.grab.height
+        withAnimation(Self.glide) {
+            groupDrag = current
+        } completion: {
+            commit()
+        }
+    }
+
     /// The lifted copy settles into its slot, then the tab really moves
     /// there (which looks like nothing, since it's already showing there).
     private func drop() {
+        if groupDrag != nil { return dropGroup() }
         guard var current = drag, !current.settling else { return }
         @MainActor func commit() {
             if store.openTabs.contains(where: { $0.id == current.tab.id }) {
@@ -490,6 +585,18 @@ private struct TabDrag {
     var location: CGPoint
     var target: DropTarget
     /// True while the lifted copy glides into its slot after the drop.
+    var settling = false
+}
+
+private struct GroupDrag {
+    let group: TabGroup
+    /// Where the pointer holds the card, from its top-left.
+    let grab: CGSize
+    /// The pointer, in the list's space.
+    var location: CGPoint
+    /// Its place in the tab list, not counting itself.
+    var target: Int
+    /// True while the lifted card glides into its slot after the drop.
     var settling = false
 }
 
@@ -580,6 +687,8 @@ private struct GroupCard<Rows: View>: View {
     let hasRows: Bool
     let color: Color
     @Binding var renaming: UUID?
+    /// True while the group is being dragged, so letting go doesn't fold it.
+    let foldLocked: Bool
     let store: BrowserStore
     @ViewBuilder let rows: Rows
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -643,7 +752,7 @@ private struct GroupCard<Rows: View>: View {
         .padding(.trailing, 4)
         .frame(height: Theme.groupHeaderHeight)
         .contentShape(Rectangle())
-        .onTapGesture { if !isRenaming { toggleFold() } }
+        .onTapGesture { if !isRenaming, !foldLocked { toggleFold() } }
         .onHover { hovering = $0 }
         // While renaming, VoiceOver reaches the name field itself.
         .accessibilityElement(children: isRenaming ? .contain : .ignore)

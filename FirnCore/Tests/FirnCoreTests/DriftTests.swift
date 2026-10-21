@@ -255,7 +255,8 @@ struct DriftTests {
         use(store, clock, days: 1)
         let data = try JSONEncoder().encode(store.session(sidebarWidth: 260, sidebarCollapsed: false))
         var json = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"drifted\"", with: "\"archived\"")
-        json = json.replacingOccurrences(of: #","driftedAt":[0-9.e+-]+"#, with: "", options: .regularExpression)
+        // Keys come in any order, so the comma may be on either side.
+        json = json.replacingOccurrences(of: #","driftedAt":[0-9.e+-]+|"driftedAt":[0-9.e+-]+,"#, with: "", options: .regularExpression)
         #expect(!json.contains("driftedAt"))
         clock.advance(days: 40)
         let restored = makeStore(clock, restoring: try JSONDecoder().decode(Session.self, from: Data(json.utf8)))

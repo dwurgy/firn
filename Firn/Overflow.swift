@@ -10,13 +10,24 @@ struct OverflowButton: View {
     let store: BrowserStore
     let window: WindowModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lidOpen = false
 
     var body: some View {
         let unseen = store.hasUnseenTidied
+        let falling = !window.flyingIcons.isEmpty
         ChromeButton("Tidied away and recently closed tabs") {
             window.showsOverflow.toggle()
         } icon: {
-            SnowBoxIcon()
+            SnowBoxIcon(lidOpen: lidOpen)
+        }
+        // The lid lifts as the first icon nears and shuts as the last one lands.
+        .task(id: falling) {
+            if falling && !reduceMotion {
+                try? await Task.sleep(for: .milliseconds(380))
+                if !Task.isCancelled { lidOpen = true }
+            } else {
+                lidOpen = false
+            }
         }
         .overlay(alignment: .topTrailing) {
             if unseen {
@@ -339,30 +350,64 @@ struct TidyPill: View {
 /// (24pt grid, 1.6 stroke, round caps and joins); also kept as
 /// docs/overflow-icon.svg. Change it only with David's OK, and update that
 /// file to match.
+///
+/// In the tidy moment the lid lifts on its right corner to catch the falling
+/// icons, and the drift slumps downhill toward the hinge: slow to start,
+/// stopping short, never past the end (snow, not water). As the lid lands,
+/// the drift settles back into its usual shape. Approved by David on
+/// 2026-10-21 ("B"); the preview is docs/overflow-lid-animation.html.
 struct SnowBoxIcon: View {
     var size: CGFloat = 18
+    /// Lifted while tidied tabs fall in.
+    var lidOpen = false
+    @State private var lidAngle = 0.0
+    @State private var slump = 0.0
+
+    private static let lift = Animation.timingCurve(0.2, 0.7, 0.3, 1, duration: 0.22)
+    private static let slide = Animation.timingCurve(0.55, 0, 0.25, 1, duration: 0.48)
+    /// Eases in so the lid lands softly and never overshoots.
+    private static let land = Animation.timingCurve(0.45, 0, 0.25, 1, duration: 0.26)
+    private static let settle = Animation.easeOut(duration: 0.34).delay(0.03)
 
     var body: some View {
-        SnowBoxShape()
-            .stroke(style: StrokeStyle(lineWidth: size * 1.6 / 24, lineCap: .round, lineJoin: .round))
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
+        let style = StrokeStyle(lineWidth: size * 1.6 / 24, lineCap: .round, lineJoin: .round)
+        ZStack {
+            SnowBoxShape().stroke(style: style)
+            SnowLidShape(slump: slump)
+                .stroke(style: style)
+                .rotationEffect(.degrees(lidAngle), anchor: SnowLidShape.hinge)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+        .onChange(of: lidOpen) { _, open in
+            if open {
+                withAnimation(Self.lift) { lidAngle = 20 }
+                withAnimation(Self.slide) { slump = 1 }
+            } else {
+                withAnimation(Self.land) { lidAngle = 0 }
+                withAnimation(Self.settle) { slump = 0 }
+            }
+        }
     }
 }
 
+/// Fits drawing in the 24pt grid to `rect`, centered.
+private func fitGrid(_ rect: CGRect) -> CGAffineTransform {
+    let scale = min(rect.width, rect.height) / 24
+    return CGAffineTransform(translationX: rect.midX - 12 * scale, y: rect.midY - 12 * scale)
+        .scaledBy(x: scale, y: scale)
+}
+
+/// The box without its lid.
 private struct SnowBoxShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let scale = min(rect.width, rect.height) / 24
-        let transform = CGAffineTransform(translationX: rect.midX - 12 * scale, y: rect.midY - 12 * scale)
-            .scaledBy(x: scale, y: scale)
-        return Self.path.applying(transform)
+        Self.path.applying(fitGrid(rect))
     }
 
     /// Built once from the approved path data (viewBox 0 0 24 24).
     private static let path: Path = {
         var path = Path()
         for data in [
-            "M3.5 10c0-3 1.8-5.3 4.6-5.3 2.6 0 4.2 1.6 6.4 2.8 2 1.1 4 1.5 6 1.6V10Z",
             "M5 10v7.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10",
             "M10 13.5h4",
         ] {
@@ -370,4 +415,38 @@ private struct SnowBoxShape: Shape {
         }
         return path
     }()
+}
+
+/// The lid, a drift of snow. At rest it is exactly the approved path
+/// ("M3.5 10c0-3 1.8-5.3 4.6-5.3 2.6 0 4.2 1.6 6.4 2.8 2 1.1 4 1.5 6 1.6V10Z",
+/// in absolute points below); `slump` 1 is the same drift slid toward the hinge.
+private struct SnowLidShape: Shape {
+    var slump: Double
+
+    var animatableData: Double {
+        get { slump }
+        set { slump = newValue }
+    }
+
+    /// The lid's right corner, where it lifts from.
+    static let hinge = UnitPoint(x: 20.5 / 24, y: 10 / 24)
+
+    private static let rest: [CGFloat] = [3.5, 10, 3.5, 7, 5.3, 4.7, 8.1, 4.7, 10.7, 4.7, 12.3, 6.3,
+                                          14.5, 7.5, 16.5, 8.6, 18.5, 9.0, 20.5, 9.1]
+    private static let slumped: [CGFloat] = [3.5, 10, 3.5, 8.1, 6.4, 5.3, 10.2, 5.3, 12.8, 5.3, 14.4, 6.3,
+                                             16.2, 7.3, 17.7, 8.0, 19.2, 8.4, 20.5, 8.6]
+
+    func path(in rect: CGRect) -> Path {
+        let k = CGFloat(slump)
+        let v = zip(Self.rest, Self.slumped).map { $0 + ($1 - $0) * k }
+        func p(_ i: Int) -> CGPoint { CGPoint(x: v[i * 2], y: v[i * 2 + 1]) }
+        var path = Path()
+        path.move(to: p(0))
+        path.addCurve(to: p(3), control1: p(1), control2: p(2))
+        path.addCurve(to: p(6), control1: p(4), control2: p(5))
+        path.addCurve(to: p(9), control1: p(7), control2: p(8))
+        path.addLine(to: CGPoint(x: 20.5, y: 10))
+        path.closeSubpath()
+        return path.applying(fitGrid(rect))
+    }
 }

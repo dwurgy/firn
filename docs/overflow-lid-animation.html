@@ -1,0 +1,299 @@
+<title>Snow Box Lid</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..600,0..100,0..1&display=swap">
+<style>
+/* Layout: a calm review sheet. Two drafts side by side, each a real-size sidebar beside a 6× view of the icon. */
+:root {
+  --page: #FBFAF8; --frame: #E9E3DA; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --space: #7F9CB0; --flake: #7F9CB0; --tint: 16%;
+  --wash: rgba(70,55,40,.07); --press: rgba(70,55,40,.13); --shadow: rgba(70,50,30,.14);
+  --frost: rgba(130,168,190,.45); --row-active: rgba(251,250,248,.72);
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #2B2826; --frame: #3A3734; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --flake: #A0C4D6; --tint: 14%;
+  --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13); --shadow: rgba(0,0,0,.35);
+  --frost: rgba(160,196,214,.45); --row-active: rgba(255,248,240,.10); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #2B2826; --frame: #3A3734; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --flake: #A0C4D6; --tint: 14%;
+  --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13); --shadow: rgba(0,0,0,.35);
+  --frost: rgba(160,196,214,.45); --row-active: rgba(255,248,240,.10); color-scheme: dark }
+
+body { background: var(--page); color: var(--ink); font-family: var(--ui); font-size: 13px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 40px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1 { font-family: var(--display); font-variation-settings: "SOFT" 100, "WONK" 0; font-weight: 360; font-size: 30px;
+  margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.intro { color: var(--muted); max-width: 62ch; line-height: 1.55; margin: 8px 0 0; font-size: 13px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+button { font: inherit; color: inherit; }
+.play { background: var(--ink); color: var(--page); border: 0; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.play:hover { opacity: .9 }
+.seg { display: inline-flex; background: var(--frame); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--page); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+:focus-visible { outline: 2px solid var(--frost); outline-offset: 2px; }
+
+.drafts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 20px; }
+.draft { background: var(--frame); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.draft h2 { margin: 0; font-family: var(--display); font-variation-settings: "SOFT" 100, "WONK" 0; font-weight: 360; font-size: 22px; }
+.draft h2 b { font-weight: 600; }
+.draft p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 12px; max-width: 58ch; }
+.stage { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+.cap { font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+
+/* The real-size sidebar */
+.sidebar { position: relative; width: 236px; height: 318px; border-radius: 10px; overflow: hidden;
+  background: color-mix(in srgb, var(--space) var(--tint), var(--frame));
+  box-shadow: inset 0 0 0 .5px var(--press); display: flex; flex-direction: column; padding: 10px 8px 6px; box-sizing: border-box; }
+.addr { height: 30px; border-radius: 8px; background: var(--wash); margin-bottom: 14px; display: flex; align-items: center; padding: 0 10px; color: var(--faint); font-size: 12px; flex: none; }
+.tabs { flex: 1; overflow: hidden; }
+.row { height: 36px; margin-bottom: 4px; border-radius: 10px; display: flex; align-items: center; gap: 8px; padding: 0 12px; box-sizing: border-box; overflow: hidden; white-space: nowrap; }
+.row.active { background: var(--row-active); box-shadow: 0 1px 2px var(--shadow); }
+.fav { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+.row span { overflow: hidden; text-overflow: ellipsis; }
+.bottom { height: 36px; display: flex; align-items: center; gap: 2px; position: relative; flex: none; }
+.spaces { flex: 1; display: flex; justify-content: center; gap: 6px; transition: opacity .2s ease-out; }
+.spaces i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.plus { width: 28px; height: 28px; display: grid; place-items: center; color: var(--muted); font-size: 16px; transition: opacity .2s ease-out; }
+.ob { position: relative; height: 28px; min-width: 28px; border-radius: 14px; border: 0; padding: 0; background: transparent;
+  display: flex; align-items: center; cursor: pointer; z-index: 2; color: var(--muted);
+  transition: background-color var(--d-frost, .25s) ease-out, box-shadow var(--d-frost, .25s) ease-out; }
+.ob:hover { background-color: var(--wash); }
+.ob .ic { width: 28px; height: 28px; display: grid; place-items: center; flex: none; }
+.ob .txt { max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--ink);
+  transition: max-width var(--d-thaw, .3s) cubic-bezier(.25,.1,.25,1), opacity var(--d-thaw, .3s) ease-out, padding var(--d-thaw, .3s) ease-out; }
+.sidebar.frosted .ob { background-color: color-mix(in srgb, var(--space) 34%, var(--row-active)); box-shadow: inset 0 0 0 .5px var(--frost), 0 1px 3px var(--shadow); }
+.sidebar.open .ob .txt { max-width: 150px; opacity: 1; padding-right: 12px; }
+.sidebar.open .spaces, .sidebar.open .plus { opacity: 0; }
+.dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--space); opacity: 0; transition: opacity .3s ease-out; }
+.sidebar.unseen .dot { opacity: 1; }
+.flyer { position: absolute; left: 0; top: 0; width: 16px; height: 16px; border-radius: 4px; z-index: 3; pointer-events: none; box-shadow: 0 1px 2px var(--shadow); }
+
+/* The 6× view */
+.zoom { flex: 1; min-width: 200px; border-radius: 10px; background: color-mix(in srgb, var(--space) var(--tint), var(--frame));
+  box-shadow: inset 0 0 0 .5px var(--press); display: grid; place-items: center; position: relative; min-height: 200px; }
+.zoom svg { width: 132px; height: 132px; color: var(--muted); overflow: visible; }
+
+svg.box { overflow: visible; }
+svg.box .lid { transform-box: view-box; transform-origin: 20.5px 10px; }
+svg.box .flake { fill: var(--flake); opacity: 0; transform-box: fill-box; transform-origin: center; }
+svg.box .drop { opacity: 0; }
+
+footer { color: var(--faint); font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) { .sidebar { width: 100%; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The snow box lid</h1>
+    <p class="intro">Two drafts of the tidy moment. Site icons drift down into the overflow button, the lid lifts to catch them, then settles shut before the pill says what happened. Both end on the approved D3 shape.</p>
+  </header>
+
+  <div class="controls">
+    <button class="play" id="play" type="button">Play again</button>
+    <div class="seg" role="group" aria-label="Appearance">
+      <button type="button" id="th-system" data-th="system" aria-pressed="true">System</button>
+      <button type="button" id="th-light" data-th="light" aria-pressed="false">Light</button>
+      <button type="button" id="th-dark" data-th="dark" aria-pressed="false">Dark</button>
+    </div>
+    <label class="check"><input type="checkbox" id="slow"> Slow motion (3×)</label>
+    <label class="check"><input type="checkbox" id="loop"> Loop</label>
+    <label class="check"><input type="checkbox" id="rm"> Reduce Motion</label>
+  </div>
+
+  <div class="drafts">
+    <section class="draft" data-variant="lid">
+      <h2><b>A</b> &nbsp;Lid only</h2>
+      <div class="stage">
+        <div><div class="cap">Real size</div><div class="sidebar"></div></div>
+        <div style="flex:1;min-width:200px;display:flex;flex-direction:column"><div class="cap">6×</div><div class="zoom"></div></div>
+      </div>
+      <p>The lid tips open about 20° on its right corner as the first icon nears, stays open while the rest fall in, and settles shut as the last one lands. No bounce.</p>
+    </section>
+
+    <section class="draft" data-variant="slide">
+      <h2><b>B</b> &nbsp;Lid and sliding snow</h2>
+      <div class="stage">
+        <div><div class="cap">Real size</div><div class="sidebar"></div></div>
+        <div style="flex:1;min-width:200px;display:flex;flex-direction:column"><div class="cap">6×</div><div class="zoom"></div></div>
+      </div>
+      <p>The same lid. A beat after it tips, the drift slumps downhill toward the hinge as one soft lump, slow to start and stopping short. As the lid lands, the jolt settles it back into its usual shape.</p>
+    </section>
+  </div>
+
+  <footer>Timing follows the app: icons leave 90ms apart and take 0.7s to fall, the frost forms in 0.25s, the pill holds for 2.6s. Click the button after it plays to clear the dot.</footer>
+</div>
+
+<template id="box">
+  <svg class="box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <g class="drops"></g>
+    <path d="M5 10v7.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10"/>
+    <path d="M10 13.5h4"/>
+    <g class="lid"><path class="snow" d="M3.5 10c0-3 1.8-5.3 4.6-5.3 2.6 0 4.2 1.6 6.4 2.8 2 1.1 4 1.5 6 1.6V10Z"/></g>
+  </svg>
+</template>
+
+<script>
+const TABS = [
+  ["Bend weather", "#C9A27E", false, true],
+  ["Sourdough starter guide", "#B07F6A", true],
+  ["Mt. Bachelor snow report", "#6FA3A0", true],
+  ["Firn notes", "#7F9CB0", false],
+  ["Flights to Portland", "#8E8FB8", true],
+  ["Library holds", "#8FAE8B", true],
+];
+const SPACES = ["#7F9CB0", "#C9A27E", "#8FAE8B"];
+const tpl = document.getElementById("box");
+let running = [], timers = [];
+
+function S() { return document.getElementById("slow").checked ? 3 : 1; }
+function RM() { return document.getElementById("rm").checked; }
+
+function build(draft) {
+  const sb = draft.querySelector(".sidebar");
+  sb.className = "sidebar";
+  sb.innerHTML = `<div class="addr">firnbrowser.com</div><div class="tabs">${
+    TABS.map(([t, c, tidy, act]) => `<div class="row${act ? " active" : ""}"${tidy ? " data-tidy" : ""}><i class="fav" style="background:${c}"></i><span>${t}</span></div>`).join("")
+  }</div><div class="bottom"><button class="ob" type="button" aria-label="Show tidied away tabs"><span class="ic"></span><span class="txt">Tidied away 4 tabs</span><i class="dot"></i></button><div class="spaces">${
+    SPACES.map(c => `<i style="background:${c}"></i>`).join("")}</div><div class="plus">+</div></div>`;
+  const small = tpl.content.firstElementChild.cloneNode(true);
+  small.setAttribute("width", 18); small.setAttribute("height", 18);
+  sb.querySelector(".ic").append(small);
+  sb.querySelector(".ob").addEventListener("click", () => sb.classList.remove("unseen"));
+  const zoom = draft.querySelector(".zoom");
+  zoom.innerHTML = "";
+  zoom.append(tpl.content.firstElementChild.cloneNode(true));
+}
+
+function anim(el, frames, ms, delay, easing = "ease-out") {
+  const a = el.animate(frames, { duration: ms * S(), delay: delay * S(), easing, fill: "both" });
+  running.push(a); return a;
+}
+function later(ms, fn) { timers.push(setTimeout(fn, ms * S())); }
+
+function lid(svgs, variant) {
+  for (const svg of svgs) {
+    const g = svg.querySelector(".lid");
+    anim(g, [{ transform: "rotate(0deg)" }, { transform: "rotate(20deg)" }], 220, 380, "cubic-bezier(.2,.7,.3,1)");
+    // Settles shut: eases in so it lands softly, never overshoots.
+    running.push(g.animate([{ transform: "rotate(20deg)" }, { transform: "rotate(0deg)" }],
+      { duration: 260 * S(), delay: 990 * S(), easing: "cubic-bezier(.45,0,.25,1)", fill: "forwards", composite: "replace" }));
+    if (variant === "slide") {
+      const snow = svg.querySelector(".snow");
+      // Slow to start (friction), soft stop, never past the end: snow, not water.
+      morph(snow, 0, 1, 480, 380, t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      morph(snow, 1, 0, 340, 1020, t => 1 - Math.pow(1 - t, 2));
+    }
+  }
+}
+
+// The approved drift (absolute points), and the same drift slumped toward the hinge.
+const REST = [3.5,10, 3.5,7, 5.3,4.7, 8.1,4.7, 10.7,4.7, 12.3,6.3, 14.5,7.5, 16.5,8.6, 18.5,9.0, 20.5,9.1];
+const SLUMP = [3.5,10, 3.5,8.1, 6.4,5.3, 10.2,5.3, 12.8,5.3, 14.4,6.3, 16.2,7.3, 17.7,8.0, 19.2,8.4, 20.5,8.6];
+function snowPath(k) {
+  const p = REST.map((v, i) => +(v + (SLUMP[i] - v) * k).toFixed(3));
+  return `M${p[0]} ${p[1]}C${p.slice(2, 8).join(" ")}C${p.slice(8, 14).join(" ")}C${p.slice(14, 20).join(" ")}V10Z`;
+}
+let gen = 0;
+function morph(el, a, b, ms, delay, ease) {
+  const mine = gen, start = performance.now() + delay * S(), dur = ms * S();
+  const step = now => {
+    if (mine !== gen) return;
+    const t = Math.min(1, Math.max(0, (now - start) / dur));
+    if (now >= start) el.setAttribute("d", snowPath(a + (b - a) * ease(t)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function zoomDrops(svg) {
+  const g = svg.querySelector(".drops");
+  g.innerHTML = "";
+  TABS.filter(t => t[2]).forEach(([, c], i) => {
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    Object.entries({ x: 9.5, y: -4, width: 3.6, height: 3.6, rx: 1, fill: c, stroke: "none", class: "drop" })
+      .forEach(([k, v]) => r.setAttribute(k, v));
+    r.style.transformBox = "fill-box"; r.style.transformOrigin = "center";
+    g.append(r);
+    const sway = [-1.2, 1, -.4, .8][i];
+    anim(r, [
+      { opacity: 0, transform: `translate(${sway}px,-6px) scale(1)` },
+      { opacity: 1, transform: `translate(${sway * .5}px,0px) scale(1)`, offset: .35 },
+      { opacity: 1, transform: "translate(0px,9px) scale(.75)", offset: .8 },
+      { opacity: 0, transform: "translate(0px,12px) scale(.55)" },
+    ], 700, i * 90, "cubic-bezier(.4,0,.6,1)");
+  });
+}
+
+function play() {
+  gen++;
+  running.forEach(a => a.cancel()); running = [];
+  timers.forEach(clearTimeout); timers = [];
+  document.documentElement.style.setProperty("--d-frost", `${.25 * S()}s`);
+  document.documentElement.style.setProperty("--d-thaw", `${.3 * S()}s`);
+  document.querySelectorAll(".draft").forEach(draft => {
+    build(draft);
+    const sb = draft.querySelector(".sidebar");
+    const rows = [...sb.querySelectorAll(".row[data-tidy]")];
+    if (RM()) {
+      later(500, () => rows.forEach(r => anim(r, [{ opacity: 1 }, { opacity: 0, height: "0px", marginBottom: "0px" }], 300, 0)));
+      later(800, () => sb.classList.add("frosted", "open"));
+      later(3600, () => sb.classList.remove("open", "frosted"));
+      later(3900, () => sb.classList.add("unseen"));
+      return;
+    }
+    later(500, () => {
+      const box = sb.getBoundingClientRect();
+      const btn = sb.querySelector(".ob .ic").getBoundingClientRect();
+      const to = { x: btn.left - box.left + 14, y: btn.top - box.top + 12 };
+      rows.forEach((row, i) => {
+        const fav = row.querySelector(".fav").getBoundingClientRect();
+        const from = { x: fav.left - box.left + 8, y: fav.top - box.top + 8 };
+        const fl = document.createElement("i");
+        fl.className = "flyer"; fl.style.background = row.querySelector(".fav").style.background;
+        sb.append(fl);
+        const dx = to.x - from.x, dy = to.y - from.y, at = `translate(${from.x - 8}px,${from.y - 8}px)`;
+        anim(fl, [
+          { transform: `${at} translate(0,0) scale(1)`, opacity: 1 },
+          { transform: `${at} translate(4px,-6px) scale(1.1)`, opacity: 1, offset: .21 },
+          { transform: `${at} translate(${6 + (dx - 6) * .25}px,${-6 + (dy + 6) * .2}px) scale(.95)`, opacity: 1, offset: .4 },
+          { transform: `${at} translate(${dx}px,${dy}px) scale(.55)`, opacity: 1, offset: .71 },
+          { transform: `${at} translate(${dx}px,${dy}px) scale(.55)`, opacity: 0 },
+        ], 700, i * 90, "ease-in-out");
+        anim(row.querySelector(".fav"), [{ opacity: 1 }, { opacity: 0 }], 60, i * 90);
+        anim(row, [{ opacity: 1 }, { opacity: 0 }], 250, i * 90);
+        anim(row, [{ height: "36px", marginBottom: "4px" }, { height: "0px", marginBottom: "0px" }], 300, i * 90 + 250, "cubic-bezier(.25,.1,.25,1)");
+      });
+      const svgs = [sb.querySelector(".ic svg"), draft.querySelector(".zoom svg")];
+      lid(svgs, draft.dataset.variant);
+      zoomDrops(svgs[1]);
+      later(1060, () => sb.classList.add("frosted"));
+      later(1310, () => sb.classList.add("open"));
+      later(3910, () => sb.classList.remove("open"));
+      later(4260, () => sb.classList.remove("frosted"));
+      later(4560, () => sb.classList.add("unseen"));
+    });
+  });
+  later(7000, () => { if (document.getElementById("loop").checked) play(); });
+}
+
+document.getElementById("play").addEventListener("click", play);
+["slow", "rm"].forEach(id => document.getElementById(id).addEventListener("change", play));
+document.getElementById("loop").addEventListener("change", e => { if (e.target.checked) play(); });
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  if (b.dataset.th === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", b.dataset.th);
+}));
+try { if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.getElementById("rm").checked = true; } catch (e) {}
+document.querySelectorAll(".draft").forEach(build);
+setTimeout(play, 400);
+</script>

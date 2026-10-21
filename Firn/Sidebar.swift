@@ -329,7 +329,9 @@ private struct TabList: View {
             }
             try? await Task.sleep(for: .milliseconds(90))
         }
-        try? await Task.sleep(for: .seconds(FlyingIcon.duration))
+        // Then a moment more, so the snow box's lid has settled shut before
+        // the frost forms over it.
+        try? await Task.sleep(for: .seconds(FlyingIcon.duration + 0.3))
         if count > 0 { window.announceTidied(count) }
         window.tidyQueue = []
     }

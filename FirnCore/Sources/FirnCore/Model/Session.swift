@@ -16,10 +16,13 @@ public struct Session: Codable, Equatable, Sendable {
     /// The days Firn was used, as "yyyy-MM-dd", for drifting. Missing in
     /// files from before Archived.
     public var usedDays: [String]
+    /// The spaces whose overflow has newly tidied tabs not yet looked at.
+    /// Missing in files from before Tidied away.
+    public var unseenTidiedSpaceIDs: [UUID]
 
     public init(
         version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], tabs: [TabRecord], window: WindowRecord,
-        usedDays: [String] = []
+        usedDays: [String] = [], unseenTidiedSpaceIDs: [UUID] = []
     ) {
         self.version = version
         self.spaces = spaces
@@ -27,9 +30,10 @@ public struct Session: Codable, Equatable, Sendable {
         self.tabs = tabs
         self.window = window
         self.usedDays = usedDays
+        self.unseenTidiedSpaceIDs = unseenTidiedSpaceIDs
     }
 
-    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window, usedDays }
+    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window, usedDays, unseenTidiedSpaceIDs }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -39,6 +43,7 @@ public struct Session: Codable, Equatable, Sendable {
         tabs = try container.decode([TabRecord].self, forKey: .tabs)
         window = try container.decode(WindowRecord.self, forKey: .window)
         usedDays = try container.decodeIfPresent([String].self, forKey: .usedDays) ?? []
+        unseenTidiedSpaceIDs = try container.decodeIfPresent([UUID].self, forKey: .unseenTidiedSpaceIDs) ?? []
     }
 }
 

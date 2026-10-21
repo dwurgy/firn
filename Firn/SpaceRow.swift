@@ -9,17 +9,36 @@ struct SpaceRow: View {
     let window: WindowModel
     /// The space waiting on "Delete Space…"'s confirmation.
     @State private var deleting: Space?
+    /// How far along the "Tidied away" pill is.
+    @State private var pill = PillPhase.hidden
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum PillPhase { case hidden, frosted, open }
 
     var body: some View {
         HStack(spacing: 2) {
             // As wide as "+", so the spaces sit truly centered between the two.
             OverflowButton(store: store, window: window)
-            buttons
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, (Theme.rowHeight - 28) / 2)
-            ChromeButton("New space", systemImage: "plus") { window.newSpace() }
+            Group {
+                buttons
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, (Theme.rowHeight - 28) / 2)
+                ChromeButton("New space", systemImage: "plus") { window.newSpace() }
+            }
+            // The spaces step back while the pill speaks.
+            .opacity(pill == .open ? 0 : 1)
         }
         .frame(minHeight: Theme.rowHeight)
+        .overlay(alignment: .leading) {
+            if pill != .hidden, let announcement = window.tidyAnnouncement {
+                TidyPill(text: announcement.text, open: pill == .open,
+                         color: Theme.spaceColor(store.activeSpace.color)) {
+                    window.showsOverflow = true
+                }
+                .transition(.opacity)
+            }
+        }
+        .task(id: window.tidyAnnouncement?.id) { await announce() }
         .confirmationDialog(
             deleting.map { "Delete “\($0.name)”?" } ?? "",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -53,6 +72,30 @@ struct SpaceRow: View {
                 }
             }
         }
+    }
+
+    /// Frost forms over the overflow button, it widens to say how many tabs
+    /// were tidied away, holds, and thaws back. Reduce Motion: the pill
+    /// fades in and out.
+    private func announce() async {
+        guard window.tidyAnnouncement != nil else { return }
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.3)) { pill = .open }
+            try? await Task.sleep(for: .seconds(2.8))
+            withAnimation(.easeOut(duration: 0.3)) { pill = .hidden }
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) { pill = .frosted }
+            try? await Task.sleep(for: .milliseconds(250))
+            withAnimation(Theme.thaw) { pill = .open }
+            try? await Task.sleep(for: .seconds(2.6))
+            withAnimation(Theme.thaw) { pill = .frosted }
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.25)) { pill = .hidden }
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+        // A newer announcement has taken over.
+        guard !Task.isCancelled else { return }
+        window.tidyAnnouncement = nil
     }
 
     /// Says plainly what goes: with a separate space, its sign-ins too; with

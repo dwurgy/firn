@@ -25,9 +25,9 @@ public final class BrowserStore {
     /// How long an everyday tab can go unseen before it drifts (a setting;
     /// the app keeps it).
     public var driftAfter: DriftAfter = .sevenDays
-    /// The tabs that drifted since Firn opened: only these show in the
-    /// sidebar's Drifted tabs group. The rest live in the overflow.
-    private var driftedThisSession: Set<UUID> = []
+    /// The spaces with tabs tidied away since the overflow was last opened
+    /// there (the overflow button shows a dot).
+    private var unseenTidiedSpaces: Set<UUID> = []
     /// Drifted tabs are deleted this many calendar days after they drift.
     static let driftedKeptDays = 30
     /// The days Firn was used, as "yyyy-MM-dd" in the Mac's calendar, oldest
@@ -230,8 +230,16 @@ public final class BrowserStore {
     public var openTabs: [Tab] { list(.open) }
     /// The current space's drifted tabs, the most recently drifted first.
     public var driftedTabs: [Tab] { list(.drifted).reversed() }
-    /// The ones that drifted since Firn opened, for the sidebar's group.
-    public var sessionDriftedTabs: [Tab] { driftedTabs.filter { driftedThisSession.contains($0.id) } }
+    /// Whether tabs were tidied away in this space since its overflow was
+    /// last opened.
+    public var hasUnseenTidied: Bool {
+        unseenTidiedSpaces.contains(activeSpaceID) && !driftedTabs.isEmpty
+    }
+
+    /// The overflow was opened: this space's tidied tabs have been seen.
+    public func markTidiedSeen() {
+        unseenTidiedSpaces.remove(activeSpaceID)
+    }
 
     /// A group's tabs, in order.
     public func tabs(in group: TabGroup) -> [Tab] {
@@ -414,7 +422,6 @@ public final class BrowserStore {
         let siblings = siblings(of: tab)
         let position = tab.place == .open ? siblings.firstIndex { $0.id == tab.id } : nil
         if remembering { rememberClosing(tab) }
-        driftedThisSession.remove(tab.id)
         tab.sleep()
         if tab.place != .basecamp {
             tabs.remove(at: index)
@@ -786,7 +793,7 @@ public final class BrowserStore {
         }
     }
 
-    /// Drifts one loose tab to its space's Drifted tabs. Its page lets go,
+    /// Drifts one loose tab away to its space's overflow ("Tidied away"). Its page lets go,
     /// so it costs nothing; it keeps its address, title, and icon.
     public func drift(_ tab: Tab) {
         guard tab.place == .open, tab.groupID == nil, tab.id != activeTabID,
@@ -796,7 +803,7 @@ public final class BrowserStore {
         tab.place = .drifted
         tab.driftedAt = now()
         tabs.append(tab)
-        driftedThisSession.insert(tab.id)
+        unseenTidiedSpaces.insert(tab.spaceID)
         lastTabBySpace = lastTabBySpace.filter { $0.value != tab.id }
     }
 
@@ -817,7 +824,6 @@ public final class BrowserStore {
         }.map(\.id))
         guard !expired.isEmpty else { return }
         tabs.removeAll { expired.contains($0.id) }
-        driftedThisSession.subtract(expired)
     }
 
     /// A date's day in the Mac's calendar, as "yyyy-MM-dd" (which sorts by date).
@@ -841,7 +847,6 @@ public final class BrowserStore {
             tabs.remove(at: index)
             tab.place = .open
             tab.driftedAt = nil
-            driftedThisSession.remove(tab.id)
             tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
         }
         activeTab?.lastActiveAt = now()
@@ -931,7 +936,10 @@ public final class BrowserStore {
             spaceTabIDs: lastTabBySpace.filter { $0.key != activeSpaceID },
             sidebarWidth: sidebarWidth, sidebarCollapsed: sidebarCollapsed
         )
-        return Session(spaces: spaces, groups: groupRecords, tabs: records, window: window, usedDays: usedDays)
+        return Session(
+            spaces: spaces, groups: groupRecords, tabs: records, window: window, usedDays: usedDays,
+            unseenTidiedSpaceIDs: unseenTidiedSpaces.sorted { $0.uuidString < $1.uuidString }
+        )
     }
 
     /// The saved file is Firn's own, but it's checked as if it weren't: only
@@ -983,6 +991,7 @@ public final class BrowserStore {
         savedRecords = Dictionary(session.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         savedGroupRecords = Dictionary(session.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         usedDays = Self.cleanDays(session.usedDays)
+        unseenTidiedSpaces = Set(session.unseenTidiedSpaceIDs).intersection(spaceIDs)
         windowID = session.window.id
         if spaceIDs.contains(session.window.activeSpaceID) { activeSpaceID = session.window.activeSpaceID }
         let tabSpaces = Dictionary(tabs.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })

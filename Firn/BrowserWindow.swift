@@ -33,9 +33,15 @@ final class WindowModel {
     /// The New space or Edit space sheet, while it's open. Here so the menu
     /// bar's New Space… can open it too.
     var spaceSheet: SpaceSheetMode?
-    /// Idle tabs waiting to drift, one by one, so each is seen going (see
-    /// `TabList`).
-    var driftQueue: [FirnCore.Tab] = []
+    /// Idle tabs waiting to be tidied away, one by one, so each is seen
+    /// going (see `TabList`).
+    var tidyQueue: [FirnCore.Tab] = []
+    /// Site icons on their way down to the overflow button.
+    var flyingIcons: [FlyingIcon] = []
+    /// Where the overflow button sits in the sidebar, where they land.
+    @ObservationIgnored var overflowButtonFrame: CGRect = .zero
+    /// "Tidied away 4 tabs", while the overflow button says so.
+    var tidyAnnouncement: TidyAnnouncement?
     /// Whether the overflow (drifted tabs and Recently closed) is open.
     var showsOverflow = false
 
@@ -50,6 +56,14 @@ final class WindowModel {
     }
 
     func toggleSidebar() { setSidebarCollapsed(!sidebarCollapsed) }
+
+    /// The overflow button frosts over and says how many tabs were tidied
+    /// away (see `SpaceRow`); VoiceOver hears it too.
+    func announceTidied(_ count: Int) {
+        let announcement = TidyAnnouncement(count: count)
+        tidyAnnouncement = announcement
+        AccessibilityNotification.Announcement(announcement.text).post()
+    }
 
     // MARK: Spaces
 
@@ -280,10 +294,13 @@ struct BrowserWindow: View {
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }
 
-    /// Idle tabs drift. Coming back to Firn, it waits a beat first, so the
-    /// drift is seen. Tabs in the space on screen go one by one while the
-    /// sidebar shows (`TabList` lets each glide down); the rest, and all of
-    /// them with Reduce Motion, simply go (a plain fade).
+    /// Idle tabs are tidied away. Coming back to Firn, it waits a beat
+    /// first, so it's seen. With the sidebar showing, the space on screen's
+    /// tabs go one by one (`TabList` shows each icon drifting down to the
+    /// overflow button), then the button says so. With Reduce Motion they
+    /// fade and the button says so; with the sidebar hidden, they simply
+    /// go and the button's dot is left to tell. Other spaces' tabs go
+    /// quietly.
     private func driftIdleTabs(afterABeat: Bool) {
         driftTask?.cancel()
         driftTask = Task { @MainActor in
@@ -292,15 +309,21 @@ struct BrowserWindow: View {
                 guard !Task.isCancelled, NSApp.isActive else { return }
             }
             let idle = store.idleTabs()
-            let watched = showsSidebar && !reduceMotion
-                ? idle.filter { $0.spaceID == store.activeSpaceID } : []
+            let here = idle.filter { $0.spaceID == store.activeSpaceID }
+            let watched = showsSidebar && !reduceMotion ? here : []
             let watchedIDs = Set(watched.map(\.id))
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : nil) {
                 for tab in idle where !watchedIDs.contains(tab.id) { store.drift(tab) }
             }
-            window.driftQueue += watched.filter { tab in !window.driftQueue.contains { $0.id == tab.id } }
+            if !watched.isEmpty {
+                window.tidyQueue += watched.filter { tab in !window.tidyQueue.contains { $0.id == tab.id } }
+            } else if showsSidebar {
+                let count = here.count { $0.place == .drifted }
+                if count > 0 { window.announceTidied(count) }
+            }
         }
     }
+
     /// While peeking, the sidebar is a card floating just inside the window
     /// edge, so it and its traffic lights sit this much further in.
     private var peekShift: CGFloat { window.isPeeking ? Theme.peekInset : 0 }
@@ -564,9 +587,9 @@ struct BrowserCommands: Commands {
             #if DEBUG
             Divider()
             // For trying drifting without waiting days; never in a release build.
-            Button("Drift Loose Tabs Now (Debug)") {
-                window.driftQueue += store.looseTabs.filter { tab in
-                    tab.id != store.activeTabID && !window.driftQueue.contains { $0.id == tab.id }
+            Button("Tidy Away Loose Tabs Now (Debug)") {
+                window.tidyQueue += store.looseTabs.filter { tab in
+                    tab.id != store.activeTabID && !window.tidyQueue.contains { $0.id == tab.id }
                 }
             }
             #endif

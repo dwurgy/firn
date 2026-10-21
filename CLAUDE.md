@@ -26,7 +26,7 @@ Dia, Arc, and Zen have great ideas, but they're built for power users or early a
 - **Have the guts to say no.** Before adding a feature, ask: would a non-techy person understand it and miss it if it were gone? If it mainly serves power users, leave it out, or tuck it away so it never adds clutter.
 - **Short menus.** No giant right-click menus. A menu shows the few things you'd actually reach for, in plain words.
 - **Discoverable, not memorized.** Anything important can be found by looking or right-clicking; keyboard shortcuts are a bonus, never the only way.
-- **Nothing hidden.** If Firn tidies something away, you can see it go and where it went (drifted tabs glide into a group at the bottom of the sidebar; later they live behind a button that's always in view, never a box to discover).
+- **Nothing hidden.** If Firn tidies something away, you can see it go and where it went (tidied-away tabs visibly drift into a button that's always in view, never a box to discover).
 - **Privacy by default.** Data stays on the device unless the person chooses otherwise. No tracking, no telemetry, and privacy claims are only made when they're true.
 - **Names: plain words win.** Keep a familiar word when it's already plain English (Spaces, Groups, Archived). Give something our own name when other browsers' word is their brand coinage or unclear (Basecamp instead of Essentials, Lookout instead of Glance).
 - **Serial (Oxford) comma, always.** In a list of three or more, a comma goes before the final "and" or "or": "tabs, color, and icon", "macOS, Windows, and Linux". Everywhere people read Firn's words: the interface, the welcome, warnings, menus, the README, and release notes. (Two items take no comma: "mail and calendar".)
@@ -134,11 +134,10 @@ Each space is its own browser. This is the heart of the prototype; get it right 
   - Make one by dragging a tab onto another, or right-click a tab: "New group with this tab." Right-click a group: Rename, Ungroup, and Close group. A close button shows only while the pointer is on the group's name line; ⇧⌘T brings a closed group back whole, with all its tabs (once ⇧⌘T exists).
   - Grouped tabs are ordinary tabs: no home address, closing one really closes it (⇧⌘T brings it back), and they never archive. Links from a grouped tab open inside its group, right below it, as in Dia (David, 2026-10-19).
 - **Spaces:** name, color, Firn's own icon, and their own browser data (see "How spaces work"); switch from the row at the bottom of the sidebar or with a shortcut; the tint cross-fades.
-- **Drifted tabs** (David, 2026-10-20; replaces "Archived"): loose tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) drift away. Never drifted: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
-  - **The moment:** when Firn comes back to the front, after a beat so it's seen, idle tabs glide down one after another and settle into a folded group named "Drifted tabs" at the bottom of the tab list (like snow settling; a plain fade with Reduce Motion). No count. Click one to bring it back where new tabs go.
-  - **After quitting:** the group holds only this session's drifted tabs; next launch it's gone and they live in the overflow.
-  - **The overflow:** one small button in the sidebar's bottom row (with the spaces; no more top-row buttons), opening a calm panel, not a long menu: the space's drifted tabs and Recently closed, and later History (Firn's own per-space history is its own step).
-  - Drifted tabs are deleted 30 calendar days after they drift (as in Dia; David, 2026-10-20), or when closed. Only this cutoff uses calendar days; drifting itself counts days Firn was used.
+- **Tidied away** (David, 2026-10-20; replaces "Archived" and the "Drifted tabs" group; "drifted" in code only): loose tabs not looked at for a while (7 days of using Firn by default; 1 day, 30 days, or Never in Settings) are tidied away. Never tidied: Basecamp tiles, grouped tabs, the tab on screen, a tab playing sound, and a tab in split view. Count days Firn was used, not calendar days.
+  - **The moment** (like Dia's, in Firn's language): when Firn comes back to the front, after a beat, idle rows fade in place one after another while each site icon drifts down into the overflow button. The button frosts over in the space's color, widens to "Tidied away 4 tabs", holds, and thaws back; a dot in the space's color stays until the overflow is opened. Reduce Motion: rows and pill fade. No section in the tab list.
+  - **The overflow:** one small clock button in the sidebar's bottom row (with the spaces; no more top-row buttons), opening a native popover: the space's Tidied away tabs and Recently closed, and later History (Firn's own per-space history is its own step). Click one to bring it back where new tabs go.
+  - Tidied tabs are deleted 30 calendar days after they're tidied (as in Dia; David, 2026-10-20), or when closed. Only this cutoff uses calendar days.
 - **Lookout:** a link preview in a floating rounded panel over the page with a dimmed backdrop; Esc or clicking outside closes it; one button turns it into a tab (at the top of the loose tabs). Links clicked in a Basecamp tile should open as a Lookout first, so you glance before keeping (David, 2026-10-18); until Lookout exists they open where new tabs go.
 - **Split view:** two pages side by side, each with its own address and back/forward; drag the gap to resize; one row in the sidebar.
 - **Command bar:** one shortcut opens a centered bar: type an address, search, jump to an open tab in this space, or run an action by name.
@@ -253,7 +252,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
 - **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. 
-- **Phase 5:** Drifted tabs built (2026-10-20): the drift, the session-only group, the overflow popover, and the 30-day cutoff; waiting on David's look. Then Lookout, split view, and the command bar (after the ⌘T talk).
+- **Phase 5:** Tidied away built (2026-10-20, second design: icons drift into the overflow button, frost pill, dot); waiting on David's look. Then Lookout, split view, and the command bar (after the ⌘T talk).
 
 ---
 

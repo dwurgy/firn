@@ -29,14 +29,14 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
-                Picker("Tabs drift away after", selection: $driftAfter) {
+                Picker("Tidy away tabs after", selection: $driftAfter) {
                     Text("1 day").tag(DriftAfter.oneDay)
                     Text("7 days").tag(DriftAfter.sevenDays)
                     Text("30 days").tag(DriftAfter.thirtyDays)
                     Text("Never").tag(DriftAfter.never)
                 }
             } footer: {
-                Text("Tabs you haven't looked at in a while drift to the bottom of the sidebar, then into the clock button by your spaces. They're deleted 30 days later. Only days you use Firn count toward drifting. Basecamp and grouped tabs stay put.")
+                Text("Tabs you haven't looked at in a while are tidied away into the clock button by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -5,6 +5,7 @@ import SwiftUI
 /// forward), the
 /// address bar, and the space's tabs.
 struct Sidebar: View {
+    nonisolated static let space = "sidebar"
     let store: BrowserStore
     let window: WindowModel
     /// Where macOS put the traffic lights; the top row lines up with them.
@@ -21,6 +22,9 @@ struct Sidebar: View {
             SpaceRow(store: store, window: window)
                 .padding(.bottom, Theme.pageInset)
         }
+        // Site icons drifting down from their rows to the overflow button.
+        .overlay { TidyFlights(window: window) }
+        .coordinateSpace(.named(Self.space))
         .padding(.leading, Theme.pageInset)
     }
 
@@ -224,12 +228,10 @@ private struct TabList: View {
     @State private var releasingGroupID: UUID?
     /// The group being closed: its frost lifts away, tabs and all.
     @State private var closingGroupID: UUID?
-    /// The spaces whose Drifted tabs group is open; it's folded by default.
-    @State private var openDrifted: Set<UUID> = []
-    /// Copies of tabs drifting down into the Drifted tabs group.
-    @State private var drifting: [DriftingTab] = []
-    /// Where the Drifted tabs group sits, so drifting tabs know where to go.
-    @State private var driftedFrame: CGRect?
+    /// Where the list's content sits in the sidebar (it moves as it
+    /// scrolls), so a tidied tab's icon knows where it starts. A plain box,
+    /// so scrolling doesn't redraw anything.
+    @State private var origin = PointBox()
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -261,13 +263,10 @@ private struct TabList: View {
                             newTabRow
                                 .padding(.top, isCard(items.last) ? Theme.groupSpacing : 0)
                         }
-                        driftedGroup
                     }
-                    .overlay(alignment: .topLeading) {
-                        ZStack(alignment: .topLeading) {
-                            lifted
-                            driftingCopies
-                        }
+                    .overlay(alignment: .topLeading) { lifted }
+                    .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(Sidebar.space)).origin } action: {
+                        origin.point = $0
                     }
                     .coordinateSpace(.named(Self.space))
                     // One drag for the whole list, so a tab can cross into and out
@@ -288,17 +287,11 @@ private struct TabList: View {
                 }
             }
         }
-        // Idle tabs drift one after another, a moment apart.
-        .task(id: window.driftQueue.first?.id) {
-            guard let tab = window.driftQueue.first else { return }
-            driftAway(tab)
-            try? await Task.sleep(for: .milliseconds(140))
-            if window.driftQueue.first?.id == tab.id { window.driftQueue.removeFirst() }
-        }
-        // Hidden mid-drift, the rest simply go.
+        .task(id: window.tidyQueue.map(\.id)) { await tidyAway() }
+        // Hidden partway through, the rest simply go.
         .onDisappear {
-            for tab in window.driftQueue { store.drift(tab) }
-            window.driftQueue = []
+            for tab in window.tidyQueue { store.drift(tab) }
+            window.tidyQueue = []
         }
     }
 
@@ -306,76 +299,32 @@ private struct TabList: View {
         NewTabRow { window.editAddress(.newTab) }
     }
 
-    /// Drifted tabs, last in the list, holding the tabs that drifted since
-    /// Firn opened (earlier ones live in the overflow).
-    @ViewBuilder private var driftedGroup: some View {
-        let tabs = store.sessionDriftedTabs
-        if !tabs.isEmpty {
-            let spaceID = store.activeSpaceID
-            DriftedSection(tabs: tabs, open: Binding(
-                get: { openDrifted.contains(spaceID) },
-                set: { if $0 { openDrifted.insert(spaceID) } else { openDrifted.remove(spaceID) } }
-            )) { tab in
-                // It glides back up into the tab list.
-                withAnimation(reduceMotion ? nil : Self.glide) { store.select(tab) }
-                window.focusPage()
-            } close: { tab in
-                window.close(tab)
+    /// Idle tabs are tidied away one after another, a moment apart: each
+    /// row fades where it is as the list closes up, and its site icon
+    /// drifts down to the overflow button (`TidyFlights`). Once the last has
+    /// landed, the button says so. (Reduce Motion never gets here; see
+    /// `BrowserWindow`.)
+    private func tidyAway() async {
+        let queue = window.tidyQueue.filter { $0.place == .open }
+        guard !queue.isEmpty else { return }
+        var count = 0
+        for tab in queue {
+            guard tab.place == .open, tab.spaceID == store.activeSpaceID else { continue }
+            let frame = drag == nil && groupDrag == nil ? frames[tab.id] : nil
+            withAnimation(.easeOut(duration: 0.25)) { store.drift(tab) }
+            guard tab.place == .drifted else { continue }
+            count += 1
+            if let frame {
+                // The icon's middle: the row's padding, then half a 16pt icon.
+                let start = CGPoint(x: origin.point.x + frame.minX + Theme.rowPadding + 8,
+                                    y: origin.point.y + frame.midY)
+                window.flyingIcons.append(FlyingIcon(id: tab.id, icon: tab.icon, from: start))
             }
-            .padding(.top, Theme.sectionSpacing - Theme.rowSpacing)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
-                driftedFrame = $0
-            }
-            .onDisappear { driftedFrame = nil }
+            try? await Task.sleep(for: .milliseconds(90))
         }
-    }
-
-    /// One idle tab drifts, like snow settling: a copy lifts off exactly
-    /// over its row as the list closes up behind it, glides down to the
-    /// Drifted tabs line, and fades into it. The group folds first, so they
-    /// settle into it. (Reduce Motion never gets here; see `BrowserWindow`.)
-    private func driftAway(_ tab: FirnCore.Tab) {
-        withAnimation(Self.glide) { _ = openDrifted.remove(store.activeSpaceID) }
-        guard tab.spaceID == store.activeSpaceID, drag == nil, groupDrag == nil, let frame = frames[tab.id] else {
-            withAnimation(Self.glide) { store.drift(tab) }
-            return
-        }
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        withTransaction(instant) { drifting.append(DriftingTab(id: tab.id, tab: tab, from: frame)) }
-        withAnimation(Self.glide) { store.drift(tab) }
-        // Once the group has its place (it may have only just appeared),
-        // the copy sets off. If the tab didn't drift after all (it came
-        // on screen), the copy simply goes.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))
-            if let index = drifting.firstIndex(where: { $0.id == tab.id }) {
-                drifting[index].stayed = tab.place != .drifted
-                drifting[index].landed = true
-            }
-            try? await Task.sleep(for: .milliseconds(Int(DriftingTab.duration * 1000) + 50))
-            drifting.removeAll { $0.id == tab.id && $0.landed }
-        }
-    }
-
-    /// Tabs on their way down, each fading as it reaches the group's line.
-    private var driftingCopies: some View {
-        ForEach(drifting) { copy in
-            let landing = copy.stayed ? copy.from.minY : driftedFrame.map {
-                $0.minY + Theme.sectionSpacing - Theme.rowSpacing
-            } ?? copy.from.maxY
-            TabRow(tab: copy.tab, isActive: false, select: {}, close: {}) { EmptyView() }
-                .frame(width: copy.from.width)
-                .scaleEffect(copy.landed && !copy.stayed ? 0.94 : 1, anchor: .top)
-                .offset(x: copy.from.minX, y: copy.landed ? landing : copy.from.minY)
-                .animation(.smooth(duration: DriftingTab.duration), value: copy.landed)
-                // The list closing up moves the group; the copy follows softly.
-                .animation(.smooth(duration: 0.3), value: landing)
-                .opacity(copy.landed ? 0 : 1)
-                .animation(.easeIn(duration: DriftingTab.duration), value: copy.landed)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
+        try? await Task.sleep(for: .seconds(FlyingIcon.duration))
+        if count > 0 { window.announceTidied(count) }
+        window.tidyQueue = []
     }
 
     /// A card thawing away, lifting away, or not yet formed spaces itself
@@ -902,75 +851,43 @@ struct TabRow<MenuItems: View>: View {
     }
 }
 
-// MARK: - Drifted tabs
-
-/// A tab on its way down into Drifted tabs.
-private struct DriftingTab: Identifiable {
-    static let duration = 0.55
-    let id: UUID
-    let tab: FirnCore.Tab
-    /// Its row, where it lifts off.
-    let from: CGRect
-    var landed = false
-    /// It came on screen before it could drift, so it fades where it is.
-    var stayed = false
-}
-
-/// Drifted tabs: the space's loose tabs not looked at for a while that
-/// drifted since Firn opened, folded away at the bottom of the tab list.
-/// Not a group card: nothing is kept here on purpose, so it stays quiet.
-/// Clicking a tab brings it back.
-private struct DriftedSection: View {
-    let tabs: [FirnCore.Tab]
-    @Binding var open: Bool
-    let select: (FirnCore.Tab) -> Void
-    let close: (FirnCore.Tab) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        VStack(spacing: Theme.rowSpacing) {
-            header
-            if open {
-                ForEach(tabs) { tab in
-                    TabRow(tab: tab, isActive: false) { select(tab) } close: { close(tab) } menu: {
-                        Button("Close Tab", systemImage: "xmark") { close(tab) }
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 6) {
-            Text("Drifted tabs")
-                .font(Theme.groupNameFont)
-                .foregroundStyle(Theme.muted)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Theme.faint)
-                .rotationEffect(.degrees(open ? 0 : -90))
-                .accessibilityHidden(true)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, Theme.rowPadding)
-        .frame(height: Theme.groupHeaderHeight)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: toggle)
-        .help(open ? "Hide drifted tabs" : "Tabs you haven't looked at in a while")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Drifted tabs")
-        .accessibilityValue(open ? "Open" : "Folded")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint(open ? "Hides drifted tabs" : "Shows tabs you haven't looked at in a while")
-        .accessibilityAction { toggle() }
-    }
-
-    private func toggle() {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { open.toggle() }
-    }
+/// A point kept out of SwiftUI's view updates.
+final class PointBox {
+    var point: CGPoint = .zero
 }
 
 // MARK: - Groups
+
+/// The same frosted glass as the Basecamp tiles, washed with the space's
+/// color: group cards, and the overflow button's "Tidied away" pill.
+struct FrostGlass: View {
+    let shape: RoundedRectangle
+    let color: Color
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear)
+                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
+                .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
+        } else {
+            shape.fill(Theme.groupFill)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        }
+    }
+
+}
+
 
 /// A group: a soft frosted card tinted by the space's color, with its name,
 /// a dot in the space's color, and a fold arrow. The close button shows
@@ -1099,27 +1016,7 @@ private struct GroupCard<Rows: View>: View {
             }
     }
 
-    /// The same frosted glass as the Basecamp tiles, washed with the space's color.
-    @ViewBuilder private var card: some View {
-        if reduceTransparency {
-            shape.fill(Theme.tileSolid)
-                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-        } else if #available(macOS 26, *) {
-            shape.fill(.clear)
-                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
-                .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
-        } else {
-            shape.fill(Theme.groupFill)
-                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
-                .overlay {
-                    shape.strokeBorder(
-                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
-                        lineWidth: 1)
-                }
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-        }
-    }
+    private var card: some View { FrostGlass(shape: shape, color: color) }
 
     private func toggleFold() {
         animate { store.setFolded(group, !group.folded) }

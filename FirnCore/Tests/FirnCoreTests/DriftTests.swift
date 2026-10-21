@@ -206,17 +206,25 @@ struct DriftTests {
         #expect(restored.session(sidebarWidth: 260, sidebarCollapsed: false).usedDays == ["2026-03-01"])
     }
 
-    @Test func onlyThisSessionsDriftedTabsShowInTheSidebar() throws {
+    @Test func newlyTidiedTabsAreMarkedUntilTheOverflowIsOpened() throws {
         let clock = Clock()
         let store = makeStore(clock)
         store.driftAfter = .oneDay
         store.openTab(url("a"))
         store.openTab(url("b"))
+        #expect(!store.hasUnseenTidied)
         use(store, clock, days: 1)
-        #expect(hosts(store.sessionDriftedTabs) == ["a.example"])
+        #expect(store.hasUnseenTidied)
+        // Still marked after quitting.
         let restored = try quitAndReopen(store, clock)
-        #expect(restored.sessionDriftedTabs.isEmpty)
-        #expect(hosts(restored.driftedTabs) == ["a.example"])
+        #expect(restored.hasUnseenTidied)
+        // Only in its own space.
+        let work = restored.addSpace(name: "Work", icon: "leaf", color: "sage")
+        #expect(!restored.hasUnseenTidied)
+        restored.selectSpace(at: 0)
+        restored.markTidiedSeen()
+        #expect(!restored.hasUnseenTidied)
+        _ = work
     }
 
     @Test func driftedTabsAreDeletedAfterThirtyCalendarDays() throws {

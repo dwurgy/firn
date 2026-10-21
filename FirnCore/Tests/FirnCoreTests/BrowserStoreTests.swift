@@ -17,6 +17,7 @@ final class FakePage: PageController {
     var loadError: LoadError?
     var stopped = false
     var onRequest: (@MainActor (PageRequest) -> Void)?
+    var sendsOtherSitesToLookout = false
 
     init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }
 

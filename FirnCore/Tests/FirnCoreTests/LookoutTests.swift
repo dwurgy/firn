@@ -133,4 +133,35 @@ struct LookoutTests {
         #expect(store.openTabs.isEmpty)
         #expect(page.onRequest == nil)
     }
+
+    // MARK: - Basecamp links (step 3)
+
+    @Test func onlyATilesPageSendsOtherSitesToALookout() throws {
+        let store = makeStore()
+        let tab = store.openTab(url("a"))
+        let page = try #require(tab.page)
+        #expect(!page.sendsOtherSitesToLookout)
+        store.addToBasecamp(tab)
+        #expect(page.sendsOtherSitesToLookout)
+        store.removeFromBasecamp(tab)
+        #expect(!page.sendsOtherSitesToLookout)
+        // A kept Lookout is an ordinary tab.
+        store.openLookout(url("b"))
+        let kept = try #require(store.keepLookout())
+        #expect(kept.page?.sendsOtherSitesToLookout == false)
+    }
+
+    @Test func sameSite() {
+        func same(_ a: String, _ b: String) -> Bool {
+            WebAddress.isSameSite(URL(string: a)!, URL(string: b)!)
+        }
+        #expect(same("https://mail.google.com/x", "https://accounts.google.com/"))
+        #expect(same("https://google.com", "http://www.google.com"))
+        #expect(!same("https://google.com", "https://youtube.com"))
+        #expect(same("https://www.bbc.co.uk", "https://news.bbc.co.uk"))
+        #expect(!same("https://bbc.co.uk", "https://itv.co.uk"))
+        #expect(!same("https://a.abc.de", "https://b.xyz.de"))
+        #expect(same("http://localhost:3000", "http://localhost:8080"))
+        #expect(!same("http://10.0.0.1", "http://10.0.0.2"))
+    }
 }

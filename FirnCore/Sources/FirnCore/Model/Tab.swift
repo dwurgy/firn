@@ -21,7 +21,9 @@ public final class Tab: Identifiable {
 
     public let id: UUID
     public let spaceID: UUID
-    public internal(set) var place: Place
+    public internal(set) var place: Place {
+        didSet { applyLinkRule() }
+    }
     /// Where a Basecamp tile goes back to: its address when it was added.
     public internal(set) var homeURL: URL?
     /// The group an everyday tab is kept in, if any.
@@ -57,6 +59,12 @@ public final class Tab: Identifiable {
         self.restingTitle = title
         self.restingIcon = icon
         self.page = page
+        applyLinkRule()
+    }
+
+    /// A tile's links to other sites open in a Lookout; other tabs' don't.
+    private func applyLinkRule() {
+        page?.sendsOtherSitesToLookout = place == .basecamp
     }
 
     /// The committed address, or where the tab rests if it has no page yet.
@@ -132,6 +140,7 @@ public final class Tab: Identifiable {
         guard page == nil else { return }
         let page = makePage()
         self.page = page
+        applyLinkRule()
         if let restingURL { page.load(restingURL) }
     }
 

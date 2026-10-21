@@ -28,6 +28,10 @@ public protocol PageController: AnyObject, Observable {
     /// Gives the page keyboard focus, so arrow keys and space scroll it.
     func focus()
 
+    /// A Basecamp tile's page: a clicked link to another site, or one meant
+    /// for a new window, goes to a Lookout instead, so the tile stays itself.
+    var sendsOtherSitesToLookout: Bool { get set }
+
     /// Where the page sends what it asks of the browser (new tabs, closing).
     /// Set by whoever owns the page; nil means nobody is listening.
     var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
@@ -43,7 +47,8 @@ public enum PageRequest {
     case openPage(any PageController, inBackground: Bool)
     /// A ⌘-click or middle-click: this address, in a new tab.
     case openURL(URL, inBackground: Bool)
-    /// A Shift-click, or "Open in Lookout" from the link's menu: this
+    /// A Shift-click, "Open in Lookout" from the link's menu, or a tile's
+    /// link to another site: this
     /// address, in a Lookout over the page.
     case openInLookout(URL)
     /// A page opened as a popup closed itself (`window.close`).

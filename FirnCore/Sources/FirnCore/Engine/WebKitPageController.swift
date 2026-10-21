@@ -18,6 +18,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var icon: Data?
     private(set) var loadError: LoadError?
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
+    @ObservationIgnored var sendsOtherSitesToLookout = false
 
     @ObservationIgnored let webView: WKWebView
     /// Only pages a site opened as popups may close themselves.
@@ -148,16 +149,32 @@ extension WebKitPageController: WKNavigationDelegate {
     ) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
-        if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url),
-           let click = specialClick(for: navigationAction) {
-            decisionHandler(.cancel)
-            switch click {
-            case let .newTab(inBackground): onRequest(.openURL(url, inBackground: inBackground))
-            case .lookout: onRequest(.openInLookout(url))
+        if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url) {
+            if let click = specialClick(for: navigationAction) {
+                decisionHandler(.cancel)
+                switch click {
+                case let .newTab(inBackground): onRequest(.openURL(url, inBackground: inBackground))
+                case .lookout: onRequest(.openInLookout(url))
+                }
+                return
             }
-            return
+            if sendsOtherSitesToLookout, leavesTile(for: navigationAction, to: url) {
+                decisionHandler(.cancel)
+                onRequest(.openInLookout(url))
+                return
+            }
         }
         decisionHandler(NavigationPolicy.allows(url, isMainFrame: isMainFrame) ? .allow : .cancel)
+    }
+
+    /// A tile's link that would take it to another site, or open a new
+    /// window (no target frame). Same-site links stay in the tile, as with
+    /// Arc's Peek. Not a real click is needed: a link chosen from the
+    /// keyboard counts too, and a page faking one only gets a Lookout.
+    private func leavesTile(for action: WKNavigationAction, to url: URL) -> Bool {
+        guard let frame = action.targetFrame else { return true }
+        guard frame.isMainFrame, let current = self.url else { return false }
+        return !WebAddress.isSameSite(current, url)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

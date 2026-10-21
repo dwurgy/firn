@@ -280,4 +280,29 @@ struct DriftTests {
         store.addSpace(name: "Work", icon: "leaf", color: "sage")
         #expect(store.recentlyClosed.isEmpty)
     }
+
+    @Test func restoreAllBringsEveryTidiedTabBackInOrder() {
+        let clock = Clock()
+        let store = makeStore(clock)
+        store.driftAfter = .oneDay
+        store.openTab(url("a"))
+        store.openTab(url("b"))
+        let shown = store.openTab(url("c"))
+        use(store, clock, days: 1)
+        #expect(hosts(store.openTabs) == ["c.example"])
+        store.restoreAllDrifted()
+        #expect(hosts(store.openTabs) == ["c.example", "a.example", "b.example"])
+        #expect(store.driftedTabs.isEmpty)
+        #expect(!store.hasUnseenTidied)
+        #expect(store.activeTabID == shown.id)
+        // Just seen, so coming back to Firn doesn't tidy them straight away again.
+        store.driftIdleTabs()
+        #expect(store.driftedTabs.isEmpty)
+
+        store.newTabPlacement = .top
+        use(store, clock, days: 1)
+        #expect(hosts(store.driftedTabs) == ["b.example", "a.example"])
+        store.restoreAllDrifted()
+        #expect(hosts(store.openTabs) == ["a.example", "b.example", "c.example"])
+    }
 }

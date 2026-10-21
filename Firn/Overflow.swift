@@ -56,7 +56,8 @@ private struct OverflowPanel: View {
                         .padding(.horizontal, 4)
                 }
                 if !drifted.isEmpty {
-                    section("Tidied away", note: "Tabs you haven’t looked at in a while. They’re deleted after 30 days.") {
+                    section("Tidied away", note: "Tabs you haven’t looked at in a while. They’re deleted after 30 days.",
+                            action: ("Restore all", restoreAll)) {
                         ForEach(drifted) { tab in
                             TabRow(tab: tab, isActive: false) { bringBack(tab) } close: { window.close(tab) } menu: {
                                 Button("Close Tab", systemImage: "xmark") { window.close(tab) }
@@ -65,7 +66,7 @@ private struct OverflowPanel: View {
                     }
                 }
                 if !closed.isEmpty {
-                    section("Recently closed", note: nil) {
+                    section("Recently closed", note: nil, action: nil) {
                         ForEach(closed) { entry in
                             ClosedRow(entry: entry, color: Theme.spaceColor(store.activeSpace.color)) {
                                 reopen(entry)
@@ -84,14 +85,22 @@ private struct OverflowPanel: View {
     }
 
     private func section(
-        _ title: String, note: String?, @ViewBuilder rows: () -> some View
+        _ title: String, note: String?, action: (label: String, perform: () -> Void)?,
+        @ViewBuilder rows: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.rowSpacing) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(Theme.groupNameFont)
-                    .foregroundStyle(Theme.ink)
-                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(Theme.groupNameFont)
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    if let action {
+                        Button(action.label, action: action.perform)
+                            .buttonStyle(TextActionStyle())
+                    }
+                }
                 if let note {
                     Text(note)
                         .font(Theme.hintFont)
@@ -105,6 +114,12 @@ private struct OverflowPanel: View {
         }
     }
 
+    /// All of them back where new tabs go; the tab on screen stays.
+    private func restoreAll() {
+        window.showsOverflow = false
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.restoreAllDrifted() }
+    }
+
     /// Back where new tabs go, and on screen.
     private func bringBack(_ tab: FirnCore.Tab) {
         window.showsOverflow = false
@@ -116,6 +131,26 @@ private struct OverflowPanel: View {
         window.showsOverflow = false
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.reopen(entry) }
         window.focusPage()
+    }
+}
+
+/// A small word button in a section's header ("Restore all"): ink, with
+/// the warm wash on hover, never system blue.
+private struct TextActionStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.labelFont.weight(.medium))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.smallRadius, style: .continuous)
+                    .fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear)
+            }
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
     }
 }
 

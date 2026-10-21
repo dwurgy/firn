@@ -807,6 +807,24 @@ public final class BrowserStore {
         lastTabBySpace = lastTabBySpace.filter { $0.value != tab.id }
     }
 
+    /// Brings back all of the current space's tidied-away tabs where new
+    /// tabs go, in the order they were tidied, leaving the tab on screen as
+    /// it is. They count as just seen, so they don't drift straight back.
+    public func restoreAllDrifted() {
+        let back = list(.drifted)
+        guard !back.isEmpty else { return }
+        let ids = Set(back.map(\.id))
+        tabs.removeAll { ids.contains($0.id) }
+        let stamp = now()
+        for tab in back {
+            tab.place = .open
+            tab.driftedAt = nil
+            tab.lastActiveAt = stamp
+        }
+        tabs.insert(contentsOf: back, at: arrivalIndex(in: activeSpaceID))
+        unseenTidiedSpaces.remove(activeSpaceID)
+    }
+
     /// Drifts every idle tab at once (when there's nothing to watch).
     public func driftIdleTabs() {
         for tab in idleTabs() { drift(tab) }

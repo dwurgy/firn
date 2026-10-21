@@ -7,10 +7,14 @@ import WebKit
 public struct PageView: NSViewRepresentable {
     private let page: any PageController
     private let cornerRadius: CGFloat
+    private let zoom: CGFloat
 
-    public init(page: any PageController, cornerRadius: CGFloat) {
+    /// `zoom` below 1 shows the page smaller but laid out as if it were
+    /// wider (a Lookout shows it as the tab would, scaled to fit).
+    public init(page: any PageController, cornerRadius: CGFloat, zoom: CGFloat = 1) {
         self.page = page
         self.cornerRadius = cornerRadius
+        self.zoom = zoom
     }
 
     public func makeNSView(context: Context) -> PageHolder {
@@ -19,11 +23,13 @@ public struct PageView: NSViewRepresentable {
         webView.layer?.masksToBounds = true
         webView.layer?.cornerCurve = .continuous
         webView.layer?.cornerRadius = cornerRadius
+        webView.pageZoom = zoom
         return PageHolder(webView: webView)
     }
 
     public func updateNSView(_ holder: PageHolder, context: Context) {
         holder.webView.layer?.cornerRadius = cornerRadius
+        if holder.webView.pageZoom != zoom { holder.webView.pageZoom = zoom }
     }
 
     private var webKitPage: WebKitPageController {

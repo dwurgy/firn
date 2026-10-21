@@ -123,10 +123,17 @@ private struct AddressBar: View {
     @FocusState private var focused: Bool
     @State private var hovering = false
 
-    private var url: URL? { window.addressTarget == .newTab ? nil : store.activeTab?.url }
+    /// The page in front: a Lookout's while one is open, so the bar always
+    /// tells the truth about what's on screen, and typing goes there too.
+    private var frontPage: (any PageController)? { store.lookout?.page ?? store.activeTab?.page }
+    private var frontURL: URL? {
+        if let lookout = store.lookout { return lookout.page.url }
+        return store.activeTab?.url
+    }
+    private var url: URL? { window.addressTarget == .newTab ? nil : frontURL }
     /// Reload sits inside the bar, as in Safari, so the top row fits at the narrowest width.
     private var reloadablePage: (any PageController)? {
-        guard !focused, let page = store.activeTab?.page, page.url != nil || page.loadError != nil else { return nil }
+        guard !focused, let page = frontPage, page.url != nil || page.loadError != nil else { return nil }
         return page
     }
 
@@ -162,7 +169,8 @@ private struct AddressBar: View {
                 }
             }
             .onHover { hovering = $0 }
-            .accessibilityLabel(window.addressTarget == .newTab ? "New tab address" : "Address")
+            .accessibilityLabel(window.addressTarget == .newTab ? "New tab address"
+                : store.lookout != nil ? "Lookout address" : "Address")
             .onSubmit(open)
             .onExitCommand(perform: cancel)
             .onChange(of: window.addressRequest) {
@@ -173,6 +181,8 @@ private struct AddressBar: View {
                 if !focused { cancel() } else { text = url?.absoluteString ?? "" }
             }
             .onChange(of: store.activeTab?.url) { showRestingAddress() }
+            .onChange(of: store.lookout?.page.url) { showRestingAddress() }
+            .onChange(of: store.lookout?.id) { showRestingAddress() }
             .onChange(of: store.activeTabID) { showRestingAddress() }
             .onAppear(perform: showRestingAddress)
     }
@@ -182,7 +192,7 @@ private struct AddressBar: View {
         if window.addressTarget == .newTab || store.activeTab == nil {
             store.openTab(url)
         } else {
-            store.activeTab?.page?.load(url)
+            frontPage?.load(url)
         }
         window.finishEditingAddress()
         focused = false
@@ -202,14 +212,7 @@ private struct AddressBar: View {
     /// pending one, so it can't claim to be a page that isn't there yet), as just the site.
     private func showRestingAddress() {
         guard !focused else { return }
-        text = Self.site(of: store.activeTab?.url)
-    }
-
-    private static func site(of url: URL?) -> String {
-        guard let url, let host = url.host(percentEncoded: false) else { return "" }
-        let site = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        if let port = url.port { return "\(site):\(port)" }
-        return site
+        text = WebAddress.site(of: frontURL)
     }
 }
 

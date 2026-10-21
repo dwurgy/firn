@@ -14,6 +14,15 @@ public enum WebAddress {
               let host = url.host(), !host.isEmpty else { return false }
         return true
     }
+
+    /// Just the site, as the address bar shows it at rest: "example.com",
+    /// without "www.", with a port if there is one. Empty without a host.
+    public static func site(of url: URL?) -> String {
+        guard let url, let host = url.host(percentEncoded: false) else { return "" }
+        let site = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        if let port = url.port { return "\(site):\(port)" }
+        return site
+    }
 }
 
 /// What a page may load into one of its frames. Pages are untrusted, so this

@@ -7,6 +7,12 @@ struct AddressInputTests {
         AddressInput.url(for: text, searchEngine: engine)?.absoluteString
     }
 
+    @Test func siteDropsWWWAndKeepsThePort() {
+        #expect(WebAddress.site(of: URL(string: "https://www.example.com/a?b")) == "example.com")
+        #expect(WebAddress.site(of: URL(string: "http://localhost:8080/")) == "localhost:8080")
+        #expect(WebAddress.site(of: nil) == "")
+    }
+
     @Test func domainGetsHTTPS() {
         #expect(open("example.com") == "https://example.com")
         #expect(open("  news.example.co.uk/a?b=1#top  ") == "https://news.example.co.uk/a?b=1#top")

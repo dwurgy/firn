@@ -26,6 +26,8 @@ enum Theme {
     /// Its glass edge: a hairline that defines the card, and a lit inner rim.
     static let peekEdgeLine = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.40)
     static let peekEdgeRim = Color(light: 0xFFFFFF, lightOpacity: 0.70, dark: 0xFFFFFF, darkOpacity: 0.16)
+    /// The page behind a Lookout: a warm brown veil in light, deeper in dark.
+    static let lookoutDim = Color(light: 0x3C2814, lightOpacity: 0.16, dark: 0x000000, darkOpacity: 0.35)
 
     /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
     /// Used under macOS 26's Liquid Glass, and on their own before it.

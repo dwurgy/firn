@@ -19,6 +19,9 @@ public final class BrowserStore {
     public private(set) var tabs: [Tab] = []
     public private(set) var activeSpaceID: UUID
     public private(set) var activeTabID: UUID?
+    /// The link preview over the tab on screen, if one is open. Showing
+    /// another tab or space closes it.
+    public private(set) var lookout: Lookout?
     /// Where new tabs go in a space's tab list (a setting; the app keeps it).
     /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
     public var newTabPlacement: NewTabPlacement = .bottom
@@ -121,6 +124,7 @@ public final class BrowserStore {
     /// showed most recently, or none).
     public func selectSpace(_ space: Space) {
         guard space.id != activeSpaceID, spaces.contains(where: { $0.id == space.id }) else { return }
+        closeLookout()
         activeTab?.lastActiveAt = now()
         lastTabBySpace[activeSpaceID] = activeTabID
         activeSpaceID = space.id
@@ -179,6 +183,7 @@ public final class BrowserStore {
               let index = spaces.firstIndex(where: { $0.id == space.id }) else { return }
         spaces[index].dataStoreID = UUID()
         spaces[index].lastChangedAt = now()
+        if lookout?.spaceID == space.id { closeLookout() }
         for tab in tabs where tab.spaceID == space.id && !tab.isResting {
             tab.sleep()
             if tab.id == activeTabID { wake(tab) }
@@ -764,9 +769,66 @@ public final class BrowserStore {
             adopt(page, opener: tab, inBackground: inBackground)
         case let .openURL(url, inBackground):
             openTab(url, opener: tab, inBackground: inBackground)
+        case let .openInLookout(url):
+            // Only over the tab on screen: a page out of sight can't be clicked.
+            guard tab.id == activeTabID else { return }
+            openLookout(url)
         case .close:
             // A popup that's done (a sign-in, say) hands back to its opener.
             close(tab, showing: tabs.first { $0.id == tab.openerTabID }, remembering: false)
+        }
+    }
+
+    // MARK: - Lookout
+
+    /// Opens `url` in a Lookout over the tab on screen, in the current
+    /// space's data store. There's one at a time; a new one replaces it.
+    public func openLookout(_ url: URL) {
+        guard WebAddress.isWebURL(url) else { return }
+        closeLookout()
+        let page = makePage(activeSpace.dataStoreID)
+        let lookout = Lookout(spaceID: activeSpaceID, page: page, openedURL: url)
+        page.onRequest = { [weak self] request in
+            self?.handle(request, fromLookout: lookout.id)
+        }
+        self.lookout = lookout
+        page.load(url)
+    }
+
+    /// Lets the Lookout's page go.
+    public func closeLookout() {
+        guard let lookout else { return }
+        self.lookout = nil
+        lookout.page.onRequest = nil
+        lookout.page.stopLoading()
+    }
+
+    /// Turns the Lookout into a tab where new tabs go, and shows it. The same
+    /// page carries on, so nothing reloads and Back still works.
+    @discardableResult
+    public func keepLookout() -> Tab? {
+        guard let lookout else { return nil }
+        self.lookout = nil
+        let tab = Tab(spaceID: lookout.spaceID, url: lookout.openedURL, lastActiveAt: now(), page: lookout.page)
+        connect(lookout.page, to: tab)
+        add(tab, below: nil, inBackground: false)
+        return tab
+    }
+
+    private func handle(_ request: PageRequest, fromLookout id: UUID) {
+        guard let lookout, lookout.id == id else { return }
+        switch request {
+        case let .openInLookout(url):
+            lookout.page.load(url)
+        case let .openURL(url, inBackground):
+            openTab(url, inBackground: inBackground)
+        case let .openPage(page, inBackground):
+            // A popup (a sign-in, say) reports back to the page that opened it,
+            // so that page is kept as a tab first and the popup opens below it.
+            guard let opener = keepLookout() else { return }
+            adopt(page, opener: opener, inBackground: inBackground)
+        case .close:
+            closeLookout()
         }
     }
 
@@ -861,6 +923,7 @@ public final class BrowserStore {
     /// Shows a tab. A drifted one comes back first, where new tabs go.
     public func select(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        closeLookout()
         if tab.place == .drifted {
             tabs.remove(at: index)
             tab.place = .open

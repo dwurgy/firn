@@ -31,6 +31,9 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var iconCandidates: [URL] = []
     @ObservationIgnored private var iconTask: Task<Void, Never>?
     @ObservationIgnored private var iconRecheckPending = false
+    /// When "Open in Lookout" was chosen from a link's menu, so the new
+    /// window WebKit then asks for becomes a Lookout instead.
+    @ObservationIgnored private var lookoutChosenAt: TimeInterval?
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -49,8 +52,10 @@ final class WebKitPageController: NSObject, PageController {
     /// over for a popup, which is a copy of the opener's.
     private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
-        webView = FirnWebView(frame: .zero, configuration: configuration)
+        let webView = FirnWebView(frame: .zero, configuration: configuration)
+        self.webView = webView
         super.init()
+        webView.page = self
 
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -144,9 +149,12 @@ extension WebKitPageController: WKNavigationDelegate {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
         if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url),
-           let inBackground = newTabClick(for: navigationAction) {
+           let click = specialClick(for: navigationAction) {
             decisionHandler(.cancel)
-            onRequest(.openURL(url, inBackground: inBackground))
+            switch click {
+            case let .newTab(inBackground): onRequest(.openURL(url, inBackground: inBackground))
+            case .lookout: onRequest(.openInLookout(url))
+            }
             return
         }
         decisionHandler(NavigationPolicy.allows(url, isMainFrame: isMainFrame) ? .allow : .cancel)
@@ -246,6 +254,8 @@ extension WebKitPageController {
 /// to the menu first instead, as in other browsers; everything else still
 /// goes to the page.
 private final class FirnWebView: WKWebView {
+    weak var page: WebKitPageController?
+
     #if os(macOS)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.shift)
@@ -254,6 +264,26 @@ private final class FirnWebView: WKWebView {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    /// Adds "Open in Lookout" above WebKit's "Open Link in New Window". WebKit
+    /// doesn't say which link the menu is for, so the item runs WebKit's own
+    /// and marks the new window it asks for as a Lookout (see `lookoutChosen`).
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        guard page?.onRequest != nil, let index = menu.items.firstIndex(where: {
+            $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow"
+        }) else { return }
+        let item = NSMenuItem(title: "Open in Lookout", action: #selector(openInLookout(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = menu.items[index]
+        menu.insertItem(item, at: index)
+    }
+
+    @objc private func openInLookout(_ sender: NSMenuItem) {
+        guard let original = sender.representedObject as? NSMenuItem, let action = original.action else { return }
+        page?.lookoutChosen()
+        NSApp.sendAction(action, to: original.target, from: original)
     }
     #endif
 }
@@ -324,6 +354,16 @@ extension WebKitPageController: WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
+        // Taken on every new window, so a stale choice can't be used later.
+        if let chosen = lookoutChosenAt {
+            lookoutChosenAt = nil
+            if ProcessInfo.processInfo.systemUptime - chosen < 1, let onRequest,
+               let url = navigationAction.request.url, WebAddress.isWebURL(url) {
+                // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.
+                onRequest(.openInLookout(url))
+                return nil
+            }
+        }
         guard let onRequest, Self.mayOpenInNewTab(navigationAction.request.url) else { return nil }
         // The popup must use its opener's store, so it stays in the same space.
         // WebKit's copy does; anything else is refused rather than risk a leak.
@@ -335,6 +375,11 @@ extension WebKitPageController: WKUIDelegate {
         // opener was closing, say) is refused, so it never loads unseen.
         guard page.onRequest != nil else { return nil }
         return page.webView
+    }
+
+    /// "Open in Lookout" was chosen; WebKit asks for the new window next.
+    fileprivate func lookoutChosen() {
+        lookoutChosenAt = ProcessInfo.processInfo.systemUptime
     }
 
     /// `window.close()`. Honored only for popups, so an ordinary tab can't
@@ -351,14 +396,20 @@ extension WebKitPageController: WKUIDelegate {
     }
 }
 
-// MARK: - ⌘-click and middle-click
+// MARK: - ⌘-click, middle-click, and Shift-click
 
 extension WebKitPageController {
-    /// Whether a link click should open a new tab instead, and whether in the
-    /// background. A page can fake a ⌘-click in script, so the modifiers WebKit
-    /// reports only count if a real click on this page just happened.
-    /// Returns nil for an ordinary click, otherwise whether to stay put.
-    private func newTabClick(for action: WKNavigationAction) -> Bool? {
+    private enum SpecialClick {
+        /// ⌘-click or middle-click; in the background unless Shift is held.
+        case newTab(inBackground: Bool)
+        /// Shift-click, as in Arc.
+        case lookout
+    }
+
+    /// Whether a link click should open somewhere else. A page can fake a
+    /// modified click in script, so the modifiers WebKit reports only count if
+    /// a real click on this page just happened. Nil for an ordinary click.
+    private func specialClick(for action: WKNavigationAction) -> SpecialClick? {
         #if os(macOS)
         // Taken on every link click, so a stale click can't be used later.
         guard let click = ClickRecorder.shared.takeRecentClick(in: webView) else { return nil }
@@ -368,9 +419,13 @@ extension WebKitPageController {
             && (action.buttonNumber == 2 || action.buttonNumber == 4)
         let isCommandClick = click.type == .leftMouseUp && click.modifierFlags.contains(.command)
             && action.modifierFlags.contains(.command)
+        let modifiers = click.modifierFlags.intersection([.shift, .command, .option, .control])
+        if click.type == .leftMouseUp, modifiers == .shift, action.modifierFlags.contains(.shift) {
+            return .lookout
+        }
         guard isMiddleClick || isCommandClick else { return nil }
         // Background unless Shift is held, as in Safari, Arc, and Dia.
-        return !click.modifierFlags.contains(.shift)
+        return .newTab(inBackground: !click.modifierFlags.contains(.shift))
         #else
         return nil
         #endif

@@ -43,6 +43,9 @@ public enum PageRequest {
     case openPage(any PageController, inBackground: Bool)
     /// A ⌘-click or middle-click: this address, in a new tab.
     case openURL(URL, inBackground: Bool)
+    /// A Shift-click, or "Open in Lookout" from the link's menu: this
+    /// address, in a Lookout over the page.
+    case openInLookout(URL)
     /// A page opened as a popup closed itself (`window.close`).
     case close
 }

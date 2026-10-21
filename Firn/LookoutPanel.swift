@@ -23,6 +23,8 @@ struct LookoutLayer: View {
                     .opacity(1 - growth)
                     .contentShape(shape)
                     .onTapGesture(perform: close)
+                    // Once it's growing into a tab, a stray click can't undo it.
+                    .allowsHitTesting(growth == 0)
                     .accessibilityHidden(true)
                     .transition(.opacity)
                 LookoutCard(
@@ -48,6 +50,7 @@ struct LookoutLayer: View {
     }
 
     private func close() {
+        guard growth == 0 else { return }
         store.closeLookout()
         window.focusPage()
     }
@@ -56,7 +59,7 @@ struct LookoutLayer: View {
     /// tab in exactly that spot, so the swap can't be seen. Reduce Motion:
     /// the card fades away from the tab.
     private func keep() {
-        guard growth == 0 else { return }
+        guard growth == 0, let id = store.lookout?.id else { return }
         if reduceMotion {
             withAnimation(.easeOut(duration: 0.2)) { _ = store.keepLookout() }
             window.focusPage()
@@ -68,7 +71,8 @@ struct LookoutLayer: View {
             var instant = Transaction()
             instant.disablesAnimations = true
             withTransaction(instant) {
-                store.keepLookout()
+                // Closed (Esc, ⌘W) or replaced mid-grow: keep nothing.
+                if store.lookout?.id == id { store.keepLookout() }
                 growth = 0
             }
             window.focusPage()

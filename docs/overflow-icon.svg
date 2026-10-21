@@ -1,0 +1,10 @@
+<!-- Firn's overflow button icon ("E1, settled tabs"), approved by David on 2026-10-21.
+     The newest tidied tab on top, older ones settled level beneath it, like layers of firn.
+     Source of truth for SettledTabsIcon in Firn/Overflow.swift; keep the two in step. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#5E564E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M6 4h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z"/>
+  <path d="M7.5 7.5h.01"/>
+  <path d="M10.5 7.5h6"/>
+  <path d="M6.5 15h11"/>
+  <path d="M6.5 19h11"/>
+</svg>

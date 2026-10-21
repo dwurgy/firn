@@ -68,22 +68,29 @@ private struct NavigationButtons: View {
 }
 
 /// A small icon button for the sidebar: quiet until hovered.
-struct ChromeButton: View {
+struct ChromeButton<Icon: View>: View {
     let label: String
-    let systemImage: String
+    let icon: Icon
     let action: () -> Void
 
-    init(_ label: String, systemImage: String, action: @escaping () -> Void) {
+    /// For Firn's own drawings; the label is still what VoiceOver reads.
+    init(_ label: String, action: @escaping () -> Void, @ViewBuilder icon: () -> Icon) {
         self.label = label
-        self.systemImage = systemImage
+        self.icon = icon()
         self.action = action
     }
 
     var body: some View {
-        Button(label, systemImage: systemImage, action: action)
+        Button(action: action) { Label { Text(label) } icon: { icon } }
             .labelStyle(.iconOnly)
             .buttonStyle(ChromeButtonStyle())
             .help(label)
+    }
+}
+
+extension ChromeButton where Icon == Image {
+    init(_ label: String, systemImage: String, action: @escaping () -> Void) {
+        self.init(label, action: action) { Image(systemName: systemImage) }
     }
 }
 

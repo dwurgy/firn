@@ -7,15 +7,16 @@ import SwiftUI
 /// between spaces. A dot in the space's color says tabs were tidied away
 /// since it was last opened.
 struct OverflowButton: View {
-    static let symbol = "clock.arrow.circlepath"
     let store: BrowserStore
     let window: WindowModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let unseen = store.hasUnseenTidied
-        ChromeButton("Tidied away and recently closed tabs", systemImage: Self.symbol) {
+        ChromeButton("Tidied away and recently closed tabs") {
             window.showsOverflow.toggle()
+        } icon: {
+            SettledTabsIcon()
         }
         .overlay(alignment: .topTrailing) {
             if unseen {
@@ -306,8 +307,7 @@ struct TidyPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 2) {
-                Image(systemName: OverflowButton.symbol)
-                    .font(.system(size: 13, weight: .medium))
+                SettledTabsIcon()
                     .foregroundStyle(Theme.muted)
                     .frame(width: 28, height: 28)
                 if open {
@@ -330,4 +330,44 @@ struct TidyPill: View {
         // The button beneath and the spoken announcement cover it.
         .accessibilityHidden(true)
     }
+}
+
+/// The overflow button's icon, Firn's own: the newest tidied tab on top,
+/// older ones settled level beneath it, like layers of firn. Approved by
+/// David on 2026-10-21 ("E1"), drawn in the space icons' style (24pt grid,
+/// 1.6 stroke, round caps and joins); also kept as docs/overflow-icon.svg.
+/// Change it only with David's OK, and update that file to match.
+struct SettledTabsIcon: View {
+    var size: CGFloat = 18
+
+    var body: some View {
+        SettledTabsShape()
+            .stroke(style: StrokeStyle(lineWidth: size * 1.6 / 24, lineCap: .round, lineJoin: .round))
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SettledTabsShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let scale = min(rect.width, rect.height) / 24
+        let transform = CGAffineTransform(translationX: rect.midX - 12 * scale, y: rect.midY - 12 * scale)
+            .scaledBy(x: scale, y: scale)
+        return Self.path.applying(transform)
+    }
+
+    /// Built once from the approved path data (viewBox 0 0 24 24).
+    private static let path: Path = {
+        var path = Path()
+        for data in [
+            "M6 4h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z",
+            "M7.5 7.5h.01",
+            "M10.5 7.5h6",
+            "M6.5 15h11",
+            "M6.5 19h11",
+        ] {
+            path.addPath(Path(SVGPath.cgPath(data)))
+        }
+        return path
+    }()
 }

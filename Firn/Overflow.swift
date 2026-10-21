@@ -16,7 +16,7 @@ struct OverflowButton: View {
         ChromeButton("Tidied away and recently closed tabs") {
             window.showsOverflow.toggle()
         } icon: {
-            SettledTabsIcon()
+            SnowBoxIcon()
         }
         .overlay(alignment: .topTrailing) {
             if unseen {
@@ -307,7 +307,7 @@ struct TidyPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 2) {
-                SettledTabsIcon()
+                SnowBoxIcon()
                     .foregroundStyle(Theme.muted)
                     .frame(width: 28, height: 28)
                 if open {
@@ -332,23 +332,25 @@ struct TidyPill: View {
     }
 }
 
-/// The overflow button's icon, Firn's own: the newest tidied tab on top,
-/// older ones settled level beneath it, like layers of firn. Approved by
-/// David on 2026-10-21 ("E1"), drawn in the space icons' style (24pt grid,
-/// 1.6 stroke, round caps and joins); also kept as docs/overflow-icon.svg.
-/// Change it only with David's OK, and update that file to match.
-struct SettledTabsIcon: View {
+/// The overflow button's icon, Firn's own: an archive box whose lid is a
+/// drift of snow, crest on the left (clear of the unseen dot), easing down
+/// to the right. Where tidied tabs are kept. Approved by David on
+/// 2026-10-21 ("D3, rounded shoulder"), drawn in the space icons' style
+/// (24pt grid, 1.6 stroke, round caps and joins); also kept as
+/// docs/overflow-icon.svg. Change it only with David's OK, and update that
+/// file to match.
+struct SnowBoxIcon: View {
     var size: CGFloat = 18
 
     var body: some View {
-        SettledTabsShape()
+        SnowBoxShape()
             .stroke(style: StrokeStyle(lineWidth: size * 1.6 / 24, lineCap: .round, lineJoin: .round))
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 }
 
-private struct SettledTabsShape: Shape {
+private struct SnowBoxShape: Shape {
     func path(in rect: CGRect) -> Path {
         let scale = min(rect.width, rect.height) / 24
         let transform = CGAffineTransform(translationX: rect.midX - 12 * scale, y: rect.midY - 12 * scale)
@@ -360,11 +362,9 @@ private struct SettledTabsShape: Shape {
     private static let path: Path = {
         var path = Path()
         for data in [
-            "M6 4h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z",
-            "M7.5 7.5h.01",
-            "M10.5 7.5h6",
-            "M6.5 15h11",
-            "M6.5 19h11",
+            "M3.5 10c0-3 1.8-5.3 4.6-5.3 2.6 0 4.2 1.6 6.4 2.8 2 1.1 4 1.5 6 1.6V10Z",
+            "M5 10v7.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10",
+            "M10 13.5h4",
         ] {
             path.addPath(Path(SVGPath.cgPath(data)))
         }

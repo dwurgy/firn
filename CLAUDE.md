@@ -252,7 +252,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 - **Phase 3: done** (2026-10-19). Basecamp, site icons, groups (one shared order with loose tabs, dragging, top-or-bottom setting), ⇧⌘T, and saving all pass; quit and reopen brings everything back.
 - **Look back over Phase 3: done** (2026-10-19).
 - **Phase 4: done** (2026-10-20). Two Google accounts at once, a shared space already signed in, and quit and reopen all pass. 
-- **Phase 5:** Tidied away done (2026-10-21): icons drift into the overflow button, frost pill, dot, and Restore all; the button has its own "settled tabs" icon. Then Lookout, split view, and the command bar (after the ⌘T talk).
+- **Phase 5:** Tidied away done (2026-10-21): icons drift into the overflow button, frost pill, dot, and Restore all; the button has its own icon, a box with a snow-drift lid. Then Lookout, split view, and the command bar (after the ⌘T talk).
 
 ---
 

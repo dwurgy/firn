@@ -43,8 +43,8 @@ final class WindowModel {
     var riseQueue: [FirnCore.Tab] = []
     /// Brought-back tabs whose icons haven't landed yet; their rows wait unseen.
     var arrivingTabIDs: Set<UUID> = []
-    /// The overflow button's snow box, open while brought-back icons rise out.
-    var snowBoxOpen = false
+    /// The overflow button's archive box, open while brought-back icons rise out.
+    var boxOpen = false
     /// Where the overflow button sits in the sidebar, where they land.
     @ObservationIgnored var overflowButtonFrame: CGRect = .zero
     /// "Tidied away 4 tabs", while the overflow button says so.

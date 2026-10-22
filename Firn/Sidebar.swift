@@ -312,7 +312,7 @@ private struct TabList: View {
             window.tidyQueue = []
             window.riseQueue = []
             window.arrivingTabIDs = []
-            window.snowBoxOpen = false
+            window.boxOpen = false
         }
     }
 
@@ -340,7 +340,7 @@ private struct TabList: View {
             }
             try? await Task.sleep(for: .milliseconds(90))
         }
-        // Then a moment more, so the snow box's lid has settled shut before
+        // Then a moment more, so the box's lid has settled shut before
         // the frost forms over it.
         try? await Task.sleep(for: .seconds(FlyingIcon.duration + 0.3))
         if count > 0 { window.announceTidied(count) }
@@ -355,7 +355,7 @@ private struct TabList: View {
     private func riseBack() async {
         let queue = window.riseQueue
         guard !queue.isEmpty else { return }
-        window.snowBoxOpen = true
+        window.boxOpen = true
         try? await Task.sleep(for: .milliseconds(300))
         for tab in queue {
             // Cut short (another restore, say): the rest simply appear.
@@ -379,7 +379,7 @@ private struct TabList: View {
         }
         guard !Task.isCancelled else { return }
         try? await Task.sleep(for: .milliseconds(200))
-        window.snowBoxOpen = false
+        window.boxOpen = false
         window.riseQueue = []
     }
 

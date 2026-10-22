@@ -18,7 +18,7 @@ struct OverflowButton: View {
         ChromeButton("Tidied away and recently closed tabs") {
             window.showsOverflow.toggle()
         } icon: {
-            SnowBoxIcon(lidOpen: lidOpen || window.snowBoxOpen)
+            ArchiveBoxIcon(lidOpen: lidOpen || window.boxOpen)
         }
         // The box opens as the first icon nears and closes as the last one lands.
         .task(id: falling) {
@@ -34,7 +34,8 @@ struct OverflowButton: View {
                 Circle()
                     .fill(Theme.spaceColor(store.activeSpace.color))
                     .frame(width: 6, height: 6)
-                    .padding(3)
+                    // Tucked into the corner, clear of the lid's.
+                    .padding(1)
                     .transition(.opacity)
                     .allowsHitTesting(false)
             }
@@ -378,7 +379,7 @@ struct TidyPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 2) {
-                SnowBoxIcon()
+                ArchiveBoxIcon()
                     .foregroundStyle(Theme.muted)
                     .frame(width: 28, height: 28)
                 if open {
@@ -403,50 +404,40 @@ struct TidyPill: View {
     }
 }
 
-/// The overflow button's icon, Firn's own: an archive box whose lid is a
-/// drift of snow, crest on the left (clear of the unseen dot), easing down
-/// to the right. Where tidied tabs are kept. Approved by David on
-/// 2026-10-21 ("D3, rounded shoulder"), drawn in the space icons' style
-/// (24pt grid, 1.6 stroke, round caps and joins); also kept as
-/// docs/overflow-icon.svg. Change it only with David's OK, and update that
-/// file to match.
+/// The overflow button's icon: a plain archive box, its lid a band a
+/// little wider than the box. Where tidied tabs are kept. Drawn in the
+/// space icons' style and size (24pt grid, 1.6 stroke, round caps and
+/// joins; as tall as the house, as wide as the briefcase); also
+/// kept as docs/overflow-icon.svg. Change it only with David's OK, and
+/// update that file to match. (The snow-drift lid it replaces read as a
+/// toupee; David, 2026-10-21.)
 ///
-/// In the tidy moment the lid lifts on its right corner to catch the falling
-/// icons, and the drift slumps downhill toward the hinge: slow to start,
-/// stopping short, never past the end (snow, not water). As the lid lands,
-/// the drift settles back into its usual shape. Approved by David on
-/// 2026-10-21 ("B"); the preview is docs/overflow-lid-animation.html.
-struct SnowBoxIcon: View {
+/// While tidied tabs fall in, or brought-back ones rise out, the lid lifts
+/// on its right corner and then lands softly, never overshooting: the
+/// timing approved as "B" on 2026-10-21 (docs/overflow-lid-animation.html
+/// still shows it with the old snow lid).
+struct ArchiveBoxIcon: View {
     var size: CGFloat = 18
-    /// Lifted while tidied tabs fall in.
+    /// Lifted while tabs go in or come out.
     var lidOpen = false
     @State private var lidAngle = 0.0
-    @State private var slump = 0.0
 
     private static let lift = Animation.timingCurve(0.2, 0.7, 0.3, 1, duration: 0.22)
-    private static let slide = Animation.timingCurve(0.55, 0, 0.25, 1, duration: 0.48)
     /// Eases in so the lid lands softly and never overshoots.
     private static let land = Animation.timingCurve(0.45, 0, 0.25, 1, duration: 0.26)
-    private static let settle = Animation.easeOut(duration: 0.34).delay(0.03)
 
     var body: some View {
         let style = StrokeStyle(lineWidth: size * 1.6 / 24, lineCap: .round, lineJoin: .round)
         ZStack {
-            SnowBoxShape().stroke(style: style)
-            SnowLidShape(slump: slump)
+            BoxShape().stroke(style: style)
+            LidShape()
                 .stroke(style: style)
-                .rotationEffect(.degrees(lidAngle), anchor: SnowLidShape.hinge)
+                .rotationEffect(.degrees(lidAngle), anchor: LidShape.hinge)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
         .onChange(of: lidOpen) { _, open in
-            if open {
-                withAnimation(Self.lift) { lidAngle = 20 }
-                withAnimation(Self.slide) { slump = 1 }
-            } else {
-                withAnimation(Self.land) { lidAngle = 0 }
-                withAnimation(Self.settle) { slump = 0 }
-            }
+            withAnimation(open ? Self.lift : Self.land) { lidAngle = open ? 20 : 0 }
         }
     }
 }
@@ -459,16 +450,16 @@ private func fitGrid(_ rect: CGRect) -> CGAffineTransform {
 }
 
 /// The box without its lid.
-private struct SnowBoxShape: Shape {
+private struct BoxShape: Shape {
     func path(in rect: CGRect) -> Path {
         Self.path.applying(fitGrid(rect))
     }
 
-    /// Built once from the approved path data (viewBox 0 0 24 24).
+    /// Built once from the path data in docs/overflow-icon.svg (viewBox 0 0 24 24).
     private static let path: Path = {
         var path = Path()
         for data in [
-            "M5 10v7.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10",
+            "M5.5 9.5v8a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-8",
             "M10 13.5h4",
         ] {
             path.addPath(Path(SVGPath.cgPath(data)))
@@ -477,36 +468,15 @@ private struct SnowBoxShape: Shape {
     }()
 }
 
-/// The lid, a drift of snow. At rest it is exactly the approved path
-/// ("M3.5 10c0-3 1.8-5.3 4.6-5.3 2.6 0 4.2 1.6 6.4 2.8 2 1.1 4 1.5 6 1.6V10Z",
-/// in absolute points below); `slump` 1 is the same drift slid toward the hinge.
-private struct SnowLidShape: Shape {
-    var slump: Double
-
-    var animatableData: Double {
-        get { slump }
-        set { slump = newValue }
-    }
-
-    /// The lid's right corner, where it lifts from.
-    static let hinge = UnitPoint(x: 20.5 / 24, y: 10 / 24)
-
-    private static let rest: [CGFloat] = [3.5, 10, 3.5, 7, 5.3, 4.7, 8.1, 4.7, 10.7, 4.7, 12.3, 6.3,
-                                          14.5, 7.5, 16.5, 8.6, 18.5, 9.0, 20.5, 9.1]
-    private static let slumped: [CGFloat] = [3.5, 10, 3.5, 8.1, 6.4, 5.3, 10.2, 5.3, 12.8, 5.3, 14.4, 6.3,
-                                             16.2, 7.3, 17.7, 8.0, 19.2, 8.4, 20.5, 8.6]
+/// The lid.
+private struct LidShape: Shape {
+    /// The lid's bottom right corner, where it lifts from.
+    static let hinge = UnitPoint(x: 20 / 24, y: 9.5 / 24)
 
     func path(in rect: CGRect) -> Path {
-        let k = CGFloat(slump)
-        let v = zip(Self.rest, Self.slumped).map { $0 + ($1 - $0) * k }
-        func p(_ i: Int) -> CGPoint { CGPoint(x: v[i * 2], y: v[i * 2 + 1]) }
-        var path = Path()
-        path.move(to: p(0))
-        path.addCurve(to: p(3), control1: p(1), control2: p(2))
-        path.addCurve(to: p(6), control1: p(4), control2: p(5))
-        path.addCurve(to: p(9), control1: p(7), control2: p(8))
-        path.addLine(to: CGPoint(x: 20.5, y: 10))
-        path.closeSubpath()
-        return path.applying(fitGrid(rect))
+        Self.path.applying(fitGrid(rect))
     }
+
+    /// Built once from the path data in docs/overflow-icon.svg (viewBox 0 0 24 24).
+    private static let path = Path(SVGPath.cgPath("M5.5 4.5h13a1.5 1.5 0 0 1 1.5 1.5v3.5H4V6a1.5 1.5 0 0 1 1.5-1.5Z"))
 }

@@ -7,20 +7,16 @@ import WebKit
 public struct PageView: NSViewRepresentable {
     private let page: any PageController
     private let cornerRadius: CGFloat
-    private let zoom: CGFloat
     private let onPointerDown: (() -> Void)?
 
-    /// `zoom` below 1 shows the page smaller but laid out as if it were
-    /// wider (a Lookout shows it as the tab would, scaled to fit).
     /// `onPointerDown` hears a press anywhere on the page (split view uses
     /// it to tell which half is in use); the page still gets the press.
     public init(
-        page: any PageController, cornerRadius: CGFloat, zoom: CGFloat = 1,
+        page: any PageController, cornerRadius: CGFloat,
         onPointerDown: (() -> Void)? = nil
     ) {
         self.page = page
         self.cornerRadius = cornerRadius
-        self.zoom = zoom
         self.onPointerDown = onPointerDown
     }
 
@@ -30,7 +26,6 @@ public struct PageView: NSViewRepresentable {
         webView.layer?.masksToBounds = true
         webView.layer?.cornerCurve = .continuous
         webView.layer?.cornerRadius = cornerRadius
-        webView.pageZoom = zoom
         let holder = PageHolder(webView: webView)
         holder.onPointerDown = onPointerDown
         return holder
@@ -39,7 +34,6 @@ public struct PageView: NSViewRepresentable {
     public func updateNSView(_ holder: PageHolder, context: Context) {
         holder.onPointerDown = onPointerDown
         holder.webView.layer?.cornerRadius = cornerRadius
-        if holder.webView.pageZoom != zoom { holder.webView.pageZoom = zoom }
     }
 
     private var webKitPage: WebKitPageController {

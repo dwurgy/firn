@@ -104,21 +104,13 @@ private struct LookoutCard: View, Animatable {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            card(fullWidth: proxy.size.width)
-        }
-    }
-
-    private func card(fullWidth: CGFloat) -> some View {
         let shrink = 1 - growth
         let radius = Theme.panelRadius + (Theme.pageCornerRadius - Theme.panelRadius) * growth
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let page = lookout.page
-        // The page lays out at the tab's full width and is scaled to fit the
-        // card, so it only ever scrolls up and down, as it would in a tab.
-        let cardWidth = fullWidth - (Self.inset.leading + Self.inset.trailing) * shrink
-        let zoom = fullWidth > 0 ? max(0.5, min(1, cardWidth / fullWidth)) : 1
-        return PageView(page: page, cornerRadius: radius, zoom: zoom)
+        // The page lays out at the card's own size, full size (as in a
+        // narrower window), and again as the card grows into a tab.
+        PageView(page: page, cornerRadius: radius)
             .overlay {
                 if let error = page.loadError {
                     LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload)

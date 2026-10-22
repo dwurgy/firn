@@ -304,6 +304,19 @@ final class WindowModel {
         }
     }
 
+    /// The half of the page `pointer` (in the window's space) is over, if
+    /// `tab` could open there; nil over the sidebar (left of `sidebarEdge`,
+    /// so a peeking sidebar counts), or when it can't.
+    func pageSide(at pointer: CGPoint, for tab: FirnCore.Tab, past sidebarEdge: CGFloat) -> SplitSide? {
+        let pages = pagesFrame
+        guard store.canDropOnPage(tab), !isPickingSplit, !showsCommandBar,
+              pages.contains(pointer), pointer.x > sidebarEdge else { return nil }
+        // A split's halves meet at its divider; one page is split down the middle.
+        let fraction = store.activeTab.flatMap { store.split(of: $0) }?.leftFraction ?? 0.5
+        let middle = pages.minX + (pages.width - Theme.pageInset) * fraction + Theme.pageInset / 2
+        return pointer.x < middle ? .left : .right
+    }
+
     /// Where the half the frost shows sits, in the window's space: the
     /// picture of a tab let go there grows into it.
     func dropFrame() -> CGRect? {
@@ -763,6 +776,9 @@ struct TabLift {
     var fades = false
     /// Let go over the page: the half it grows into, in the window's space.
     var landing: CGRect?
+    /// A Basecamp tile, not a row: where the tile is held, in the window's
+    /// space. It's the tile until it comes loose over the page.
+    var tile: CGRect?
 }
 
 private struct TabLiftGhost: View {
@@ -772,7 +788,7 @@ private struct TabLiftGhost: View {
         if let lift = window.tabLift {
             ZStack(alignment: .topLeading) {
                 lift.row
-                    .frame(width: lift.width, height: Theme.rowHeight)
+                    .frame(width: lift.tile?.width ?? lift.width, height: lift.tile?.height ?? Theme.rowHeight)
                     .opacity(lift.isCard ? 0 : 1)
                 card(lift)
                     // At least the picture's size, so turning from the row
@@ -785,7 +801,7 @@ private struct TabLiftGhost: View {
                                     landed: lift.landing == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
                                     pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
-                                    landing: lift.landing))
+                                    landing: lift.landing, tile: lift.tile))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -859,6 +875,8 @@ private struct LiftPlacement: ViewModifier, Animatable {
     let grab: CGPoint
     let slot: CGRect?
     let landing: CGRect?
+    /// A tile's held place, standing in for the row.
+    let tile: CGRect?
 
     nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>,
                                                    AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>> {
@@ -879,12 +897,14 @@ private struct LiftPlacement: ViewModifier, Animatable {
         var row = CGRect(x: column + 8 * CGFloat(tanh(Double(pull) / 60)),
                          y: pointer.y - grab.y * Theme.rowHeight, width: width, height: Theme.rowHeight)
         if let slot { row = Self.mix(row, slot, settled) }
+        if let tile { row = tile }
         let size = Theme.liftedCard
         var picture = CGRect(x: pointer.x - grab.x * size.width, y: pointer.y - grab.y * size.height,
                              width: size.width, height: size.height)
         if let landing { picture = Self.mix(picture, landing, landed) }
         let frame = Self.mix(row, picture, card)
-        let corner = Theme.tabRadius + (Theme.pageCornerRadius - Theme.tabRadius) * landed
+        let resting = tile == nil ? Theme.tabRadius : Theme.tileRadius
+        let corner = resting + (Theme.pageCornerRadius - resting) * landed
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
         let lift = card * (1 - landed)
         return content

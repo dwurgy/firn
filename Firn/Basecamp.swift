@@ -18,6 +18,8 @@ struct BasecampGrid: View {
     @State private var originInWindow: CGPoint = .zero
     /// True once the lifted tile has risen (it grows a touch as it's picked up).
     @State private var raised = false
+    /// The dragged tile's page, pictured in case it goes out over the page.
+    @State private var preview: CGImage?
 
     /// Tiles glide aside at the same speed as tab rows do.
     private static let glide = Animation.smooth(duration: 0.2)
@@ -41,8 +43,9 @@ struct BasecampGrid: View {
                     } close: {
                         window.close(tab)
                     }
-                    // While dragged, a tile holds its slot open; the lifted copy is what shows.
-                    .opacity(drag?.tab.id == tab.id ? 0 : 1)
+                    // While dragged, a tile holds its slot open; the lifted copy is
+                    // what shows. Out over the page, the tile stays where it is.
+                    .opacity(drag?.tab.id == tab.id && drag?.overPage == false ? 0 : 1)
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -118,14 +121,15 @@ struct BasecampGrid: View {
     @ViewBuilder private var lifted: some View {
         if let drag {
             let origin = position(of: drag)
-            BasecampTile(tab: drag.tab, isActive: drag.tab.id == store.activeTabID, lifted: true,
-                         select: {}, goHome: {}, split: {}, remove: {}, close: {})
+            liftedTile(drag.tab)
                 .frame(width: drag.size.width, height: drag.size.height)
                 .scaleEffect(raised && !reduceMotion ? 1.03 : 1)
                 .animation(.smooth(duration: 0.15), value: raised)
                 .offset(x: origin.x, y: origin.y)
                 // It sticks to the pointer; only settling into place glides.
                 .transaction { if !drag.settling { $0.animation = nil } }
+                // Loose over the page (and on its way back), the window draws it (`TabLiftGhost`).
+                .opacity(window.tabLift == nil ? 1 : 0)
                 .onAppear { raised = true }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -145,11 +149,17 @@ struct BasecampGrid: View {
                     drag = TileDrag(
                         tab: tiles[index],
                         grab: CGSize(width: value.startLocation.x - slot.minX, height: value.startLocation.y - slot.minY),
-                        size: slot.size, location: value.location, target: index)
+                        size: slot.size, location: value.location, home: index, target: index)
+                    window.isDraggingTab = true
+                    window.dragPointer = inWindow(value.location)
+                    picture(tiles[index])
                     return
                 }
                 guard !current.settling else { return }
                 current.location = value.location
+                window.dragPointer = inWindow(value.location)
+                if overPage(&current) { return }
+                if window.tabLift != nil { window.tabLift?.tile = heldInWindow(current) }
                 let target = target(for: current)
                 if target == current.target {
                     drag = current
@@ -160,10 +170,119 @@ struct BasecampGrid: View {
             }
     }
 
+    /// A point in the grid's space, in the window's.
+    private func inWindow(_ location: CGPoint) -> CGPoint {
+        CGPoint(x: location.x + originInWindow.x, y: location.y + originInWindow.y)
+    }
+
+    /// Where the lifted tile shows, in the window's space (grown a touch, as it's drawn).
+    private func heldInWindow(_ drag: TileDrag) -> CGRect {
+        let origin = inWindow(position(of: drag))
+        let rect = CGRect(origin: origin, size: drag.size)
+        guard !reduceMotion else { return rect }
+        return rect.insetBy(dx: -rect.width * 0.015, dy: -rect.height * 0.015)
+    }
+
+    /// A tile that could open in split view gets a picture of its page
+    /// taken as it's picked up; a resting tile is never woken for it.
+    private func picture(_ tab: FirnCore.Tab) {
+        preview = nil
+        guard store.canDropOnPage(tab), let page = tab.page else { return }
+        Task {
+            // Larger than the card, so it stays sharp as it grows into its half when let go.
+            let picture = await page.snapshot(width: Theme.liftedCard.width * 3)
+            guard drag?.tab.id == tab.id else { return }
+            preview = picture
+            if window.tabLift?.tab.id == tab.id { window.tabLift?.preview = picture }
+        }
+    }
+
+    /// Out over the page, a tile that can open there in split view comes
+    /// loose as a picture of its page, and frost shows the half it would
+    /// open in (a copy: the tile glides back to its own slot and stays).
+    /// Back over the sidebar, it turns into the tile again. True while
+    /// it's over the page.
+    private func overPage(_ current: inout TileDrag) -> Bool {
+        let slide = Theme.slide(reduceMotion: reduceMotion)
+        guard let side = window.pageSide(at: window.dragPointer, for: current.tab, past: originInWindow.x + width) else {
+            if current.overPage {
+                current.overPage = false
+                drag = current
+                window.tabLift?.tile = heldInWindow(current)
+                withAnimation(slide) { window.pageDrop = nil }
+                let id = current.tab.id
+                withAnimation(reshape) {
+                    window.tabLift?.isCard = false
+                } completion: {
+                    // Still a tile on its way back: Basecamp's own copy takes over.
+                    if drag?.overPage == false, window.tabLift?.tab.id == id { window.tabLift = nil }
+                }
+            }
+            return false
+        }
+        if !current.overPage {
+            current.overPage = true
+            current.target = current.home
+            withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
+            if window.tabLift == nil {
+                var lift = TabLift(tab: current.tab, row: AnyView(liftedTile(current.tab)),
+                                   grab: CGPoint(x: current.grab.width / current.size.width,
+                                                 y: current.grab.height / current.size.height),
+                                   width: current.size.width, column: 0)
+                lift.preview = preview
+                lift.tile = heldInWindow(current)
+                window.tabLift = lift
+                // Drawn as the tile first, so it can come loose from it.
+                Task { @MainActor in
+                    guard drag?.overPage == true else { return }
+                    withAnimation(reshape) { window.tabLift?.isCard = true }
+                }
+            } else {
+                withAnimation(reshape) { window.tabLift?.isCard = true }
+            }
+        } else {
+            drag = current
+        }
+        let drop = PageDrop(tab: current.tab, side: side)
+        if window.pageDrop != drop { withAnimation(slide) { window.pageDrop = drop } }
+        return true
+    }
+
+    /// The tile turning into its page's picture and back: a short glide; a fade with Reduce Motion.
+    private var reshape: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.2)
+    }
+
+    private func liftedTile(_ tab: FirnCore.Tab) -> some View {
+        BasecampTile(tab: tab, isActive: tab.id == store.activeTabID, lifted: true,
+                     select: {}, goHome: {}, split: {}, remove: {}, close: {})
+    }
+
     /// The lifted copy settles into its slot, then the tile really moves
     /// there (which looks like nothing, since it's already showing there).
     private func drop() {
         guard var current = drag, !current.settling else { return }
+        window.isDraggingTab = false
+        // Let go over the page: a copy opens there; the tile is already back in its slot.
+        if current.overPage {
+            drag = nil
+            raised = false
+            preview = nil
+            guard !reduceMotion, let landing = window.dropFrame() else {
+                withAnimation(Theme.slide(reduceMotion: reduceMotion)) { window.tabLift = nil }
+                return window.dropOnPage()
+            }
+            // The picture grows into the half, then the page itself fades in under it.
+            withAnimation(.smooth(duration: 0.35)) {
+                window.tabLift?.landing = landing
+            } completion: {
+                window.dropOnPage()
+                withAnimation(.easeOut(duration: 0.25)) { window.tabLift = nil }
+            }
+            return
+        }
+        window.tabLift = nil
+        preview = nil
         @MainActor func commit() {
             if let tab = store.basecampTabs.first(where: { $0.id == current.tab.id }) {
                 store.move(tab, to: current.target)
@@ -191,8 +310,12 @@ private struct TileDrag {
     let size: CGSize
     /// The pointer, in the grid's space.
     var location: CGPoint
+    /// Its place among the tiles when picked up.
+    let home: Int
     /// Its place among the tiles.
     var target: Int
+    /// True while it's loose, out over the page.
+    var overPage = false
     /// True while the lifted copy glides into its slot after the drop.
     var settling = false
 }

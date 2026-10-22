@@ -871,7 +871,7 @@ private struct TabList: View {
     private func overPage(_ location: CGPoint, current: inout TabDrag) -> Bool {
         let pointer = inWindow(location)
         let slide = Theme.slide(reduceMotion: reduceMotion)
-        guard let side = pageSide(at: pointer, for: current.tab) else {
+        guard let side = window.pageSide(at: pointer, for: current.tab, past: shownInWindow.rect.maxX) else {
             if current.overPage {
                 current.overPage = false
                 withAnimation(slide) { window.pageDrop = nil }
@@ -895,18 +895,6 @@ private struct TabList: View {
     /// The row turning into its page's picture and back: a short glide; a fade with Reduce Motion.
     private var reshape: Animation {
         reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.2)
-    }
-
-    /// The half of the page `pointer` (in the window's space) is over, if
-    /// `tab` could open there; nil over the sidebar, or when it can't.
-    private func pageSide(at pointer: CGPoint, for tab: FirnCore.Tab) -> SplitSide? {
-        let pages = window.pagesFrame
-        guard store.canDropOnPage(tab), !window.isPickingSplit, !window.showsCommandBar,
-              pages.contains(pointer), pointer.x > shownInWindow.rect.maxX else { return nil }
-        // A split's halves meet at its divider; one page is split down the middle.
-        let fraction = store.activeTab.flatMap { store.split(of: $0) }?.leftFraction ?? 0.5
-        let middle = pages.minX + (pages.width - Theme.pageInset) * fraction + Theme.pageInset / 2
-        return pointer.x < middle ? .left : .right
     }
 
     /// Starts dragging a group if `start` is on its name line (and it isn't

@@ -21,6 +21,7 @@ const check = (n, ok, x = '') => {
       onboarded: true,
       // A current install (not just updated, so no What's new).
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   fs.writeFileSync(
@@ -80,9 +81,9 @@ const check = (n, ok, x = '') => {
     globalThis.__menu.map((i) => (i.type === 'separator' ? '—' : i.label)),
   );
   check(
-    "the sidebar's ⋯ menu: new tab, new space, history, archived tabs, passwords, downloads, settings, what's new",
+    "the sidebar's ⋯ menu: new tab, new space, history, archived tabs, passwords, downloads, settings, what's new, a note from David",
     labels.join('|') ===
-      "New tab|New space|—|History|Archived tabs|Passwords|Downloads|—|Settings|What's new",
+      "New tab|New space|—|History|Archived tabs|Passwords|Downloads|—|Settings|What's new|A note from David",
     labels.join(' | '),
   );
   // the archive box, at the bottom right: its right-click menu opens the

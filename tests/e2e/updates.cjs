@@ -40,6 +40,7 @@ const sources = (dir) =>
       onboarded: true,
       // A current install (not just updated, so no What's new).
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   const firn = spawn(

@@ -131,6 +131,9 @@ export interface Settings {
   // The version of Firn that last ran here ('' before Firn kept track), so
   // the first start after an update can show what's new.
   lastVersion: string;
+  // The goodbye card (Firn's last version on Electron, src/farewell.ts) has
+  // been shown.
+  farewellSeen: boolean;
   // Archive everyday tabs not looked at for this many days of use (0:
   // never). See src/archive.ts.
   archiveAfter: 0 | 1 | 7 | 30;
@@ -377,6 +380,8 @@ export type OverlayState =
   // What's new: the release notes of every version after `since` (just
   // updated), or of this version alone (since: '', or opened from a menu).
   | { mode: 'whats-new'; openId: number; since: string }
+  // The goodbye card: Firn's last version on Electron.
+  | { mode: 'farewell'; openId: number }
   | { mode: 'shortcuts'; openId: number }
   | { mode: 'archive'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
@@ -418,6 +423,8 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
+  // Opens the goodbye card's page (its address is the main process's own).
+  openFarewellLink(): void;
   // The command bar: every open tab (all spaces), history matches, and its
   // quick actions (`arg` is a space id for 'switch-space').
   allTabs(): Promise<(TabView & { spaceId: string })[]>;

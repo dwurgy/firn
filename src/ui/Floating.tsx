@@ -44,6 +44,7 @@ import {
 } from './icons';
 import { ShortcutsPanel } from './Shortcuts';
 import { WhatsNewPanel } from './WhatsNew';
+import { FarewellPanel } from './Farewell';
 
 // The layer that floats above the web page: the command bar (new tab), the
 // Ctrl+Tab switcher and Lookout's backdrop and buttons. It's transparent
@@ -108,6 +109,9 @@ export function Floating() {
         since={overlay.since}
       />
     );
+  }
+  if (overlay.mode === 'farewell') {
+    return <FarewellPanel key={overlay.openId} />;
   }
   if (overlay.mode === 'shortcuts') {
     return <ShortcutsPanel key={overlay.openId} />;

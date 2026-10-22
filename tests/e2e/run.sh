@@ -54,7 +54,7 @@ for t in $CHECKS; do
   mkdir -p "$DATA"
   rm -f "$DATA/session.json"
   if [ "$t" != welcome ]; then
-    python3 -c "import json,os,sys;f=sys.argv[1];d=json.load(open(f)) if os.path.exists(f) else {};d['onboarded']=True;d['lastVersion']=json.load(open(sys.argv[2]))['version'];json.dump(d,open(f,'w'))" "$DATA/settings.json" "$ROOT/package.json"
+    python3 -c "import json,os,sys;f=sys.argv[1];d=json.load(open(f)) if os.path.exists(f) else {};d['onboarded']=True;d['lastVersion']=json.load(open(sys.argv[2]))['version'];d['farewellSeen']=True;json.dump(d,open(f,'w'))" "$DATA/settings.json" "$ROOT/package.json"
   fi
   timeout 300 node "$E2E/$t.cjs" 2>&1 | grep -E 'PASS|FAIL' | tail -60
   pkill -f 'electron/dist/electro[n]'

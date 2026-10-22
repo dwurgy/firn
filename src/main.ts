@@ -65,6 +65,7 @@ import { macMenuTemplate } from './menu';
 import { matchShortcut, menuAccelerator } from './shortcuts';
 import { ARCHIVE_CHOICES, isOld, noteDayUsed } from './archive';
 import { handleInstallerEvent } from './installer';
+import { FAREWELL_URL } from './farewell';
 import type {
   CarryTab,
   CommandAction,
@@ -682,6 +683,13 @@ const createWindow = () => {
     // The top bar may need to be there from the start.
     if (web === topBar.webContents) syncTopBar(false);
     if (web === floating.webContents && welcomePending) openWelcome();
+    // (A fresh install's goodbye waits for the welcome to finish.)
+    else if (
+      web === floating.webContents &&
+      farewellPending &&
+      settings.onboarded
+    )
+      openFarewell();
     else if (web === floating.webContents && whatsNewSince !== null)
       openWhatsNew(whatsNewSince);
     if (web === win.webContents || !layersToStart.includes(web)) {
@@ -1370,7 +1378,9 @@ const createWindow = () => {
       tabs.addToBasecamp(tabs.create(site.url, { activate: false }));
     }
     changeSettings({ onboarded: true });
-    hideOverlay();
+    // A fresh install meets the goodbye card right after.
+    if (farewellPending) openFarewell();
+    else hideOverlay();
   };
 
   // --- Scam and malware warnings ---------------------------------------------
@@ -1738,6 +1748,19 @@ const createWindow = () => {
   const openWhatsNew = (since: string) => {
     whatsNewSince = null;
     showOverlay({ mode: 'whats-new', openId: ++commandOpenId, since });
+  };
+  // The goodbye card (src/farewell.ts): once, the first time this version
+  // opens, in place of What's new (or right after the welcome on a fresh
+  // install). Then from the Firn menu.
+  let farewellPending = !settings.farewellSeen;
+  const openFarewell = () => {
+    farewellPending = false;
+    whatsNewSince = null;
+    if (!settings.farewellSeen) {
+      settings = { ...settings, farewellSeen: true };
+      saveSettings(settingsFile, settings);
+    }
+    showOverlay({ mode: 'farewell', openId: ++commandOpenId });
   };
   const applySettings = () => {
     setSearchEngine(settings.searchEngine);
@@ -3218,6 +3241,7 @@ const createWindow = () => {
           click: () => openSettings(),
         },
         { label: "What's new", click: () => openWhatsNew('') },
+        { label: 'A note from David', click: () => openFarewell() },
       ]).popup({ window: win }),
     // The archive box's right-click menu: open it, or choose how long.
     'archive:menu': () =>
@@ -3272,6 +3296,12 @@ const createWindow = () => {
       ]).popup({ window: win });
     },
     'welcome:finish': (_sender, urls) => finishWelcome(urls),
+    // No address comes from the UI: Firn opens its own.
+    'farewell:open-link': () => {
+      if (overlay.mode !== 'farewell') return;
+      hideOverlay();
+      void tabs.create(FAREWELL_URL);
+    },
     'danger:answer': (_sender, answer) => {
       if (answer === 'back' || answer === 'visit') answerDanger(answer);
     },

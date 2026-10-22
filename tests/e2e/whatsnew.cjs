@@ -17,10 +17,15 @@ const check = (n, ok, x = '') => {
   );
 };
 
-// Starts Firn with these settings (and no saved tabs).
+// Starts Firn with these settings (and no saved tabs), the goodbye card
+// already seen (tests/e2e/farewell.cjs has its own check).
 const launch = async (settings) => {
   execSync('rm -f /root/.config/Firn/session.json');
-  if (settings) fs.writeFileSync(SETTINGS, JSON.stringify(settings));
+  if (settings)
+    fs.writeFileSync(
+      SETTINGS,
+      JSON.stringify({ farewellSeen: true, ...settings }),
+    );
   else fs.rmSync(SETTINGS, { force: true });
   const app = await _electron.launch({
     args: ['--no-sandbox', '.'],

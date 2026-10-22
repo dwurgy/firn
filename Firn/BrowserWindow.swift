@@ -2,14 +2,13 @@ import FirnCore
 import SwiftUI
 
 /// What the window is doing, apart from its tabs: whether the address bar is
-/// being edited, and for which tab.
+/// being edited, or the command bar is open.
 @MainActor
 @Observable
 final class WindowModel {
-    enum AddressTarget { case currentTab, newTab }
-
     let store: BrowserStore
-    private(set) var addressTarget: AddressTarget = .currentTab
+    /// Whether the command bar (⌘T) is open over the page.
+    private(set) var showsCommandBar = false
     /// Goes up each time the address bar is asked to take focus.
     private(set) var addressRequest = 0
 
@@ -190,10 +189,9 @@ final class WindowModel {
         }
     }
 
-    /// Focuses the address bar: to change the tab on screen, or (⌘T) to open a
-    /// new tab, which only appears once an address is entered.
-    func editAddress(_ target: AddressTarget) {
-        addressTarget = store.activeTab == nil ? .newTab : target
+    /// Focuses the address bar, to change the page in front (or, with no
+    /// tab on screen, to open one).
+    func editAddress() {
         addressRequest += 1
         // The address bar lives in the sidebar, so a hidden one slides out to be typed in.
         if sidebarCollapsed {
@@ -204,9 +202,34 @@ final class WindowModel {
     }
 
     func finishEditingAddress() {
-        addressTarget = .currentTab
         peekHeldForTyping = false
         if sidebarCollapsed, !pointerNearSidebar { isPeeking = false }
+    }
+
+    // MARK: Command bar
+
+    /// Opens the command bar (⌘T, the New tab button, an empty window). No
+    /// tab exists until something in it is picked.
+    func openCommandBar() { showsCommandBar = true }
+
+    /// Closes the command bar, leaving nothing behind. The page in front
+    /// gets the keys back, unless focus already went somewhere else (a
+    /// click in the sidebar's address bar, say).
+    func closeCommandBar(focusingPage: Bool = true) {
+        guard showsCommandBar else { return }
+        showsCommandBar = false
+        if focusingPage { focusPage() }
+    }
+
+    /// Tabs just brought back: their site icons rise out of the overflow
+    /// button to their rows, which wait unseen until they land (see
+    /// `TabList`). With Reduce Motion, or the sidebar hidden, the rows
+    /// simply appear.
+    func rise(_ tabs: [FirnCore.Tab]) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              !sidebarCollapsed || isPeeking else { return }
+        arrivingTabIDs.formUnion(tabs.map(\.id))
+        riseQueue = tabs
     }
 
     /// Gives the page in front (a Lookout's, or the tab on screen's) keyboard
@@ -237,6 +260,7 @@ struct BrowserWindow: View {
             // The page and the sidebar move together, frame by frame, on one curve.
             PageArea(tab: store.activeTab)
                 .overlay { LookoutLayer(store: store, window: window) }
+                .overlay { CommandBarLayer(store: store, window: window) }
                 .modifier(PageBesideSidebar(
                     reveal: window.sidebarCollapsed ? 0 : 1,
                     sidebarWidth: window.sidebarWidth
@@ -282,7 +306,7 @@ struct BrowserWindow: View {
             SpaceSheet(window: window, mode: mode)
         }
         .onAppear {
-            window.editAddress(.newTab)
+            if store.activeTab == nil { window.openCommandBar() }
             // Launching may bring Firn to the front before this window listens.
             driftIdleTabs(afterABeat: true)
         }
@@ -296,8 +320,8 @@ struct BrowserWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             driftIdleTabs(afterABeat: true)
         }
-        .onChange(of: store.openTabs.isEmpty) {
-            if store.openTabs.isEmpty { window.editAddress(.newTab) }
+        .onChange(of: store.activeTab == nil) {
+            if store.activeTab == nil { window.openCommandBar() }
         }
     }
 
@@ -546,9 +570,9 @@ struct BrowserCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Tab") { window.editAddress(.newTab) }
+            Button("New Tab") { window.openCommandBar() }
                 .keyboardShortcut("t")
-            Button("Open Location…") { window.editAddress(.currentTab) }
+            Button("Open Location…") { window.editAddress() }
                 .keyboardShortcut("l")
             Divider()
             Button("Duplicate Tab") { if let tab = everydayTab { window.duplicate(tab) } }

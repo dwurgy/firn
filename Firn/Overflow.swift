@@ -130,25 +130,16 @@ private struct OverflowPanel: View {
     /// All of them back where new tabs go; the tab on screen stays.
     private func restoreAll() {
         window.showsOverflow = false
-        rise(store.driftedTabs)
+        window.rise(store.driftedTabs)
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.restoreAllDrifted() }
     }
 
     /// Back where new tabs go, and on screen.
     private func bringBack(_ tab: FirnCore.Tab) {
         window.showsOverflow = false
-        rise([tab])
+        window.rise([tab])
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.select(tab) }
         window.focusPage()
-    }
-
-    /// Their site icons rise back out of the overflow button to their rows,
-    /// which wait unseen until they land (see `TabList`). With Reduce
-    /// Motion the rows simply fade in.
-    private func rise(_ tabs: [FirnCore.Tab]) {
-        guard !reduceMotion else { return }
-        window.arrivingTabIDs.formUnion(tabs.map(\.id))
-        window.riseQueue = tabs
     }
 
     private func reopen(_ entry: ClosedEntry) {

@@ -1,0 +1,324 @@
+import FirnCore
+import SwiftUI
+
+/// The command bar over the page area (⌘T, the New tab button, an empty
+/// window): a frosted card in the space's color over a lightly dimmed
+/// page. Just the field until something is typed; then up to seven rows
+/// from the space on screen only (`BrowserStore.commandRows`). No tab
+/// exists until a row is picked; Esc or a click on the dim leaves nothing
+/// behind. It rises a hair as it fades in; Reduce Motion: fades.
+struct CommandBarLayer: View {
+    let store: BrowserStore
+    let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                if window.showsCommandBar {
+                    shape.fill(Theme.commandDim)
+                        .contentShape(shape)
+                        .onTapGesture { window.closeCommandBar() }
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
+                    CommandBar(store: store, window: window)
+                        .frame(width: min(560, max(0, proxy.size.width - 64)))
+                        // About a third of the way down, as a glance, not a page.
+                        .padding(.top, max(48, proxy.size.height * 0.22))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .animation(.easeOut(duration: 0.2), value: window.showsCommandBar)
+    }
+}
+
+private struct CommandBar: View {
+    let store: BrowserStore
+    let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var text = ""
+    /// The chosen row, by id, so suggestions arriving don't move it; nil
+    /// means the first.
+    @State private var selection: String?
+    /// The engine's latest suggestions. Kept until new ones come, so the
+    /// rows don't flicker on every key.
+    @State private var suggestions: [String] = []
+    @FocusState private var focused: Bool
+    /// Set once the field has had focus, so losing it can close the bar.
+    @State private var hadFocus = false
+
+    /// No search engine setting yet; this follows it once there is one.
+    private let engine = SearchEngine.default
+    private static let fieldHeight: CGFloat = 48
+
+    private var rows: [CommandRow] {
+        store.commandRows(for: text, searchEngine: engine, suggestions: suggestions)
+    }
+
+    var body: some View {
+        let rows = rows
+        let selected = selectedIndex(in: rows)
+        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+        VStack(spacing: 0) {
+            field(rows: rows, selected: selected)
+            if !rows.isEmpty {
+                Rectangle()
+                    .fill(Theme.tileHairline)
+                    .frame(height: 0.5)
+                    .padding(.horizontal, Theme.rowPadding)
+                VStack(spacing: 2) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        CommandRowView(row: row, engine: engine, isSelected: index == selected) { pick(row) }
+                    }
+                }
+                .padding(6)
+            }
+        }
+        .background { CommandBarGlass(shape: shape, color: Theme.spaceColor(store.activeSpace.color)) }
+        .clipShape(shape)
+        .shadow(color: Theme.shadowPeek, radius: 24, y: 8)
+        .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)
+        .background { ArrowCatcher(onArrow: { move(by: $0, in: rows) }) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Command bar")
+        .task(id: text) { await fetchSuggestions() }
+        .onAppear {
+            Task { @MainActor in
+                await Task.yield()
+                focused = true
+            }
+        }
+    }
+
+    private func field(rows: [CommandRow], selected: Int) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.faint)
+                .accessibilityHidden(true)
+            TextField("Search or enter address", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16))
+                .foregroundStyle(Theme.ink)
+                .focused($focused)
+                .onSubmit { if rows.indices.contains(selected) { pick(rows[selected]) } }
+                .onExitCommand { window.closeCommandBar() }
+                .onChange(of: text) { selection = nil }
+                .onChange(of: focused) {
+                    // Clicking elsewhere (the sidebar, say) closes it, and
+                    // leaves focus where the click put it.
+                    if focused { hadFocus = true } else if hadFocus { window.closeCommandBar(focusingPage: false) }
+                }
+        }
+        .padding(.horizontal, Theme.rowPadding + 4)
+        .frame(height: Self.fieldHeight)
+    }
+
+    private func selectedIndex(in rows: [CommandRow]) -> Int {
+        selection.flatMap { id in rows.firstIndex { $0.id == id } } ?? 0
+    }
+
+    private func move(by offset: Int, in rows: [CommandRow]) {
+        guard !rows.isEmpty else { return }
+        let index = min(max(selectedIndex(in: rows) + offset, 0), rows.count - 1)
+        selection = rows[index].id
+    }
+
+    /// A short pause after typing, then the engine's suggestions. Each key
+    /// cancels the last request; nothing is sent for an address.
+    private func fetchSuggestions() async {
+        guard SearchSuggestions.mayAsk(about: text) else {
+            suggestions = []
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(150))
+        guard !Task.isCancelled else { return }
+        let found = await SearchSuggestions.fetch(text, from: engine)
+        guard !Task.isCancelled else { return }
+        suggestions = found
+    }
+
+    private func pick(_ row: CommandRow) {
+        let change = { @MainActor in
+            switch row {
+            case let .go(url), let .search(_, url, _):
+                store.openTab(url)
+            case let .tab(tab):
+                store.select(tab)
+            case let .tidied(tab):
+                window.rise([tab])
+                store.select(tab)
+            case let .closed(entry):
+                store.reopen(entry)
+            case .action:
+                // Actions come in the next step.
+                break
+            }
+        }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2), change)
+        window.closeCommandBar()
+    }
+}
+
+/// One row: an icon, the words, and a faint hint at the right saying what
+/// picking it does.
+private struct CommandRowView: View {
+    let row: CommandRow
+    let engine: SearchEngine
+    let isSelected: Bool
+    let pick: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: pick) {
+            HStack(spacing: 10) {
+                icon
+                    .frame(width: 16, height: 16)
+                    .foregroundStyle(Theme.muted)
+                Text(title)
+                    .font(Theme.tabFont)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 12)
+                if let hint {
+                    Text(hint)
+                        .font(Theme.hintFont)
+                        .foregroundStyle(Theme.faint)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, Theme.rowPadding - 2)
+            .frame(height: Theme.rowHeight)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+                    .fill(isSelected ? Theme.press : hovering ? Theme.hover : .clear)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(hint.map { "\(title), \($0)" } ?? title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder private var icon: some View {
+        switch row {
+        case .go:
+            Image(systemName: "globe")
+        case .search:
+            Image(systemName: "magnifyingglass")
+        case let .tab(tab), let .tidied(tab):
+            SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }
+        case let .closed(entry):
+            if entry.kind == .group {
+                Image(systemName: "square.on.square")
+            } else {
+                SiteIconView(icon: entry.icon, size: 16) { Image(systemName: "globe") }
+            }
+        case .action:
+            Image(systemName: "command")
+        }
+    }
+
+    private var title: String {
+        switch row {
+        // The whole address, scheme and all, so it never hides an http.
+        case let .go(url): url.absoluteString
+        case let .search(text, _, _): text
+        case let .tab(tab), let .tidied(tab): tab.title
+        case let .closed(entry): entry.title
+        case let .action(action): action.name
+        }
+    }
+
+    private var hint: String? {
+        switch row {
+        case .go: "Open"
+        case .search(_, _, isSuggestion: false): "Search \(engine.name)"
+        case .search: nil
+        case .tab: "Switch to tab"
+        case .tidied: "Tidied away"
+        case .closed: "Recently closed"
+        case let .action(action): action.shortcut
+        }
+    }
+}
+
+/// The bar's glass: Liquid Glass on macOS 26, a regular material before,
+/// tinted by the space's color. It sits over web pages, so it's the
+/// regular (denser) glass, not the sidebar groups' thinner frost.
+private struct CommandBarGlass: View {
+    let shape: RoundedRectangle
+    let color: Color
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear)
+                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
+                .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
+        } else {
+            shape.fill(.regularMaterial)
+                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        }
+    }
+}
+
+/// ↑ and ↓ move through the rows while typing. AppKit, because the text
+/// field's editor takes the arrow keys before SwiftUI sees them.
+private struct ArrowCatcher: NSViewRepresentable {
+    let onArrow: (Int) -> Void
+
+    func makeNSView(context: Context) -> CatcherView { CatcherView() }
+
+    func updateNSView(_ view: CatcherView, context: Context) { view.onArrow = onArrow }
+
+    final class CatcherView: NSView {
+        var onArrow: ((Int) -> Void)?
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let caught = MainActor.assumeIsolated { self?.catches(event) ?? false }
+                return caught ? nil : event
+            }
+        }
+
+        /// Only plain arrows, only in this window, and only while a text
+        /// field is being typed in (the bar's own, since it closes when
+        /// focus leaves it).
+        private func catches(_ event: NSEvent) -> Bool {
+            let offset = switch event.keyCode {
+            case 125: 1
+            case 126: -1
+            default: 0
+            }
+            guard offset != 0, let window, event.window === window,
+                  event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+                  (window.firstResponder as? NSTextView)?.isFieldEditor == true,
+                  let onArrow else { return false }
+            onArrow(offset)
+            return true
+        }
+    }
+}

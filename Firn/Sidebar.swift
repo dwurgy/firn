@@ -130,7 +130,6 @@ private struct AddressBar: View {
         if let lookout = store.lookout { return lookout.page.url }
         return store.activeTab?.url
     }
-    private var url: URL? { window.addressTarget == .newTab ? nil : frontURL }
     /// Reload sits inside the bar, as in Safari, so the top row fits at the narrowest width.
     private var reloadablePage: (any PageController)? {
         guard !focused, let page = frontPage, page.url != nil || page.loadError != nil else { return nil }
@@ -169,16 +168,15 @@ private struct AddressBar: View {
                 }
             }
             .onHover { hovering = $0 }
-            .accessibilityLabel(window.addressTarget == .newTab ? "New tab address"
-                : store.lookout != nil ? "Lookout address" : "Address")
+            .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")
             .onSubmit(open)
             .onExitCommand(perform: cancel)
             .onChange(of: window.addressRequest) {
-                text = url?.absoluteString ?? ""
+                text = frontURL?.absoluteString ?? ""
                 focused = true
             }
             .onChange(of: focused) {
-                if !focused { cancel() } else { text = url?.absoluteString ?? "" }
+                if !focused { cancel() } else { text = frontURL?.absoluteString ?? "" }
             }
             .onChange(of: store.activeTab?.url) { showRestingAddress() }
             .onChange(of: store.lookout?.page.url) { showRestingAddress() }
@@ -189,7 +187,7 @@ private struct AddressBar: View {
 
     private func open() {
         guard let url = AddressInput.url(for: text) else { return }
-        if window.addressTarget == .newTab || store.activeTab == nil {
+        if store.activeTab == nil {
             store.openTab(url)
         } else {
             frontPage?.load(url)
@@ -317,7 +315,7 @@ private struct TabList: View {
     }
 
     private var newTabRow: some View {
-        NewTabRow { window.editAddress(.newTab) }
+        NewTabRow { window.openCommandBar() }
     }
 
     /// Idle tabs are tidied away one after another, a moment apart: each

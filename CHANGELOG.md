@@ -1,5 +1,20 @@
 # What's new in Firn
 
+## Firn 0.11.0
+
+**The last Firn on Electron.**
+
+Firn is becoming a native Mac app. This is the final version of the one you have now, and it says so once, with a note from David. From here on it no longer checks for updates.
+
+### New
+
+- **A note from David** shows once after you update, and stays in the Firn menu if you want to read it again.
+
+### Better
+
+- **Settings > Updates** now says plainly that this version no longer updates itself. It still shows which version you have.
+- **Nothing is sent to look for updates** anymore. Your tabs, history, and passwords stay on your computer, and reinstalling keeps them.
+
 ## Firn 0.10.4
 
 **Signing in to Google works in Firn.**

@@ -9,10 +9,12 @@ final class WindowModel {
     let store: BrowserStore
     /// Whether the command bar (⌘T) is open over the page.
     private(set) var showsCommandBar = false
-    /// The tab a split view is being made beside (Open in Split View on the
+    /// The tab a split view is being made beside (Open as Split on the
     /// tab on screen, or a tile): it moves to the left half, and the command
     /// bar sits over an empty right half until something is picked.
     private(set) var splitPickAnchor: FirnCore.Tab?
+    /// A split just made: its row opens from its left tab's row (see `SplitRow`).
+    var formingSplitID: UUID?
     /// Whether that's happening now, with its tab on screen.
     var isPickingSplit: Bool {
         splitPickAnchor != nil && splitPickAnchor?.id == store.activeTabID
@@ -264,7 +266,7 @@ final class WindowModel {
         if focusingPage { focusPage() }
     }
 
-    /// Open in Split View on the tab on screen or a Basecamp tile: the page
+    /// Open as Split on the tab on screen or a Basecamp tile: the page
     /// glides over to the left half, and the command bar opens over the
     /// empty right half to pick what goes there. Esc leaves things as they were.
     func pickSplit(beside tab: FirnCore.Tab) {
@@ -273,6 +275,15 @@ final class WindowModel {
             splitPickAnchor = tab
         }
         openCommandBar()
+    }
+
+    /// Shows `incoming` beside `anchor` in split view; a new split's row
+    /// forms in the sidebar.
+    func openSplit(_ incoming: FirnCore.Tab, beside anchor: FirnCore.Tab) {
+        let existing = Set(store.splits.map(\.id))
+        if let split = store.openSplit(incoming, beside: anchor), !existing.contains(split.id) {
+            formingSplitID = split.id
+        }
     }
 
     /// Something was picked for the empty half: the split is made, in the

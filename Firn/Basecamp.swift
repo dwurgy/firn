@@ -87,7 +87,7 @@ private struct BasecampTile: View {
             if tab.isAwayFromHome {
                 Button("Go Back to Home", action: goHome)
             }
-            Button("Open in Split View", action: split)
+            Button("Open as Split", action: split)
             Divider()
             Button("Remove from Basecamp", action: remove)
             Divider()

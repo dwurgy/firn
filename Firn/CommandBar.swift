@@ -204,7 +204,7 @@ private struct CommandBar: View {
                 incoming = nil
             }
             if let incoming, incoming.id != anchor.id {
-                store.openSplit(incoming, beside: anchor)
+                window.openSplit(incoming, beside: anchor)
             } else {
                 store.select(anchor)
             }

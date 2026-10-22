@@ -275,6 +275,8 @@ private struct TabList: View {
                         }
                     }
                     .overlay(alignment: .topLeading) { lifted }
+                    // A split forming or ending: the rows around it glide.
+                    .animation(reduceMotion ? nil : Self.glide, value: store.splits.map(\.id))
                     .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(Sidebar.space)).origin } action: {
                         origin.point = $0
                     }
@@ -542,14 +544,19 @@ private struct TabList: View {
     /// A tab's row, or a split's (`tab` is its left half).
     @ViewBuilder private func row(_ tab: FirnCore.Tab) -> some View {
         if let split = store.split(of: tab), let partner = store.splitPartner(of: tab) {
-            placed(SplitRow(left: tab, right: partner, inUseID: inUseHalf(of: tab)) { half in
+            placed(SplitRow(
+                left: tab, right: partner, fraction: split.leftFraction, inUseID: inUseHalf(of: tab),
+                forming: window.formingSplitID == split.id
+            ) { half in
                 store.select(half)
                 window.focusPage()
             } close: { half in
-                window.close(half)
+                withAnimation(reduceMotion ? nil : Self.glide) { window.close(half) }
+            } separate: {
+                withAnimation(reduceMotion ? nil : Self.glide) { store.closeSplit(split) }
+            } formed: {
+                if window.formingSplitID == split.id { window.formingSplitID = nil }
             } menu: { half in
-                Button("Close Split View", systemImage: "rectangle") { store.closeSplit(split) }
-                Divider()
                 menu(for: half)
             }, tab)
         } else {
@@ -568,6 +575,9 @@ private struct TabList: View {
     /// shows. Brought back, it waits unseen for its icon to land.
     private func placed(_ row: some View, _ tab: FirnCore.Tab) -> some View {
         row
+            // Becoming a split or leaving one, the row swaps for its new self
+            // at once: the two look the same at that moment.
+            .transaction(value: tab.splitID) { $0.animation = nil }
             .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id) ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
                 frames[tab.id] = $0
@@ -587,7 +597,8 @@ private struct TabList: View {
     /// A row as dragged or carried: a copy, not clickable.
     @ViewBuilder private func liftedRow(_ tab: FirnCore.Tab, isActive: Bool) -> some View {
         if let partner = store.splitPartner(of: tab) {
-            SplitRow(left: tab, right: partner, inUseID: inUseHalf(of: tab), select: { _ in }, close: { _ in }) { _ in
+            SplitRow(left: tab, right: partner, fraction: store.split(of: tab)?.leftFraction ?? 0.5,
+                     inUseID: inUseHalf(of: tab), select: { _ in }, close: { _ in }, separate: {}) { _ in
                 EmptyView()
             }
         } else {
@@ -699,13 +710,13 @@ private struct TabList: View {
             Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
             // Beside the tab on screen, or, for that tab, beside a page picked
-            // in the command bar. (A split's halves have Close Split View instead.)
+            // in the command bar. (A split's halves have Separate Tabs instead.)
             if tab.splitID == nil, let onScreen = store.activeTab {
-                Button("Open in Split View", systemImage: "rectangle.split.2x1") {
+                Button("Open as Split", systemImage: "rectangle.split.2x1") {
                     if onScreen.id == tab.id {
                         window.pickSplit(beside: tab)
                     } else {
-                        store.openSplit(tab, beside: onScreen)
+                        window.openSplit(tab, beside: onScreen)
                     }
                 }
             }
@@ -967,101 +978,206 @@ struct TabRow<MenuItems: View>: View {
     }
 }
 
-/// Split view's row: one row, two halves, each with its own icon and
-/// title. Clicking a half shows the split with that half in use. While the
-/// split is on screen, the row is lifted like the tab on screen and the
-/// half in use carries a soft frost wash, echoing the ring on its page.
-/// The close button on the half under the pointer closes only that half.
+/// Split view's row (docs/split-row-design.html): one ordinary tab row,
+/// lifted like the tab on screen while the split is, holding both pages
+/// side by side, each its icon and a title that fades at the edge. Their
+/// widths follow the split's divider. Which page is in use shows only on
+/// the pages themselves (their frost ring), never here. Clicking a half
+/// shows the split with that page in use.
+///
+/// Its motion: a new split's right half grows in beside the left as the
+/// left's title draws back. Separate Tabs draws the right half away as the
+/// left widens to a whole row, then its tab returns as its own row below;
+/// closing one half thaws it away as the other widens. Reduce Motion:
+/// short fades.
 struct SplitRow<MenuItems: View>: View {
     let left: FirnCore.Tab
     let right: FirnCore.Tab
-    /// The half in use, when the split is on screen.
+    /// The left page's share of the width, as on screen.
+    let fraction: Double
+    /// The page in use, when the split is on screen.
     let inUseID: UUID?
     let select: (FirnCore.Tab) -> Void
+    /// Closes a half, once it has thawed away.
     let close: (FirnCore.Tab) -> Void
+    /// Separates the two tabs, once the halves have parted.
+    let separate: () -> Void
+    /// Called once a new split's halves have formed.
+    var formed: () -> Void = {}
     @ViewBuilder let menu: (FirnCore.Tab) -> MenuItems
-    @State private var hoveredID: UUID?
+
+    /// Pointing anywhere on the row shows both halves' close buttons, as in Dia.
+    @State private var rowHovered = false
+    /// While forming or parting, the left half's share, in place of the split's own.
+    @State private var share: Double?
+    /// A half fading: the right one forming, or one drawing away.
+    @State private var faded: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The halves sit this far inside the row, so their washes nest in its corners.
-    private static var inset: CGFloat { 3 }
+    init(left: FirnCore.Tab, right: FirnCore.Tab, fraction: Double, inUseID: UUID?, forming: Bool = false,
+         select: @escaping (FirnCore.Tab) -> Void, close: @escaping (FirnCore.Tab) -> Void,
+         separate: @escaping () -> Void, formed: @escaping () -> Void = {},
+         @ViewBuilder menu: @escaping (FirnCore.Tab) -> MenuItems) {
+        self.left = left
+        self.right = right
+        self.fraction = fraction
+        self.inUseID = inUseID
+        self.select = select
+        self.close = close
+        self.separate = separate
+        self.formed = formed
+        self.menu = menu
+        // A new split starts as its left tab's row, ready to open.
+        _share = State(initialValue: forming ? 1 : nil)
+        _faded = State(initialValue: forming ? right.id : nil)
+    }
+
+    private var isOnScreen: Bool { inUseID != nil }
 
     var body: some View {
-        HStack(spacing: 0) {
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+        SplitPanes(share: share ?? fraction, gap: 0) {
             half(left)
-            Rectangle()
-                .fill(Theme.splitDivider)
-                .frame(width: 1, height: 16)
-                .accessibilityHidden(true)
             half(right)
         }
-        .padding(Self.inset)
-        .frame(maxWidth: .infinity, minHeight: Theme.rowHeight)
+        .frame(height: Theme.rowHeight)
         .background {
-            RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                .fill(inUseID != nil ? Theme.activeTab : .clear)
-                .shadow(color: inUseID != nil ? Theme.shadowSoft : .clear, radius: 1, y: 1)
+            shape
+                .fill(isOnScreen ? Theme.activeTab : rowHovered ? Theme.hover : .clear)
+                .shadow(color: isOnScreen ? Theme.shadowSoft : .clear, radius: 1, y: 1)
         }
-        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: inUseID)
+        .contentShape(shape)
+        .onHover { rowHovered = $0 }
+        .onAppear { if share != nil { form() } }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Split view")
     }
 
     private func half(_ tab: FirnCore.Tab) -> some View {
-        let hovering = hoveredID == tab.id
+        let hovering = rowHovered
         return Button { select(tab) } label: {
-            Label {
-                Text(tab.title)
-            } icon: {
+            HStack(spacing: 8) {
                 SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 16)
+                FadingTitle(text: tab.title)
             }
-            .labelStyle(RowLabelStyle(color: Theme.ink))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Room for the close button, so long titles stop short of it.
-            .padding(.trailing, hovering ? 18 : 0)
+            .padding(.leading, Theme.rowPadding)
+            // Room for the close button, so the title fades out before it.
+            .padding(.trailing, hovering ? 28 : 4)
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(SplitHalfStyle(isInUse: tab.id == inUseID))
+        .buttonStyle(.plain)
+        // Its contents shrink away when it closes or the split forms.
+        .clipped()
         .overlay(alignment: .trailing) {
-            if hovering {
-                Button("Close tab", systemImage: "xmark") { close(tab) }
+            if hovering && faded == nil {
+                Button("Close tab", systemImage: "xmark") { closeHalf(tab) }
                     .labelStyle(.iconOnly)
                     .buttonStyle(CloseButtonStyle())
                     .help(tab.id == inUseID ? "Close tab (⌘W)" : "Close tab")
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 8)
             }
         }
-        .onHover { inside in
-            if inside { hoveredID = tab.id } else if hoveredID == tab.id { hoveredID = nil }
+        .opacity(faded == tab.id ? 0 : 1)
+        .contextMenu {
+            Button("Separate Tabs", systemImage: "rectangle.split.2x1.slash") { part() }
+            Divider()
+            menu(tab)
         }
-        .contextMenu { menu(tab) }
         .accessibilityAddTraits(tab.id == inUseID ? .isSelected : [])
-        .accessibilityAction(named: "Close tab") { close(tab) }
+        .accessibilityAction(named: "Close tab") { closeHalf(tab) }
+        .accessibilityAction(named: "Separate Tabs") { part() }
+    }
+
+    /// A new split: the right half grows in beside the left.
+    private func form() {
+        let animation = reduceMotion ? Animation.easeOut(duration: 0.2) : Theme.thaw
+        withAnimation(animation) {
+            share = nil
+            faded = nil
+        } completion: {
+            formed()
+        }
+    }
+
+    /// Separate Tabs: the right half draws away as the left widens to a
+    /// whole row; then the split ends and its tab returns below.
+    private func part() {
+        withdraw(right) { separate() }
+    }
+
+    /// Closing one half: it thaws away as the other widens.
+    private func closeHalf(_ tab: FirnCore.Tab) {
+        withdraw(tab) { close(tab) }
+    }
+
+    private func withdraw(_ tab: FirnCore.Tab, then commit: @escaping () -> Void) {
+        guard faded == nil else { return }
+        guard !reduceMotion else {
+            withAnimation(.easeOut(duration: 0.15)) { faded = tab.id } completion: { commit() }
+            return
+        }
+        withAnimation(Theme.thaw) {
+            share = tab.id == right.id ? 1 : 0
+            faded = tab.id
+        } completion: {
+            commit()
+        }
     }
 }
 
-/// One half of a split's row: a warm wash on hover and press, and a soft
-/// frost wash when it's the half in use.
-private struct SplitHalfStyle: ButtonStyle {
-    let isInUse: Bool
-    @State private var hovering = false
+/// A split row's two halves, side by side: the left takes `share` of the
+/// width after the gap, the right the rest. Animatable, so the halves grow,
+/// part, and follow the divider smoothly.
+private struct SplitPanes: Layout {
+    var share: Double
+    var gap: CGFloat
 
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius - 3, style: .continuous)
-        configuration.label
-            // Icons line up with the other rows' icons.
-            .padding(.horizontal, Theme.rowPadding - 3)
-            .frame(maxWidth: .infinity, minHeight: Theme.rowHeight - 6, alignment: .leading)
-            .background {
-                shape.fill(fill(pressed: configuration.isPressed))
-            }
-            .contentShape(shape)
-            .onHover { hovering = $0 }
+    var animatableData: AnimatablePair<Double, CGFloat> {
+        get { AnimatablePair(share, gap) }
+        set {
+            share = newValue.first
+            gap = newValue.second
+        }
     }
 
-    private func fill(pressed: Bool) -> Color {
-        if pressed { return Theme.press }
-        if isInUse { return Theme.splitInUse }
-        return hovering ? Theme.hover : .clear
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        CGSize(width: proposal.width ?? 240, height: proposal.height ?? Theme.rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let room = max(bounds.width - gap, 0)
+        let left = room * min(max(share, 0), 1)
+        subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(width: left, height: bounds.height))
+        subviews[1].place(at: CGPoint(x: bounds.minX + left + gap, y: bounds.minY),
+                          proposal: ProposedViewSize(width: room - left, height: bounds.height))
+    }
+}
+
+/// A title on one line that fades out at the edge instead of ending in "…".
+private struct FadingTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Theme.tabFont)
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .fixedSize()
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .clipped()
+            .mask {
+                HStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 18)
+                }
+            }
+            .accessibilityLabel(text)
     }
 }
 

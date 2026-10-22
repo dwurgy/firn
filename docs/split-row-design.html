@@ -1,0 +1,38 @@
+<!doctype html>
+<!--
+  Split view's sidebar row, as David chose it (2026-10-21), after Dia's.
+  One ordinary tab row (36pt, 10pt corners), lifted like the tab on screen while the split
+  is on screen, holding both pages side by side: each its icon and a title that fades out
+  at the edge (no "…"). No divider and no mark for the page in use: that shows only on the
+  pages (their frost ring). The halves' widths follow the split's divider. Pointing
+  anywhere on the row shows both halves' close buttons, each at its half's right edge.
+  Words: "Open as Split" makes one; "Separate Tabs" ends one, leaving both tabs.
+  Motion: forming, the right half grows in beside the left; Separate Tabs, the right half
+  draws away as the left widens, then its tab returns as its own row below; closing one
+  half, it thaws away as the other widens. Reduce Motion: short fades.
+  (Superseded the same day: "two panes" with a frost ring in the row; David found it busy.)
+-->
+<meta charset="utf-8">
+<title>Split row design</title>
+<style>
+body{margin:24px;font:13px -apple-system,system-ui,sans-serif;background:#f4f2ee}
+.fw{display:grid;grid-template-columns:repeat(2,300px);gap:10px}
+.sb{border-radius:12px;padding:14px 10px}
+.sb.l{background:#E4E2DC;--ink:#241F1B;--mut:#5E564E;--act:#FBFAF8;--sh:0 1px 1px rgba(60,40,20,.08)}
+.sb.d{background:#383836;--ink:#F5F1EC;--mut:#D4CDC5;--act:rgba(245,241,236,.14);--sh:0 1px 1px rgba(0,0,0,.15)}
+.row{height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--ink);white-space:nowrap;overflow:hidden;border-radius:10px;margin-bottom:4px}
+.ic{width:16px;height:16px;border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff}
+.s{background:#1b2838}.g{background:#4285F4}.a{background:#8a8580}
+.t{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent);mask-image:linear-gradient(90deg,#000 80%,transparent);min-width:0}
+.split{display:flex;height:36px;border-radius:10px;background:var(--act);box-shadow:var(--sh);margin-bottom:4px}
+.split .h{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;color:var(--ink);white-space:nowrap}
+.mut{color:var(--mut)}
+</style>
+<div class="fw">
+ <div class="sb l"><div class="row"><span class="ic a">A</span><span class="t">The Art of Play LP | Snow Peak</span></div>
+  <div class="split"><div class="h"><span class="ic s">S</span><span class="t">SteamDB | Database</span></div><div class="h"><span class="ic g">G</span><span class="t">portland - Google Search</span></div></div>
+  <div class="row mut"><span style="width:16px;text-align:center">+</span>New tab</div></div>
+ <div class="sb d"><div class="row"><span class="ic a">A</span><span class="t">The Art of Play LP | Snow Peak</span></div>
+  <div class="split"><div class="h"><span class="ic s">S</span><span class="t">SteamDB | Database</span></div><div class="h"><span class="ic g">G</span><span class="t">portland - Google Search</span></div></div>
+  <div class="row mut"><span style="width:16px;text-align:center">+</span>New tab</div></div>
+</div>

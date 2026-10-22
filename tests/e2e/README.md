@@ -41,6 +41,7 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `macmenu`      | The Mac menu bar (shown on Linux for the check): menus and choices    |
 | `basecamp`     | Basecamp: dragging tiles to reorder them                              |
 | `whatsnew`     | What's new: after an update, from the menus, never on a fresh install |
+| `farewell`     | The goodbye card: once after an update or the welcome, in the Firn menu, its button opens a new tab |
 | `adblock`      | Blocking ads and trackers, "Allow ads on this site", the switch       |
 | `defaultbrowser` | Links from other apps open as tabs (also after `--`, as Windows passes them, where nothing can pass as a setting); the Settings row where it applies |
 | `tooltips`     | Firn's own hover labels, in the sidebar and the top bar               |

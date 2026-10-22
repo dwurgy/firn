@@ -117,6 +117,7 @@ const hit = (h) => hits.some((x) => x.startsWith(h));
       onboarded: true,
       // A current install (not just updated, so no What's new).
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   const app = await _electron.launch({

@@ -24,6 +24,7 @@ const check = (n, ok, x = '') => {
     JSON.stringify({
       onboarded: true,
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   const app = await _electron.launch({

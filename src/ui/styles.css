@@ -3183,7 +3183,8 @@ button {
   white-space: nowrap;
 }
 
-.whats-new-sheet {
+.whats-new-sheet,
+.farewell-sheet {
   width: min(520px, calc(100vw - 64px));
   height: auto;
   max-height: min(640px, calc(100vh - 16vh));
@@ -3249,9 +3250,42 @@ button {
   color: var(--text);
 }
 
+/* The goodbye card: David's note, signed; its two buttons together on the
+   right, the page link in ink (dark on light, light on dark). */
+.farewell-sheet .whats-new-body p.farewell-sign {
+  margin: 4px 0 0;
+  color: var(--text);
+}
+
+.farewell-footer {
+  justify-content: flex-end;
+}
+
+.farewell-footer .sheet-button.is-quiet {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.farewell-footer .sheet-button.is-quiet:hover {
+  background: var(--hover);
+  box-shadow: none;
+}
+
+.farewell-footer .sheet-button.is-ink {
+  background: var(--text);
+  color: var(--page);
+  font-weight: 500;
+}
+
+.farewell-footer .sheet-button.is-ink:hover {
+  opacity: 0.88;
+  box-shadow: none;
+}
+
 /* "Got it" takes the keyboard as it opens: a soft frost ring, not the
    browser's own. */
-.whats-new-sheet .sheet-button:focus-visible {
+.whats-new-sheet .sheet-button:focus-visible,
+.farewell-sheet .sheet-button:focus-visible {
   outline: 2px solid var(--frost);
   outline-offset: 2px;
 }

@@ -25,6 +25,7 @@ const check = (n, ok, x = '') => {
     JSON.stringify({
       onboarded: true,
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   // Started by another app with a link.

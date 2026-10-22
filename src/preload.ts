@@ -21,6 +21,7 @@ const bridge: FirnBridge = {
   newTab: () => ipcRenderer.send('tabs:new'),
   openUrl: (input) => ipcRenderer.send('tabs:open-url', input),
   closeOverlay: () => ipcRenderer.send('overlay:close'),
+  openFarewellLink: () => ipcRenderer.send('farewell:open-link'),
   expandLookout: () => ipcRenderer.send('lookout:expand'),
   find: (text, forward, newSearch) =>
     ipcRenderer.send('find:search', text, forward, newSearch),
@@ -65,8 +66,6 @@ const bridge: FirnBridge = {
   resetAllPermissions: () => ipcRenderer.send('settings:reset-permissions'),
   onSettingsState: (listener) => listen('settings:state', listener),
   showFirnMenu: () => ipcRenderer.send('firn:menu'),
-  checkForUpdates: () => ipcRenderer.send('updates:check'),
-  installUpdate: () => ipcRenderer.send('updates:install'),
   runAction: (action, arg) => ipcRenderer.send('command:run', action, arg),
   resizeSplit: (id, ratio) => ipcRenderer.send('split:resize', id, ratio),
   separateSplit: (tabId) => ipcRenderer.send('split:separate', tabId),

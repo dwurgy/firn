@@ -82,6 +82,7 @@ export function writeSettings({ onboarded = true } = {}) {
     adsAllowedSites: [],
     onboarded,
     lastVersion: VERSION,
+    farewellSeen: true,
   });
 }
 

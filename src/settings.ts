@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   adsAllowedSites: [],
   onboarded: false,
   lastVersion: '',
+  farewellSeen: false,
   archiveAfter: 7,
 };
 
@@ -86,6 +87,10 @@ export function cleanSettings(changes: unknown, current: Settings): Settings {
       typeof c.onboarded === 'boolean' ? c.onboarded : current.onboarded,
     lastVersion:
       typeof c.lastVersion === 'string' ? c.lastVersion : current.lastVersion,
+    farewellSeen:
+      typeof c.farewellSeen === 'boolean'
+        ? c.farewellSeen
+        : current.farewellSeen,
     archiveAfter: ARCHIVE_CHOICES.includes(c.archiveAfter as ArchiveAfter)
       ? (c.archiveAfter as ArchiveAfter)
       : current.archiveAfter,

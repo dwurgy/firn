@@ -47,6 +47,7 @@ const look = (app) =>
       onboarded: true,
       theme: 'dark',
       lastVersion: require('../../package.json').version,
+      farewellSeen: true,
     }),
   );
   let app = await launch({ FIRN_DEMO: '1', FIRN_DEMO_PROFILE: profile });

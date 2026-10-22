@@ -131,26 +131,12 @@ export interface Settings {
   // The version of Firn that last ran here ('' before Firn kept track), so
   // the first start after an update can show what's new.
   lastVersion: string;
+  // The goodbye card (Firn's last version on Electron, src/farewell.ts) has
+  // been shown.
+  farewellSeen: boolean;
   // Archive everyday tabs not looked at for this many days of use (0:
   // never). See src/archive.ts.
   archiveAfter: 0 | 1 | 7 | 30;
-}
-
-// Where Firn's automatic updates are: 'off' (this copy can't update
-// itself; `reason` says why, in plain words), not checked yet, checking,
-// up to date (`checkedAt`), getting a new version, a new version ready
-// for the next start, or a check that didn't work (offline, say).
-export interface UpdateState {
-  status:
-    | 'off'
-    | 'idle'
-    | 'checking'
-    | 'up-to-date'
-    | 'downloading'
-    | 'ready'
-    | 'error';
-  reason?: string;
-  checkedAt?: number;
 }
 
 // What the settings panel shows: the settings, plus the downloads folder
@@ -162,8 +148,6 @@ export interface SettingsState {
   // The version of Chromium (the web engine) this Firn is built on, as
   // its main number ("152"), the way Chrome names it.
   chromium: string;
-  // Keeping Firn up to date (see src/updates.ts).
-  updates: UpdateState;
   // Whether this copy of Firn can warn about dangerous sites (it needs a
   // key for Google's service, added when Firn is built).
   safeBrowsingAvailable: boolean;
@@ -396,6 +380,8 @@ export type OverlayState =
   // What's new: the release notes of every version after `since` (just
   // updated), or of this version alone (since: '', or opened from a menu).
   | { mode: 'whats-new'; openId: number; since: string }
+  // The goodbye card: Firn's last version on Electron.
+  | { mode: 'farewell'; openId: number }
   | { mode: 'shortcuts'; openId: number }
   | { mode: 'archive'; openId: number }
   // Find in page (Ctrl+F): `text` is the last search, to start from.
@@ -437,6 +423,8 @@ export interface FirnBridge {
   newTab(): void;
   openUrl(input: string): void;
   closeOverlay(): void;
+  // Opens the goodbye card's page (its address is the main process's own).
+  openFarewellLink(): void;
   // The command bar: every open tab (all spaces), history matches, and its
   // quick actions (`arg` is a space id for 'switch-space').
   allTabs(): Promise<(TabView & { spaceId: string })[]>;
@@ -487,9 +475,6 @@ export interface FirnBridge {
   onSettingsState(listener: (state: SettingsState) => void): () => void;
   // The sidebar's ⋯ menu (new tab, history, downloads, settings).
   showFirnMenu(): void;
-  // Settings > Updates (see src/updates.ts).
-  checkForUpdates(): void;
-  installUpdate(): void;
   runAction(action: CommandAction, arg?: string): void;
   // Lookout's "Open as tab".
   expandLookout(): void;

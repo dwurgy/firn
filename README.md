@@ -29,7 +29,7 @@ The welcome, the first time you open Firn.
 - **Every version** and its notes: the [Releases page](https://github.com/dwurgy/firn/releases).
 - **Linux:** no download yet; Firn can be built from its source code as an .rpm (Fedora) or .deb (Debian, Ubuntu), and there are recipes for Arch and Void (see `packaging/README.md`).
 
-Firn keeps itself up to date: it checks for a new version a minute after it opens and every few hours, downloads it quietly, and is the new version the next time you open it, with a short **What's new** note. **Settings > Updates** shows where things stand, with a **Check for updates** button. Uninstalling keeps your tabs, history, and passwords, so reinstalling brings everything back.
+This is the last version of Firn on Electron, and it no longer checks for updates. Uninstalling keeps your tabs, history, and passwords, so reinstalling brings everything back.
 
 ## What Firn does
 
@@ -71,7 +71,7 @@ Files save to your Downloads folder and show at the bottom of the sidebar, with 
 - **Scam and malware warnings** use Google Safe Browsing, checked on your computer: Firn downloads Google's lists, which hold only the first few bytes of a code made from each dangerous address. Only when one matches, which is rare, does Firn ask Google about those few bytes, never the address.
 - **Saved passwords** are encrypted with your computer's own protection, or not saved at all if it has none. They fill in only when you click into a sign-in form, only on the very same site, and only over a secure connection. Settings shows or copies one only after Touch ID (Mac) or Windows Hello (Windows) checks it's you.
 - **Site permissions:** a site must ask before using your camera, microphone, location, notifications, or clipboard, and Firn remembers your answer. The button at the left of the address bar changes it.
-- **What Firn sends, and to whom:** the update check (to update.electronjs.org: only Firn's version and the kind of computer), the daily block lists (downloaded from Ghostery's public GitHub), and Safe Browsing's lists (from Google, as above). Nothing about you or what you browse.
+- **What Firn sends, and to whom:** the daily block lists (downloaded from Ghostery's public GitHub) and Safe Browsing's lists (from Google, as above). Nothing about you or what you browse.
 
 ### Shortcuts
 
@@ -125,7 +125,7 @@ Google's free key is for non-commercial use; if Firn is ever sold, it should mov
 - `src/preload.ts`: the narrow bridge between Firn's interface and the main process.
 - `src/ui/`: Firn's own interface (React): the sidebar, the floating panels, the top bar, the welcome, and the styles.
 - `src/page-preload.ts`: the small, walled-off helper inside web pages (saved passwords, and "has someone typed here?" for sleeping tabs).
-- `src/adblock.ts`, `src/safebrowsing.ts`, `src/passwords.ts`, `src/defaultBrowser.ts`, `src/updates.ts`: ad blocking, scam warnings, saved passwords, the default browser, and updates.
+- `src/adblock.ts`, `src/safebrowsing.ts`, `src/passwords.ts`, and `src/defaultBrowser.ts`: ad blocking, scam warnings, saved passwords, and the default browser.
 - `tests/e2e/`: checks that start Firn and click through it.
 - `brand/` and `assets/`: Firn's logo, wordmark, and app icons. `demo/`: the recorder for marketing clips.
 

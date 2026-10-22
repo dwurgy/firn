@@ -4,7 +4,6 @@ import type {
   ArchivedTab,
   CarryTab,
   CommandAction,
-  UpdateState,
   FindResult,
   SplitHandleState,
   HistoryEntry,
@@ -45,6 +44,7 @@ import {
 } from './icons';
 import { ShortcutsPanel } from './Shortcuts';
 import { WhatsNewPanel } from './WhatsNew';
+import { FarewellPanel } from './Farewell';
 
 // The layer that floats above the web page: the command bar (new tab), the
 // Ctrl+Tab switcher and Lookout's backdrop and buttons. It's transparent
@@ -109,6 +109,9 @@ export function Floating() {
         since={overlay.since}
       />
     );
+  }
+  if (overlay.mode === 'farewell') {
+    return <FarewellPanel key={overlay.openId} />;
   }
   if (overlay.mode === 'shortcuts') {
     return <ShortcutsPanel key={overlay.openId} />;
@@ -1801,11 +1804,7 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
                 </button>
               </div>
             </section>
-            <UpdatesGroup
-              version={state.version}
-              chromium={state.chromium}
-              updates={state.updates}
-            />
+            <UpdatesGroup version={state.version} chromium={state.chromium} />
           </div>
         )}
         <footer className="sheet-footer">
@@ -1819,35 +1818,15 @@ function SettingsPanel({ state }: { state: SettingsState | null }) {
   );
 }
 
-// Settings > Updates: where Firn's automatic updates are, a way to check
-// now, and, once a new version is ready, to restart into it.
+// Settings > Updates: this is Firn's last version on Electron, so it no
+// longer updates itself; just which version this is.
 function UpdatesGroup({
   version,
   chromium,
-  updates,
 }: {
   version: string;
   chromium: string;
-  updates: UpdateState;
 }) {
-  const at = (time?: number) =>
-    time
-      ? new Date(time).toLocaleTimeString([], {
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : '';
-  const status: Record<UpdateState['status'], string> = {
-    off: updates.reason ?? '',
-    idle: 'Firn checks for new versions on its own.',
-    checking: 'Checking for updates…',
-    'up-to-date': `Up to date · checked at ${at(updates.checkedAt)}`,
-    downloading: 'Getting the new version…',
-    ready: 'A new version is ready. Restart Firn to use it.',
-    error: 'Couldn’t check just now. Firn will try again later.',
-  };
-  const busy =
-    updates.status === 'checking' || updates.status === 'downloading';
   return (
     <section className="settings-group" data-testid="updates">
       <h3>Updates</h3>
@@ -1856,26 +1835,10 @@ function UpdatesGroup({
           <span>
             Firn {version} · Chromium {chromium}
           </span>
-          <small data-testid="update-status">{status[updates.status]}</small>
+          <small data-testid="update-status">
+            This version no longer updates itself.
+          </small>
         </div>
-        {updates.status === 'ready' ? (
-          <button
-            className="sheet-button"
-            onClick={() => window.firn.installUpdate()}
-          >
-            Restart now
-          </button>
-        ) : (
-          updates.status !== 'off' && (
-            <button
-              className="sheet-button"
-              disabled={busy}
-              onClick={() => window.firn.checkForUpdates()}
-            >
-              {busy ? 'Checking…' : 'Check for updates'}
-            </button>
-          )
-        )}
       </div>
     </section>
   );

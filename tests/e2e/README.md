@@ -37,10 +37,11 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `welcome`      | The welcome, the first time Firn opens                                |
 | `brand`        | The Fraunces headings                                                 |
 | `bottom`       | The bottom row of the sidebar (the Firn button, spaces)               |
-| `updates`      | Automatic updates stay off on a copy that isn't installed on Windows  |
+| `updates`      | No automatic updates: no updater left in the code, and no update activity in Firn's log |
 | `macmenu`      | The Mac menu bar (shown on Linux for the check): menus and choices    |
 | `basecamp`     | Basecamp: dragging tiles to reorder them                              |
 | `whatsnew`     | What's new: after an update, from the menus, never on a fresh install |
+| `farewell`     | The goodbye card: once after an update or the welcome, in the Firn menu, its button opens a new tab |
 | `adblock`      | Blocking ads and trackers, "Allow ads on this site", the switch       |
 | `defaultbrowser` | Links from other apps open as tabs (also after `--`, as Windows passes them, where nothing can pass as a setting); the Settings row where it applies |
 | `tooltips`     | Firn's own hover labels, in the sidebar and the top bar               |
@@ -56,7 +57,6 @@ Screenshots and logs land in `tests/e2e/out/` (not saved in Git).
 | `mactips`     | Hover labels on a Mac (pretended): the system's own tooltips (titles kept, no label of Firn's), a tab's name only when cut off, the top bar's buttons too |
 | `restore`     | Back from minimized: the page on screen (and Firn's own layers) drawn again, pages out of sight left alone |
 | `splitpin`    | Leaving a split view by pinning a tab or adding it to Basecamp: only the tab you're on stays on the page; a link from a split's side opens below its row; switching spaces mid-drag cancels the drag |
-| `updatestatus` | Settings > Updates: the version and where updates are, "Check for updates", "Restart now" once a new version is ready (pretended), and a copy that can't update itself saying why |
 | `topedge` | The top edge (Windows/Linux, "In the sidebar"): a site's own search box at the very top keeps its clicks (no top bar), a flick past the edge brings nothing, resting at the very top brings the bar, and a setting changing as it slides away doesn't leave it behind |
 | `sleep` | Sleeping tabs (pretended: 3 seconds): a tab not on screen for a while is set aside and rests quieter; the tab on screen, one playing sound, and one with typed text stay awake; clicking a sleeping tab brings it back with its history; a tab just left stays awake the full time |
 | `downloadfx` | A download's small moments in the sidebar: the new row rises in with a wash of color and a soft ring, the file settles in when done, a very long name keeps the row (and its ×) inside the sidebar, and rows already there at start are simply there |

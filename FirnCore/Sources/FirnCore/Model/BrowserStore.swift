@@ -17,6 +17,9 @@ public final class BrowserStore {
     /// keeps this order. A group's tabs always sit side by side in it, so
     /// this one order also places the groups among the loose tabs.
     public private(set) var tabs: [Tab] = []
+    /// Every split view in every space. Its two tabs sit side by side in
+    /// `tabs`, left first, in the same group if any.
+    public private(set) var splits: [SplitGroup] = []
     public private(set) var activeSpaceID: UUID
     public private(set) var activeTabID: UUID?
     /// The link preview over the tab on screen, if one is open. Showing
@@ -53,6 +56,7 @@ public final class BrowserStore {
     /// time only moves when the record really changed.
     @ObservationIgnored private var savedRecords: [UUID: TabRecord] = [:]
     @ObservationIgnored private var savedGroupRecords: [UUID: GroupRecord] = [:]
+    @ObservationIgnored private var savedSplitRecords: [UUID: SplitRecord] = [:]
 
     /// - Parameters:
     ///   - makePage: Makes a page for a data store; `BrowserEngine.makePage` in the app.
@@ -125,7 +129,7 @@ public final class BrowserStore {
     public func selectSpace(_ space: Space) {
         guard space.id != activeSpaceID, spaces.contains(where: { $0.id == space.id }) else { return }
         closeLookout()
-        activeTab?.lastActiveAt = now()
+        for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
         lastTabBySpace[activeSpaceID] = activeTabID
         activeSpaceID = space.id
         activeTabID = nil
@@ -184,9 +188,10 @@ public final class BrowserStore {
         spaces[index].dataStoreID = UUID()
         spaces[index].lastChangedAt = now()
         if lookout?.spaceID == space.id { closeLookout() }
+        let onScreen = onScreenTabIDs
         for tab in tabs where tab.spaceID == space.id && !tab.isResting {
             tab.sleep()
-            if tab.id == activeTabID { wake(tab) }
+            if onScreen.contains(tab.id) { wake(tab) }
         }
     }
 
@@ -203,6 +208,7 @@ public final class BrowserStore {
         for tab in tabs where tab.spaceID == deleted.id { tab.sleep() }
         tabs.removeAll { $0.spaceID == deleted.id }
         groups.removeAll { $0.spaceID == deleted.id }
+        splits.removeAll { $0.spaceID == deleted.id }
         closed.removeAll { $0.spaceID == deleted.id }
         lastTabBySpace[deleted.id] = nil
         spaces.remove(at: index)
@@ -355,13 +361,12 @@ public final class BrowserStore {
         return tab
     }
 
-    /// Opens a copy of an everyday tab right below it, in its group if it has
-    /// one, and shows it. The copy loads its address fresh (back/forward
+    /// Opens a copy of an everyday tab right below it (below its split, if
+    /// it's in one), in its group if it has one, and shows it. The copy loads its address fresh (back/forward
     /// history isn't copied) and stays in the same space and data store.
     @discardableResult
     public func duplicate(_ tab: Tab) -> Tab? {
-        guard tab.place == .open, let url = tab.url,
-              let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return nil }
+        guard tab.place == .open, let url = tab.url, let index = lastIndex(withSplitOf: tab) else { return nil }
         let copy = Tab(
             spaceID: tab.spaceID, url: url, title: tab.title, icon: tab.icon,
             groupID: tab.groupID, lastActiveAt: now()
@@ -386,11 +391,11 @@ public final class BrowserStore {
     }
 
     /// Links from an everyday tab open right below it, in its group if it
-    /// has one (as in Dia); links from a Basecamp tile open at the top or
+    /// has one (as in Dia), and below its split if it's in one; links from a Basecamp tile open at the top or
     /// bottom of the tab list, as set. Either way, several links from one
     /// tab stay in the order they were opened.
     private func add(_ tab: Tab, below opener: Tab?, inBackground: Bool) {
-        if let opener, let index = tabs.firstIndex(where: { $0.id == opener.id }) {
+        if let opener, let index = lastIndex(withSplitOf: opener) {
             var position: Int
             if opener.place == .open {
                 tab.groupID = opener.groupID
@@ -412,8 +417,9 @@ public final class BrowserStore {
 
     /// Closes a tab. An everyday tab goes away (a group whose last tab it
     /// was ends with it); a Basecamp tile lets its page go and rests in its
-    /// place until clicked. If it was on screen, `next` is shown if it's
-    /// still there; otherwise, for an everyday tab, the one below it in its
+    /// place until clicked. A split it was in ends. If it was on screen,
+    /// `next` is shown if it's still there, or else the other half of its
+    /// split; otherwise, for an everyday tab, the one below it in its
     /// group or the loose tabs (or above, if it was last); failing that, the
     /// tab in this space that was on screen most recently.
     public func close(_ tab: Tab, showing next: Tab? = nil) {
@@ -423,6 +429,9 @@ public final class BrowserStore {
     /// `remembering`: whether ⇧⌘T can bring it back (not a popup that
     /// closed itself).
     private func close(_ tab: Tab, showing next: Tab?, remembering: Bool) {
+        guard tabs.contains(where: { $0.id == tab.id }) else { return }
+        let partner = endSplit(of: tab)
+        let next = next ?? partner
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         let siblings = siblings(of: tab)
         let position = tab.place == .open ? siblings.firstIndex { $0.id == tab.id } : nil
@@ -499,18 +508,21 @@ public final class BrowserStore {
 
     /// Starts a group with an everyday tab, where the tab already is. A tab
     /// taken from another group starts its new one just below that group.
+    /// The other half of its split comes too.
     @discardableResult
     public func newGroup(with tab: Tab) -> TabGroup? {
         guard tab.place == .open, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return nil }
         let group = TabGroup(spaceID: tab.spaceID, name: freeGroupName(in: tab.spaceID))
         groups.append(group)
-        let oldGroupID = tab.groupID
-        tab.groupID = group.id
-        if let oldGroupID {
-            tabs.remove(at: index)
-            let below = tabs.lastIndex { $0.groupID == oldGroupID }.map { $0 + 1 } ?? index
-            tabs.insert(tab, at: below)
-            endIfEmpty(oldGroupID)
+        movingSplit(of: tab) {
+            let oldGroupID = tab.groupID
+            tab.groupID = group.id
+            if let oldGroupID {
+                tabs.remove(at: index)
+                let below = tabs.lastIndex { $0.groupID == oldGroupID }.map { $0 + 1 } ?? index
+                tabs.insert(tab, at: below)
+                endIfEmpty(oldGroupID)
+            }
         }
         return group
     }
@@ -529,15 +541,17 @@ public final class BrowserStore {
 
     /// Moves an everyday tab into a group of its space, at `position` among
     /// the group's tabs (0-based; the count means the end). A group it
-    /// leaves empty ends.
+    /// leaves empty ends. The other half of its split comes too.
     public func move(_ tab: Tab, into group: TabGroup, at position: Int) {
         guard tab.place == .open, tab.spaceID == group.spaceID, groups.contains(where: { $0.id == group.id }),
               let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        let oldGroupID = tab.groupID
-        tabs.remove(at: index)
-        tab.groupID = group.id
-        insert(tab, at: position, in: tabs(in: group), fallback: index)
-        if oldGroupID != group.id { endIfEmpty(oldGroupID) }
+        movingSplit(of: tab) {
+            let oldGroupID = tab.groupID
+            tabs.remove(at: index)
+            tab.groupID = group.id
+            insert(tab, at: position, in: tabs(in: group), fallback: index)
+            if oldGroupID != group.id { endIfEmpty(oldGroupID) }
+        }
     }
 
     /// Moves an everyday tab to the end of a group (right-click › Move to
@@ -555,18 +569,21 @@ public final class BrowserStore {
     /// Takes a tab out of its group: to `position` in the tab list when
     /// dragged, otherwise right below the group, so it doesn't fly off to
     /// where new tabs go (David, 2026-10-19). A group it leaves empty ends.
+    /// The other half of its split comes too.
     public func takeOutOfGroup(_ tab: Tab, to position: Int? = nil) {
         guard let groupID = tab.groupID, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        tabs.remove(at: index)
-        tab.groupID = nil
-        if let position {
-            insertInTabList([tab], at: position, fallback: index)
-        } else {
-            // Right below what's left of the group (or where it was).
-            let below = tabs.lastIndex { $0.groupID == groupID }.map { $0 + 1 } ?? index
-            tabs.insert(tab, at: below)
+        movingSplit(of: tab) {
+            tabs.remove(at: index)
+            tab.groupID = nil
+            if let position {
+                insertInTabList([tab], at: position, fallback: index)
+            } else {
+                // Right below what's left of the group (or where it was).
+                let below = tabs.lastIndex { $0.groupID == groupID }.map { $0 + 1 } ?? index
+                tabs.insert(tab, at: below)
+            }
+            endIfEmpty(groupID)
         }
-        endIfEmpty(groupID)
     }
 
     /// Where a dragged everyday tab lands: `position` among a group's tabs,
@@ -604,6 +621,7 @@ public final class BrowserStore {
         let members = tabs(in: group)
         tabs.removeAll { $0.groupID == group.id }
         insertInTabList(members, at: position, fallback: from)
+        keepSplitsTogether()
     }
 
     /// Ends a group but keeps its tabs, right where the card was, in the
@@ -624,7 +642,10 @@ public final class BrowserStore {
         // So the tab on screen is the one shown again if the group comes back.
         if wasShowing { activeTab?.lastActiveAt = now() }
         rememberClosing(groups[index], members: members)
-        for tab in members { tab.sleep() }
+        for tab in members {
+            _ = endSplit(of: tab)
+            tab.sleep()
+        }
         tabs.removeAll { $0.groupID == group.id }
         groups.remove(at: index)
         if wasShowing {
@@ -651,6 +672,160 @@ public final class BrowserStore {
     private func endIfEmpty(_ groupID: UUID?) {
         guard let groupID, !tabs.contains(where: { $0.groupID == groupID }) else { return }
         groups.removeAll { $0.id == groupID }
+    }
+
+    // MARK: - Split view
+
+    /// The split view a tab is half of, if any.
+    public func split(of tab: Tab) -> SplitGroup? {
+        guard let splitID = tab.splitID else { return nil }
+        return splits.first { $0.id == splitID }
+    }
+
+    /// A split's two tabs, left then right.
+    public func tabs(in split: SplitGroup) -> [Tab] {
+        tabs.filter { $0.splitID == split.id }
+    }
+
+    /// The other half of a tab's split, if it's in one.
+    public func splitPartner(of tab: Tab) -> Tab? {
+        guard let splitID = tab.splitID else { return nil }
+        return tabs.first { $0.splitID == splitID && $0.id != tab.id }
+    }
+
+    /// Shows `incoming` beside `anchor`, on `side`, in split view, with
+    /// `incoming` the one in use. `anchor` stays where it is, and `incoming`
+    /// joins it there, in its group. A Basecamp tile is never moved: a copy
+    /// of its page goes in the tab list instead (for `anchor`, where new
+    /// tabs go). A tidied-away tab comes back. If `anchor` was already in a
+    /// split, its other half leaves, right below the new pair (so dropping
+    /// a tab on one half replaces that half); a split `incoming` was in ends.
+    @discardableResult
+    public func openSplit(_ incoming: Tab, beside anchor: Tab, on side: SplitSide = .right) -> SplitGroup? {
+        guard incoming.id != anchor.id, incoming.spaceID == anchor.spaceID,
+              tabs.contains(where: { $0.id == incoming.id }), tabs.contains(where: { $0.id == anchor.id })
+        else { return nil }
+        // Already a pair: only the sides can change.
+        if let split = split(of: anchor), incoming.splitID == split.id {
+            let pair = tabs(in: split)
+            if (side == .left) != (pair.first?.id == incoming.id), let from = tabs.firstIndex(where: { $0.id == incoming.id }) {
+                tabs.remove(at: from)
+                let at = tabs.firstIndex { $0.id == anchor.id }!
+                tabs.insert(incoming, at: side == .left ? at : at + 1)
+            }
+            select(incoming)
+            return split
+        }
+        let anchor = everyday(anchor, at: arrivalIndex(in: anchor.spaceID))
+        let displaced = endSplit(of: anchor)
+        _ = endSplit(of: incoming)
+        let incoming = everyday(incoming, at: nil)
+        if let from = tabs.firstIndex(where: { $0.id == incoming.id }) { tabs.remove(at: from) }
+        let oldGroupID = incoming.groupID
+        incoming.groupID = anchor.groupID
+        let at = tabs.firstIndex { $0.id == anchor.id }!
+        tabs.insert(incoming, at: side == .left ? at : at + 1)
+        if oldGroupID != anchor.groupID { endIfEmpty(oldGroupID) }
+        let split = SplitGroup(spaceID: anchor.spaceID)
+        splits.append(split)
+        anchor.splitID = split.id
+        incoming.splitID = split.id
+        // The displaced half goes right below the new pair.
+        if let displaced, let from = tabs.firstIndex(where: { $0.id == displaced.id }) {
+            tabs.remove(at: from)
+            tabs.insert(displaced, at: lastIndex(withSplitOf: anchor)! + 1)
+        }
+        select(incoming)
+        return split
+    }
+
+    /// An everyday tab for a split: the tab itself (a drifted one comes back
+    /// first), or for a Basecamp tile, a copy of its page, placed at
+    /// `index` (or nowhere yet, if nil).
+    private func everyday(_ tab: Tab, at index: Int?) -> Tab {
+        switch tab.place {
+        case .open:
+            return tab
+        case .drifted:
+            bringBack(tab)
+            return tab
+        case .basecamp:
+            let copy = Tab(spaceID: tab.spaceID, url: tab.url, title: tab.title, icon: tab.icon, lastActiveAt: now())
+            if let index { tabs.insert(copy, at: min(index, tabs.count)) }
+            return copy
+        }
+    }
+
+    /// Ends a split view. Its two tabs stay right where they are, as
+    /// ordinary tabs.
+    public func closeSplit(_ split: SplitGroup) {
+        guard let first = tabs.first(where: { $0.splitID == split.id }) else { return }
+        // Both were on screen, so neither should drift straight away.
+        if onScreenTabIDs.contains(first.id) {
+            for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
+        }
+        _ = endSplit(of: first)
+    }
+
+    /// Sets how much of the width the left page takes (kept within
+    /// `SplitGroup.fractionRange`).
+    public func setLeftFraction(of split: SplitGroup, to fraction: Double) {
+        guard let index = splits.firstIndex(where: { $0.id == split.id }) else { return }
+        splits[index].leftFraction = SplitGroup.clamped(fraction)
+    }
+
+    /// Ends the split a tab is in, if any, and returns its other half.
+    private func endSplit(of tab: Tab) -> Tab? {
+        guard let splitID = tab.splitID else { return nil }
+        let partner = splitPartner(of: tab)
+        tab.splitID = nil
+        partner?.splitID = nil
+        splits.removeAll { $0.id == splitID }
+        return partner
+    }
+
+    /// Where a tab is in `tabs`, or the second half of its split if that's
+    /// further down.
+    private func lastIndex(withSplitOf tab: Tab) -> Int? {
+        tabs.lastIndex { $0.id == tab.id || (tab.splitID != nil && $0.splitID == tab.splitID) }
+    }
+
+    /// Moves a tab with `change`, then brings the other half of its split
+    /// back beside it, on the same side and in the same group.
+    private func movingSplit(of tab: Tab, _ change: () -> Void) {
+        let partner = splitPartner(of: tab)
+        let partnerOnLeft = partner.map { partner in
+            (tabs.firstIndex { $0.id == partner.id } ?? 0) < (tabs.firstIndex { $0.id == tab.id } ?? 0)
+        } ?? false
+        change()
+        if let partner, let from = tabs.firstIndex(where: { $0.id == partner.id }) {
+            let oldGroupID = partner.groupID
+            tabs.remove(at: from)
+            partner.groupID = tab.groupID
+            if let at = tabs.firstIndex(where: { $0.id == tab.id }) {
+                tabs.insert(partner, at: partnerOnLeft ? at : at + 1)
+            } else {
+                tabs.insert(partner, at: min(from, tabs.count))
+            }
+            if oldGroupID != tab.groupID { endIfEmpty(oldGroupID) }
+        }
+        keepSplitsTogether()
+    }
+
+    /// Puts each split's halves back side by side, in the first one's group,
+    /// if something landed between them.
+    private func keepSplitsTogether() {
+        for split in splits {
+            let pair = tabs(in: split)
+            guard pair.count == 2, let first = tabs.firstIndex(where: { $0.id == pair[0].id }),
+                  let second = tabs.firstIndex(where: { $0.id == pair[1].id }),
+                  second != first + 1 || pair[1].groupID != pair[0].groupID else { continue }
+            let oldGroupID = pair[1].groupID
+            tabs.remove(at: second)
+            pair[1].groupID = pair[0].groupID
+            tabs.insert(pair[1], at: first + 1)
+            if oldGroupID != pair[0].groupID { endIfEmpty(oldGroupID) }
+        }
     }
 
     // MARK: - Reopening
@@ -714,6 +889,7 @@ public final class BrowserStore {
             insertInTabList(members, at: position, fallback: arrivalIndex(in: group.spaceID))
             if let recent = members.max(by: { $0.lastActiveAt < $1.lastActiveAt }) { select(recent) }
         }
+        keepSplitsTogether()
     }
 
     /// Remembers an everyday or drifted tab about to close. The last tab of a group
@@ -838,8 +1014,8 @@ public final class BrowserStore {
     /// 30-day cutoff, and returns every loose tab that hasn't been on screen
     /// for the set number of used days, in every space, top to bottom. Days
     /// away from Firn don't count. Never drifted: Basecamp tiles, grouped
-    /// tabs, and the tab on screen. (Later, also a tab playing sound or in
-    /// split view.) The app drifts them with `drift(_:)`, one by one, so
+    /// tabs, the tab on screen, and tabs in split view. (Later, also a tab
+    /// playing sound.) The app drifts them with `drift(_:)`, one by one, so
     /// it can show each go.
     public func idleTabs() -> [Tab] {
         let today = Self.day(of: now())
@@ -849,7 +1025,7 @@ public final class BrowserStore {
         deleteExpiredDriftedTabs()
         guard let limit = driftAfter.days else { return [] }
         return tabs.filter { tab in
-            guard tab.place == .open, tab.groupID == nil, tab.id != activeTabID else { return false }
+            guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID else { return false }
             let lastSeen = Self.day(of: tab.lastActiveAt)
             return usedDays.count { $0 > lastSeen } >= limit
         }
@@ -858,7 +1034,7 @@ public final class BrowserStore {
     /// Drifts one loose tab away to its space's overflow ("Tidied away"). Its page lets go,
     /// so it costs nothing; it keeps its address, title, and icon.
     public func drift(_ tab: Tab) {
-        guard tab.place == .open, tab.groupID == nil, tab.id != activeTabID,
+        guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID,
               let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tab.sleep()
@@ -920,20 +1096,32 @@ public final class BrowserStore {
 
     // MARK: - Switching
 
-    /// Shows a tab. A drifted one comes back first, where new tabs go.
+    /// Shows a tab. A drifted one comes back first, where new tabs go. A
+    /// tab in split view shows with its other half, and is the one in use.
     public func select(_ tab: Tab) {
-        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        guard tabs.contains(where: { $0.id == tab.id }) else { return }
         closeLookout()
-        if tab.place == .drifted {
-            tabs.remove(at: index)
-            tab.place = .open
-            tab.driftedAt = nil
-            tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
-        }
-        activeTab?.lastActiveAt = now()
+        bringBack(tab)
+        for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
         wake(tab)
+        if let partner = splitPartner(of: tab) { wake(partner) }
         tab.lastActiveAt = now()
         activeTabID = tab.id
+    }
+
+    /// A drifted tab comes back where new tabs go.
+    private func bringBack(_ tab: Tab) {
+        guard tab.place == .drifted, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        tabs.remove(at: index)
+        tab.place = .open
+        tab.driftedAt = nil
+        tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
+    }
+
+    /// The tab on screen and, in split view, its other half.
+    private var onScreenTabIDs: Set<UUID> {
+        guard let activeTab else { return [] }
+        return Set([activeTab.id] + (splitPartner(of: activeTab).map { [$0.id] } ?? []))
     }
 
     /// Makes the tab's page, in its own space's data store, if it has none.
@@ -971,14 +1159,16 @@ public final class BrowserStore {
     /// Moves a tab to `position` in its own list (Basecamp, its group, or,
     /// for a loose tab, the tab list, counting each group as one; 0-based,
     /// the count means the end). Other lists and other spaces keep their
-    /// places.
+    /// places. The other half of its split comes too.
     public func move(_ tab: Tab, to position: Int) {
         guard let from = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        tabs.remove(at: from)
-        if tab.place == .open, tab.groupID == nil {
-            insertInTabList([tab], at: position, fallback: from)
-        } else {
-            insert(tab, at: position, in: siblings(of: tab), fallback: from)
+        movingSplit(of: tab) {
+            tabs.remove(at: from)
+            if tab.place == .open, tab.groupID == nil {
+                insertInTabList([tab], at: position, fallback: from)
+            } else {
+                insert(tab, at: position, in: siblings(of: tab), fallback: from)
+            }
         }
     }
 
@@ -991,7 +1181,8 @@ public final class BrowserStore {
         let records = tabs.enumerated().map { order, tab in
             var record = TabRecord(
                 id: tab.id, spaceID: tab.spaceID, place: tab.place, url: tab.url,
-                title: tab.savedTitle, icon: tab.icon, homeURL: tab.homeURL, groupID: tab.groupID, order: order,
+                title: tab.savedTitle, icon: tab.icon, homeURL: tab.homeURL, groupID: tab.groupID,
+                splitID: tab.splitID, order: order,
                 lastActiveAt: tab.lastActiveAt, openerTabID: tab.openerTabID, driftedAt: tab.driftedAt,
                 lastChangedAt: stamp
             )
@@ -1012,13 +1203,23 @@ public final class BrowserStore {
             return record
         }
         savedGroupRecords = Dictionary(groupRecords.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let splitRecords = splits.map { split in
+            var record = SplitRecord(
+                id: split.id, spaceID: split.spaceID, leftFraction: split.leftFraction, lastChangedAt: stamp
+            )
+            if let saved = savedSplitRecords[split.id], saved.sameContent(as: record) {
+                record.lastChangedAt = saved.lastChangedAt
+            }
+            return record
+        }
+        savedSplitRecords = Dictionary(splitRecords.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let window = WindowRecord(
             id: windowID, activeSpaceID: activeSpaceID, activeTabID: activeTabID,
             spaceTabIDs: lastTabBySpace.filter { $0.key != activeSpaceID },
             sidebarWidth: sidebarWidth, sidebarCollapsed: sidebarCollapsed
         )
         return Session(
-            spaces: spaces, groups: groupRecords, tabs: records, window: window, usedDays: usedDays,
+            spaces: spaces, groups: groupRecords, splits: splitRecords, tabs: records, window: window, usedDays: usedDays,
             unseenTidiedSpaceIDs: unseenTidiedSpaces.sorted { $0.uuidString < $1.uuidString }
         )
     }
@@ -1028,7 +1229,9 @@ public final class BrowserStore {
     /// are unique, Basecamp holds no more than its limit, icons are small
     /// PNGs, group names are tidy, and only everyday tabs sit in a group of
     /// their own space. Groups left with no tabs are dropped, and a group's
-    /// tabs are put back together where its first one is.
+    /// tabs are put back together where its first one is. A split view
+    /// comes back only with exactly two everyday tabs of its own space; they
+    /// go side by side where its first one is, in that one's group.
     private func restore(_ session: Session) {
         let spaceIDs = Set(spaces.map(\.id))
         var seenGroups = Set<UUID>()
@@ -1040,6 +1243,12 @@ public final class BrowserStore {
             )
         }
         let groupSpaces = Dictionary(restoredGroups.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })
+        var seenSplits = Set<UUID>()
+        let savedSplits = session.splits.compactMap { record -> SplitGroup? in
+            guard spaceIDs.contains(record.spaceID), seenSplits.insert(record.id).inserted else { return nil }
+            return SplitGroup(id: record.id, spaceID: record.spaceID, leftFraction: record.leftFraction)
+        }
+        let splitSpaces = Dictionary(savedSplits.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })
         var seen = Set<UUID>()
         var basecampCounts: [UUID: Int] = [:]
         let restoredAt = now()
@@ -1060,17 +1269,30 @@ public final class BrowserStore {
                 id: record.id, spaceID: record.spaceID, place: place, url: url ?? home,
                 title: record.title, icon: record.icon.flatMap { SiteIcon.isValidStored($0) ? $0 : nil },
                 homeURL: place == .basecamp ? home : nil, groupID: groupID,
+                splitID: record.splitID.flatMap { id in place == .open && splitSpaces[id] == record.spaceID ? id : nil },
                 openerTabID: record.openerTabID, lastActiveAt: record.lastActiveAt,
                 // Tabs from before Drifted tabs (or with a time still to
                 // come) start their 30 days now.
                 driftedAt: place == .drifted ? min(record.driftedAt ?? restoredAt, restoredAt) : nil
             )
         }
+        // Only pairs make a split; both halves go in the first one's group.
+        let halves = Dictionary(grouping: tabs.filter { $0.splitID != nil }, by: { $0.splitID! })
+        for (_, members) in halves {
+            if members.count == 2 {
+                members[1].groupID = members[0].groupID
+            } else {
+                for tab in members { tab.splitID = nil }
+            }
+        }
+        splits = savedSplits.filter { halves[$0.id]?.count == 2 }
         tabs = Self.keepingGroupsTogether(tabs)
+        keepSplitsTogether()
         let usedGroups = Set(tabs.compactMap(\.groupID))
         groups = restoredGroups.filter { usedGroups.contains($0.id) }
         savedRecords = Dictionary(session.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         savedGroupRecords = Dictionary(session.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        savedSplitRecords = Dictionary(session.splits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         usedDays = Self.cleanDays(session.usedDays)
         unseenTidiedSpaces = Set(session.unseenTidiedSpaceIDs).intersection(spaceIDs)
         windowID = session.window.id

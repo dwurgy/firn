@@ -11,6 +11,8 @@ public struct Session: Codable, Equatable, Sendable {
     public var spaces: [Space]
     /// Missing in files from before groups, which simply had none.
     public var groups: [GroupRecord]
+    /// Missing in files from before split view, which simply had none.
+    public var splits: [SplitRecord]
     public var tabs: [TabRecord]
     public var window: WindowRecord
     /// The days Firn was used, as "yyyy-MM-dd", for drifting. Missing in
@@ -21,25 +23,27 @@ public struct Session: Codable, Equatable, Sendable {
     public var unseenTidiedSpaceIDs: [UUID]
 
     public init(
-        version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], tabs: [TabRecord], window: WindowRecord,
+        version: Int = currentVersion, spaces: [Space], groups: [GroupRecord] = [], splits: [SplitRecord] = [], tabs: [TabRecord], window: WindowRecord,
         usedDays: [String] = [], unseenTidiedSpaceIDs: [UUID] = []
     ) {
         self.version = version
         self.spaces = spaces
         self.groups = groups
+        self.splits = splits
         self.tabs = tabs
         self.window = window
         self.usedDays = usedDays
         self.unseenTidiedSpaceIDs = unseenTidiedSpaceIDs
     }
 
-    private enum CodingKeys: String, CodingKey { case version, spaces, groups, tabs, window, usedDays, unseenTidiedSpaceIDs }
+    private enum CodingKeys: String, CodingKey { case version, spaces, groups, splits, tabs, window, usedDays, unseenTidiedSpaceIDs }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(Int.self, forKey: .version)
         spaces = try container.decode([Space].self, forKey: .spaces)
         groups = try container.decodeIfPresent([GroupRecord].self, forKey: .groups) ?? []
+        splits = try container.decodeIfPresent([SplitRecord].self, forKey: .splits) ?? []
         tabs = try container.decode([TabRecord].self, forKey: .tabs)
         window = try container.decode(WindowRecord.self, forKey: .window)
         usedDays = try container.decodeIfPresent([String].self, forKey: .usedDays) ?? []
@@ -74,6 +78,28 @@ public struct GroupRecord: Codable, Equatable, Sendable {
     }
 }
 
+/// A split view as saved; its tabs say they're in it.
+public struct SplitRecord: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var spaceID: UUID
+    public var leftFraction: Double
+    public var lastChangedAt: Date
+
+    public init(id: UUID, spaceID: UUID, leftFraction: Double, lastChangedAt: Date) {
+        self.id = id
+        self.spaceID = spaceID
+        self.leftFraction = leftFraction
+        self.lastChangedAt = lastChangedAt
+    }
+
+    /// The same split, ignoring when it last changed.
+    func sameContent(as other: SplitRecord) -> Bool {
+        var other = other
+        other.lastChangedAt = lastChangedAt
+        return self == other
+    }
+}
+
 /// A tab as saved: where it was, not its page.
 public struct TabRecord: Codable, Equatable, Sendable {
     public var id: UUID
@@ -86,6 +112,8 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var homeURL: URL?
     /// The group it's kept in, if any. Missing in files from before groups.
     public var groupID: UUID?
+    /// The split view it's half of. Missing in files from before split view.
+    public var splitID: UUID?
     /// Its position among all tabs (each space's lists keep this order).
     public var order: Int
     public var lastActiveAt: Date
@@ -96,7 +124,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
 
     public init(
         id: UUID, spaceID: UUID, place: Tab.Place, url: URL?, title: String, icon: Data? = nil, homeURL: URL?,
-        groupID: UUID? = nil, order: Int, lastActiveAt: Date, openerTabID: UUID?, driftedAt: Date? = nil,
+        groupID: UUID? = nil, splitID: UUID? = nil, order: Int, lastActiveAt: Date, openerTabID: UUID?, driftedAt: Date? = nil,
         lastChangedAt: Date
     ) {
         self.id = id
@@ -107,6 +135,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.icon = icon
         self.homeURL = homeURL
         self.groupID = groupID
+        self.splitID = splitID
         self.order = order
         self.lastActiveAt = lastActiveAt
         self.openerTabID = openerTabID

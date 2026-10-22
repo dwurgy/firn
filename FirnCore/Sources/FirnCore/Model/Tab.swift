@@ -28,6 +28,8 @@ public final class Tab: Identifiable {
     public internal(set) var homeURL: URL?
     /// The group an everyday tab is kept in, if any.
     public internal(set) var groupID: UUID?
+    /// The split view it's half of, if any.
+    public internal(set) var splitID: UUID?
     /// The tab whose link opened this one, if any.
     public var openerTabID: UUID?
     public internal(set) var lastActiveAt: Date
@@ -43,7 +45,7 @@ public final class Tab: Identifiable {
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
-        url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, groupID: UUID? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
+        url: URL?, title: String = "", icon: Data? = nil, homeURL: URL? = nil, groupID: UUID? = nil, splitID: UUID? = nil, openerTabID: UUID? = nil, lastActiveAt: Date,
         driftedAt: Date? = nil,
         page: (any PageController)? = nil
     ) {
@@ -52,6 +54,7 @@ public final class Tab: Identifiable {
         self.place = place
         self.homeURL = homeURL
         self.groupID = groupID
+        self.splitID = splitID
         self.openerTabID = openerTabID
         self.lastActiveAt = lastActiveAt
         self.driftedAt = driftedAt

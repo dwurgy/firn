@@ -24,7 +24,7 @@ struct CommandBarLayer: View {
                         .transition(.opacity)
                     CommandBar(store: store, window: window)
                         .frame(width: min(560, max(0, proxy.size.width - 64)))
-                        // About a third of the way down, as a glance, not a page.
+                        // About a fifth of the way down, as a glance, not a page.
                         .padding(.top, max(48, proxy.size.height * 0.22))
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
                 }
@@ -127,7 +127,11 @@ private struct CommandBar: View {
     private func move(by offset: Int, in rows: [CommandRow]) {
         guard !rows.isEmpty else { return }
         let index = min(max(selectedIndex(in: rows) + offset, 0), rows.count - 1)
+        guard rows[index].id != selection ?? rows[0].id else { return }
         selection = rows[index].id
+        // The field keeps VoiceOver's focus while typing, so say which row
+        // Return would pick.
+        AccessibilityNotification.Announcement(CommandRowView.spoken(rows[index], engine: engine)).post()
     }
 
     /// A short pause after typing, then the engine's suggestions. Each key
@@ -261,6 +265,8 @@ private struct CommandRowView: View {
                         .font(Theme.hintFont)
                         .foregroundStyle(Theme.faint)
                         .lineLimit(1)
+                        // A long title gives way, never the hint.
+                        .fixedSize()
                 }
             }
             .padding(.horizontal, Theme.rowPadding - 2)
@@ -273,8 +279,14 @@ private struct CommandRowView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel(hint.map { "\(title), \($0)" } ?? title)
+        .accessibilityLabel(Self.spoken(row, engine: engine))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// What VoiceOver says for a row: the words, then the hint.
+    static func spoken(_ row: CommandRow, engine: SearchEngine) -> String {
+        let view = CommandRowView(row: row, engine: engine, isSelected: false) {}
+        return view.hint.map { "\(view.title), \($0)" } ?? view.title
     }
 
     @ViewBuilder private var icon: some View {

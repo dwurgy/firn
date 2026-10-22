@@ -53,7 +53,10 @@ final class WebKitPageController: NSObject, PageController {
     /// over for a popup, which is a copy of the opener's.
     private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
-        let webView = FirnWebView(frame: .zero, configuration: configuration)
+        // A real starting size, not zero: a page that loads before it's ever
+        // on screen (a split's new half, say) laid out at 0×0 sat blank for
+        // seconds once shown. Its holder gives it the true size when shown.
+        let webView = FirnWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 768), configuration: configuration)
         self.webView = webView
         super.init()
         webView.page = self

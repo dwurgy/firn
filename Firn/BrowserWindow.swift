@@ -17,6 +17,9 @@ final class WindowModel {
     var isPickingSplit: Bool {
         splitPickAnchor != nil && splitPickAnchor?.id == store.activeTabID
     }
+    /// The command bar was opened to pick a split's page, so it sits over
+    /// the right half. Kept until it's next opened, so it fades out where it was.
+    private(set) var commandBarOnRightHalf = false
     /// Goes up each time the address bar is asked to take focus.
     private(set) var addressRequest = 0
 
@@ -241,7 +244,10 @@ final class WindowModel {
 
     /// Opens the command bar (⌘T, the New tab button, an empty window). No
     /// tab exists until something in it is picked.
-    func openCommandBar() { showsCommandBar = true }
+    func openCommandBar() {
+        commandBarOnRightHalf = splitPickAnchor != nil
+        showsCommandBar = true
+    }
 
     /// Closes the command bar, leaving nothing behind. The page in front
     /// gets the keys back, unless focus already went somewhere else (a
@@ -269,15 +275,11 @@ final class WindowModel {
         openCommandBar()
     }
 
-    /// Something was picked for the empty half: the split is made at once,
-    /// with no animation, since its two pages are already where they show.
+    /// Something was picked for the empty half: the split is made, in the
+    /// very places the two pages already show.
     func finishSplitPick(_ make: () -> Void) {
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        withTransaction(instant) {
-            make()
-            splitPickAnchor = nil
-        }
+        make()
+        splitPickAnchor = nil
     }
 
     /// Tabs just brought back: their site icons rise out of the overflow
@@ -554,81 +556,65 @@ private struct SidebarResizeHandle: View {
 }
 
 /// The page on screen, floating in the frame. With no tab open, a calm
-/// empty page; in split view, two pages side by side.
+/// empty page. In split view, two pages side by side, with a gap between
+/// them that can be dragged (double-click evens them) and a thin frost ring
+/// on the page in use; pressing the other page moves it there, and the
+/// address bar and buttons follow. Picking a page for a split, the page
+/// takes the left half beside an empty one. One layout for all three, so
+/// the left page never changes places between them (swapping whole layouts
+/// left the old one stuck over the new split).
 private struct PageArea: View {
     let store: BrowserStore
     let window: WindowModel
-
-    var body: some View {
-        if let tab = store.activeTab, let split = store.split(of: tab) {
-            SplitPages(store: store, split: split, inUseID: tab.id)
-        } else {
-            // Picking a page for a split, the page takes the left half, as
-            // it will in the split, beside an empty page for the right.
-            let picking = window.isPickingSplit
-            GeometryReader { proxy in
-                HStack(spacing: 0) {
-                    PagePane(tab: store.activeTab)
-                        .frame(width: picking ? SplitPicking.leftWidth(in: proxy.size.width) : proxy.size.width)
-                    if picking {
-                        PagePane(tab: nil)
-                            .padding(.leading, Theme.pageInset)
-                            .transition(.opacity)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Where the pages sit while a split is being picked: halves, as a new split has.
-enum SplitPicking {
-    static func leftWidth(in width: CGFloat) -> CGFloat {
-        max(width - Theme.pageInset, 1) * 0.5
-    }
-}
-
-/// Split view: two pages with a gap between them that can be dragged
-/// (double-click evens them). A thin frost ring marks the page in use;
-/// pressing the other page moves it there, and the address bar and
-/// buttons follow.
-private struct SplitPages: View {
-    let store: BrowserStore
-    let split: SplitGroup
-    let inUseID: UUID
     @State private var startFraction: Double?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let pair = store.tabs(in: split)
+        let active = store.activeTab
+        let split = active.flatMap { store.split(of: $0) }
+        let pair = split.map { store.tabs(in: $0) } ?? []
+        let fraction = split?.leftFraction ?? (window.isPickingSplit ? 0.5 : nil)
         GeometryReader { proxy in
             let room = max(proxy.size.width - Theme.pageInset, 1)
-            let leftWidth = room * split.leftFraction
             HStack(spacing: 0) {
-                if let left = pair.first { half(left).frame(width: leftWidth) }
-                SidebarResizeGrip(
-                    onDrag: { distance in
-                        let start = startFraction ?? split.leftFraction
-                        startFraction = start
-                        store.setLeftFraction(of: split, to: start + distance / room)
-                    },
-                    onEnd: { startFraction = nil },
-                    onDoubleClick: {
-                        withAnimation(Theme.slide(reduceMotion: reduceMotion)) {
-                            store.setLeftFraction(of: split, to: 0.5)
-                        }
+                page(pair.first ?? active, inUseID: split == nil ? nil : active?.id)
+                    .frame(width: fraction.map { room * $0 } ?? proxy.size.width)
+                if fraction != nil {
+                    if let split {
+                        grip(split, room: room)
+                    } else {
+                        Color.clear.frame(width: Theme.pageInset)
                     }
-                )
-                .frame(width: Theme.pageInset)
-                .accessibilityLabel("Resize split view")
-                if pair.count > 1 { half(pair[1]) }
+                    page(pair.count > 1 ? pair[1] : nil, inUseID: split == nil ? nil : active?.id)
+                }
             }
         }
     }
 
-    private func half(_ tab: FirnCore.Tab) -> some View {
-        let isInUse = tab.id == inUseID
-        return PagePane(tab: tab, onPointerDown: isInUse ? nil : { store.select(tab) })
+    private func grip(_ split: SplitGroup, room: CGFloat) -> some View {
+        SidebarResizeGrip(
+            onDrag: { distance in
+                let start = startFraction ?? split.leftFraction
+                startFraction = start
+                store.setLeftFraction(of: split, to: start + distance / room)
+            },
+            onEnd: { startFraction = nil },
+            onDoubleClick: {
+                withAnimation(Theme.slide(reduceMotion: reduceMotion)) {
+                    store.setLeftFraction(of: split, to: 0.5)
+                }
+            }
+        )
+        .frame(width: Theme.pageInset)
+        .accessibilityLabel("Resize split view")
+    }
+
+    /// A page; in split view (`inUseID` set), ringed when it's the one in
+    /// use, and made the one in use when pressed.
+    private func page(_ tab: FirnCore.Tab?, inUseID: UUID?) -> some View {
+        let isInUse = tab != nil && tab?.id == inUseID
+        let pressable = inUseID != nil && !isInUse
+        return PagePane(tab: tab, onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
                     .strokeBorder(Theme.frost, lineWidth: 2)
@@ -636,6 +622,13 @@ private struct SplitPages: View {
                     .allowsHitTesting(false)
             }
             .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
+    }
+}
+
+/// Where the pages sit while a split is being picked: halves, as a new split has.
+enum SplitPicking {
+    static func leftWidth(in width: CGFloat) -> CGFloat {
+        max(width - Theme.pageInset, 1) * 0.5
     }
 }
 

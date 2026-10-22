@@ -16,7 +16,7 @@ struct CommandBarLayer: View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
         GeometryReader { proxy in
             // Picking a page for a split, the bar sits over the empty right half.
-            let leftWidth = window.isPickingSplit ? SplitPicking.leftWidth(in: proxy.size.width) : 0
+            let leftWidth = window.commandBarOnRightHalf ? SplitPicking.leftWidth(in: proxy.size.width) : 0
             let rightStart = leftWidth == 0 ? 0 : leftWidth + Theme.pageInset
             ZStack(alignment: .top) {
                 if window.showsCommandBar {

@@ -1085,8 +1085,8 @@ struct TabRow<MenuItems: View>: View {
 ///
 /// Its motion: a new split's right half grows in beside the left as the
 /// left's title draws back. Separate Tabs ends it at once, the right's tab
-/// gliding in as its own row below; closing one half thaws it away as the other widens. Reduce Motion:
-/// short fades.
+/// gliding in as its own row below; closing one half closes it at once.
+/// Reduce Motion: short fades.
 struct SplitRow<MenuItems: View>: View {
     let left: FirnCore.Tab
     let right: FirnCore.Tab
@@ -1095,9 +1095,9 @@ struct SplitRow<MenuItems: View>: View {
     /// The page in use, when the split is on screen.
     let inUseID: UUID?
     let select: (FirnCore.Tab) -> Void
-    /// Closes a half, once it has thawed away.
+    /// Closes a half.
     let close: (FirnCore.Tab) -> Void
-    /// Separates the two tabs, once the halves have parted.
+    /// Separates the two tabs.
     let separate: () -> Void
     /// Called once a new split's halves have formed.
     var formed: () -> Void = {}
@@ -1105,9 +1105,9 @@ struct SplitRow<MenuItems: View>: View {
 
     /// Pointing anywhere on the row shows both halves' close buttons, as in Dia.
     @State private var rowHovered = false
-    /// While forming or parting, the left half's share, in place of the split's own.
+    /// While forming, the left half's share, in place of the split's own.
     @State private var share: Double?
-    /// A half fading: the right one forming, or one drawing away.
+    /// The right half, while it's forming.
     @State private var faded: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1204,23 +1204,9 @@ struct SplitRow<MenuItems: View>: View {
         separate()
     }
 
-    /// Closing one half: it thaws away as the other widens.
+    /// Closing one half: it goes at once, the other page widening as it does.
     private func closeHalf(_ tab: FirnCore.Tab) {
-        withdraw(tab) { close(tab) }
-    }
-
-    private func withdraw(_ tab: FirnCore.Tab, then commit: @escaping () -> Void) {
-        guard faded == nil else { return }
-        guard !reduceMotion else {
-            withAnimation(.easeOut(duration: 0.15)) { faded = tab.id } completion: { commit() }
-            return
-        }
-        withAnimation(Theme.thaw) {
-            share = tab.id == right.id ? 1 : 0
-            faded = tab.id
-        } completion: {
-            commit()
-        }
+        close(tab)
     }
 }
 

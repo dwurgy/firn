@@ -133,6 +133,29 @@ final class WindowModel {
         if wasShowing { focusPage() }
     }
 
+    /// ⌘W: closes the Lookout if one is open (as in Arc), or else the tab on screen.
+    func closeFront() {
+        if store.lookout != nil {
+            store.closeLookout()
+            focusPage()
+        } else if let tab = store.activeTab {
+            close(tab)
+        }
+    }
+
+    /// ⇧⌘T: brings back the last closed tab or group.
+    func reopenClosed() {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        withAnimation(Theme.glide(reduceMotion: reduceMotion)) { store.reopenClosed() }
+        focusPage()
+    }
+
+    /// The page in front: a Lookout's while one is open, so Back and Reload act on it.
+    var frontPage: (any PageController)? { store.lookout?.page ?? store.activeTab?.page }
+
+    /// The tab on screen, if it's an everyday tab (not a Basecamp tile).
+    var everydayTab: FirnCore.Tab? { store.activeTab.flatMap { $0.place == .open ? $0 : nil } }
+
     func duplicate(_ tab: FirnCore.Tab) {
         store.duplicate(tab)
         focusPage()
@@ -563,10 +586,8 @@ struct BrowserCommands: Commands {
     let window: WindowModel
 
     private var store: BrowserStore { window.store }
-    /// The page in front: a Lookout's while one is open, so Back and Reload act on it.
-    private var page: (any PageController)? { store.lookout?.page ?? store.activeTab?.page }
-    /// The tab on screen, if it's an everyday tab (not a Basecamp tile).
-    private var everydayTab: FirnCore.Tab? { store.activeTab.flatMap { $0.place == .open ? $0 : nil } }
+    private var page: (any PageController)? { window.frontPage }
+    private var everydayTab: FirnCore.Tab? { window.everydayTab }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -595,23 +616,12 @@ struct BrowserCommands: Commands {
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {
             // With a Lookout open, ⌘W closes the Lookout, not the tab under it (as in Arc).
-            Button(store.lookout == nil ? "Close Tab" : "Close Lookout") {
-                if store.lookout != nil {
-                    store.closeLookout()
-                    window.focusPage()
-                } else if let tab = store.activeTab {
-                    window.close(tab)
-                }
-            }
-            .keyboardShortcut("w")
-            .disabled(store.activeTab == nil && store.lookout == nil)
-            Button(store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab") {
-                let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                withAnimation(Theme.glide(reduceMotion: reduceMotion)) { store.reopenClosed() }
-                window.focusPage()
-            }
-            .keyboardShortcut("t", modifiers: [.command, .shift])
-            .disabled(store.nextToReopen == nil)
+            Button(store.lookout == nil ? "Close Tab" : "Close Lookout") { window.closeFront() }
+                .keyboardShortcut("w")
+                .disabled(store.activeTab == nil && store.lookout == nil)
+            Button(store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab") { window.reopenClosed() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(store.nextToReopen == nil)
             Button("Close Window") { NSApp.keyWindow?.performClose(nil) }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
         }

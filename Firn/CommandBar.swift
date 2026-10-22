@@ -54,16 +54,19 @@ private struct CommandBar: View {
     private let engine = SearchEngine.default
     private static let fieldHeight: CGFloat = 48
 
-    private var rows: [CommandRow] {
-        store.commandRows(for: text, searchEngine: engine, suggestions: suggestions)
+    @Environment(\.openSettings) private var openSettings
+
+    private func rows(actions: [BarAction]) -> [CommandRow] {
+        store.commandRows(for: text, searchEngine: engine, suggestions: suggestions, actions: actions.map(\.action))
     }
 
     var body: some View {
-        let rows = rows
+        let actions = actions
+        let rows = rows(actions: actions)
         let selected = selectedIndex(in: rows)
         let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
         VStack(spacing: 0) {
-            field(rows: rows, selected: selected)
+            field(rows: rows, actions: actions, selected: selected)
             if !rows.isEmpty {
                 Rectangle()
                     .fill(Theme.tileHairline)
@@ -71,7 +74,7 @@ private struct CommandBar: View {
                     .padding(.horizontal, Theme.rowPadding)
                 VStack(spacing: 2) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        CommandRowView(row: row, engine: engine, isSelected: index == selected) { pick(row) }
+                        CommandRowView(row: row, engine: engine, isSelected: index == selected) { pick(row, actions: actions) }
                     }
                 }
                 .padding(6)
@@ -93,7 +96,7 @@ private struct CommandBar: View {
         }
     }
 
-    private func field(rows: [CommandRow], selected: Int) -> some View {
+    private func field(rows: [CommandRow], actions: [BarAction], selected: Int) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15))
@@ -104,7 +107,7 @@ private struct CommandBar: View {
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.ink)
                 .focused($focused)
-                .onSubmit { if rows.indices.contains(selected) { pick(rows[selected]) } }
+                .onSubmit { if rows.indices.contains(selected) { pick(rows[selected], actions: actions) } }
                 .onExitCommand { window.closeCommandBar() }
                 .onChange(of: text) { selection = nil }
                 .onChange(of: focused) {
@@ -141,7 +144,14 @@ private struct CommandBar: View {
         suggestions = found
     }
 
-    private func pick(_ row: CommandRow) {
+    private func pick(_ row: CommandRow, actions: [BarAction]) {
+        // The bar goes first, so an action that opens a sheet or names a
+        // group gets the focus, not the page.
+        if case let .action(action) = row {
+            window.closeCommandBar(focusingPage: false)
+            actions.first { $0.action.id == action.id }?.run()
+            return
+        }
         let change = { @MainActor in
             switch row {
             case let .go(url), let .search(_, url, _):
@@ -154,13 +164,75 @@ private struct CommandBar: View {
             case let .closed(entry):
                 store.reopen(entry)
             case .action:
-                // Actions come in the next step.
                 break
             }
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2), change)
         window.closeCommandBar()
     }
+
+    /// What can be done by name right now, the same things as the menu bar
+    /// with the same shortcuts. Only what would do something is offered.
+    private var actions: [BarAction] {
+        var list: [BarAction] = []
+        func add(_ id: String, _ name: String, _ keywords: [String] = [], _ shortcut: String? = nil,
+                 when available: Bool = true, run: @escaping @MainActor () -> Void) {
+            guard available else { return }
+            list.append(BarAction(action: CommandAction(id: id, name: name, keywords: keywords, shortcut: shortcut), run: run))
+        }
+        let page = window.frontPage
+        let tab = window.everydayTab
+
+        add("reload", "Reload Page", ["refresh"], "⌘R", when: page?.url != nil) {
+            page?.reload()
+            window.focusPage()
+        }
+        add("back", "Back", ["previous", "page"], "⌘[", when: page?.canGoBack == true) {
+            page?.goBack()
+            window.focusPage()
+        }
+        add("forward", "Forward", ["next", "page"], "⌘]", when: page?.canGoForward == true) {
+            page?.goForward()
+            window.focusPage()
+        }
+        add("copy-link", "Copy Link", ["address", "url", "share"], "⇧⌘C", when: store.activeTab?.url != nil) {
+            if let tab = store.activeTab { window.copyLink(of: tab) }
+            window.focusPage()
+        }
+        add("duplicate", "Duplicate Tab", ["copy"], when: tab?.url != nil) {
+            if let tab { window.duplicate(tab) }
+        }
+        add("new-group", "New Group with This Tab", [], "⌃⌘N", when: tab != nil && tab?.groupID == nil) {
+            if let tab { window.newGroup(with: tab) }
+        }
+        add("close", store.lookout == nil ? "Close Tab" : "Close Lookout", [], "⌘W",
+            when: store.activeTab != nil || store.lookout != nil) {
+            window.closeFront()
+        }
+        add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
+            ["undo", "restore", "bring back"], "⇧⌘T", when: store.nextToReopen != nil) {
+            window.reopenClosed()
+        }
+        add("sidebar", window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", ["toggle"], "⌘S") {
+            window.toggleSidebar()
+            window.focusPage()
+        }
+        // Only the names of the other spaces, never what's in them.
+        for (index, space) in store.spaces.enumerated() where space.id != store.activeSpace.id {
+            add("space \(space.id)", "Switch to \(space.name)", ["space", "go"], index < 9 ? "⌃\(index + 1)" : nil) {
+                window.showSpace { store.selectSpace(space) }
+            }
+        }
+        add("new-space", "New Space…", ["add", "create", "space"]) { window.newSpace() }
+        add("settings", "Settings", ["preferences", "options"], "⌘,") { openSettings() }
+        return list
+    }
+}
+
+/// An action the bar can run: what FirnCore matches, and what picking it does.
+private struct BarAction {
+    let action: CommandAction
+    let run: @MainActor () -> Void
 }
 
 /// One row: an icon, the words, and a faint hint at the right saying what

@@ -494,20 +494,23 @@ public final class BrowserStore {
 
     // MARK: - Basecamp
 
-    /// Adds a tab to the end of its space's Basecamp, if there's room (taking
-    /// it out of its group). Its address becomes its home.
+    /// Adds a tab to its space's Basecamp, if there's room (taking it out of
+    /// its group and split): at `position` among the tiles when dragged
+    /// there (0-based; the count means the end), otherwise at the end. Its
+    /// address becomes its home.
     @discardableResult
-    public func addToBasecamp(_ tab: Tab) -> Bool {
-        guard tab.place != .basecamp, list(.basecamp, in: tab.spaceID).count < Self.basecampLimit,
-              let index = tabs.firstIndex(where: { $0.id == tab.id }),
+    public func addToBasecamp(_ tab: Tab, at position: Int? = nil) -> Bool {
+        let tiles = list(.basecamp, in: tab.spaceID)
+        guard tab.place != .basecamp, tiles.count < Self.basecampLimit,
+              tabs.contains(where: { $0.id == tab.id }),
               let home = tab.url else { return false }
         _ = endSplit(of: tab)
-        tabs.remove(at: index)
+        tabs.removeAll { $0.id == tab.id }
         let groupID = tab.groupID
         tab.place = .basecamp
         tab.homeURL = home
         tab.groupID = nil
-        tabs.append(tab)
+        insert(tab, at: position ?? tiles.count, in: tiles)
         endIfEmpty(groupID)
         return true
     }
@@ -521,6 +524,26 @@ public final class BrowserStore {
         tab.place = .open
         tab.homeURL = nil
         tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
+    }
+
+    /// A tile dragged out of Basecamp becomes an everyday tab right where it
+    /// was let go: `position` among `group`'s tabs, or in the tab list when
+    /// `group` is nil (as `move(_:toGroup:at:)`). Even a resting one stays,
+    /// since it was put there on purpose; it loads when clicked. It counts
+    /// as just seen, so it isn't tidied away straight after.
+    public func removeFromBasecamp(_ tab: Tab, toGroup group: TabGroup?, at position: Int) {
+        guard tab.place == .basecamp, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        if let group, group.spaceID != tab.spaceID || !groups.contains(where: { $0.id == group.id }) { return }
+        tabs.remove(at: index)
+        tab.place = .open
+        tab.homeURL = nil
+        tab.lastActiveAt = now()
+        if let group {
+            tab.groupID = group.id
+            insert(tab, at: position, in: Self.rows(tabs(in: group)), fallback: index)
+        } else {
+            insertInTabList([tab], at: position, fallback: index)
+        }
     }
 
     /// Takes a Basecamp tile back to its home address, and shows it.

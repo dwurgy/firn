@@ -130,6 +130,103 @@ struct BasecampAndSessionTests {
         #expect(hosts(store.openTabs) == ["c.example"])
     }
 
+    // MARK: - Dragging in and out of Basecamp
+
+    @Test func aTabDraggedInLandsAmongTheTilesWhereLetGo() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        let d = store.openTab(url("d"))
+        store.addToBasecamp(a)
+        store.addToBasecamp(b)
+        #expect(store.addToBasecamp(c, at: 1))
+        #expect(store.addToBasecamp(d, at: 0))
+        #expect(hosts(store.basecampTabs) == ["d.example", "a.example", "c.example", "b.example"])
+        #expect(c.homeURL == url("c"))
+        #expect(store.openTabs.isEmpty)
+    }
+
+    @Test func anEmptyBasecampTakesADraggedTab() {
+        let store = makeStore()
+        store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        #expect(store.basecampTabs.isEmpty)
+        #expect(store.addToBasecamp(b, at: 0))
+        #expect(hosts(store.basecampTabs) == ["b.example"])
+        #expect(hosts(store.openTabs) == ["a.example"])
+    }
+
+    @Test func aFullBasecampRefusesADraggedTab() {
+        let store = makeStore()
+        for n in 0..<BrowserStore.basecampLimit {
+            store.addToBasecamp(store.openTab(url("t\(n)")))
+        }
+        let extra = store.openTab(url("extra"))
+        #expect(!store.addToBasecamp(extra, at: 0))
+        #expect(extra.place == .open)
+        #expect(store.basecampTabs.count == BrowserStore.basecampLimit)
+    }
+
+    @Test func aTabDraggedInLeavesItsGroupAndSplit() throws {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let b = store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        try #require(store.openSplit(b, beside: a))
+        let group = try #require(store.newGroup(with: c))
+        store.addToBasecamp(b, at: 0)
+        #expect(a.splitID == nil && b.splitID == nil)
+        #expect(store.splits.isEmpty)
+        store.addToBasecamp(c, at: 0)
+        #expect(!store.tabGroups.contains { $0.id == group.id })
+        #expect(hosts(store.basecampTabs) == ["c.example", "b.example"])
+        #expect(hosts(store.openTabs) == ["a.example"])
+    }
+
+    @Test func aTileDraggedOutLandsInTheTabListWhereLetGo() {
+        let store = makeStore()
+        let tile = store.openTab(url("tile"))
+        store.openTab(url("x"))
+        store.openTab(url("y"))
+        store.addToBasecamp(tile)
+        store.removeFromBasecamp(tile, toGroup: nil, at: 1)
+        #expect(store.basecampTabs.isEmpty)
+        #expect(hosts(store.openTabs) == ["x.example", "tile.example", "y.example"])
+        #expect(tile.place == .open)
+        #expect(tile.homeURL == nil)
+    }
+
+    @Test func aRestingTileDraggedOutStaysAsATab() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let store = makeStore(now: { clock })
+        let tile = store.openTab(url("tile"))
+        store.openTab(url("x"))
+        store.addToBasecamp(tile)
+        store.close(tile)
+        #expect(tile.isResting)
+        clock = Date(timeIntervalSince1970: 1000)
+        store.removeFromBasecamp(tile, toGroup: nil, at: 0)
+        #expect(hosts(store.openTabs) == ["tile.example", "x.example"])
+        #expect(tile.isResting)
+        #expect(tile.lastActiveAt == clock)
+    }
+
+    @Test func aTileDraggedIntoAGroupJoinsItWhereLetGo() throws {
+        let store = makeStore()
+        let tile = store.openTab(url("tile"))
+        let x = store.openTab(url("x"))
+        let y = store.openTab(url("y"))
+        store.openTab(url("z"))
+        store.addToBasecamp(tile)
+        let group = try #require(store.newGroup(with: x))
+        store.move(y, into: group, at: 1)
+        store.removeFromBasecamp(tile, toGroup: group, at: 1)
+        #expect(hosts(store.tabs(in: group)) == ["x.example", "tile.example", "y.example"])
+        #expect(tile.groupID == group.id)
+        #expect(store.basecampTabs.isEmpty)
+    }
+
     // MARK: - Saving and restoring
 
     @Test func aSavedSessionComesBackAsItWas() {

@@ -1,8 +1,9 @@
-// Automatic updates: only an installed copy (Windows: by Firn Setup.exe;
-// Mac: in the Applications folder) asks for updates.
-// This copy (Linux, run from the source code) must stay quiet and still
-// open normally. Firn is started directly (not through Playwright) so its
-// log can be read from the very first line.
+// No more automatic updates: this is Firn's last version on Electron, and
+// the repository's releases will become the Mac app's, so no copy may ask
+// for them. The code has no updater left (Electron's autoUpdater or the
+// update.electronjs.org address), and Firn logs no update activity while
+// still opening normally. Firn is started directly (not through
+// Playwright) so its log can be read from the very first line.
 const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
@@ -15,7 +16,23 @@ const check = (n, ok, x = '') => {
     `${ok ? 'PASS' : 'FAIL'}  ${n}${x !== '' ? '  (' + x + ')' : ''}`,
   );
 };
+// Every file under src/, for words that mean an update check.
+const sources = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    return e.isDirectory() ? sources(p) : [p];
+  });
 (async () => {
+  const updater = sources(path.join(ROOT, 'src')).filter((f) =>
+    /autoUpdater|update\.electronjs|electron-updater|setFeedURL/.test(
+      fs.readFileSync(f, 'utf8'),
+    ),
+  );
+  check(
+    'no updater left in the code',
+    updater.length === 0,
+    updater.map((f) => path.relative(ROOT, f)).join(', '),
+  );
   execSync('rm -f /root/.config/Firn/session.json');
   fs.writeFileSync(
     '/root/.config/Firn/settings.json',
@@ -33,11 +50,7 @@ const check = (n, ok, x = '') => {
   let out = '';
   firn.stdout.on('data', (d) => (out += d));
   await wait(12000);
-  check(
-    'a copy run from the source code does not ask for updates',
-    out.includes('updates: off (Run from its source code') &&
-      !out.includes('updates: asking'),
-  );
+  check('Firn does no update check', !out.includes('updates:'));
   check('Firn still opens normally', out.includes('started'));
   firn.kill();
   process.exit(results.every(Boolean) ? 0 : 1);

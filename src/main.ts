@@ -60,13 +60,6 @@ import { isLiquidGlass, pageRadius } from './frame';
 import { cleanSettings, loadSettings, saveSettings } from './settings';
 import { isSpaceIcon, SPACE_ICON_NAMES, toSpaceIcon } from './spaceIcons';
 import { BASECAMP_MAX, TabManager } from './tabs';
-import {
-  checkForUpdates,
-  installUpdate,
-  onUpdateState,
-  startUpdates,
-  updateState,
-} from './updates';
 import { DEMO, demoBounds, installDemoHooks, applyDemoProfile } from './demo';
 import { macMenuTemplate } from './menu';
 import { matchShortcut, menuAccelerator } from './shortcuts';
@@ -1786,7 +1779,6 @@ const createWindow = () => {
     downloadsFolder: downloadsFolder(),
     version: app.getVersion(),
     chromium: process.versions.chrome.split('.')[0],
-    updates: updateState(),
     safeBrowsingAvailable: safeBrowsing.available,
     defaultBrowser,
   });
@@ -3196,10 +3188,6 @@ const createWindow = () => {
       sitePermissions.forgetAll();
       sendNav();
     },
-    // Settings > Updates: "Check for updates", and "Restart now" once a new
-    // version is ready.
-    'updates:check': () => checkForUpdates(),
-    'updates:install': () => installUpdate(),
     'firn:menu': () =>
       Menu.buildFromTemplate([
         {
@@ -3996,11 +3984,6 @@ const createWindow = () => {
       });
   }, SLEEP_CHECK_MS);
   win.on('closed', () => clearInterval(sleepEvery));
-  // Settings shows where updates are (checking, up to date, ready...).
-  const stopUpdateState = onUpdateState(() =>
-    send('settings:state', settingsState()),
-  );
-  win.on('closed', stopUpdateState);
   console.log(
     savedTabs.length
       ? `[Firn] Restored ${savedTabs.length} tab(s) from ${sessionPath()}`
@@ -4149,7 +4132,6 @@ app.whenReady().then(() => {
   if (!isFirstInstance) return;
   serveUi();
   createWindow();
-  if (!DEMO) startUpdates(debug);
 
   // On macOS, re-create a window when the dock icon is clicked and none are open.
   app.on('activate', () => {

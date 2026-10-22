@@ -23,6 +23,14 @@ public enum AddressInput {
         return addressWithoutScheme(text) ?? searchEngine.searchURL(for: text)
     }
 
+    /// Whether the text is an address (one Firn would open, or one it refuses,
+    /// like "javascript:…") rather than words to search for.
+    public static func isAddress(_ text: String) -> Bool {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains(where: \.isWhitespace) else { return false }
+        return explicitScheme(in: text) != nil || addressWithoutScheme(text) != nil
+    }
+
     /// The scheme the text starts with ("https" in "https://…", "javascript"
     /// in "javascript:…"), or nil. "localhost:3000" is a host and port, not a scheme.
     private static func explicitScheme(in text: String) -> String? {

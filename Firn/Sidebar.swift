@@ -1084,9 +1084,8 @@ struct TabRow<MenuItems: View>: View {
 /// shows the split with that page in use.
 ///
 /// Its motion: a new split's right half grows in beside the left as the
-/// left's title draws back. Separate Tabs draws the right half away as the
-/// left widens to a whole row, then its tab returns as its own row below;
-/// closing one half thaws it away as the other widens. Reduce Motion:
+/// left's title draws back. Separate Tabs ends it at once, the right's tab
+/// gliding in as its own row below; closing one half thaws it away as the other widens. Reduce Motion:
 /// short fades.
 struct SplitRow<MenuItems: View>: View {
     let left: FirnCore.Tab
@@ -1199,10 +1198,10 @@ struct SplitRow<MenuItems: View>: View {
         }
     }
 
-    /// Separate Tabs: the right half draws away as the left widens to a
-    /// whole row; then the split ends and its tab returns below.
+    /// Separate Tabs: the split ends at once, its pages and rows gliding
+    /// apart together (no show first; you just want the two tabs).
     private func part() {
-        withdraw(right) { separate() }
+        separate()
     }
 
     /// Closing one half: it thaws away as the other widens.

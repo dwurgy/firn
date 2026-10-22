@@ -242,6 +242,10 @@ private struct TabList: View {
     @State private var origin = PointBox()
     /// Where the list shows in the sidebar (see `riseBack`).
     @State private var shown = RectBox()
+    /// Where the list's content and the list itself sit in the window, so a
+    /// dragged tab knows when it's out over the page.
+    @State private var windowOrigin = PointBox()
+    @State private var shownInWindow = RectBox()
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -280,6 +284,9 @@ private struct TabList: View {
                     .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(Sidebar.space)).origin } action: {
                         origin.point = $0
                     }
+                    .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(BrowserWindow.space)).origin } action: {
+                        windowOrigin.point = $0
+                    }
                     .coordinateSpace(.named(Self.space))
                     // One drag for the whole list, so a tab can cross into and out
                     // of the group cards (a drag on the row itself would stop the
@@ -304,6 +311,9 @@ private struct TabList: View {
         // view don't get a flight.
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Sidebar.space)) } action: {
             shown.rect = $0
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserWindow.space)) } action: {
+            shownInWindow.rect = $0
         }
         .task(id: window.tidyQueue.map(\.id)) { await tidyAway() }
         .task(id: window.riseQueue.map(\.id)) { await riseBack() }
@@ -757,16 +767,19 @@ private struct TabList: View {
     @ViewBuilder private var lifted: some View {
         if let drag, let slot = slot(for: drag) {
             liftedRow(drag.tab, isActive: true)
-                .shadow(color: drag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
+                .shadow(color: drag.settling || drag.overPage ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
                 .frame(width: slot.width)
                 .offset(x: slot.minX)
                 .animation(reduceMotion ? nil : Self.glide, value: slot.width)
-                .offset(y: drag.follows ? slot.minY : drag.location.y - drag.grab.height)
+                .offset(y: drag.follows || drag.overPage ? slot.minY : drag.location.y - drag.grab.height)
                 // Carried from the menu, it glides along as its slot moves.
                 .animation(drag.follows ? Theme.thaw : nil, value: slot.minY)
-                .opacity(drag.settling && intoFoldedGroup ? 0 : 1)
-                // It sticks to the pointer; only settling into place glides.
-                .transaction { if !drag.settling { $0.animation = nil } }
+                // Out over the page (where its row follows the pointer), it
+                // rests in its slot, faded, until it's back.
+                .opacity(drag.settling && intoFoldedGroup ? 0 : drag.overPage ? 0.4 : 1)
+                // It sticks to the pointer; only settling into place, or
+                // resting while over the page, glides.
+                .transaction { if !drag.settling && !drag.overPage { $0.animation = nil } }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         } else if let groupDrag, let slot = frames[groupDrag.group.id] {
@@ -802,10 +815,12 @@ private struct TabList: View {
                     drag = TabDrag(
                         tab: tab, grab: CGSize(width: 0, height: value.startLocation.y - frame.minY),
                         location: value.location, target: currentTarget(of: tab))
+                    window.isDraggingTab = true
                     return
                 }
                 guard !current.settling else { return }
                 current.location = value.location
+                if overPage(value.location, current: &current) { return }
                 let target = target(at: value.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
                 if target == current.target {
                     drag = current
@@ -814,6 +829,45 @@ private struct TabList: View {
                     withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
                 }
             }
+    }
+
+    /// Out over the page, a tab that can open there in split view shows
+    /// where it would (frost over a half, see `PageArea`), its row resting
+    /// back in its slot. Back over the sidebar, the page goes back as it was.
+    /// True while it's over the page.
+    private func overPage(_ location: CGPoint, current: inout TabDrag) -> Bool {
+        let pointer = CGPoint(x: location.x + windowOrigin.point.x, y: location.y + windowOrigin.point.y)
+        let slide = Theme.slide(reduceMotion: reduceMotion)
+        guard let side = pageSide(at: pointer, for: current.tab) else {
+            if current.overPage {
+                current.overPage = false
+                withAnimation(slide) { window.pageDrop = nil }
+            }
+            return false
+        }
+        window.pageDropPointer = pointer
+        if !current.overPage {
+            current.overPage = true
+            current.target = currentTarget(of: current.tab)
+            withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
+        } else {
+            drag = current
+        }
+        let drop = PageDrop(tab: current.tab, side: side)
+        if window.pageDrop != drop { withAnimation(slide) { window.pageDrop = drop } }
+        return true
+    }
+
+    /// The half of the page `pointer` (in the window's space) is over, if
+    /// `tab` could open there; nil over the sidebar, or when it can't.
+    private func pageSide(at pointer: CGPoint, for tab: FirnCore.Tab) -> SplitSide? {
+        let pages = window.pagesFrame
+        guard store.canDropOnPage(tab), !window.isPickingSplit, !window.showsCommandBar,
+              pages.contains(pointer), pointer.x > shownInWindow.rect.maxX else { return nil }
+        // A split's halves meet at its divider; one page is split down the middle.
+        let fraction = store.activeTab.flatMap { store.split(of: $0) }?.leftFraction ?? 0.5
+        let middle = pages.minX + (pages.width - Theme.pageInset) * fraction + Theme.pageInset / 2
+        return pointer.x < middle ? .left : .right
     }
 
     /// Starts dragging a group if `start` is on its name line (and it isn't
@@ -869,6 +923,12 @@ private struct TabList: View {
     private func drop() {
         if groupDrag != nil { return dropGroup() }
         guard var current = drag, !current.settling else { return }
+        window.isDraggingTab = false
+        // Let go over the page: it opens there, and its row becomes the split's.
+        if current.overPage {
+            drag = nil
+            return window.dropOnPage()
+        }
         @MainActor func commit() {
             if store.openTabs.contains(where: { $0.id == current.tab.id }) {
                 switch current.target {
@@ -912,6 +972,8 @@ private struct TabDrag {
     var settling = false
     /// True when moved from the menu: the copy follows its slot, not a pointer.
     var follows = false
+    /// True while it's out over the page (see `TabList.overPage`).
+    var overPage = false
 }
 
 private struct GroupDrag {

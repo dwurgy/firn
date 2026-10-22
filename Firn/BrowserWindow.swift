@@ -25,6 +25,23 @@ final class WindowModel {
     /// Goes up each time the address bar is asked to take focus.
     private(set) var addressRequest = 0
 
+    /// A tab dragged out of the sidebar over the page: which half it's
+    /// over, where frost shows it would open (see `PageArea`).
+    var pageDrop: PageDrop?
+    /// The pointer during that drag, in the window's space, for the lifted
+    /// row following it over the page. Apart from `pageDrop`, so the pages
+    /// don't redraw as the pointer moves.
+    var pageDropPointer: CGPoint = .zero
+    /// Where the pages sit in the window, so a drag knows when it's over one.
+    @ObservationIgnored var pagesFrame: CGRect = .zero
+    /// A tab is being dragged in the sidebar: a peeking sidebar stays out
+    /// until it's let go, wherever the pointer goes.
+    var isDraggingTab = false {
+        didSet {
+            if !isDraggingTab, sidebarCollapsed, !pointerNearSidebar, !peekHeldForTyping { isPeeking = false }
+        }
+    }
+
     /// The sidebar's width while it's showing (CLAUDE.md: 200–360pt).
     var sidebarWidth = CGFloat(SidebarSizing.standard)
     private(set) var sidebarCollapsed = false
@@ -219,7 +236,7 @@ final class WindowModel {
         } else if !peekHeldForTyping {
             peekHideTask = Task { @MainActor in
                 try? await Task.sleep(for: delay)
-                guard !Task.isCancelled, !pointerNearSidebar, !peekHeldForTyping else { return }
+                guard !Task.isCancelled, !pointerNearSidebar, !peekHeldForTyping, !isDraggingTab else { return }
                 isPeeking = false
             }
         }
@@ -286,6 +303,18 @@ final class WindowModel {
         }
     }
 
+    /// A dragged tab let go over the page: it opens on the half the frost
+    /// showed, the frost giving way to the page.
+    func dropOnPage() {
+        guard let drop = pageDrop else { return }
+        let existing = Set(store.splits.map(\.id))
+        let split = withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+            pageDrop = nil
+            return store.dropOnPage(drop.tab, on: drop.side)
+        }
+        if let split, !existing.contains(split.id) { formingSplitID = split.id }
+    }
+
     /// Something was picked for the empty half: the split is made, in the
     /// very places the two pages already show.
     func finishSplitPick(_ make: () -> Void) {
@@ -316,6 +345,8 @@ final class WindowModel {
 
 /// One browser window: the sidebar and the page, on the space-tinted frame.
 struct BrowserWindow: View {
+    /// The whole window's space, for a tab dragged from the sidebar onto the page.
+    nonisolated static let space = "browserWindow"
     let window: WindowModel
     @State private var lights = TrafficLights()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -347,6 +378,9 @@ struct BrowserWindow: View {
                     .padding(.leading, window.sidebarWidth - 3)
             }
         }
+        // A tab dragged out over the page: its row follows the pointer, over everything.
+        .overlay(alignment: .topLeading) { PageDropGhost(window: window) }
+        .coordinateSpace(.named(Self.space))
         .background {
             ZStack {
                 Theme.frame
@@ -584,22 +618,63 @@ private struct PageArea: View {
         let active = store.activeTab
         let split = active.flatMap { store.split(of: $0) }
         let pair = split.map { store.tabs(in: $0) } ?? []
-        let fraction = split?.leftFraction ?? (window.isPickingSplit ? 0.5 : nil)
+        let drop = window.pageDrop
+        // Picking a split's page, or a tab dragged over one page, shows
+        // halves, as a new split has.
+        let fraction = split?.leftFraction ?? (window.isPickingSplit || drop != nil ? 0.5 : nil)
         GeometryReader { proxy in
             let room = max(proxy.size.width - Theme.pageInset, 1)
-            HStack(spacing: 0) {
-                page(pair.first ?? active, inUseID: split == nil ? nil : active?.id)
-                    .frame(width: fraction.map { room * $0 } ?? proxy.size.width)
-                if fraction != nil {
-                    if let split {
-                        grip(split, room: room)
-                    } else {
-                        Color.clear.frame(width: Theme.pageInset)
+            let leftWidth = fraction.map { room * $0 } ?? proxy.size.width
+            let rightX = leftWidth + Theme.pageInset
+            // Each page keeps its place in a ZStack, by its tab, so it glides
+            // from one half to the other instead of being made again.
+            ZStack(alignment: .topLeading) {
+                ForEach(slots(active: active, pair: pair, drop: drop)) { slot in
+                    Group {
+                        if slot.isFrost, let drop {
+                            DropFrost(tab: drop.tab, color: Theme.spaceColor(store.activeSpace.color))
+                                .transition(.opacity)
+                        } else {
+                            page(slot.tab, inUseID: split == nil ? nil : active?.id,
+                                 frosted: split != nil && drop?.side == slot.side ? drop?.tab : nil)
+                        }
                     }
-                    page(pair.count > 1 ? pair[1] : nil, inUseID: split == nil ? nil : active?.id)
+                    .frame(width: slot.side == nil ? proxy.size.width
+                               : slot.side == .left ? leftWidth : max(proxy.size.width - rightX, 0),
+                           height: proxy.size.height)
+                    // Padding, not an offset, so the web view itself moves, not just its picture.
+                    .padding(.leading, slot.side == .right ? rightX : 0)
+                }
+                if let split {
+                    grip(split, room: room)
+                        .frame(height: proxy.size.height)
+                        .padding(.leading, leftWidth)
                 }
             }
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserWindow.space)) } action: {
+            window.pagesFrame = $0
+        }
+    }
+
+    /// What shows where: a split's two pages; one page beside the frost of
+    /// a tab dragged over the other half (or beside an empty page while
+    /// one is picked); or one page across the whole width.
+    private func slots(active: FirnCore.Tab?, pair: [FirnCore.Tab], drop: PageDrop?) -> [PageSlot] {
+        if pair.count == 2 {
+            return [PageSlot(id: pair[0].id, tab: pair[0], side: .left),
+                    PageSlot(id: pair[1].id, tab: pair[1], side: .right)]
+        }
+        let id = active?.id ?? PageSlot.emptyID
+        if let drop {
+            return [PageSlot(id: id, tab: active, side: drop.side == .left ? .right : .left),
+                    PageSlot(id: PageSlot.frostID, tab: nil, side: drop.side, isFrost: true)]
+        }
+        if window.isPickingSplit {
+            return [PageSlot(id: id, tab: active, side: .left),
+                    PageSlot(id: PageSlot.emptyID, tab: nil, side: .right)]
+        }
+        return [PageSlot(id: id, tab: active, side: nil)]
     }
 
     private func grip(_ split: SplitGroup, room: CGFloat) -> some View {
@@ -622,7 +697,8 @@ private struct PageArea: View {
 
     /// A page; in split view (`inUseID` set), ringed when it's the one in
     /// use, and made the one in use when pressed.
-    private func page(_ tab: FirnCore.Tab?, inUseID: UUID?) -> some View {
+    /// `frosted`: a tab dragged over this half of a split, which would take its place.
+    private func page(_ tab: FirnCore.Tab?, inUseID: UUID?, frosted: FirnCore.Tab?) -> some View {
         let isInUse = tab != nil && tab?.id == inUseID
         let pressable = inUseID != nil && !isInUse
         return PagePane(tab: tab, onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
@@ -633,6 +709,106 @@ private struct PageArea: View {
                     .allowsHitTesting(false)
             }
             .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
+            .overlay {
+                if let frosted {
+                    DropFrost(tab: frosted, color: Theme.spaceColor(store.activeSpace.color))
+                        .transition(.opacity)
+                }
+            }
+    }
+}
+
+/// The row of a tab dragged over the page, shrunk to fit beside the
+/// pointer (in the sidebar, the list draws its own lifted row).
+private struct PageDropGhost: View {
+    let window: WindowModel
+
+    var body: some View {
+        if let drop = window.pageDrop {
+            HStack(spacing: 8) {
+                SiteIconView(icon: drop.tab.icon, size: 16) {
+                    Image(systemName: "globe").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                }
+                Text(drop.tab.title)
+                    .font(Theme.tabFont)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, Theme.rowPadding)
+            .frame(width: 220, height: Theme.rowHeight, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+                    .fill(Theme.activeTab)
+                    .shadow(color: Theme.shadowPageFar, radius: 8, y: 3)
+            }
+            .offset(x: window.pageDropPointer.x - 24, y: window.pageDropPointer.y - Theme.rowHeight / 2)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Where one page sits in `PageArea`: a half, or the whole width (`side` nil).
+private struct PageSlot: Identifiable {
+    /// The empty page beside one being picked for, or with no tab at all.
+    static let emptyID = UUID()
+    static let frostID = UUID()
+    let id: UUID
+    let tab: FirnCore.Tab?
+    let side: SplitSide?
+    var isFrost = false
+}
+
+/// A tab dragged out of the sidebar, over a half of the page.
+struct PageDrop: Equatable {
+    let tab: FirnCore.Tab
+    private let tabID: UUID
+    var side: SplitSide
+
+    @MainActor init(tab: FirnCore.Tab, side: SplitSide) {
+        self.tab = tab
+        tabID = tab.id
+        self.side = side
+    }
+
+    static func == (a: PageDrop, b: PageDrop) -> Bool { a.tabID == b.tabID && a.side == b.side }
+}
+
+/// Where a dragged tab would open: frost over that half, in the space's
+/// color, with the tab's site icon and title (`docs/split-drop-design.html`).
+private struct DropFrost: View {
+    let tab: FirnCore.Tab
+    let color: Color
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
+        VStack(spacing: 10) {
+            SiteIconView(icon: tab.icon, size: 32) {
+                Image(systemName: "globe").font(.system(size: 26)).foregroundStyle(Theme.muted)
+            }
+            Text(tab.title)
+                .font(Theme.tabFont)
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+                .frame(maxWidth: 260)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { glass(shape) }
+        .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1.5) }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private func glass(_ shape: RoundedRectangle) -> some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid).overlay { shape.fill(color.opacity(Theme.dropTint)) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear).glassEffect(.regular.tint(color.opacity(Theme.dropTint)), in: shape)
+        } else {
+            shape.fill(.ultraThinMaterial).overlay { shape.fill(color.opacity(Theme.dropTint)) }
+        }
     }
 }
 

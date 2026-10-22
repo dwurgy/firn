@@ -386,4 +386,51 @@ struct SplitViewTests {
         #expect(old.splits.isEmpty)
         #expect(makeStore(restoring: old).openTabs.count == 2)
     }
+
+    // MARK: - Dragging onto the page
+
+    @Test func droppingOnAHalfOfOnePageOpensASplitThere() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        store.select(tabs[0])
+        let split = try #require(store.dropOnPage(tabs[2], on: .left))
+        #expect(hosts(store.tabs(in: split)) == ["c.example", "a.example"])
+        #expect(store.activeTabID == tabs[2].id)
+    }
+
+    @Test func droppingOnAHalfOfASplitReplacesThatHalf() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        let split = try #require(store.openSplit(tabs[1], beside: tabs[0]))
+        let replaced = try #require(store.dropOnPage(tabs[3], on: .left))
+        #expect(replaced.id != split.id)
+        #expect(hosts(store.tabs(in: replaced)) == ["d.example", "b.example"])
+        // The replaced half goes right below the pair.
+        #expect(hosts(store.openTabs) == ["d.example", "b.example", "a.example", "c.example"])
+        #expect(tabs[0].splitID == nil)
+    }
+
+    @Test func whatsOnScreenAndSplitsCantBeDropped() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        try #require(store.openSplit(tabs[1], beside: tabs[0]))
+        #expect(!store.canDropOnPage(tabs[0]))
+        #expect(!store.canDropOnPage(tabs[1]))
+        #expect(store.canDropOnPage(tabs[2]))
+        store.select(tabs[2])
+        // A split not on screen is two pages already.
+        #expect(!store.canDropOnPage(tabs[0]))
+        #expect(store.dropOnPage(tabs[2], on: .right) == nil)
+    }
+
+    @Test func aTileDroppedOnThePageStaysInBasecamp() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        #expect(store.addToBasecamp(tabs[1]))
+        store.select(tabs[0])
+        let split = try #require(store.dropOnPage(tabs[1], on: .right))
+        #expect(store.basecampTabs.map(\.id) == [tabs[1].id])
+        #expect(hosts(store.tabs(in: split)) == ["a.example", "b.example"])
+        #expect(store.tabs(in: split).allSatisfy { $0.place == .open })
+    }
 }

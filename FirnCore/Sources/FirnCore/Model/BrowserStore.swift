@@ -765,6 +765,28 @@ public final class BrowserStore {
         return split
     }
 
+    /// Whether `tab` can be dragged onto the page to open it in split view:
+    /// not what's already on screen, not a split (it's two pages already),
+    /// and not while a Lookout is open over the page.
+    public func canDropOnPage(_ tab: Tab) -> Bool {
+        guard lookout == nil, let active = activeTab, active.spaceID == tab.spaceID else { return false }
+        return tab.splitID == nil && !onScreenTabIDs.contains(tab.id)
+    }
+
+    /// Opens `tab` on `side` of the page: beside the tab on screen, or, in
+    /// a split, in place of that half (the other half stays).
+    @discardableResult
+    public func dropOnPage(_ tab: Tab, on side: SplitSide) -> SplitGroup? {
+        guard canDropOnPage(tab), let active = activeTab else { return nil }
+        var anchor = active
+        if let split = split(of: active) {
+            let pair = tabs(in: split)
+            guard pair.count == 2 else { return nil }
+            anchor = side == .left ? pair[1] : pair[0]
+        }
+        return openSplit(tab, beside: anchor, on: side)
+    }
+
     /// An everyday tab for a split: the tab itself (a drifted one comes back
     /// first), or for a Basecamp tile, a copy of its page, placed at
     /// `index` (or nowhere yet, if nil).

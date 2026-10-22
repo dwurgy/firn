@@ -1,0 +1,237 @@
+<!doctype html>
+<!--
+  Split view, step 4: dragging a tab onto the page, as David approved it (2026-10-21).
+  Drag a tab row out of the sidebar and over the page.
+  - One page on screen: over a half, the page glides to the other half, and the empty half
+    frosts over in the space's color with the tab's icon and title. Let go to make the split.
+  - A split on screen: the half under the pointer frosts over the same way (it'll be replaced).
+  - Back over the sidebar, or let go there: everything glides back.
+  The lifted row follows the pointer out of the sidebar and shrinks to fit its title.
+  Reduce Motion: no gliding; the frost fades in and out.
+-->
+<meta charset="utf-8">
+<title>Split drop design</title>
+<style>
+:root{--glacier:#7F9CB0}
+body{margin:24px;font:13px -apple-system,system-ui,sans-serif;background:#f4f2ee;color:#241F1B;user-select:none;-webkit-user-select:none}
+h1{font-size:15px;font-weight:600;margin:0 0 4px}
+p.note{margin:0 0 14px;color:#5E564E;max-width:720px;line-height:1.45}
+.controls{display:flex;gap:16px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.controls button{font:inherit;border:0;border-radius:8px;padding:6px 12px;background:#241F1B;color:#FBFAF8;cursor:pointer}
+.controls label{display:flex;gap:6px;align-items:center;color:#5E564E}
+
+.win{--frame:#D8D8D3;--page:#FBFAF8;--ink:#241F1B;--mut:#5E564E;--faint:#9D9389;--act:#FBFAF8;
+  --frost:rgba(130,168,190,.45);--hover:rgba(70,55,40,.07);--sh:0 1px 1px rgba(60,40,20,.08);
+  --shFar:0 8px 24px rgba(70,50,30,.16);--wash:rgba(251,250,248,.55);--line:rgba(36,31,27,.08);
+  position:relative;width:min(720px,100%);height:420px;border-radius:12px;background:var(--frame);display:flex;overflow:hidden;
+  box-shadow:0 20px 50px rgba(70,50,30,.18);margin-bottom:28px}
+.win.dark{--frame:#444546;--page:#2B2826;--ink:#F5F1EC;--mut:#D4CDC5;--faint:#958D85;--act:rgba(245,241,236,.14);
+  --frost:rgba(160,196,214,.45);--hover:rgba(245,241,236,.07);--sh:0 1px 1px rgba(0,0,0,.15);
+  --shFar:0 8px 24px rgba(0,0,0,.35);--wash:rgba(43,40,38,.5);--line:rgba(245,241,236,.08)}
+.side{width:200px;flex:none;padding:12px 10px;box-sizing:border-box;position:relative;z-index:1}
+.lights{display:flex;gap:8px;height:20px;align-items:center;padding-left:4px;margin-bottom:12px}
+.lights i{width:12px;height:12px;border-radius:50%;background:var(--faint);opacity:.45}
+.addr{height:30px;border-radius:8px;background:var(--hover);color:var(--mut);display:flex;align-items:center;padding:0 10px;margin-bottom:20px;font-size:12px}
+.row{height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--ink);white-space:nowrap;overflow:hidden;border-radius:10px;margin-bottom:4px;cursor:default;transition:opacity .2s ease-out}
+.row:hover{background:var(--hover)}
+.row.on{background:var(--act);box-shadow:var(--sh)}
+.row.away{opacity:.35}
+.ic{width:16px;height:16px;border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:600}
+.t{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent);mask-image:linear-gradient(90deg,#000 80%,transparent);min-width:0}
+.split{display:flex;height:36px;border-radius:10px;background:var(--act);box-shadow:var(--sh);margin-bottom:4px}
+.split .h{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;color:var(--ink);white-space:nowrap}
+.newtab{color:var(--mut)}
+
+.pages{position:relative;flex:1;margin:8px 8px 8px 0}
+.pane{position:absolute;top:0;bottom:0;border-radius:12px;background:var(--page);overflow:hidden;
+  box-shadow:4px 8px 24px rgba(70,50,30,.12);transition:left .25s cubic-bezier(.2,.8,.2,1),width .25s cubic-bezier(.2,.8,.2,1)}
+.win.dark .pane{box-shadow:4px 8px 24px rgba(0,0,0,.3)}
+.pane.inuse::after{content:"";position:absolute;inset:0;border-radius:12px;box-shadow:inset 0 0 0 2px var(--frost);pointer-events:none}
+.site{padding:18px 22px;color:var(--ink)}
+.site .hd{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;margin-bottom:18px}
+.site .hd .ic{width:22px;height:22px;border-radius:6px;font-size:12px}
+.bar{height:9px;border-radius:5px;background:var(--line);margin:0 0 11px}
+.block{height:90px;border-radius:10px;background:var(--line);margin:16px 0}
+
+/* The frost that shows where the dragged tab will go. */
+.frost{position:absolute;top:0;bottom:0;border-radius:12px;opacity:0;pointer-events:none;
+  background:linear-gradient(160deg,var(--wash),transparent 70%),color-mix(in srgb,var(--glacier) 18%,transparent);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);
+  box-shadow:inset 0 0 0 1.5px var(--frost),inset 0 1px 0 rgba(255,255,255,.35);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  transition:opacity .2s ease-out,left .25s cubic-bezier(.2,.8,.2,1),width .25s cubic-bezier(.2,.8,.2,1)}
+.frost.show{opacity:1}
+.frost .ic{width:36px;height:36px;border-radius:9px;font-size:16px;box-shadow:0 2px 6px rgba(70,50,30,.18)}
+.frost .ft{color:var(--mut);font-size:13px;max-width:80%;white-space:nowrap;overflow:hidden;text-overflow:clip;
+  -webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+
+.ghost{position:absolute;z-index:5;height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:10px;
+  background:var(--act);color:var(--ink);white-space:nowrap;box-shadow:var(--shFar);pointer-events:none;overflow:hidden;
+  transition:width .2s ease-out;box-sizing:border-box}
+.win.dark .ghost{background:#4a4643}
+
+.rm .pane,.rm .frost{transition:opacity .15s ease-out}
+.rm .ghost{transition:none}
+.cap{font-size:12px;color:#5E564E;margin:-18px 0 22px}
+</style>
+
+<h1>Dragging a tab onto the page</h1>
+<p class="note">Drag any tab row (not the one on screen) out of the sidebar and over the page. Move between the left and right halves, go back over the sidebar, and let go over the page to make the split. Then try it with a split already on screen.</p>
+<div class="controls">
+  <button id="reset">Start over: one page</button>
+  <button id="splitBtn">Start with a split on screen</button>
+  <label><input type="checkbox" id="rm"> Reduce Motion</label>
+</div>
+
+<div id="host"></div>
+
+<script>
+const sites = {
+  snow:  {t:'The Art of Play LP | Snow Peak', l:'S', c:'#8a8580'},
+  steam: {t:'SteamDB | Database', l:'S', c:'#1b2838'},
+  goog:  {t:'portland - Google Search', l:'G', c:'#4285F4'},
+  wiki:  {t:'Firn - Wikipedia', l:'W', c:'#6b6b6b'},
+  mail:  {t:'Inbox (3) - Mail', l:'M', c:'#c0634a'}
+};
+const order = ['snow','steam','goog','wiki','mail'];
+let start = 'single';
+
+function icon(k){ const s=sites[k]; return `<span class="ic" style="background:${s.c}">${s.l}</span>`; }
+function sitePage(k){
+  return `<div class="site"><div class="hd">${icon(k)}<span>${sites[k].t.split(' |')[0].split(' - ')[0]}</span></div>
+    <div class="bar" style="width:70%"></div><div class="bar" style="width:92%"></div><div class="bar" style="width:55%"></div>
+    <div class="block"></div><div class="bar" style="width:80%"></div><div class="bar" style="width:64%"></div></div>`;
+}
+
+function build(win, dark){
+  // state: pages = [left] or [left,right]; inUse index
+  const st = {pages: start==='single' ? ['snow'] : ['snow','goog'], inUse:0};
+  win.className = 'win' + (dark?' dark':'');
+  win.innerHTML = `<div class="side"><div class="lights"><i></i><i></i><i></i></div>
+     <div class="addr">snowpeak.com</div><div class="list"></div></div>
+     <div class="pages"></div>`;
+  const list = win.querySelector('.list'), pagesEl = win.querySelector('.pages');
+
+  function renderList(){
+    const p = st.pages;
+    let h = '';
+    let placedSplit = false;
+    for(const k of order){
+      if(p.length===2 && p.includes(k)){
+        if(placedSplit) continue; placedSplit = true;
+        h += `<div class="split"><div class="h">${icon(p[0])}<span class="t">${sites[p[0]].t}</span></div><div class="h">${icon(p[1])}<span class="t">${sites[p[1]].t}</span></div></div>`;
+      } else {
+        h += `<div class="row ${p[0]===k&&p.length===1?'on':''}" data-k="${k}">${icon(k)}<span class="t">${sites[k].t}</span></div>`;
+      }
+    }
+    h += `<div class="row newtab"><span style="width:16px;text-align:center">+</span>New tab</div>`;
+    list.innerHTML = h;
+    list.querySelectorAll('.row[data-k]').forEach(r=>{
+      if(!st.pages.includes(r.dataset.k)) r.addEventListener('pointerdown', e=>beginDrag(e, r.dataset.k, r));
+    });
+  }
+
+  // Panes keyed by site so they glide instead of being rebuilt.
+  const panes = {};
+  const frost = document.createElement('div'); frost.className='frost';
+  function pane(k){
+    if(!panes[k]){ const d=document.createElement('div'); d.className='pane'; d.innerHTML=sitePage(k); pagesEl.appendChild(d); panes[k]=d; }
+    return panes[k];
+  }
+  const L = 'calc(50% - 4px)', R = 'calc(50% + 4px)';
+  function layout(hover, incoming){
+    // hover: null | 'left' | 'right'
+    Object.values(panes).forEach(d=>d.style.display = 'none');
+    const p = st.pages;
+    if(p.length===1){
+      const a = pane(p[0]); a.style.display='block'; a.classList.remove('inuse');
+      if(hover==='right'){ a.style.left='0'; a.style.width=L; frost.style.left=R; frost.style.width=L; }
+      else if(hover==='left'){ a.style.left=R; a.style.width=L; frost.style.left='0'; frost.style.width=L; }
+      else { a.style.left='0'; a.style.width='100%'; }
+    } else {
+      p.forEach((k,i)=>{ const d=pane(k); d.style.display='block'; d.style.left = i? R:'0'; d.style.width=L; d.classList.toggle('inuse', i===st.inUse); });
+      if(hover){ frost.style.left = hover==='left'?'0':R; frost.style.width=L; }
+    }
+    if(hover && incoming){
+      frost.innerHTML = `${icon(incoming)}<span class="ft">${sites[incoming].t}</span>`;
+      frost.classList.add('show');
+    } else frost.classList.remove('show');
+    pagesEl.appendChild(frost);
+  }
+
+  let drag = null;
+  function beginDrag(e, k, rowEl){
+    e.preventDefault();
+    const wr = win.getBoundingClientRect(), rr = rowEl.getBoundingClientRect();
+    drag = {k, rowEl, grabX:e.clientX-rr.left, grabY:e.clientY-rr.top, moved:false, sx:e.clientX, sy:e.clientY, hover:null};
+    win.setPointerCapture?.(e.pointerId);
+  }
+  function ghostFor(k){
+    const g = document.createElement('div'); g.className='ghost';
+    g.innerHTML = `${icon(k)}<span class="t">${sites[k].t}</span>`; win.appendChild(g); return g;
+  }
+  win.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    if(!drag.moved){
+      if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy) < 6) return;
+      drag.moved = true; drag.ghost = ghostFor(drag.k); drag.rowEl.classList.add('away');
+      const rr = drag.rowEl.getBoundingClientRect(); drag.ghost.style.width = rr.width+'px';
+    }
+    const wr = win.getBoundingClientRect(), pr = pagesEl.getBoundingClientRect();
+    const overPage = e.clientX > pr.left && e.clientX < pr.right && e.clientY > pr.top && e.clientY < pr.bottom;
+    // Over the page the row shrinks to its title and sits by the pointer.
+    if(overPage){
+      drag.ghost.style.width = '210px';
+      drag.ghost.style.left = (e.clientX - wr.left - 24)+'px';
+      drag.ghost.style.top  = (e.clientY - wr.top - 18)+'px';
+    } else {
+      const rr = drag.rowEl.getBoundingClientRect();
+      drag.ghost.style.width = rr.width+'px';
+      drag.ghost.style.left = (e.clientX - wr.left - drag.grabX)+'px';
+      drag.ghost.style.top  = (e.clientY - wr.top - drag.grabY)+'px';
+    }
+    const hover = overPage ? (e.clientX < pr.left + pr.width/2 ? 'left' : 'right') : null;
+    if(hover !== drag.hover){ drag.hover = hover; layout(hover, drag.k); }
+  });
+  function end(){
+    if(!drag) return;
+    const d = drag; drag = null;
+    if(d.ghost){
+      if(d.hover){
+        // The split is made where the frost was.
+        if(st.pages.length===1){ st.pages = d.hover==='right' ? [st.pages[0], d.k] : [d.k, st.pages[0]]; }
+        else { st.pages[d.hover==='left'?0:1] = d.k; }
+        st.inUse = d.hover==='left'?0:1;
+        d.ghost.remove();
+        frost.classList.remove('show');
+        layout(null);
+        renderList();
+      } else {
+        // Back to its row.
+        const rr = d.rowEl.getBoundingClientRect(), wr = win.getBoundingClientRect();
+        d.ghost.style.transition = win.classList.contains('rmw')||rm.checked ? 'none' : 'left .2s ease-out, top .2s ease-out, width .2s ease-out';
+        d.ghost.style.left = (rr.left-wr.left)+'px'; d.ghost.style.top=(rr.top-wr.top)+'px'; d.ghost.style.width=rr.width+'px';
+        setTimeout(()=>{ d.ghost.remove(); d.rowEl.classList.remove('away'); }, rm.checked?0:200);
+        layout(null);
+      }
+    }
+  }
+  win.addEventListener('pointerup', end);
+  win.addEventListener('pointercancel', end);
+  renderList(); layout(null);
+}
+
+const host = document.getElementById('host'), rm = document.getElementById('rm');
+function all(){
+  host.innerHTML = '';
+  for(const dark of [false,true]){
+    const w = document.createElement('div'); host.appendChild(w); build(w, dark);
+    const c = document.createElement('div'); c.className='cap'; c.textContent = dark ? 'Dark' : 'Light'; host.appendChild(c);
+  }
+  host.classList.toggle('rm', rm.checked);
+}
+document.getElementById('reset').onclick = ()=>{ start='single'; all(); };
+document.getElementById('splitBtn').onclick = ()=>{ start='split'; all(); };
+rm.onchange = ()=>host.classList.toggle('rm', rm.checked);
+all();
+</script>

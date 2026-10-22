@@ -5,8 +5,8 @@ import path from 'node:path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { MakerDeb } from '@electron-forge/maker-deb';
-import { MakerRpm } from '@electron-forge/maker-rpm';
+import { MakerDeb, type MakerDebConfig } from '@electron-forge/maker-deb';
+import { MakerRpm, type MakerRpmConfig } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -64,6 +64,43 @@ const windowsSign =
       }
     : undefined;
 
+// Linux: the .rpm and .deb install Firn as /usr/bin/firn with a firn.desktop
+// launcher (Network > Web Browser), in sizes the menus and docks pick from.
+// The launcher's "--" keeps a crafted link from posing as a Chromium flag,
+// as the Windows handler's does (src/defaultBrowser.ts).
+const linux = process.platform === 'linux';
+const linuxIcons = {
+  ...Object.fromEntries(
+    [16, 24, 32, 48, 64, 128, 256, 512].map((size) => [
+      `${size}x${size}`,
+      `./brand/app-icons/firn-app-icon-windows-glacier-${size}.png`,
+    ]),
+  ),
+  scalable: './brand/svg/firn-app-icon-windows-glacier.svg',
+};
+const linuxPackage = {
+  name: 'firn',
+  bin: 'firn',
+  productName: 'Firn',
+  genericName: 'Web Browser',
+  homepage: 'https://firnbrowser.com',
+  // A size-to-file map works (each lands in /usr/share/icons/hicolor),
+  // though Forge's types only know a single file.
+  icon: linuxIcons as unknown as string,
+  // WebBrowser is a freedesktop.org sub-category Forge's types don't list.
+  categories: ['Network', 'WebBrowser'],
+  mimeType: [
+    'x-scheme-handler/http',
+    'x-scheme-handler/https',
+    'text/html',
+    'application/xhtml+xml',
+    'application/pdf',
+    'image/svg+xml',
+    'image/webp',
+  ],
+  desktopTemplate: './assets/linux/firn.desktop.ejs',
+};
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -80,6 +117,13 @@ const config: ForgeConfig = {
     // macOS: Firn is a browser. It opens http and https links and web page
     // files, so it can be chosen as the default browser (src/defaultBrowser.ts).
     protocols: [{ name: 'Web page', schemes: ['http', 'https'] }],
+    // Linux: lowercase "firn", as Linux commands are and as the .rpm and
+    // .deb expect (Windows and macOS keep Firn.exe and Firn.app). The icon
+    // goes beside the app too, for the window (appIcon in src/main.ts).
+    ...(linux && {
+      executableName: 'firn',
+      extraResource: ['./assets/icon.png'],
+    }),
     // The texts macOS shows the first time a website asks for the camera,
     // the microphone, or the location (Firn asks for each site as well).
     extendInfo: {
@@ -166,8 +210,27 @@ const config: ForgeConfig = {
       ...(windowsSign && { windowsSign }),
     }),
     new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
+    // Linux: Fedora's .rpm and Debian/Ubuntu's .deb (npm run make:rpm or
+    // make:deb; each needs its own tool: rpm-build, or dpkg and fakeroot).
+    // Both also require two libraries Firn's program needs that the
+    // defaults leave out: sound (ALSA) and printing (CUPS). The .rpm's own
+    // spec fixes two things in the stock one (see the file).
+    new MakerRpm({
+      options: {
+        ...linuxPackage,
+        license: 'MPL-2.0',
+        requires: ['(alsa-lib or libasound2)', '(cups-libs or libcups2)'],
+        specTemplate: './assets/linux/firn.spec.ejs',
+      } as MakerRpmConfig['options'],
+    }),
+    new MakerDeb({
+      options: {
+        ...linuxPackage,
+        section: 'web',
+        priority: 'optional',
+        depends: ['libasound2t64 | libasound2', 'libcups2t64 | libcups2'],
+      } as MakerDebConfig['options'],
+    }),
   ],
   plugins: [
     new VitePlugin({

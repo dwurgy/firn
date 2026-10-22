@@ -364,14 +364,15 @@ function lockUi(web: WebContents) {
   web.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
-// Firn's app icon (assets/icon.*), if it's there.
+// Firn's app icon (assets/icon.*), if it's there. A Linux build carries it
+// beside the app (packagerConfig.extraResource), for the window's icon on X11.
 function appIcon() {
-  const file = path.join(
-    app.getAppPath(),
-    'assets',
-    process.platform === 'win32' ? 'icon.ico' : 'icon.png',
-  );
-  return fs.existsSync(file) ? file : undefined;
+  const name = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+  const files = [
+    path.join(app.getAppPath(), 'assets', name),
+    path.join(process.resourcesPath, name),
+  ];
+  return files.find((file) => fs.existsSync(file));
 }
 
 // Fetches `url` and reads its body, up to `max` bytes: null if it's bigger,
@@ -4099,7 +4100,7 @@ app.on('second-instance', (_event, argv) => {
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.focus();
-  // A link clicked in another app (Windows starts Firn again with it).
+  // A link clicked in another app (Windows and Linux start Firn again with it).
   receiveLinks(linksFromArguments(argv));
 });
 

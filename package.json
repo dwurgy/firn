@@ -1,6 +1,7 @@
 {
   "name": "firn",
   "productName": "Firn",
+  "desktopName": "firn.desktop",
   "version": "0.11.0",
   "private": true,
   "description": "A calm, minimalist desktop browser.",
@@ -15,6 +16,8 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "make:rpm": "electron-forge make --targets rpm",
+    "make:deb": "electron-forge make --targets deb",
     "release": "electron-forge release",
     "lint": "oxlint && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",

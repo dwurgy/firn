@@ -11,13 +11,14 @@
 //   removes them on uninstall. Windows doesn't let any app make itself the
 //   default (so no app can sneakily take over), so "Make Firn default…"
 //   opens that Settings page at Firn, and the person picks it there.
-// Linux isn't offered (its packages are set up by the system).
+// Linux isn't offered here: the .rpm and .deb list Firn for web links and
+// files (firn.desktop), and the person picks it in their system's settings.
 
 import { app, shell } from 'electron';
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Windows: the names Firn registers under.
 const PROG_ID = 'FirnURL';
@@ -211,7 +212,8 @@ export function askToBeDefault() {
 
 // --- Links from other apps -------------------------------------------------
 
-// What another app asked Firn to open, from its command line (Windows) as
+// What another app asked Firn to open, from its command line (Windows and
+// Linux) as
 // a web address, or a web page file. Anything else is ignored.
 export function linksFromArguments(argv: string[]): string[] {
   const links: string[] = [];
@@ -219,6 +221,19 @@ export function linksFromArguments(argv: string[]): string[] {
     if (arg.startsWith('-')) continue;
     if (/^https?:\/\//i.test(arg)) {
       links.push(arg);
+      continue;
+    }
+    // Linux desktops hand over a file as a file:// address (Exec=firn %U).
+    // Only one on this computer (a host would be a network share on Windows).
+    if (/^file:\/\//i.test(arg)) {
+      try {
+        const url = new URL(arg);
+        const file = url.host === '' ? fileURLToPath(url) : '';
+        if (file && isWebFile(file) && fs.existsSync(file))
+          links.push(pathToFileURL(file).href);
+      } catch {
+        // Not a usable file address.
+      }
       continue;
     }
     if (isWebFile(arg) && path.isAbsolute(arg) && fs.existsSync(arg))

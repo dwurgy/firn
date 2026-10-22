@@ -28,8 +28,9 @@ cleanup() {
 cleanup
 # The test website the checks visit.
 (cd "$E2E/site" && python3 -m http.server 8765 >/dev/null 2>&1) &
-# A virtual screen to run Firn on.
+# A virtual screen to run Firn on (and not the desktop's own Wayland one).
 export DISPLAY=:99
+unset WAYLAND_DISPLAY
 Xvfb :99 -screen 0 1400x900x24 >/dev/null 2>&1 &
 
 # Build Firn's main process once, then serve its UI with Vite alone, so each

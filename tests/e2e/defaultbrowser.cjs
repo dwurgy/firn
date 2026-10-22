@@ -143,6 +143,29 @@ const check = (n, ok, x = '') => {
     urls.filter((u) => u.startsWith('file://')).join(', '),
   );
 
+  // As a Linux desktop hands over a file (Exec=firn -- %U): a file://
+  // address on this computer opens; one on another computer doesn't.
+  const green = require('url').pathToFileURL(
+    require('path').join(site, 'green.html'),
+  ).href;
+  const sixth = spawn(
+    ELECTRON,
+    ['--no-sandbox', '.', '--', green, 'file://elsewhere/share/blue.html'],
+    { cwd: ROOT, stdio: 'ignore' },
+  );
+  await new Promise((r) => sixth.on('exit', r));
+  await wait(2000);
+  const fileUrls = await app.evaluate(({ webContents }) =>
+    webContents.getAllWebContents().map((w) => w.getURL()),
+  );
+  check(
+    "a file:// address from a Linux desktop opens; another computer's doesn't",
+    fileUrls.includes(green) &&
+      !fileUrls.some((u) => u.includes('elsewhere')) &&
+      (await titles()).length === 5,
+    fileUrls.filter((u) => u.startsWith('file://')).join(', '),
+  );
+
   // Settings: no "Default browser" here (a copy that can't be the default).
   await ui.evaluate(() => window.firn.runAction('settings'));
   await wait(600);

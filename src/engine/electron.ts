@@ -91,6 +91,9 @@ function guardWindowOpens(
     };
   });
   web.on('did-create-window', (popup) => {
+    // Linux: no Electron menu bar for Alt to bring up. (Windows keeps it, for
+    // its shortcuts, such as Ctrl+W closing the popup.)
+    if (process.platform === 'linux') popup.removeMenu();
     showPopupSite(popup);
     guardWindowOpens(popup.webContents, open);
   });

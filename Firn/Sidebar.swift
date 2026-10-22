@@ -1062,7 +1062,7 @@ struct TabRow<MenuItems: View>: View {
                 } icon: {
                     SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }
                 }
-                    .labelStyle(RowLabelStyle(color: Theme.ink))
+                    .labelStyle(RowLabelStyle(color: isActive ? Theme.ink : Theme.tabRest))
                 Spacer(minLength: 0)
             }
             // Room for the close button, so long titles stop short of it.
@@ -1149,9 +1149,7 @@ struct SplitRow<MenuItems: View>: View {
         }
         .frame(height: Theme.rowHeight)
         .background {
-            shape
-                .fill(isOnScreen ? Theme.activeTab : rowHovered ? Theme.hover : .clear)
-                .shadow(color: isOnScreen ? Theme.shadowSoft : .clear, radius: 1, y: 1)
+            if isOnScreen { ActiveTabBackground() } else { shape.fill(rowHovered ? Theme.hover : .clear) }
         }
         .contentShape(shape)
         .onHover { rowHovered = $0 }
@@ -1168,7 +1166,7 @@ struct SplitRow<MenuItems: View>: View {
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.muted)
                     .frame(width: 16)
-                FadingTitle(text: tab.title)
+                FadingTitle(text: tab.title, onScreen: isOnScreen)
             }
             .padding(.leading, Theme.rowPadding)
             // Room for the close button, so the title fades out before it.
@@ -1268,11 +1266,13 @@ private struct SplitPanes: Layout {
 /// A title on one line that fades out at the edge instead of ending in "…".
 private struct FadingTitle: View {
     let text: String
+    /// Both halves lead while the split is on screen, like the tab on screen.
+    let onScreen: Bool
 
     var body: some View {
         Text(text)
             .font(Theme.tabFont)
-            .foregroundStyle(Theme.ink)
+            .foregroundStyle(onScreen ? Theme.ink : Theme.tabRest)
             .lineLimit(1)
             .fixedSize()
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -1508,18 +1508,33 @@ private struct RowButtonStyle: ButtonStyle {
             .padding(.horizontal, Theme.rowPadding)
             .frame(maxWidth: .infinity, minHeight: Theme.rowHeight, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .fill(fill(pressed: configuration.isPressed))
-                    .shadow(color: isActive ? Theme.shadowSoft : .clear, radius: 1, y: 1)
+                if isActive {
+                    ActiveTabBackground()
+                } else {
+                    RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+                        .fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear)
+                }
             }
             .contentShape(RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous))
             .onHover { hovering = $0 }
     }
+}
 
-    private func fill(pressed: Bool) -> Color {
-        if isActive { return Theme.activeTab }
-        if pressed { return Theme.press }
-        return hovering ? Theme.hover : .clear
+/// The tab on screen: a lifted sheet of snow, lit along its top edge, with a
+/// warm hairline, a contact shadow, and a wider, fainter one beneath.
+private struct ActiveTabBackground: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+        shape
+            .fill(Theme.activeTab)
+            .overlay {
+                shape.inset(by: 0.5).strokeBorder(
+                    LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 0.5)
+            }
+            .overlay { shape.strokeBorder(Theme.activeTabHairline, lineWidth: 0.5) }
+            .shadow(color: Theme.shadowSoft, radius: 1, y: 1)
+            .shadow(color: Theme.shadowLift, radius: 5, y: 3)
     }
 }
 

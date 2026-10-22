@@ -16,13 +16,19 @@ enum Theme {
     static let hover = Color(light: 0x463728, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.07)
     static let press = Color(light: 0x463728, lightOpacity: 0.13, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// The tab on screen: lifted to page white in light, a warm-white wash in dark.
-    static let activeTab = Color(light: 0xFBFAF8, lightOpacity: 1, dark: 0xF5F1EC, darkOpacity: 0.14)
+    static let activeTab = Color(light: 0xFBFAF8, lightOpacity: 1, dark: 0xF5F1EC, darkOpacity: 0.17)
+    /// Its edge: a warm hairline, so it reads as a sheet, not a lighter patch.
+    static let activeTabHairline = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.25)
     /// A tab lifted off the sidebar: the row on screen's own color, but solid,
-    /// so it never turns see-through over the page (dark: 14% warm white over the frame).
-    static let liftedTab = Color(light: 0xFBFAF8, dark: 0x54514E)
+    /// so it never turns see-through over the page (dark: 17% warm white over the frame).
+    static let liftedTab = Color(light: 0xFBFAF8, dark: 0x5A5753)
+    /// The other tabs' titles rest a step back, so the tab on screen leads.
+    static let tabRest = Color(light: 0x5E564E, dark: 0xBDB5AC)
 
     /// Shadows are warm brown in light, never grey.
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)
+    /// The tab on screen's wider, fainter shadow, under its contact shadow.
+    static let shadowLift = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.20)
     static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.16)
     /// The peeking sidebar floats over the page, so it casts a deeper shadow.
     static let shadowPeek = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)

@@ -36,8 +36,15 @@ final class WindowModel {
     /// Idle tabs waiting to be tidied away, one by one, so each is seen
     /// going (see `TabList`).
     var tidyQueue: [FirnCore.Tab] = []
-    /// Site icons on their way down to the overflow button.
+    /// Site icons on their way down to the overflow button, or up out of it.
     var flyingIcons: [FlyingIcon] = []
+    /// Tabs just brought back, whose icons rise out of the overflow button
+    /// one by one (see `TabList`).
+    var riseQueue: [FirnCore.Tab] = []
+    /// Brought-back tabs whose icons haven't landed yet; their rows wait unseen.
+    var arrivingTabIDs: Set<UUID> = []
+    /// The overflow button's snow box, open while brought-back icons rise out.
+    var snowBoxOpen = false
     /// Where the overflow button sits in the sidebar, where they land.
     @ObservationIgnored var overflowButtonFrame: CGRect = .zero
     /// "Tidied away 4 tabs", while the overflow button says so.

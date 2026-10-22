@@ -14,13 +14,13 @@ struct OverflowButton: View {
 
     var body: some View {
         let unseen = store.hasUnseenTidied
-        let falling = !window.flyingIcons.isEmpty
+        let falling = window.flyingIcons.contains { !$0.rising }
         ChromeButton("Tidied away and recently closed tabs") {
             window.showsOverflow.toggle()
         } icon: {
-            SnowBoxIcon(lidOpen: lidOpen)
+            SnowBoxIcon(lidOpen: lidOpen || window.snowBoxOpen)
         }
-        // The lid lifts as the first icon nears and shuts as the last one lands.
+        // The box opens as the first icon nears and closes as the last one lands.
         .task(id: falling) {
             if falling && !reduceMotion {
                 try? await Task.sleep(for: .milliseconds(380))
@@ -129,14 +129,25 @@ private struct OverflowPanel: View {
     /// All of them back where new tabs go; the tab on screen stays.
     private func restoreAll() {
         window.showsOverflow = false
+        rise(store.driftedTabs)
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.restoreAllDrifted() }
     }
 
     /// Back where new tabs go, and on screen.
     private func bringBack(_ tab: FirnCore.Tab) {
         window.showsOverflow = false
+        rise([tab])
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.select(tab) }
         window.focusPage()
+    }
+
+    /// Their site icons rise back out of the overflow button to their rows,
+    /// which wait unseen until they land (see `TabList`). With Reduce
+    /// Motion the rows simply fade in.
+    private func rise(_ tabs: [FirnCore.Tab]) {
+        guard !reduceMotion else { return }
+        window.arrivingTabIDs.formUnion(tabs.map(\.id))
+        window.riseQueue = tabs
     }
 
     private func reopen(_ entry: ClosedEntry) {
@@ -220,16 +231,20 @@ struct TidyAnnouncement: Equatable {
     var text: String { count == 1 ? "Tidied away 1 tab" : "Tidied away \(count) tabs" }
 }
 
-/// A tidied tab's site icon on its way down to the overflow button.
+/// A site icon on its way down to the overflow button (tidied away), or up
+/// out of it (brought back).
 struct FlyingIcon: Identifiable {
     static let duration = 0.7
     let id: UUID
     let icon: Data?
     /// The icon's middle in its row, in the sidebar's space.
-    let from: CGPoint
+    let row: CGPoint
+    /// Up out of the button to the row, rather than down into it.
+    var rising = false
 }
 
-/// The icons drifting down to the overflow button, over the whole sidebar.
+/// The icons drifting between their rows and the overflow button, over the
+/// whole sidebar.
 struct TidyFlights: View {
     let window: WindowModel
 
@@ -237,7 +252,7 @@ struct TidyFlights: View {
         let frame = window.overflowButtonFrame
         ZStack(alignment: .topLeading) {
             ForEach(window.flyingIcons) { flight in
-                FlightView(flight: flight, to: CGPoint(x: frame.midX, y: frame.midY)) {
+                FlightView(flight: flight, button: CGPoint(x: frame.midX, y: frame.midY)) {
                     window.flyingIcons.removeAll { $0.id == flight.id }
                 }
             }
@@ -248,13 +263,46 @@ struct TidyFlights: View {
     }
 }
 
-/// One icon, like a flake: it lifts a touch, sways, and falls into the
-/// button, shrinking, and fading as it arrives. Transforms and opacity only.
+/// One icon, like a flake. Falling: it lifts a touch, sways, and falls
+/// into the button, shrinking, and fading as it arrives. Rising, the same
+/// in reverse: small and faint, it lifts out of the box, then glides up to
+/// its row, growing, and fades as its row fades in under it. Transforms
+/// and opacity only.
 private struct FlightView: View {
     let flight: FlyingIcon
-    let to: CGPoint
+    let button: CGPoint
     let done: () -> Void
     @State private var started = false
+
+    var body: some View {
+        let from = flight.rising ? button : flight.row
+        let to = flight.rising ? flight.row : button
+        let dx = to.x - from.x
+        let dy = to.y - from.y
+        SiteIconView(icon: flight.icon, size: 16) {
+            Image(systemName: "globe").foregroundStyle(Theme.muted)
+        }
+        .frame(width: 16, height: 16)
+        .shadow(color: Theme.shadowSoft, radius: 2, y: 1)
+        .modifier(Flight(rising: flight.rising, dx: dx, dy: dy, started: started))
+        .position(from)
+        .task {
+            try? await Task.sleep(for: .milliseconds(16))
+            started = true
+            try? await Task.sleep(for: .seconds(FlyingIcon.duration - 0.02))
+            done()
+        }
+    }
+}
+
+/// A flight's path. Falling, it lifts a touch and sways on the way down.
+/// Rising, it goes straight up out of the box, then glides over to its
+/// row, each step smooth and one-way (no dip back toward the box).
+private struct Flight: ViewModifier {
+    let rising: Bool
+    let dx: Double
+    let dy: Double
+    let started: Bool
 
     private struct Pose {
         var x = 0.0
@@ -263,43 +311,55 @@ private struct FlightView: View {
         var opacity = 1.0
     }
 
-    var body: some View {
-        let dx = to.x - flight.from.x
-        let dy = to.y - flight.from.y
-        SiteIconView(icon: flight.icon, size: 16) {
-            Image(systemName: "globe").foregroundStyle(Theme.muted)
-        }
-        .frame(width: 16, height: 16)
-        .shadow(color: Theme.shadowSoft, radius: 2, y: 1)
-        .keyframeAnimator(initialValue: Pose(), trigger: started) { content, pose in
-            content
-                .scaleEffect(pose.scale)
-                .opacity(pose.opacity)
-                .offset(x: pose.x, y: pose.y)
-        } keyframes: { _ in
-            KeyframeTrack(\.y) {
-                CubicKeyframe(-6, duration: 0.15)
-                CubicKeyframe(dy, duration: FlyingIcon.duration - 0.15)
+    func body(content: Content) -> some View {
+        let rest = FlyingIcon.duration
+        if rising {
+            content.keyframeAnimator(initialValue: Pose(scale: 0.55, opacity: 0), trigger: started) { view, pose in
+                view
+                    .scaleEffect(pose.scale)
+                    .opacity(pose.opacity)
+                    .offset(x: pose.x, y: pose.y)
+            } keyframes: { _ in
+                KeyframeTrack(\.y) {
+                    CubicKeyframe(dy, duration: rest)
+                }
+                KeyframeTrack(\.x) {
+                    LinearKeyframe(0, duration: 0.2)
+                    CubicKeyframe(dx, duration: rest - 0.2)
+                }
+                KeyframeTrack(\.scale) {
+                    CubicKeyframe(1, duration: rest)
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(1, duration: 0.15)
+                    LinearKeyframe(1, duration: rest - 0.3)
+                    LinearKeyframe(0, duration: 0.15)
+                }
             }
-            KeyframeTrack(\.x) {
-                CubicKeyframe(6, duration: 0.25)
-                CubicKeyframe(dx, duration: FlyingIcon.duration - 0.25)
+        } else {
+            content.keyframeAnimator(initialValue: Pose(), trigger: started) { view, pose in
+                view
+                    .scaleEffect(pose.scale)
+                    .opacity(pose.opacity)
+                    .offset(x: pose.x, y: pose.y)
+            } keyframes: { _ in
+                KeyframeTrack(\.y) {
+                    CubicKeyframe(-6, duration: 0.15)
+                    CubicKeyframe(dy, duration: rest - 0.15)
+                }
+                KeyframeTrack(\.x) {
+                    CubicKeyframe(6, duration: 0.25)
+                    CubicKeyframe(dx, duration: rest - 0.25)
+                }
+                KeyframeTrack(\.scale) {
+                    CubicKeyframe(1.1, duration: 0.15)
+                    CubicKeyframe(0.55, duration: rest - 0.15)
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(1, duration: rest - 0.2)
+                    LinearKeyframe(0, duration: 0.2)
+                }
             }
-            KeyframeTrack(\.scale) {
-                CubicKeyframe(1.1, duration: 0.15)
-                CubicKeyframe(0.55, duration: FlyingIcon.duration - 0.15)
-            }
-            KeyframeTrack(\.opacity) {
-                LinearKeyframe(1, duration: FlyingIcon.duration - 0.2)
-                LinearKeyframe(0, duration: 0.2)
-            }
-        }
-        .position(flight.from)
-        .task {
-            try? await Task.sleep(for: .milliseconds(16))
-            started = true
-            try? await Task.sleep(for: .seconds(FlyingIcon.duration - 0.02))
-            done()
         }
     }
 }

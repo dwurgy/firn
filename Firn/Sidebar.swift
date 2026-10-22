@@ -242,6 +242,8 @@ private struct TabList: View {
     /// scrolls), so a tidied tab's icon knows where it starts. A plain box,
     /// so scrolling doesn't redraw anything.
     @State private var origin = PointBox()
+    /// Where the list shows in the sidebar (see `riseBack`).
+    @State private var shown = RectBox()
     /// The group whose name is being edited, if any (kept by the window).
     private var renamingGroupID: UUID? { window.renamingGroupID }
 
@@ -297,11 +299,20 @@ private struct TabList: View {
                 }
             }
         }
+        // Where the list shows in the sidebar, so brought-back tabs out of
+        // view don't get a flight.
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Sidebar.space)) } action: {
+            shown.rect = $0
+        }
         .task(id: window.tidyQueue.map(\.id)) { await tidyAway() }
-        // Hidden partway through, the rest simply go.
+        .task(id: window.riseQueue.map(\.id)) { await riseBack() }
+        // Hidden partway through, the rest simply go, or simply come back.
         .onDisappear {
             for tab in window.tidyQueue { store.drift(tab) }
             window.tidyQueue = []
+            window.riseQueue = []
+            window.arrivingTabIDs = []
+            window.snowBoxOpen = false
         }
     }
 
@@ -325,10 +336,7 @@ private struct TabList: View {
             guard tab.place == .drifted else { continue }
             count += 1
             if let frame {
-                // The icon's middle: the row's padding, then half a 16pt icon.
-                let start = CGPoint(x: origin.point.x + frame.minX + Theme.rowPadding + 8,
-                                    y: origin.point.y + frame.midY)
-                window.flyingIcons.append(FlyingIcon(id: tab.id, icon: tab.icon, from: start))
+                window.flyingIcons.append(FlyingIcon(id: tab.id, icon: tab.icon, row: iconPoint(in: frame)))
             }
             try? await Task.sleep(for: .milliseconds(90))
         }
@@ -337,6 +345,52 @@ private struct TabList: View {
         try? await Task.sleep(for: .seconds(FlyingIcon.duration + 0.3))
         if count > 0 { window.announceTidied(count) }
         window.tidyQueue = []
+    }
+
+    /// Brought-back tabs, the tidy moment in reverse: the snow slides off
+    /// the overflow button as the rows glide into place unseen, then each
+    /// site icon rises out of the box to its row, a moment apart, and the
+    /// row fades in under it as it lands. Fresh snow settles once the last
+    /// has left. Rows out of view simply appear.
+    private func riseBack() async {
+        let queue = window.riseQueue
+        guard !queue.isEmpty else { return }
+        window.snowBoxOpen = true
+        try? await Task.sleep(for: .milliseconds(300))
+        for tab in queue {
+            // Cut short (another restore, say): the rest simply appear.
+            guard !Task.isCancelled else {
+                reveal(tab.id)
+                continue
+            }
+            if drag == nil && groupDrag == nil, let frame = frames[tab.id],
+               shown.rect.contains(iconPoint(in: frame)) {
+                window.flyingIcons.append(
+                    FlyingIcon(id: tab.id, icon: tab.icon, row: iconPoint(in: frame), rising: true))
+                // The row fades in under the icon as the icon fades out.
+                Task {
+                    try? await Task.sleep(for: .seconds(FlyingIcon.duration - 0.15))
+                    reveal(tab.id)
+                }
+            } else {
+                reveal(tab.id)
+            }
+            try? await Task.sleep(for: .milliseconds(90))
+        }
+        guard !Task.isCancelled else { return }
+        try? await Task.sleep(for: .milliseconds(200))
+        window.snowBoxOpen = false
+        window.riseQueue = []
+    }
+
+    private func reveal(_ id: UUID) {
+        _ = withAnimation(.easeOut(duration: 0.2)) { window.arrivingTabIDs.remove(id) }
+    }
+
+    /// A row's site icon's middle, in the sidebar's space: the row's
+    /// padding, then half a 16pt icon.
+    private func iconPoint(in frame: CGRect) -> CGPoint {
+        CGPoint(x: origin.point.x + frame.minX + Theme.rowPadding + 8, y: origin.point.y + frame.midY)
     }
 
     /// A card thawing away, lifting away, or not yet formed spaces itself
@@ -495,8 +549,9 @@ private struct TabList: View {
         } menu: {
             menu(for: tab)
         }
-        // While dragged, the row holds its slot open; the lifted copy is what shows.
-        .opacity(drag?.tab.id == tab.id ? 0 : 1)
+        // While dragged, the row holds its slot open; the lifted copy is what
+        // shows. Brought back, it waits unseen for its icon to land.
+        .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id) ? 0 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
             frames[tab.id] = $0
         }
@@ -866,6 +921,11 @@ struct TabRow<MenuItems: View>: View {
 /// A point kept out of SwiftUI's view updates.
 final class PointBox {
     var point: CGPoint = .zero
+}
+
+/// A rectangle kept out of SwiftUI's view updates.
+final class RectBox {
+    var rect: CGRect = .zero
 }
 
 // MARK: - Groups

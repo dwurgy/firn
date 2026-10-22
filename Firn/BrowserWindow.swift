@@ -33,6 +33,10 @@ final class WindowModel {
     /// The pointer while a tab is lifted, in the window's space. Apart from
     /// `tabLift` and `pageDrop`, so only the lifted tab redraws as it moves.
     var dragPointer: CGPoint = .zero
+    /// The dragged tab's icon and title on its frost, in the window's space.
+    /// With Reduce Motion they stay put, and the lifted picture turns
+    /// see-through over them instead (see `DropMark`).
+    @ObservationIgnored var dropMarkFrame: CGRect?
     /// Where the pages sit in the window, so a drag knows when it's over one.
     @ObservationIgnored var pagesFrame: CGRect = .zero
     /// A tab is being dragged in the sidebar: a peeking sidebar stays out
@@ -633,7 +637,7 @@ private struct PageArea: View {
                 ForEach(slots(active: active, pair: pair, drop: drop)) { slot in
                     Group {
                         if slot.isFrost, let drop {
-                            DropFrost(tab: drop.tab, color: Theme.spaceColor(store.activeSpace.color))
+                            DropFrost(tab: drop.tab, window: window, color: Theme.spaceColor(store.activeSpace.color))
                                 .transition(.opacity)
                         } else {
                             page(slot.tab, inUseID: split == nil ? nil : active?.id,
@@ -712,7 +716,7 @@ private struct PageArea: View {
             .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
             .overlay {
                 if let frosted {
-                    DropFrost(tab: frosted, color: Theme.spaceColor(store.activeSpace.color))
+                    DropFrost(tab: frosted, window: window, color: Theme.spaceColor(store.activeSpace.color))
                         .transition(.opacity)
                 }
             }
@@ -748,6 +752,7 @@ struct TabLift {
 
 private struct TabLiftGhost: View {
     let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let lift = window.tabLift {
@@ -760,7 +765,8 @@ private struct TabLiftGhost: View {
             }
             .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
-                                    pointer: window.dragPointer, grab: lift.grab, slot: lift.settle))
+                                    pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
+                                    seeThrough: reduceMotion && lift.isCard ? window.dropMarkFrame : nil))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -808,6 +814,9 @@ private struct LiftPlacement: ViewModifier, Animatable {
     let pointer: CGPoint
     let grab: CGPoint
     let slot: CGRect?
+    /// With Reduce Motion, the drop mark (in the window's space): the picture
+    /// turns see-through over it, since it doesn't move out of the way.
+    var seeThrough: CGRect? = nil
 
     nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get { AnimatablePair(AnimatablePair(card, settled), AnimatablePair(width, column)) }
@@ -836,8 +845,25 @@ private struct LiftPlacement: ViewModifier, Animatable {
             .background { shape.fill(Theme.liftedTab) }
             .clipShape(shape)
             .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1).opacity(card) }
+            .mask { see(through: seeThrough?.offsetBy(dx: -frame.minX, dy: -frame.minY)) }
             .shadow(color: Theme.shadowPageFar, radius: 8 + 6 * card, y: 3 + 3 * card)
             .offset(x: frame.minX, y: frame.minY)
+    }
+
+    /// Solid, but for a soft-edged window onto what's underneath.
+    private func see(through hole: CGRect?) -> some View {
+        Rectangle()
+            .overlay(alignment: .topLeading) {
+                if let hole {
+                    RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+                        .frame(width: hole.width + 16, height: hole.height + 16)
+                        .offset(x: hole.minX - 8, y: hole.minY - 8)
+                        .blur(radius: 6)
+                        .opacity(0.65)
+                        .blendMode(.destinationOut)
+                }
+            }
+            .compositingGroup()
     }
 
     private static func mix(_ a: CGRect, _ b: CGRect, _ amount: CGFloat) -> CGRect {
@@ -876,23 +902,13 @@ struct PageDrop: Equatable {
 /// color, with the tab's site icon and title (`docs/split-drop-design.html`).
 private struct DropFrost: View {
     let tab: FirnCore.Tab
+    let window: WindowModel
     let color: Color
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
-        VStack(spacing: 10) {
-            SiteIconView(icon: tab.icon, size: 32) {
-                Image(systemName: "globe").font(.system(size: 26)).foregroundStyle(Theme.muted)
-            }
-            Text(tab.title)
-                .font(Theme.tabFont)
-                .foregroundStyle(Theme.muted)
-                .lineLimit(1)
-                .frame(maxWidth: 260)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        DropMark(tab: tab, window: window)
         .background { glass(shape) }
         .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1.5) }
         .allowsHitTesting(false)
@@ -907,6 +923,92 @@ private struct DropFrost: View {
         } else {
             shape.fill(.ultraThinMaterial).overlay { shape.fill(color.opacity(Theme.dropTint)) }
         }
+    }
+}
+
+/// The dragged tab's icon and title on its frost. They lean away from the
+/// lifted picture, like a magnet pushed by another, and drift back to the
+/// middle of their half once it moves off (`MarkDodge`). With Reduce Motion
+/// they stay put; the picture turns see-through over them instead.
+/// Its own view, so only it redraws as the pointer moves, not the glass.
+private struct DropMark: View {
+    let tab: FirnCore.Tab
+    let window: WindowModel
+    /// The frost, in the window's space.
+    @State private var area: CGRect = .zero
+    @State private var size: CGSize = .zero
+    @State private var dodge = CGSize.zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 10) {
+            SiteIconView(icon: tab.icon, size: 32) {
+                Image(systemName: "globe").font(.system(size: 26)).foregroundStyle(Theme.muted)
+            }
+            Text(tab.title)
+                .font(Theme.tabFont)
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+                .frame(maxWidth: 260)
+        }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0; update() }
+        .offset(dodge)
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserWindow.space)) } action: {
+            area = $0
+            update()
+        }
+        .onChange(of: window.dragPointer) { update() }
+        .onChange(of: window.tabLift?.isCard) { update() }
+        .onDisappear {
+            // A frost fading out after the drop moved halves mustn't clear the new one's.
+            if window.dropMarkFrame == rest { window.dropMarkFrame = nil }
+        }
+    }
+
+    private var rest: CGRect {
+        CGRect(x: area.midX - size.width / 2, y: area.midY - size.height / 2,
+               width: size.width, height: size.height)
+    }
+
+    private func update() {
+        window.dropMarkFrame = rest
+        var next = CGSize.zero
+        if !reduceMotion, let lift = window.tabLift, lift.isCard, size != .zero {
+            let card = Theme.liftedCard
+            let picture = CGRect(x: window.dragPointer.x - lift.grab.x * card.width,
+                                 y: window.dragPointer.y - lift.grab.y * card.height,
+                                 width: card.width, height: card.height)
+            next = MarkDodge.offset(rest, awayFrom: picture, within: area.insetBy(dx: 16, dy: 16))
+        }
+        guard abs(next.width - dodge.width) + abs(next.height - dodge.height) > 0.25 else { return }
+        // A slow, bounce-free spring, so it trails the picture a little, like a magnet.
+        withAnimation(.spring(duration: 0.5, bounce: 0)) { dodge = next }
+    }
+}
+
+/// How far the drop mark leans away from the lifted picture: a soft push,
+/// like two magnets, never a rule. Strongest when the picture is close
+/// (about 40pt), fading to nothing far off; it may stay partly covered.
+/// Smooth everywhere, so it sways rather than jumps as the picture passes.
+enum MarkDodge {
+    /// The most it ever moves.
+    static let push: CGFloat = 40
+    /// How near the picture must come to be felt, across and down.
+    static let reach = CGSize(width: 130, height: 95)
+
+    static func offset(_ mark: CGRect, awayFrom picture: CGRect, within bounds: CGRect) -> CGSize {
+        let x = (mark.midX - picture.midX) / reach.width
+        let y = (mark.midY - picture.midY) / reach.height
+        // Rises from nothing at the center, peaks at `reach`, then fades out.
+        let strength = push * exp((1 - x * x - y * y) / 2)
+        let shift = CGSize(width: x * strength, height: y * strength)
+        func one(_ v: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {
+            low > high ? 0 : min(max(v, low), high)
+        }
+        return CGSize(width: one(shift.width, bounds.minX - mark.minX, bounds.maxX - mark.maxX),
+                      height: one(shift.height, bounds.minY - mark.minY, bounds.maxY - mark.maxY))
     }
 }
 

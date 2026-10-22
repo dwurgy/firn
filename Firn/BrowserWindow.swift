@@ -317,22 +317,6 @@ final class WindowModel {
         return pointer.x < middle ? .left : .right
     }
 
-    /// Where the half the frost shows sits, in the window's space: the
-    /// picture of a tab let go there grows into it.
-    func dropFrame() -> CGRect? {
-        guard let drop = pageDrop, pagesFrame.width > 0 else { return nil }
-        let fraction = store.activeTab.flatMap { store.split(of: $0) }?.leftFraction ?? 0.5
-        let left = (pagesFrame.width - Theme.pageInset) * fraction
-        var frame = pagesFrame
-        if drop.side == .left {
-            frame.size.width = left
-        } else {
-            frame.origin.x += left + Theme.pageInset
-            frame.size.width -= left + Theme.pageInset
-        }
-        return frame
-    }
-
     /// A dragged tab let go over the page: it opens on the half the frost
     /// showed, the frost giving way to the page.
     func dropOnPage() {
@@ -774,8 +758,6 @@ struct TabLift {
     var settle: CGRect?
     /// Settling into a folded group: it fades into the name line.
     var fades = false
-    /// Let go over the page: the half it grows into, in the window's space.
-    var landing: CGRect?
     /// A Basecamp tile, not a row: where the tile is held, in the window's
     /// space. It's the tile until it comes loose over the page.
     var tile: CGRect?
@@ -792,16 +774,15 @@ private struct TabLiftGhost: View {
                     .opacity(lift.isCard ? 0 : 1)
                 card(lift)
                     // At least the picture's size, so turning from the row
-                    // uncovers it; larger only as it grows into its half.
+                    // (or tile) uncovers it rather than squeezing it.
                     .frame(minWidth: Theme.liftedCard.width, maxWidth: .infinity,
                            minHeight: Theme.liftedCard.height, maxHeight: .infinity, alignment: .topLeading)
                     .opacity(lift.isCard ? 1 : 0)
             }
             .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
-                                    landed: lift.landing == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
                                     pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
-                                    landing: lift.landing, tile: lift.tile))
+                                    tile: lift.tile))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -812,7 +793,7 @@ private struct TabLiftGhost: View {
     /// The page's picture, from the top; a sleeping page, its icon and title.
     @ViewBuilder private func card(_ lift: TabLift) -> some View {
         if let preview = lift.preview {
-            LiftPicture(image: preview, landed: lift.landing == nil ? 0 : 1)
+            LiftPicture(image: preview)
         } else {
             VStack(spacing: 8) {
                 SiteIconView(icon: lift.tab.icon, size: 22) {
@@ -830,24 +811,14 @@ private struct TabLiftGhost: View {
     }
 }
 
-/// The page's picture, from the top. Small, it fills the card; grown into
-/// its half (`landed` 1), it spans the width, as the page will, so it isn't
-/// blown up and cropped. Animatable, so it blends between the two as it grows.
-private struct LiftPicture: View, Animatable {
+/// The page's picture, from the top, filling the card.
+private struct LiftPicture: View {
     let image: CGImage
-    var landed: CGFloat
-
-    nonisolated var animatableData: CGFloat {
-        get { landed }
-        set { landed = newValue }
-    }
 
     var body: some View {
         GeometryReader { proxy in
             let w = proxy.size.width, h = proxy.size.height
-            let across = w / CGFloat(max(image.width, 1))
-            let filling = max(across, h / CGFloat(max(image.height, 1)))
-            let scale = across + (filling - across) * (1 - landed)
+            let scale = max(w / CGFloat(max(image.width, 1)), h / CGFloat(max(image.height, 1)))
             Image(decorative: image, scale: 1)
                 .resizable()
                 .frame(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
@@ -867,26 +838,21 @@ private struct LiftPlacement: ViewModifier, Animatable {
     var card: CGFloat
     /// 0 following the pointer, 1 in its slot.
     var settled: CGFloat
-    /// 0 the picture, 1 grown into the half it was let go over.
-    var landed: CGFloat
     var width: CGFloat
     var column: CGFloat
     let pointer: CGPoint
     let grab: CGPoint
     let slot: CGRect?
-    let landing: CGRect?
     /// A tile's held place, standing in for the row.
     let tile: CGRect?
 
-    nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>,
-                                                   AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>> {
-        get { AnimatablePair(AnimatablePair(card, settled), AnimatablePair(landed, AnimatablePair(width, column))) }
+    nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(card, settled), AnimatablePair(width, column)) }
         set {
             card = newValue.first.first
             settled = newValue.first.second
-            landed = newValue.second.first
-            width = newValue.second.second.first
-            column = newValue.second.second.second
+            width = newValue.second.first
+            column = newValue.second.second
         }
     }
 
@@ -899,17 +865,15 @@ private struct LiftPlacement: ViewModifier, Animatable {
         if let slot { row = Self.mix(row, slot, settled) }
         if let tile { row = tile }
         let size = Theme.liftedCard
-        var picture = CGRect(x: pointer.x - grab.x * size.width, y: pointer.y - grab.y * size.height,
+        let picture = CGRect(x: pointer.x - grab.x * size.width, y: pointer.y - grab.y * size.height,
                              width: size.width, height: size.height)
-        if let landing { picture = Self.mix(picture, landing, landed) }
         let frame = Self.mix(row, picture, card)
-        let resting = tile == nil ? Theme.tabRadius : Theme.tileRadius
-        let corner = resting + (Theme.pageCornerRadius - resting) * landed
+        let corner = tile == nil ? Theme.tabRadius : Theme.tileRadius
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        let lift = card * (1 - landed)
+        let lift = card
         return content
             .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-            .background { shape.fill(Theme.liftedTab).overlay { shape.fill(Theme.page).opacity(landed) } }
+            .background { shape.fill(Theme.liftedTab) }
             .clipShape(shape)
             .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1).opacity(lift) }
             .shadow(color: Theme.shadowPageFar, radius: 8 + 6 * lift, y: 3 + 3 * lift)

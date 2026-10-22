@@ -189,8 +189,8 @@ struct BasecampGrid: View {
         preview = nil
         guard store.canDropOnPage(tab), let page = tab.page else { return }
         Task {
-            // Larger than the card, so it stays sharp as it grows into its half when let go.
-            let picture = await page.snapshot(width: Theme.liftedCard.width * 3)
+            // Twice the card's width, so it's sharp on a Retina screen.
+            let picture = await page.snapshot(width: Theme.liftedCard.width * 2)
             guard drag?.tab.id == tab.id else { return }
             preview = picture
             if window.tabLift?.tab.id == tab.id { window.tabLift?.preview = picture }
@@ -263,23 +263,14 @@ struct BasecampGrid: View {
     private func drop() {
         guard var current = drag, !current.settling else { return }
         window.isDraggingTab = false
-        // Let go over the page: a copy opens there; the tile is already back in its slot.
+        // Let go over the page: a copy opens there at once, its picture
+        // fading as it does; the tile is already back in its slot.
         if current.overPage {
             drag = nil
             raised = false
             preview = nil
-            guard !reduceMotion, let landing = window.dropFrame() else {
-                withAnimation(Theme.slide(reduceMotion: reduceMotion)) { window.tabLift = nil }
-                return window.dropOnPage()
-            }
-            // The picture grows into the half, then the page itself fades in under it.
-            withAnimation(.smooth(duration: 0.35)) {
-                window.tabLift?.landing = landing
-            } completion: {
-                window.dropOnPage()
-                withAnimation(.easeOut(duration: 0.25)) { window.tabLift = nil }
-            }
-            return
+            withAnimation(.easeOut(duration: 0.15)) { window.tabLift = nil }
+            return window.dropOnPage()
         }
         window.tabLift = nil
         preview = nil

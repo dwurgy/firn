@@ -853,8 +853,8 @@ private struct TabList: View {
                                  width: frame.width, column: frame.minX + windowOrigin.point.x)
         guard store.canDropOnPage(tab), let page = tab.page else { return }
         Task {
-            // Larger than the card, so it stays sharp as it grows into its half when let go.
-            let picture = await page.snapshot(width: Theme.liftedCard.width * 3)
+            // Twice the card's width, so it's sharp on a Retina screen.
+            let picture = await page.snapshot(width: Theme.liftedCard.width * 2)
             if window.tabLift?.tab.id == tab.id { window.tabLift?.preview = picture }
         }
     }
@@ -951,21 +951,13 @@ private struct TabList: View {
         if groupDrag != nil { return dropGroup() }
         guard var current = drag, !current.settling else { return }
         window.isDraggingTab = false
-        // Let go over the page: it opens there, and its row becomes the split's.
+        // Let go over the page: it opens there at once (no show on the way,
+        // you just want the page), its picture fading as it does, and its row
+        // becomes the split's.
         if current.overPage {
             drag = nil
-            guard !reduceMotion, let landing = window.dropFrame() else {
-                withAnimation(Theme.slide(reduceMotion: reduceMotion)) { window.tabLift = nil }
-                return window.dropOnPage()
-            }
-            // The picture grows into the half, then the page itself fades in under it.
-            withAnimation(.smooth(duration: 0.35)) {
-                window.tabLift?.landing = landing
-            } completion: {
-                window.dropOnPage()
-                withAnimation(.easeOut(duration: 0.25)) { window.tabLift = nil }
-            }
-            return
+            withAnimation(.easeOut(duration: 0.15)) { window.tabLift = nil }
+            return window.dropOnPage()
         }
         @MainActor func commit() {
             if store.openTabs.contains(where: { $0.id == current.tab.id }) {

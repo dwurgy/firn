@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 import Testing
@@ -27,6 +28,7 @@ final class FakePage: PageController {
     func reload() {}
     func stopLoading() { stopped = true }
     func focus() {}
+    func snapshot(width: CGFloat) async -> CGImage? { nil }
 }
 
 @MainActor

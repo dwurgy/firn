@@ -94,6 +94,14 @@ final class WebKitPageController: NSObject, PageController {
         webView.window?.makeFirstResponder(webView)
     }
 
+    func snapshot(width: CGFloat) async -> CGImage? {
+        guard url != nil, loadError == nil else { return nil }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: Double(width))
+        let image = try? await webView.takeSnapshot(configuration: configuration)
+        return image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
     // MARK: - Keeping state in step with WebKit
 
     private func observeWebView() {

@@ -28,10 +28,11 @@ final class WindowModel {
     /// A tab dragged out of the sidebar over the page: which half it's
     /// over, where frost shows it would open (see `PageArea`).
     var pageDrop: PageDrop?
-    /// The pointer during that drag, in the window's space, for the lifted
-    /// row following it over the page. Apart from `pageDrop`, so the pages
-    /// don't redraw as the pointer moves.
-    var pageDropPointer: CGPoint = .zero
+    /// A tab lifted off the sidebar, following the pointer (see `TabLiftGhost`).
+    var tabLift: TabLift?
+    /// The pointer while a tab is lifted, in the window's space. Apart from
+    /// `tabLift` and `pageDrop`, so only the lifted tab redraws as it moves.
+    var dragPointer: CGPoint = .zero
     /// Where the pages sit in the window, so a drag knows when it's over one.
     @ObservationIgnored var pagesFrame: CGRect = .zero
     /// A tab is being dragged in the sidebar: a peeking sidebar stays out
@@ -378,8 +379,8 @@ struct BrowserWindow: View {
                     .padding(.leading, window.sidebarWidth - 3)
             }
         }
-        // A tab dragged out over the page: its row follows the pointer, over everything.
-        .overlay(alignment: .topLeading) { PageDropGhost(window: window) }
+        // A dragged tab follows the pointer over everything, off the sidebar and onto the page.
+        .overlay(alignment: .topLeading) { TabLiftGhost(window: window) }
         .coordinateSpace(.named(Self.space))
         .background {
             ZStack {
@@ -718,33 +719,130 @@ private struct PageArea: View {
     }
 }
 
-/// The row of a tab dragged over the page, shrunk to fit beside the
-/// pointer (in the sidebar, the list draws its own lifted row).
-private struct PageDropGhost: View {
+/// A tab lifted off the sidebar. It's drawn over the whole window, not in
+/// the list, so it can leave the sidebar. In the sidebar it's the row,
+/// kept to the sidebar's column (giving a little toward the pointer); once
+/// the pointer is out over a page where it could open in split view, it
+/// comes loose as a small picture of its page (as in Dia). Let go in the
+/// sidebar, it glides into its slot. It keeps hold of the same spot under
+/// the pointer as it changes shape.
+struct TabLift {
+    let tab: FirnCore.Tab
+    /// The row as drawn in the sidebar.
+    let row: AnyView
+    /// Where the pointer holds it, as a fraction of its width and height.
+    let grab: CGPoint
+    /// The row's width (its slot's, which narrows inside a group card).
+    var width: CGFloat
+    /// The row's left edge in the window: its slot's.
+    var column: CGFloat
+    /// Out over the page: the picture, not the row.
+    var isCard = false
+    /// The page's picture, once taken; nil for a sleeping page.
+    var preview: CGImage?
+    /// Let go in the sidebar: the slot it glides into, in the window's space.
+    var settle: CGRect?
+    /// Settling into a folded group: it fades into the name line.
+    var fades = false
+}
+
+private struct TabLiftGhost: View {
     let window: WindowModel
 
     var body: some View {
-        if let drop = window.pageDrop {
-            HStack(spacing: 8) {
-                SiteIconView(icon: drop.tab.icon, size: 16) {
-                    Image(systemName: "globe").font(.system(size: 13)).foregroundStyle(Theme.muted)
-                }
-                Text(drop.tab.title)
-                    .font(Theme.tabFont)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
+        if let lift = window.tabLift {
+            ZStack(alignment: .topLeading) {
+                lift.row
+                    .frame(width: lift.width, height: Theme.rowHeight)
+                    .opacity(lift.isCard ? 0 : 1)
+                card(lift, size: Theme.liftedCard)
+                    .opacity(lift.isCard ? 1 : 0)
             }
-            .padding(.horizontal, Theme.rowPadding)
-            .frame(width: 220, height: Theme.rowHeight, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .fill(Theme.activeTab)
-                    .shadow(color: Theme.shadowPageFar, radius: 8, y: 3)
-            }
-            .offset(x: window.pageDropPointer.x - 24, y: window.pageDropPointer.y - Theme.rowHeight / 2)
+            .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
+                                    width: lift.width, column: lift.column,
+                                    pointer: window.dragPointer, grab: lift.grab, slot: lift.settle))
+            .opacity(lift.fades ? 0 : 1)
+            .transition(.opacity)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+
+    /// The page's picture, from the top; a sleeping page, its icon and title.
+    @ViewBuilder private func card(_ lift: TabLift, size: CGSize) -> some View {
+        if let preview = lift.preview {
+            Image(decorative: preview, scale: 2)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height, alignment: .top)
+                .clipped()
+        } else {
+            VStack(spacing: 8) {
+                SiteIconView(icon: lift.tab.icon, size: 22) {
+                    Image(systemName: "globe").font(.system(size: 18)).foregroundStyle(Theme.muted)
+                }
+                Text(lift.tab.title)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(12)
+            .frame(width: size.width, height: size.height)
+        }
+    }
+}
+
+/// Where the lifted tab is and what shape it has: the row in the sidebar's
+/// column, the picture at the pointer, or the row settling into its slot,
+/// and every step between. Worked out from these numbers as they animate,
+/// with the pointer read fresh each time, so the pointer moving never
+/// interrupts a change of shape.
+private struct LiftPlacement: ViewModifier, Animatable {
+    /// 0 the row, 1 the picture.
+    var card: CGFloat
+    /// 0 following the pointer, 1 in its slot.
+    var settled: CGFloat
+    var width: CGFloat
+    var column: CGFloat
+    let pointer: CGPoint
+    let grab: CGPoint
+    let slot: CGRect?
+
+    nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(card, settled), AnimatablePair(width, column)) }
+        set {
+            card = newValue.first.first
+            settled = newValue.first.second
+            width = newValue.second.first
+            column = newValue.second.second
+        }
+    }
+
+    func body(content: Content) -> some View {
+        // The row keeps to its column, giving at most 8pt toward the pointer,
+        // as if about to come loose.
+        let pull = pointer.x - (column + grab.x * width)
+        var row = CGRect(x: column + 8 * CGFloat(tanh(Double(pull) / 60)),
+                         y: pointer.y - grab.y * Theme.rowHeight, width: width, height: Theme.rowHeight)
+        if let slot { row = Self.mix(row, slot, settled) }
+        let size = Theme.liftedCard
+        let picture = CGRect(x: pointer.x - grab.x * size.width, y: pointer.y - grab.y * size.height,
+                             width: size.width, height: size.height)
+        let frame = Self.mix(row, picture, card)
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+        return content
+            .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+            .background { shape.fill(Theme.liftedTab) }
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1).opacity(card) }
+            .shadow(color: Theme.shadowPageFar, radius: 8 + 6 * card, y: 3 + 3 * card)
+            .offset(x: frame.minX, y: frame.minY)
+    }
+
+    private static func mix(_ a: CGRect, _ b: CGRect, _ amount: CGFloat) -> CGRect {
+        CGRect(x: a.minX + (b.minX - a.minX) * amount, y: a.minY + (b.minY - a.minY) * amount,
+               width: a.width + (b.width - a.width) * amount, height: a.height + (b.height - a.height) * amount)
     }
 }
 

@@ -776,7 +776,15 @@ private struct TabList: View {
                 .animation(drag.follows ? Theme.thaw : nil, value: slot.minY)
                 // Out over the page (where its row follows the pointer), it
                 // rests in its slot, faded, until it's back.
-                .opacity(drag.settling && intoFoldedGroup ? 0 : drag.overPage ? 0.4 : 1)
+                // Dragged by the pointer, the window draws it instead
+                // (`TabLiftGhost`); this copy only keeps its slot in step.
+                .opacity(!drag.follows || (drag.settling && intoFoldedGroup) ? 0 : 1)
+                .onChange(of: slot) {
+                    withAnimation(reduceMotion ? nil : Self.glide) {
+                        window.tabLift?.width = slot.width
+                        window.tabLift?.column = slot.minX + windowOrigin.point.x
+                    }
+                }
                 // It sticks to the pointer; only settling into place, or
                 // resting while over the page, glides.
                 .transaction { if !drag.settling && !drag.overPage { $0.animation = nil } }
@@ -816,10 +824,12 @@ private struct TabList: View {
                         tab: tab, grab: CGSize(width: 0, height: value.startLocation.y - frame.minY),
                         location: value.location, target: currentTarget(of: tab))
                     window.isDraggingTab = true
+                    lift(tab, from: frame, at: value)
                     return
                 }
                 guard !current.settling else { return }
                 current.location = value.location
+                window.dragPointer = inWindow(value.location)
                 if overPage(value.location, current: &current) { return }
                 let target = target(at: value.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
                 if target == current.target {
@@ -831,23 +841,46 @@ private struct TabList: View {
             }
     }
 
+    /// Lifts `tab` off the list: from here it's drawn over the whole window
+    /// (`TabLiftGhost`), so it can leave the sidebar. A tab that can open
+    /// in split view gets a picture of its page taken now, in case it goes
+    /// out over the page; a sleeping page is never woken for it.
+    private func lift(_ tab: FirnCore.Tab, from frame: CGRect, at value: DragGesture.Value) {
+        let grab = CGPoint(x: (value.startLocation.x - frame.minX) / max(frame.width, 1),
+                           y: (value.startLocation.y - frame.minY) / max(frame.height, 1))
+        window.dragPointer = inWindow(value.location)
+        window.tabLift = TabLift(tab: tab, row: AnyView(liftedRow(tab, isActive: true)), grab: grab,
+                                 width: frame.width, column: frame.minX + windowOrigin.point.x)
+        guard store.canDropOnPage(tab), let page = tab.page else { return }
+        Task {
+            let picture = await page.snapshot(width: Theme.liftedCard.width)
+            if window.tabLift?.tab.id == tab.id { window.tabLift?.preview = picture }
+        }
+    }
+
+    /// A point in the list's space, in the window's.
+    private func inWindow(_ location: CGPoint) -> CGPoint {
+        CGPoint(x: location.x + windowOrigin.point.x, y: location.y + windowOrigin.point.y)
+    }
+
     /// Out over the page, a tab that can open there in split view shows
     /// where it would (frost over a half, see `PageArea`), its row resting
     /// back in its slot. Back over the sidebar, the page goes back as it was.
     /// True while it's over the page.
     private func overPage(_ location: CGPoint, current: inout TabDrag) -> Bool {
-        let pointer = CGPoint(x: location.x + windowOrigin.point.x, y: location.y + windowOrigin.point.y)
+        let pointer = inWindow(location)
         let slide = Theme.slide(reduceMotion: reduceMotion)
         guard let side = pageSide(at: pointer, for: current.tab) else {
             if current.overPage {
                 current.overPage = false
                 withAnimation(slide) { window.pageDrop = nil }
+                withAnimation(reshape) { window.tabLift?.isCard = false }
             }
             return false
         }
-        window.pageDropPointer = pointer
         if !current.overPage {
             current.overPage = true
+            withAnimation(reshape) { window.tabLift?.isCard = true }
             current.target = currentTarget(of: current.tab)
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
         } else {
@@ -856,6 +889,11 @@ private struct TabList: View {
         let drop = PageDrop(tab: current.tab, side: side)
         if window.pageDrop != drop { withAnimation(slide) { window.pageDrop = drop } }
         return true
+    }
+
+    /// The row turning into its page's picture and back: a short glide; a fade with Reduce Motion.
+    private var reshape: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.2)
     }
 
     /// The half of the page `pointer` (in the window's space) is over, if
@@ -927,6 +965,7 @@ private struct TabList: View {
         // Let go over the page: it opens there, and its row becomes the split's.
         if current.overPage {
             drag = nil
+            withAnimation(Theme.slide(reduceMotion: reduceMotion)) { window.tabLift = nil }
             return window.dropOnPage()
         }
         @MainActor func commit() {
@@ -941,12 +980,18 @@ private struct TabList: View {
                 }
             }
             drag = nil
+            window.tabLift = nil
         }
         guard !reduceMotion, let slot = slot(for: current) else { return commit() }
         current.settling = true
         current.location.y = slot.minY + current.grab.height
+        // The lifted tab glides back into its slot, a row again.
+        let settle = slot.offsetBy(dx: windowOrigin.point.x, dy: windowOrigin.point.y)
         withAnimation(Self.glide) {
             drag = current
+            window.tabLift?.isCard = false
+            window.tabLift?.settle = settle
+            window.tabLift?.fades = intoFoldedGroup
         } completion: {
             // A group the tab left empty fades away.
             withAnimation(Self.glide) { commit() }

@@ -17,6 +17,9 @@ enum Theme {
     static let press = Color(light: 0x463728, lightOpacity: 0.13, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// The tab on screen: lifted to page white in light, a warm-white wash in dark.
     static let activeTab = Color(light: 0xFBFAF8, lightOpacity: 1, dark: 0xF5F1EC, darkOpacity: 0.14)
+    /// A tab lifted off the sidebar: the row on screen's own color, but solid,
+    /// so it never turns see-through over the page (dark: 14% warm white over the frame).
+    static let liftedTab = Color(light: 0xFBFAF8, dark: 0x54514E)
 
     /// Shadows are warm brown in light, never grey.
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)
@@ -177,6 +180,8 @@ enum Theme {
     /// How far past the card's right edge the pointer may drift before it hides.
     static let peekLeaveMargin: CGFloat = 16
     static let tabRadius: CGFloat = 10
+    /// The small picture a tab becomes out over the page (16:10, as in Dia).
+    static let liftedCard = CGSize(width: 168, height: 105)
     static let fieldRadius: CGFloat = 8
     static let smallRadius: CGFloat = 6
 

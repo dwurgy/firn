@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 
@@ -27,6 +28,9 @@ public protocol PageController: AnyObject, Observable {
     func stopLoading()
     /// Gives the page keyboard focus, so arrow keys and space scroll it.
     func focus()
+    /// A small picture of the page as it is now, `width` points wide, or nil
+    /// if there's nothing to show. Kept in memory only, never saved.
+    func snapshot(width: CGFloat) async -> CGImage?
 
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.

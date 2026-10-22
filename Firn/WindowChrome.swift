@@ -189,7 +189,8 @@ struct TrafficLightsMover: NSViewRepresentable {
     }
 }
 
-/// The strip between the sidebar and the page that resizes the sidebar.
+/// The strip between the sidebar and the page that resizes the sidebar
+/// (and the gap between split view's pages).
 /// AppKit because a cursor rectangle is the only dependable way to show the
 /// resize cursor next to a web view (which keeps setting its own), and mouse
 /// tracking in screen points doesn't drift as the strip itself moves.

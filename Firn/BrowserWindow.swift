@@ -281,7 +281,7 @@ struct BrowserWindow: View {
     var body: some View {
         ZStack(alignment: .leading) {
             // The page and the sidebar move together, frame by frame, on one curve.
-            PageArea(tab: store.activeTab)
+            PageArea(store: store)
                 .overlay { LookoutLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
                 .modifier(PageBesideSidebar(
@@ -517,9 +517,75 @@ private struct SidebarResizeHandle: View {
     }
 }
 
-/// The page on screen, floating in the frame. With no tab open, a calm empty page.
+/// The page on screen, floating in the frame. With no tab open, a calm
+/// empty page; in split view, two pages side by side.
 private struct PageArea: View {
+    let store: BrowserStore
+
+    var body: some View {
+        if let tab = store.activeTab, let split = store.split(of: tab) {
+            SplitPages(store: store, split: split, inUseID: tab.id)
+        } else {
+            PagePane(tab: store.activeTab)
+        }
+    }
+}
+
+/// Split view: two pages with a gap between them that can be dragged
+/// (double-click evens them). A thin frost ring marks the page in use;
+/// pressing the other page moves it there, and the address bar and
+/// buttons follow.
+private struct SplitPages: View {
+    let store: BrowserStore
+    let split: SplitGroup
+    let inUseID: UUID
+    @State private var startFraction: Double?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let pair = store.tabs(in: split)
+        GeometryReader { proxy in
+            let room = max(proxy.size.width - Theme.pageInset, 1)
+            let leftWidth = room * split.leftFraction
+            HStack(spacing: 0) {
+                if let left = pair.first { half(left).frame(width: leftWidth) }
+                SidebarResizeGrip(
+                    onDrag: { distance in
+                        let start = startFraction ?? split.leftFraction
+                        startFraction = start
+                        store.setLeftFraction(of: split, to: start + distance / room)
+                    },
+                    onEnd: { startFraction = nil },
+                    onDoubleClick: {
+                        withAnimation(Theme.slide(reduceMotion: reduceMotion)) {
+                            store.setLeftFraction(of: split, to: 0.5)
+                        }
+                    }
+                )
+                .frame(width: Theme.pageInset)
+                .accessibilityLabel("Resize split view")
+                if pair.count > 1 { half(pair[1]) }
+            }
+        }
+    }
+
+    private func half(_ tab: FirnCore.Tab) -> some View {
+        let isInUse = tab.id == inUseID
+        return PagePane(tab: tab, onPointerDown: isInUse ? nil : { store.select(tab) })
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
+                    .strokeBorder(Theme.frost, lineWidth: 2)
+                    .opacity(isInUse ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
+    }
+}
+
+/// One page, floating in the frame, or a calm empty page with no tab.
+private struct PagePane: View {
     let tab: FirnCore.Tab?
+    var onPointerDown: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -531,12 +597,13 @@ private struct PageArea: View {
                 .fill(Theme.page)
                 .shadow(color: Theme.shadowPageFar, radius: 12, x: 4, y: 8)
             if let tab, let page = tab.page {
-                PageView(page: page, cornerRadius: Theme.pageCornerRadius)
+                PageView(page: page, cornerRadius: Theme.pageCornerRadius, onPointerDown: onPointerDown)
                     .overlay {
                         if let error = page.loadError {
                             LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload)
                                 .clipShape(shape)
                                 .transition(.opacity)
+                                .simultaneousGesture(TapGesture().onEnded { onPointerDown?() })
                         } else if page.url == nil {
                             // Until something has loaded, show Firn's calm page color, not WebKit's white.
                             shape.fill(Theme.page).allowsHitTesting(false)

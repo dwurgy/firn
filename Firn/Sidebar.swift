@@ -653,11 +653,15 @@ private struct TabList: View {
     }
 
     /// A tab's right-click menu: the few things you'd reach for, as in Dia.
-    /// Later: Open as Split (split view) and Move to Space (Phase 4).
+    /// Later: Move to Space (Phase 4).
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
         if tab.place == .open {
             Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
+            // For now, only beside the tab on screen; split view step 3 adds the rest.
+            if let onScreen = store.activeTab, onScreen.id != tab.id, store.splitPartner(of: onScreen)?.id != tab.id {
+                Button("Open in Split View", systemImage: "rectangle.split.2x1") { store.openSplit(tab, beside: onScreen) }
+            }
             Divider()
             Button("Duplicate", systemImage: "plus.square.on.square") { window.duplicate(tab) }
                 .disabled(tab.url == nil)

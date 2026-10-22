@@ -17,6 +17,10 @@ enum Theme {
     static let press = Color(light: 0x463728, lightOpacity: 0.13, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// The tab on screen: lifted to page white in light, a warm-white wash in dark.
     static let activeTab = Color(light: 0xFBFAF8, lightOpacity: 1, dark: 0xF5F1EC, darkOpacity: 0.14)
+    /// Split view's row: a soft frost wash on the half in use (echoing the
+    /// frost ring on its page), and a hairline between the halves.
+    static let splitInUse = Color(light: 0x82A8BE, lightOpacity: 0.18, dark: 0xA0C4D6, darkOpacity: 0.16)
+    static let splitDivider = Color(light: 0x463728, lightOpacity: 0.12, dark: 0xF5F1EC, darkOpacity: 0.12)
 
     /// Shadows are warm brown in light, never grey.
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)

@@ -15,15 +15,24 @@ struct CommandBarLayer: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
         GeometryReader { proxy in
+            // Picking a page for a split, the bar sits over the empty right half.
+            let leftWidth = window.isPickingSplit ? SplitPicking.leftWidth(in: proxy.size.width) : 0
+            let rightStart = leftWidth == 0 ? 0 : leftWidth + Theme.pageInset
             ZStack(alignment: .top) {
                 if window.showsCommandBar {
-                    shape.fill(Theme.commandDim)
-                        .contentShape(shape)
-                        .onTapGesture { window.closeCommandBar() }
-                        .accessibilityHidden(true)
-                        .transition(.opacity)
+                    // Each page dims on its own, so the gap between them doesn't.
+                    HStack(spacing: Theme.pageInset) {
+                        if leftWidth > 0 { shape.fill(Theme.commandDim).frame(width: leftWidth) }
+                        shape.fill(Theme.commandDim)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { window.closeCommandBar() }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
                     CommandBar(store: store, window: window)
-                        .frame(width: min(560, max(0, proxy.size.width - 64)))
+                        .frame(width: min(560, max(0, proxy.size.width - rightStart - 64)))
+                        .frame(maxWidth: .infinity)
+                        .padding(.leading, rightStart)
                         // About a fifth of the way down, as a glance, not a page.
                         .padding(.top, max(48, proxy.size.height * 0.22))
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
@@ -57,7 +66,9 @@ private struct CommandBar: View {
     @Environment(\.openSettings) private var openSettings
 
     private func rows(actions: [BarAction]) -> [CommandRow] {
-        store.commandRows(for: text, searchEngine: engine, suggestions: suggestions, actions: actions.map(\.action))
+        // Picking a page for a split, it's pages only, not actions.
+        let actions = window.splitPickAnchor == nil ? actions.map(\.action) : []
+        return store.commandRows(for: text, searchEngine: engine, suggestions: suggestions, actions: actions)
     }
 
     var body: some View {
@@ -102,7 +113,8 @@ private struct CommandBar: View {
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.faint)
                 .accessibilityHidden(true)
-            TextField("Search or enter address", text: $text)
+            TextField(window.splitPickAnchor == nil ? "Search or enter address" : "Search, enter address, or find a tab",
+                      text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.ink)
@@ -149,6 +161,7 @@ private struct CommandBar: View {
     }
 
     private func pick(_ row: CommandRow, actions: [BarAction]) {
+        if let anchor = window.splitPickAnchor { return pickSplit(row, beside: anchor) }
         // The bar goes first, so an action that opens a sheet or names a
         // group gets the focus, not the page.
         if case let .action(action) = row {
@@ -172,6 +185,30 @@ private struct CommandBar: View {
             }
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2), change)
+        window.closeCommandBar()
+    }
+
+    /// The page picked for the empty half goes there, beside `anchor`.
+    private func pickSplit(_ row: CommandRow, beside anchor: FirnCore.Tab) {
+        window.finishSplitPick {
+            let incoming: FirnCore.Tab?
+            switch row {
+            case let .go(url), let .search(_, url, _):
+                incoming = store.openTab(url, inBackground: true)
+            case let .tab(tab), let .tidied(tab):
+                incoming = tab
+            case let .closed(entry):
+                store.reopen(entry)
+                incoming = store.activeTab
+            case .action:
+                incoming = nil
+            }
+            if let incoming, incoming.id != anchor.id {
+                store.openSplit(incoming, beside: anchor)
+            } else {
+                store.select(anchor)
+            }
+        }
         window.closeCommandBar()
     }
 

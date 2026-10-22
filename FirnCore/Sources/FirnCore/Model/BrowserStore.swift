@@ -257,12 +257,32 @@ public final class BrowserStore {
         tabs.filter { $0.groupID == group.id }
     }
 
+    /// A group's rows, in order: a split shows as one, its left half
+    /// standing for both.
+    public func rows(in group: TabGroup) -> [Tab] {
+        Self.rows(tabs(in: group))
+    }
+
+    /// Tabs as the sidebar's rows: each split once, as its first half.
+    /// Halves of `skipping` are left out (a split being moved).
+    private static func rows(_ list: [Tab], skipping splitID: UUID? = nil) -> [Tab] {
+        var seen = Set<UUID>()
+        return list.filter { tab in
+            guard let id = tab.splitID else { return true }
+            return id != splitID && seen.insert(id).inserted
+        }
+    }
+
     /// The tab rows the current space's sidebar shows, top to bottom:
     /// Basecamp, then the tab list (folded groups hide theirs).
     public var sidebarTabs: [Tab] {
         let folded = Set(groups.filter(\.folded).map(\.id))
         return basecampTabs + openTabs.filter { $0.groupID.map { !folded.contains($0) } ?? true }
     }
+
+    /// The sidebar's rows, top to bottom, as ⌘1–9 and ⌃Tab count them: like
+    /// `sidebarTabs`, but each split once, as its left half.
+    public var sidebarRows: [Tab] { Self.rows(sidebarTabs) }
 
     public var canAddToBasecamp: Bool { basecampTabs.count < Self.basecampLimit }
 
@@ -284,11 +304,15 @@ public final class BrowserStore {
     }
 
     /// A space's tab list: each group once, where its tabs are, and the
-    /// loose tabs.
-    private func items(in spaceID: UUID) -> [TabListItem] {
+    /// loose tabs (each split once, as its left half). Halves of `skipping`
+    /// are left out (a split being moved).
+    private func items(in spaceID: UUID, skipping splitID: UUID? = nil) -> [TabListItem] {
         var seen = Set<UUID>()
         return list(.open, in: spaceID).compactMap { tab in
-            guard let groupID = tab.groupID else { return .tab(tab) }
+            guard let groupID = tab.groupID else {
+                if let id = tab.splitID, id == splitID || !seen.insert(id).inserted { return nil }
+                return .tab(tab)
+            }
             guard seen.insert(groupID).inserted, let group = groups.first(where: { $0.id == groupID }) else { return nil }
             return .group(group)
         }
@@ -311,7 +335,7 @@ public final class BrowserStore {
         let target: Int
         if position < list.count, let before = tabs.firstIndex(where: { $0.id == list[max(position, 0)].id }) {
             target = before
-        } else if let last = list.last, let after = tabs.firstIndex(where: { $0.id == last.id }) {
+        } else if let last = list.last, let after = lastIndex(withSplitOf: last) {
             target = after + 1
         } else {
             target = min(fallback ?? tabs.count, tabs.count)
@@ -321,14 +345,15 @@ public final class BrowserStore {
 
     /// Puts tabs (already out of `tabs`, all loose or all one group's) at
     /// `position` in their space's tab list (0-based, counting each group
-    /// as one; the count, or more, means the end). Never splits a group.
+    /// and split as one; the count, or more, means the end). Never splits
+    /// a group, or a split (the other half of a moving one is skipped).
     private func insertInTabList(_ moving: [Tab], at position: Int, fallback: Int) {
         guard let spaceID = moving.first?.spaceID else { return }
-        let items = items(in: spaceID)
+        let items = items(in: spaceID, skipping: moving.count == 1 ? moving[0].splitID : nil)
         func indexes(of item: TabListItem) -> [Int] {
             tabs.indices.filter { index in
                 switch item {
-                case let .tab(tab): tabs[index].id == tab.id
+                case let .tab(tab): tabs[index].id == tab.id || (tab.splitID != nil && tabs[index].splitID == tab.splitID)
                 case let .group(group): tabs[index].groupID == group.id
                 }
             }
@@ -476,6 +501,7 @@ public final class BrowserStore {
         guard tab.place != .basecamp, list(.basecamp, in: tab.spaceID).count < Self.basecampLimit,
               let index = tabs.firstIndex(where: { $0.id == tab.id }),
               let home = tab.url else { return false }
+        _ = endSplit(of: tab)
         tabs.remove(at: index)
         let groupID = tab.groupID
         tab.place = .basecamp
@@ -549,7 +575,7 @@ public final class BrowserStore {
             let oldGroupID = tab.groupID
             tabs.remove(at: index)
             tab.groupID = group.id
-            insert(tab, at: position, in: tabs(in: group), fallback: index)
+            insert(tab, at: position, in: Self.rows(tabs(in: group), skipping: tab.splitID), fallback: index)
             if oldGroupID != group.id { endIfEmpty(oldGroupID) }
         }
     }
@@ -1134,10 +1160,11 @@ public final class BrowserStore {
         }
     }
 
-    /// Shows the tab at `position` (0-based) in the sidebar, top to bottom;
-    /// past the end means the last one.
+    /// Shows the tab at `position` (0-based) in the sidebar's rows, top to
+    /// bottom (a split is one row; its left half shows in use); past the end
+    /// means the last one.
     public func selectTab(at position: Int) {
-        let visible = sidebarTabs
+        let visible = sidebarRows
         guard !visible.isEmpty, position >= 0 else { return }
         select(visible[min(position, visible.count - 1)])
     }
@@ -1145,9 +1172,11 @@ public final class BrowserStore {
     /// Shows the next tab in the sidebar (or the previous one with `by: -1`),
     /// wrapping around.
     public func selectTab(by offset: Int) {
-        let visible = sidebarTabs
+        let visible = sidebarRows
         guard !visible.isEmpty else { return }
-        guard let current = visible.firstIndex(where: { $0.id == activeTabID }) else {
+        let splitID = activeTab?.splitID
+        guard let current = visible.firstIndex(where: { $0.id == activeTabID || (splitID != nil && $0.splitID == splitID) })
+        else {
             return select(visible[0])
         }
         let count = visible.count
@@ -1158,7 +1187,7 @@ public final class BrowserStore {
 
     /// Moves a tab to `position` in its own list (Basecamp, its group, or,
     /// for a loose tab, the tab list, counting each group as one; 0-based,
-    /// the count means the end). Other lists and other spaces keep their
+    /// counting each split as one, the count means the end). Other lists and other spaces keep their
     /// places. The other half of its split comes too.
     public func move(_ tab: Tab, to position: Int) {
         guard let from = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
@@ -1167,7 +1196,7 @@ public final class BrowserStore {
             if tab.place == .open, tab.groupID == nil {
                 insertInTabList([tab], at: position, fallback: from)
             } else {
-                insert(tab, at: position, in: siblings(of: tab), fallback: from)
+                insert(tab, at: position, in: Self.rows(siblings(of: tab), skipping: tab.splitID), fallback: from)
             }
         }
     }

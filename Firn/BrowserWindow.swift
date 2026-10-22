@@ -9,6 +9,14 @@ final class WindowModel {
     let store: BrowserStore
     /// Whether the command bar (⌘T) is open over the page.
     private(set) var showsCommandBar = false
+    /// The tab a split view is being made beside (Open in Split View on the
+    /// tab on screen, or a tile): it moves to the left half, and the command
+    /// bar sits over an empty right half until something is picked.
+    private(set) var splitPickAnchor: FirnCore.Tab?
+    /// Whether that's happening now, with its tab on screen.
+    var isPickingSplit: Bool {
+        splitPickAnchor != nil && splitPickAnchor?.id == store.activeTabID
+    }
     /// Goes up each time the address bar is asked to take focus.
     private(set) var addressRequest = 0
 
@@ -241,7 +249,35 @@ final class WindowModel {
     func closeCommandBar(focusingPage: Bool = true) {
         guard showsCommandBar else { return }
         showsCommandBar = false
+        // Nothing picked: the page glides back to full width.
+        if splitPickAnchor != nil {
+            withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+                splitPickAnchor = nil
+            }
+        }
         if focusingPage { focusPage() }
+    }
+
+    /// Open in Split View on the tab on screen or a Basecamp tile: the page
+    /// glides over to the left half, and the command bar opens over the
+    /// empty right half to pick what goes there. Esc leaves things as they were.
+    func pickSplit(beside tab: FirnCore.Tab) {
+        store.select(tab)
+        withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+            splitPickAnchor = tab
+        }
+        openCommandBar()
+    }
+
+    /// Something was picked for the empty half: the split is made at once,
+    /// with no animation, since its two pages are already where they show.
+    func finishSplitPick(_ make: () -> Void) {
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            make()
+            splitPickAnchor = nil
+        }
     }
 
     /// Tabs just brought back: their site icons rise out of the overflow
@@ -281,7 +317,7 @@ struct BrowserWindow: View {
     var body: some View {
         ZStack(alignment: .leading) {
             // The page and the sidebar move together, frame by frame, on one curve.
-            PageArea(store: store)
+            PageArea(store: store, window: window)
                 .overlay { LookoutLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
                 .modifier(PageBesideSidebar(
@@ -521,13 +557,34 @@ private struct SidebarResizeHandle: View {
 /// empty page; in split view, two pages side by side.
 private struct PageArea: View {
     let store: BrowserStore
+    let window: WindowModel
 
     var body: some View {
         if let tab = store.activeTab, let split = store.split(of: tab) {
             SplitPages(store: store, split: split, inUseID: tab.id)
         } else {
-            PagePane(tab: store.activeTab)
+            // Picking a page for a split, the page takes the left half, as
+            // it will in the split, beside an empty page for the right.
+            let picking = window.isPickingSplit
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    PagePane(tab: store.activeTab)
+                        .frame(width: picking ? SplitPicking.leftWidth(in: proxy.size.width) : proxy.size.width)
+                    if picking {
+                        PagePane(tab: nil)
+                            .padding(.leading, Theme.pageInset)
+                            .transition(.opacity)
+                    }
+                }
+            }
         }
+    }
+}
+
+/// Where the pages sit while a split is being picked: halves, as a new split has.
+enum SplitPicking {
+    static func leftWidth(in width: CGFloat) -> CGFloat {
+        max(width - Theme.pageInset, 1) * 0.5
     }
 }
 
@@ -720,10 +777,10 @@ struct BrowserCommands: Commands {
         CommandGroup(before: .windowArrangement) {
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }
                 .keyboardShortcut(.tab, modifiers: .control)
-                .disabled(store.sidebarTabs.count < 2)
+                .disabled(store.sidebarRows.count < 2)
             Button("Show Previous Tab") { store.selectTab(by: -1); window.focusPage() }
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
-                .disabled(store.sidebarTabs.count < 2)
+                .disabled(store.sidebarRows.count < 2)
             Divider()
             // As in Arc: ⌃1–9 for a space, ⌥⌘ and the arrows for the next one.
             ForEach(Array(store.spaces.prefix(9).enumerated()), id: \.element.id) { index, space in

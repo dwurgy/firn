@@ -224,9 +224,65 @@ struct SplitViewTests {
         let store = makeStore()
         let tabs = open("a", "b", "c", in: store)
         store.openSplit(tabs[1], beside: tabs[0])
-        // Position 1 counts each tab, so it would land between a and b.
+        // Counting each tab, position 1 would land between a and b.
         store.move(tabs[2], to: 1)
         #expect(hosts(store.openTabs) == ["a.example", "b.example", "c.example"])
+    }
+
+    @Test func aSplitIsOneRow() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        store.openSplit(tabs[1], beside: tabs[0])
+        #expect(store.tabListItems.map(\.id) == [tabs[0].id, tabs[2].id, tabs[3].id])
+        // Position 1 is just below the pair, whichever half is moved.
+        store.move(tabs[3], to: 1)
+        #expect(hosts(store.openTabs) == ["a.example", "b.example", "d.example", "c.example"])
+        store.move(tabs[1], to: 1)
+        #expect(hosts(store.openTabs) == ["d.example", "a.example", "b.example", "c.example"])
+        store.move(tabs[2], toGroup: nil, at: 1)
+        #expect(hosts(store.openTabs) == ["d.example", "c.example", "a.example", "b.example"])
+    }
+
+    @Test func aSplitIsOneRowInAGroup() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", "d", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.move(tabs[1], toEndOf: group)
+        store.move(tabs[2], toEndOf: group)
+        store.openSplit(tabs[1], beside: tabs[0])
+        #expect(store.rows(in: group).map(\.id) == [tabs[0].id, tabs[2].id])
+        // d dropped at 1 lands below the pair, not between its halves.
+        store.move(tabs[3], into: group, at: 1)
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "b.example", "d.example", "c.example"])
+        // The right half moved to the end brings its left half along.
+        store.move(tabs[1], into: group, at: 2)
+        #expect(hosts(store.tabs(in: group)) == ["d.example", "c.example", "a.example", "b.example"])
+    }
+
+    @Test func shortcutsCountASplitOnce() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        store.openSplit(tabs[1], beside: tabs[0])
+        #expect(store.sidebarRows.map(\.id) == [tabs[0].id, tabs[2].id])
+        store.selectTab(at: 1)
+        #expect(store.activeTabID == tabs[2].id)
+        store.selectTab(at: 0)
+        #expect(store.activeTabID == tabs[0].id)
+        // From the right half, the next row is c, not the left half.
+        store.select(tabs[1])
+        store.selectTab(by: 1)
+        #expect(store.activeTabID == tabs[2].id)
+        store.selectTab(by: 1)
+        #expect(store.activeTabID == tabs[0].id)
+    }
+
+    @Test func addingAHalfToBasecampEndsTheSplit() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        store.openSplit(tabs[1], beside: tabs[0])
+        store.addToBasecamp(tabs[1])
+        #expect(store.splits.isEmpty)
+        #expect(tabs[0].splitID == nil && tabs[1].splitID == nil)
     }
 
     @Test func groupingEitherHalfGroupsBoth() throws {

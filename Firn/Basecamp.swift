@@ -18,6 +18,8 @@ struct BasecampGrid: View {
                     } goHome: {
                         store.goHome(tab)
                         window.focusPage()
+                    } split: {
+                        window.pickSplit(beside: tab)
                     } remove: {
                         store.removeFromBasecamp(tab)
                     } close: {
@@ -63,6 +65,7 @@ private struct BasecampTile: View {
     let isActive: Bool
     let select: () -> Void
     let goHome: () -> Void
+    let split: () -> Void
     let remove: () -> Void
     let close: () -> Void
 
@@ -84,6 +87,8 @@ private struct BasecampTile: View {
             if tab.isAwayFromHome {
                 Button("Go Back to Home", action: goHome)
             }
+            Button("Open in Split View", action: split)
+            Divider()
             Button("Remove from Basecamp", action: remove)
             Divider()
             Button("Close", action: close)

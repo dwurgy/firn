@@ -292,8 +292,9 @@ private struct TabList: View {
                 // A tab coming on screen (a new one at the bottom of a long
                 // list, say) scrolls into view, by as little as it takes.
                 .onChange(of: store.activeTabID) {
-                    guard let id = store.activeTabID, store.activeTab?.place == .open else { return }
-                    withAnimation(reduceMotion ? nil : Self.glide) { scroller.scrollTo(id) }
+                    guard let tab = store.activeTab, tab.place == .open else { return }
+                    // A split's row goes by its left half.
+                    withAnimation(reduceMotion ? nil : Self.glide) { scroller.scrollTo(rowTab(of: tab).id) }
                 }
             }
         }
@@ -461,18 +462,18 @@ private struct TabList: View {
     /// card away instead, like Ungroup.
     private func takeOut(_ tab: FirnCore.Tab) {
         guard let group = store.tabGroups.first(where: { $0.id == tab.groupID }) else { return }
-        if store.tabs(in: group).count == 1 { return release(group) }
+        if store.rows(in: group).count == 1 { return release(group) }
         guard let index = store.tabListItems.firstIndex(where: { $0.id == group.id }) else { return }
-        carry(tab, to: .list(index + 1)) { store.takeOutOfGroup(tab) }
+        carry(rowTab(of: tab), to: .list(index + 1)) { store.takeOutOfGroup(tab) }
     }
 
     /// Move to Group: the tab travels to the end of the other group, which
     /// opens room for it; into a folded group, it fades into the name line
     /// (unless it's the tab on screen, which opens the group, as the store does).
     private func move(_ tab: FirnCore.Tab, toEndOf group: TabGroup) {
-        let target = DropTarget.group(group.id, store.tabs(in: group).count)
+        let target = DropTarget.group(group.id, store.rows(in: group).count)
         let opens = group.folded && tab.id == store.activeTabID
-        carry(tab, to: target, opening: opens ? group : nil) { store.move(tab, toEndOf: group) }
+        carry(rowTab(of: tab), to: target, opening: opens ? group : nil) { store.move(tab, toEndOf: group) }
     }
 
     /// A tab moved from its menu travels the way a dropped one settles: a
@@ -538,20 +539,59 @@ private struct TabList: View {
         return afterCard || isCard(items[index]) ? Theme.groupSpacing - Theme.rowSpacing : 0
     }
 
-    private func row(_ tab: FirnCore.Tab) -> some View {
-        TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
-            store.select(tab)
-            window.focusPage()
-        } close: {
-            window.close(tab)
-        } menu: {
-            menu(for: tab)
+    /// A tab's row, or a split's (`tab` is its left half).
+    @ViewBuilder private func row(_ tab: FirnCore.Tab) -> some View {
+        if let split = store.split(of: tab), let partner = store.splitPartner(of: tab) {
+            placed(SplitRow(left: tab, right: partner, inUseID: inUseHalf(of: tab)) { half in
+                store.select(half)
+                window.focusPage()
+            } close: { half in
+                window.close(half)
+            } menu: { half in
+                Button("Close Split View", systemImage: "rectangle") { store.closeSplit(split) }
+                Divider()
+                menu(for: half)
+            }, tab)
+        } else {
+            placed(TabRow(tab: tab, isActive: tab.id == store.activeTabID) {
+                store.select(tab)
+                window.focusPage()
+            } close: {
+                window.close(tab)
+            } menu: {
+                menu(for: tab)
+            }, tab)
         }
-        // While dragged, the row holds its slot open; the lifted copy is what
-        // shows. Brought back, it waits unseen for its icon to land.
-        .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id) ? 0 : 1)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
-            frames[tab.id] = $0
+    }
+
+    /// While dragged, a row holds its slot open; the lifted copy is what
+    /// shows. Brought back, it waits unseen for its icon to land.
+    private func placed(_ row: some View, _ tab: FirnCore.Tab) -> some View {
+        row
+            .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id) ? 0 : 1)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                frames[tab.id] = $0
+            }
+    }
+
+    /// The tab a row goes by: a split's left half, or the tab itself.
+    private func rowTab(of tab: FirnCore.Tab) -> FirnCore.Tab {
+        store.split(of: tab).flatMap { store.tabs(in: $0).first } ?? tab
+    }
+
+    /// The half in use, if the split `tab` is in is on screen.
+    private func inUseHalf(of tab: FirnCore.Tab) -> UUID? {
+        tab.splitID != nil && store.activeTab?.splitID == tab.splitID ? store.activeTabID : nil
+    }
+
+    /// A row as dragged or carried: a copy, not clickable.
+    @ViewBuilder private func liftedRow(_ tab: FirnCore.Tab, isActive: Bool) -> some View {
+        if let partner = store.splitPartner(of: tab) {
+            SplitRow(left: tab, right: partner, inUseID: inUseHalf(of: tab), select: { _ in }, close: { _ in }) { _ in
+                EmptyView()
+            }
+        } else {
+            TabRow(tab: tab, isActive: isActive, select: {}, close: {}) { EmptyView() }
         }
     }
 
@@ -559,7 +599,7 @@ private struct TabList: View {
 
     /// A group's tabs as they'd be if the dragged tab landed where it is now.
     private func shownTabs(in group: TabGroup) -> [FirnCore.Tab] {
-        var list = store.tabs(in: group)
+        var list = store.rows(in: group)
         guard let drag else { return list }
         list.removeAll { $0.id == drag.tab.id }
         if case let .group(id, position) = drag.target, id == group.id {
@@ -584,9 +624,10 @@ private struct TabList: View {
         return list
     }
 
-    /// The tab rows on show (folded groups hide theirs).
+    /// The tab rows on show (folded groups hide theirs; a split is one row,
+    /// by its left half).
     private var shownTabs: [FirnCore.Tab] {
-        store.sidebarTabs.filter { $0.place == .open }
+        store.sidebarRows.filter { $0.place == .open }
     }
 
     /// Where the dragged tab would land with its middle at `y`. Well inside
@@ -606,7 +647,7 @@ private struct TabList: View {
             let top = group.folded ? card.height / 4 : Theme.rowHeight / 2
             let bottom = group.folded ? card.height / 4 : Theme.rowHeight / 4
             guard y > card.minY + top, y < card.maxY - bottom else { continue }
-            let members = store.tabs(in: group)
+            let members = store.rows(in: group)
             return .group(group.id, group.folded ? members.filter { $0.id != tab.id }.count : position(in: members))
         }
         return .list(items.filter { (frames[$0.id]?.midY ?? .infinity) < y }.count)
@@ -629,9 +670,8 @@ private struct TabList: View {
 
     /// The tab's place now, so a drag starts by changing nothing.
     private func currentTarget(of tab: FirnCore.Tab) -> DropTarget {
-        if let groupID = tab.groupID {
-            let members = store.openTabs.filter { $0.groupID == groupID }
-            return .group(groupID, members.firstIndex { $0.id == tab.id } ?? 0)
+        if let group = store.tabGroups.first(where: { $0.id == tab.groupID }) {
+            return .group(group.id, store.rows(in: group).firstIndex { $0.id == tab.id } ?? 0)
         }
         return .list(store.tabListItems.firstIndex { $0.id == tab.id } ?? 0)
     }
@@ -658,9 +698,16 @@ private struct TabList: View {
         if tab.place == .open {
             Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
-            // For now, only beside the tab on screen; split view step 3 adds the rest.
-            if let onScreen = store.activeTab, onScreen.id != tab.id, store.splitPartner(of: onScreen)?.id != tab.id {
-                Button("Open in Split View", systemImage: "rectangle.split.2x1") { store.openSplit(tab, beside: onScreen) }
+            // Beside the tab on screen, or, for that tab, beside a page picked
+            // in the command bar. (A split's halves have Close Split View instead.)
+            if tab.splitID == nil, let onScreen = store.activeTab {
+                Button("Open in Split View", systemImage: "rectangle.split.2x1") {
+                    if onScreen.id == tab.id {
+                        window.pickSplit(beside: tab)
+                    } else {
+                        store.openSplit(tab, beside: onScreen)
+                    }
+                }
             }
             Divider()
             Button("Duplicate", systemImage: "plus.square.on.square") { window.duplicate(tab) }
@@ -698,7 +745,7 @@ private struct TabList: View {
     /// pointer up and down, and takes the width of the slot it's over.
     @ViewBuilder private var lifted: some View {
         if let drag, let slot = slot(for: drag) {
-            TabRow(tab: drag.tab, isActive: true, select: {}, close: {}) { EmptyView() }
+            liftedRow(drag.tab, isActive: true)
                 .shadow(color: drag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
                 .frame(width: slot.width)
                 .offset(x: slot.minX)
@@ -715,8 +762,8 @@ private struct TabList: View {
             GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
                       foldLocked: true, thawed: false, closing: false, store: store, ungroup: {}, close: {}) {
-                ForEach(store.tabs(in: groupDrag.group)) { tab in
-                    TabRow(tab: tab, isActive: tab.id == store.activeTabID, select: {}, close: {}) { EmptyView() }
+                ForEach(store.rows(in: groupDrag.group)) { tab in
+                    liftedRow(tab, isActive: tab.id == store.activeTabID)
                 }
             }
             .shadow(color: groupDrag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
@@ -917,6 +964,104 @@ struct TabRow<MenuItems: View>: View {
         .contextMenu { menu }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
+    }
+}
+
+/// Split view's row: one row, two halves, each with its own icon and
+/// title. Clicking a half shows the split with that half in use. While the
+/// split is on screen, the row is lifted like the tab on screen and the
+/// half in use carries a soft frost wash, echoing the ring on its page.
+/// The close button on the half under the pointer closes only that half.
+struct SplitRow<MenuItems: View>: View {
+    let left: FirnCore.Tab
+    let right: FirnCore.Tab
+    /// The half in use, when the split is on screen.
+    let inUseID: UUID?
+    let select: (FirnCore.Tab) -> Void
+    let close: (FirnCore.Tab) -> Void
+    @ViewBuilder let menu: (FirnCore.Tab) -> MenuItems
+    @State private var hoveredID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The halves sit this far inside the row, so their washes nest in its corners.
+    private static var inset: CGFloat { 3 }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            half(left)
+            Rectangle()
+                .fill(Theme.splitDivider)
+                .frame(width: 1, height: 16)
+                .accessibilityHidden(true)
+            half(right)
+        }
+        .padding(Self.inset)
+        .frame(maxWidth: .infinity, minHeight: Theme.rowHeight)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+                .fill(inUseID != nil ? Theme.activeTab : .clear)
+                .shadow(color: inUseID != nil ? Theme.shadowSoft : .clear, radius: 1, y: 1)
+        }
+        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: inUseID)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Split view")
+    }
+
+    private func half(_ tab: FirnCore.Tab) -> some View {
+        let hovering = hoveredID == tab.id
+        return Button { select(tab) } label: {
+            Label {
+                Text(tab.title)
+            } icon: {
+                SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }
+            }
+            .labelStyle(RowLabelStyle(color: Theme.ink))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Room for the close button, so long titles stop short of it.
+            .padding(.trailing, hovering ? 18 : 0)
+        }
+        .buttonStyle(SplitHalfStyle(isInUse: tab.id == inUseID))
+        .overlay(alignment: .trailing) {
+            if hovering {
+                Button("Close tab", systemImage: "xmark") { close(tab) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(CloseButtonStyle())
+                    .help(tab.id == inUseID ? "Close tab (⌘W)" : "Close tab")
+                    .padding(.trailing, 4)
+            }
+        }
+        .onHover { inside in
+            if inside { hoveredID = tab.id } else if hoveredID == tab.id { hoveredID = nil }
+        }
+        .contextMenu { menu(tab) }
+        .accessibilityAddTraits(tab.id == inUseID ? .isSelected : [])
+        .accessibilityAction(named: "Close tab") { close(tab) }
+    }
+}
+
+/// One half of a split's row: a warm wash on hover and press, and a soft
+/// frost wash when it's the half in use.
+private struct SplitHalfStyle: ButtonStyle {
+    let isInUse: Bool
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius - 3, style: .continuous)
+        configuration.label
+            // Icons line up with the other rows' icons.
+            .padding(.horizontal, Theme.rowPadding - 3)
+            .frame(maxWidth: .infinity, minHeight: Theme.rowHeight - 6, alignment: .leading)
+            .background {
+                shape.fill(fill(pressed: configuration.isPressed))
+            }
+            .contentShape(shape)
+            .onHover { hovering = $0 }
+    }
+
+    private func fill(pressed: Bool) -> Color {
+        if pressed { return Theme.press }
+        if isInUse { return Theme.splitInUse }
+        return hovering ? Theme.hover : .clear
     }
 }
 

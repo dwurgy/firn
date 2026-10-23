@@ -35,6 +35,11 @@ final class WebKitPageController: NSObject, PageController {
     /// When "Open in Lookout" was chosen from a link's menu, so the new
     /// window WebKit then asks for becomes a Lookout instead.
     @ObservationIgnored private var lookoutChosenAt: TimeInterval?
+    /// Alerts, confirms, and prompts shown since this page last changed, so
+    /// one that keeps asking can be told to stop.
+    @ObservationIgnored private var dialogsShown = 0
+    @ObservationIgnored private var dialogsBlocked = false
+    @ObservationIgnored private var isShowingPanel = false
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -198,6 +203,9 @@ extension WebKitPageController: WKNavigationDelegate {
         isProvisional = false
         provisionalURL = nil
         loadError = nil
+        // A new page starts with a clean slate for alerts.
+        dialogsShown = 0
+        dialogsBlocked = false
         let previous = url
         url = webView.url
         // A different site: its old icon must not linger beside the new title.
@@ -423,6 +431,109 @@ extension WebKitPageController: WKUIDelegate {
         return url.absoluteString == "about:blank" || WebAddress.isWebURL(url)
     }
 }
+
+// MARK: - Alerts and choosing files
+
+#if os(macOS)
+extension WebKitPageController {
+    /// `alert()`.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        showDialog(message, from: frame, buttons: ["OK"]) { _ in completionHandler() }
+    }
+
+    /// `confirm()`: true only if OK was clicked.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        showDialog(message, from: frame, buttons: ["OK", "Cancel"]) { answer in
+            completionHandler(answer != nil)
+        }
+    }
+
+    /// `prompt()`: the typed text, or nil for Cancel.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        let field = NSTextField(string: Self.clipped(defaultText ?? ""))
+        field.frame = CGRect(x: 0, y: 0, width: 260, height: 24)
+        showDialog(prompt, from: frame, buttons: ["OK", "Cancel"], field: field) { answer in
+            completionHandler(answer)
+        }
+    }
+
+    /// A file input's panel. WebKit only asks after a real click on one.
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable ([URL]?) -> Void
+    ) {
+        guard let window = webView.window, !isShowingPanel else { return completionHandler(nil) }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.prompt = "Choose"
+        isShowingPanel = true
+        panel.beginSheetModal(for: window) { [weak self] response in
+            self?.isShowingPanel = false
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
+
+    /// One alert at a time, attached to the window, headed by the site that
+    /// asked (the frame's real origin, so an embedded frame can't pass itself
+    /// off as the page). `done` gets nil for Cancel, otherwise the field's
+    /// text (empty without a field). A page that isn't on screen, or one told
+    /// to stop, is answered Cancel without asking, so nothing jumps out.
+    private func showDialog(
+        _ message: String,
+        from frame: WKFrameInfo,
+        buttons: [String],
+        field: NSTextField? = nil,
+        done: @escaping @MainActor (String?) -> Void
+    ) {
+        guard let window = webView.window, !dialogsBlocked, !isShowingPanel else { return done(nil) }
+        let alert = NSAlert()
+        let host = frame.securityOrigin.host
+        alert.messageText = host.isEmpty ? "This page says" : "\(host) says"
+        alert.informativeText = Self.clipped(message)
+        for title in buttons { alert.addButton(withTitle: title) }
+        alert.accessoryView = field
+        dialogsShown += 1
+        // From the second one on, a way out of a page that keeps asking.
+        if dialogsShown > 1 {
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don’t let this page show more"
+        }
+        if let field { alert.window.initialFirstResponder = field }
+        isShowingPanel = true
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return done(nil) }
+            self.isShowingPanel = false
+            if alert.suppressionButton?.state == .on { self.dialogsBlocked = true }
+            done(response == .alertFirstButtonReturn ? (field?.stringValue ?? "") : nil)
+        }
+    }
+
+    /// Pages decide what these say; a few screens' worth is plenty.
+    private static func clipped(_ text: String) -> String {
+        text.count > 2000 ? String(text.prefix(2000)) + "…" : text
+    }
+}
+#endif
 
 // MARK: - ⌘-click, middle-click, and Shift-click
 

@@ -8,5 +8,8 @@
 	<!-- Outgoing network connections: needed to load web pages. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Files a person picks in an open panel (uploading to a site): read only, and nothing else on disk. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>

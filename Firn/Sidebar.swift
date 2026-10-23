@@ -779,6 +779,10 @@ private struct TabList: View {
     /// A tab's right-click menu: the few things you'd reach for, as in Dia.
     /// Later: Move to Space (Phase 4).
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
+        if tab.sound != .silent {
+            MuteMenuItem(tab: tab)
+            Divider()
+        }
         if tab.place == .open {
             Button("Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
@@ -1282,23 +1286,64 @@ struct TabRow<MenuItems: View>: View {
                     .labelStyle(RowLabelStyle(color: isActive ? Theme.ink : Theme.tabRest))
                 Spacer(minLength: 0)
             }
-            // Room for the close button, so long titles stop short of it.
-            .padding(.trailing, hovering ? 20 : 0)
+            // Room for the speaker and close button, so long titles stop short of them.
+            .padding(.trailing, (hovering ? 20 : 0) + (tab.sound != .silent ? 22 : 0))
         }
         .buttonStyle(RowButtonStyle(isActive: isActive))
         .overlay(alignment: .trailing) {
-            if hovering {
-                Button("Close tab", systemImage: "xmark", action: close)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(CloseButtonStyle())
-                    .help("Close tab (⌘W)")
-                    .padding(.trailing, 8)
+            HStack(spacing: 2) {
+                SoundButton(tab: tab)
+                if hovering {
+                    Button("Close tab", systemImage: "xmark", action: close)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(CloseButtonStyle())
+                        .help("Close tab (⌘W)")
+                }
             }
+            .padding(.trailing, 8)
         }
         .onHover { hovering = $0 }
         .contextMenu { menu }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
+    }
+}
+
+/// A tab's speaker, there only while its page makes sound (or would, if
+/// it weren't muted). Clicking it mutes or unmutes the tab. It fades in
+/// and out as the sound starts and stops.
+struct SoundButton: View {
+    let tab: FirnCore.Tab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let sound = tab.sound
+        ZStack {
+            if sound != .silent {
+                let muted = sound == .muted
+                Button(muted ? "Unmute tab" : "Mute tab",
+                       systemImage: muted ? "speaker.slash" : "speaker.wave.2") { tab.toggleMuted() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(CloseButtonStyle())
+                    .contentTransition(.symbolEffect(.replace))
+                    .help(muted ? "Unmute tab" : "Mute tab")
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: sound)
+    }
+}
+
+/// "Mute Tab" or "Unmute Tab" for a tab's menu, while it makes sound.
+struct MuteMenuItem: View {
+    let tab: FirnCore.Tab
+
+    var body: some View {
+        switch tab.sound {
+        case .silent: EmptyView()
+        case .playing: Button("Mute Tab", systemImage: "speaker.slash") { tab.toggleMuted() }
+        case .muted: Button("Unmute Tab", systemImage: "speaker.wave.2") { tab.toggleMuted() }
+        }
     }
 }
 
@@ -1385,8 +1430,8 @@ struct SplitRow<MenuItems: View>: View {
                 FadingTitle(text: tab.title, onScreen: isOnScreen)
             }
             .padding(.leading, Theme.rowPadding)
-            // Room for the close button, so the title fades out before it.
-            .padding(.trailing, hovering ? 28 : 4)
+            // Room for the speaker and close button, so the title fades out before them.
+            .padding(.trailing, (hovering ? 28 : 4) + (tab.sound != .silent ? 22 : 0))
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
@@ -1394,13 +1439,16 @@ struct SplitRow<MenuItems: View>: View {
         // Its contents shrink away when it closes or the split forms.
         .clipped()
         .overlay(alignment: .trailing) {
-            if hovering && faded == nil {
-                Button("Close tab", systemImage: "xmark") { closeHalf(tab) }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(CloseButtonStyle())
-                    .help(tab.id == inUseID ? "Close tab (⌘W)" : "Close tab")
-                    .padding(.trailing, 8)
+            HStack(spacing: 2) {
+                SoundButton(tab: tab)
+                if hovering && faded == nil {
+                    Button("Close tab", systemImage: "xmark") { closeHalf(tab) }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(CloseButtonStyle())
+                        .help(tab.id == inUseID ? "Close tab (⌘W)" : "Close tab")
+                }
             }
+            .padding(.trailing, 8)
         }
         .opacity(faded == tab.id ? 0 : 1)
         .contextMenu {

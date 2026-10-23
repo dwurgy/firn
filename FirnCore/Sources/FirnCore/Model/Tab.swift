@@ -118,6 +118,15 @@ public final class Tab: Identifiable {
         return a == b
     }
 
+    /// Whether the tab's page is making sound; silent while it rests.
+    public var sound: PageSound { page?.sound ?? .silent }
+
+    /// Mutes a tab making sound, or unmutes a muted one.
+    public func toggleMuted() {
+        guard sound != .silent else { return }
+        page?.setMuted(sound == .playing)
+    }
+
     /// Whether the tab has no page right now (closed Basecamp tiles rest
     /// until clicked, as do tabs not yet shown since launch).
     public var isResting: Bool { page == nil }

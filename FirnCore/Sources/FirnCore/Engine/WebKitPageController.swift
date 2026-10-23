@@ -18,6 +18,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var icon: Data?
     private(set) var loadError: LoadError?
     private(set) var zoom: Double = 1
+    private(set) var sound: PageSound = .silent
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
 
@@ -44,6 +45,10 @@ final class WebKitPageController: NSObject, PageController {
     /// Camera and microphone answers of Allow, kept in memory until the tab
     /// closes (never saved), so a call that reconnects isn't asked again.
     @ObservationIgnored private var mediaGrants: Set<String> = []
+    /// Each frame that has reported its sound (`PageSoundScript`): the
+    /// frame, to mute it, and whether it's sounding. Cleared on each new page.
+    @ObservationIgnored private var soundFrames: [String: (info: WKFrameInfo, sounding: Bool)] = [:]
+    @ObservationIgnored private var isMuted = false
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -76,6 +81,7 @@ final class WebKitPageController: NSObject, PageController {
         webView.isInspectable = true // The Web Inspector is Firn's only developer tool.
         observeWebView()
         IconChangeWatcher.shared.watch(webView, for: self)
+        SoundWatcher.shared.watch(webView, for: self)
         #if os(macOS)
         ClickRecorder.start() // Before the first click, or it would be missed.
         #endif
@@ -113,7 +119,15 @@ final class WebKitPageController: NSObject, PageController {
 
     func isInUse() async -> Bool {
         if webView.cameraCaptureState != .none || webView.microphoneCaptureState != .none { return true }
+        if sound != .silent { return true }
         return await webView.requestMediaPlaybackState() == .playing
+    }
+
+    func setMuted(_ muted: Bool) {
+        guard muted != isMuted else { return }
+        isMuted = muted
+        for frame in soundFrames.values { tellMuted(frame.info) }
+        updateSound()
     }
 
     func focus() {
@@ -321,6 +335,9 @@ extension WebKitPageController: WKNavigationDelegate {
         dialogsBlocked = false
         let previous = url
         url = webView.url
+        // The old page's frames are gone, and their sound with them.
+        soundFrames = [:]
+        updateSound()
         // A different site: its old icon must not linger beside the new title.
         if previous?.host()?.lowercased() != url?.host()?.lowercased() {
             iconTask?.cancel()
@@ -394,6 +411,34 @@ extension WebKitPageController {
             self.iconRecheckPending = false
             self.findIcon()
         }
+    }
+}
+
+// MARK: - Sound
+
+extension WebKitPageController {
+    /// A frame's report from `PageSoundScript`. A frame seen for the first
+    /// time while muted is muted too, so sound can't slip in through a new one.
+    fileprivate func heard(_ report: PageSoundScript.Report, in frame: WKFrameInfo) {
+        let isNew = soundFrames[report.frame] == nil
+        // A page that keeps making frames (ads, say) lets go of the quiet ones first.
+        if isNew && soundFrames.count >= PageSoundScript.frameLimit {
+            soundFrames = soundFrames.filter { $0.value.sounding }
+            guard soundFrames.count < PageSoundScript.frameLimit else { return }
+        }
+        soundFrames[report.frame] = (frame, report.sounding)
+        if isNew && isMuted { tellMuted(frame) }
+        updateSound()
+    }
+
+    private func tellMuted(_ frame: WKFrameInfo) {
+        webView.evaluateJavaScript(PageSoundScript.setMutedScript(isMuted), in: frame, in: Self.firnWorld) { _ in }
+    }
+
+    private func updateSound() {
+        let sounding = soundFrames.values.contains { $0.sounding }
+        let new: PageSound = !sounding ? .silent : isMuted ? .muted : .playing
+        if new != sound { sound = new }
     }
 }
 
@@ -486,6 +531,37 @@ private final class IconChangeWatcher: NSObject, WKScriptMessageHandler {
               message.body as? String == "changed",
               let webView = message.webView, let page = pages.object(forKey: webView) else { return }
         page.iconLinksMayHaveChanged(from: message.frameInfo.securityOrigin)
+    }
+}
+
+/// Hears pages' sound (see `PageSoundScript`). Like `IconChangeWatcher`,
+/// its script and handler live only in Firn's content world, so a page
+/// can't post to it; a message counts only in its exact shape. It runs in
+/// every frame, since sound often plays in an embedded one.
+@MainActor
+private final class SoundWatcher: NSObject, WKScriptMessageHandler {
+    static let shared = SoundWatcher()
+
+    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
+
+    func watch(_ webView: WKWebView, for page: WebKitPageController) {
+        pages.setObject(page, forKey: webView)
+        let controller = webView.configuration.userContentController
+        guard !controllers.contains(controller) else { return }
+        controllers.add(controller)
+        let world = WebKitPageController.firnWorld
+        controller.add(self, contentWorld: world, name: PageSoundScript.handlerName)
+        controller.addUserScript(WKUserScript(
+            source: PageSoundScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world
+        ))
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.world.name == WebKitPageController.firnWorld.name,
+              let report = PageSoundScript.parse(message.body),
+              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
+        page.heard(report, in: message.frameInfo)
     }
 }
 

@@ -49,6 +49,21 @@ struct DriftTests {
         #expect(a.title == "a.example")
     }
 
+    @Test func aTabPlayingSoundNeverDrifts() throws {
+        let clock = Clock()
+        let store = makeStore(clock)
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        let page = try #require(a.page as? FakePage)
+        page.sound = .muted
+        store.driftIdleTabs()
+        use(store, clock, days: 7)
+        #expect(hosts(store.openTabs) == ["a.example", "b.example"])
+        page.sound = .silent
+        use(store, clock, days: 1)
+        #expect(hosts(store.driftedTabs) == ["a.example"])
+    }
+
     @Test func daysAwayFromFirnDontCount() {
         let clock = Clock()
         let store = makeStore(clock)

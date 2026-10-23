@@ -56,6 +56,12 @@ public protocol PageController: AnyObject, Observable {
     /// sound or video, or using the camera or microphone.
     func isInUse() async -> Bool
 
+    /// Whether the page is making sound, or would be if Firn hadn't muted it.
+    var sound: PageSound { get }
+    /// Mutes or unmutes the page. In memory only, never saved; it stays
+    /// muted as it moves from page to page, until unmuted.
+    func setMuted(_ muted: Bool)
+
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.
     var sendsOtherSitesToLookout: Bool { get set }

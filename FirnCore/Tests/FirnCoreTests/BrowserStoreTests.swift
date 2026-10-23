@@ -43,6 +43,8 @@ final class FakePage: PageController {
         url = resumedFrom
     }
     func isInUse() async -> Bool { inUse }
+    var sound: PageSound = .silent
+    func setMuted(_ muted: Bool) {}
 }
 
 @MainActor

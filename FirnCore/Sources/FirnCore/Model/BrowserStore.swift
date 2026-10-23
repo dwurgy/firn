@@ -1115,8 +1115,8 @@ public final class BrowserStore {
     /// 30-day cutoff, and returns every loose tab that hasn't been on screen
     /// for the set number of used days, in every space, top to bottom. Days
     /// away from Firn don't count. Never drifted: Basecamp tiles, grouped
-    /// tabs, the tab on screen, and tabs in split view. (Later, also a tab
-    /// playing sound.) The app drifts them with `drift(_:)`, one by one, so
+    /// tabs, the tab on screen, tabs in split view, and a tab playing sound
+    /// (muted or not). The app drifts them with `drift(_:)`, one by one, so
     /// it can show each go.
     public func idleTabs() -> [Tab] {
         let today = Self.day(of: now())
@@ -1126,7 +1126,8 @@ public final class BrowserStore {
         deleteExpiredDriftedTabs()
         guard let limit = driftAfter.days else { return [] }
         return tabs.filter { tab in
-            guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID else { return false }
+            guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID,
+                  tab.sound == .silent else { return false }
             let lastSeen = Self.day(of: tab.lastActiveAt)
             return usedDays.count { $0 > lastSeen } >= limit
         }
@@ -1136,7 +1137,7 @@ public final class BrowserStore {
     /// so it costs nothing; it keeps its address, title, and icon.
     public func drift(_ tab: Tab) {
         guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID,
-              let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+              tab.sound == .silent, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tab.sleep()
         tab.place = .drifted

@@ -541,7 +541,15 @@ private struct BasecampTile: View {
         }
         .buttonStyle(TileButtonStyle(isActive: isActive, lifted: lifted, accent: Theme.tileAccent(site: site, icon: tab.icon)))
         .help(tab.title)
+        // Its speaker, while it makes sound, tucked in the corner.
+        .overlay(alignment: .topTrailing) {
+            SoundButton(tab: tab).padding(2)
+        }
         .contextMenu {
+            if tab.sound != .silent {
+                MuteMenuItem(tab: tab)
+                Divider()
+            }
             if tab.isAwayFromHome {
                 Button("Go Back to Home", action: goHome)
             }

@@ -45,6 +45,9 @@ final class FakePage: PageController {
     func isInUse() async -> Bool { inUse }
     var sound: PageSound = .silent
     func setMuted(_ muted: Bool) {}
+    var isPausedByFirn = false
+    func setPaused(_ paused: Bool) { isPausedByFirn = paused }
+    func forgetPause() { isPausedByFirn = false }
 }
 
 @MainActor

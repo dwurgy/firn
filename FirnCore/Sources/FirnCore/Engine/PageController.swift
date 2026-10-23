@@ -61,6 +61,15 @@ public protocol PageController: AnyObject, Observable {
     /// Mutes or unmutes the page. In memory only, never saved; it stays
     /// muted as it moves from page to page, until unmuted.
     func setMuted(_ muted: Bool)
+    /// Whether Firn paused the page's sound (from the mini player), so it
+    /// can be played again. Cleared when the page changes, when it plays
+    /// again on its own, or with `forgetPause()`.
+    var isPausedByFirn: Bool { get }
+    /// Pauses what's playing on the page, or plays just that again.
+    func setPaused(_ paused: Bool)
+    /// Lets go of a pause, leaving the page as it is (the tab came on
+    /// screen, so its own controls take over).
+    func forgetPause()
 
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.

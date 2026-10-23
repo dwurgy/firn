@@ -1248,6 +1248,19 @@ public final class BrowserStore {
         if let partner = splitPartner(of: tab) { wake(partner) }
         tab.lastActiveAt = now()
         activeTabID = tab.id
+        // On screen, its page's own controls take over from the mini player.
+        for id in onScreenTabIDs { tabs.first { $0.id == id }?.forgetPause() }
+    }
+
+    /// The tab the mini player shows: in this space, out of sight, and
+    /// playing (muted counts) or paused from the mini player. Of several,
+    /// the one looked at last. Never a tab from another space.
+    public var miniPlayerTab: Tab? {
+        let onScreen = onScreenTabIDs
+        return tabs
+            .filter { $0.spaceID == activeSpaceID && !onScreen.contains($0.id)
+                && ($0.sound != .silent || $0.isPausedByFirn) }
+            .max { $0.lastActiveAt < $1.lastActiveAt }
     }
 
     /// A drifted tab comes back where new tabs go.

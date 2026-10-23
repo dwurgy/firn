@@ -29,6 +29,7 @@ enum PageSoundScript {
             var frame = Math.random().toString(36).slice(2, 14);
             var seen = new Set();
             var mutedByFirn = new Set();
+            var pausedByFirn = new Set();
             var muted = false;
             var last = false;
             var timer = null;
@@ -75,12 +76,31 @@ enum PageSoundScript {
                 }
                 check();
             };
+            window.__firnSetPaused = function (on) {
+                if (on) {
+                    pausedByFirn.clear();
+                    for (var el of seen) {
+                        if (el.isConnected && !el.paused && !el.ended) { pausedByFirn.add(el); el.pause(); }
+                    }
+                } else {
+                    for (var el of pausedByFirn) {
+                        if (el.isConnected) { var p = el.play(); if (p) p.catch(function () {}); }
+                    }
+                    pausedByFirn.clear();
+                }
+            };
             check();
         })();
         """
 
     static func setMutedScript(_ muted: Bool) -> String {
         "window.__firnSetMuted && window.__firnSetMuted(\(muted))"
+    }
+
+    /// Pauses what's playing in a frame, remembering it, or plays just
+    /// that again. For the mini player; the page's own media, nothing else.
+    static func setPausedScript(_ paused: Bool) -> String {
+        "window.__firnSetPaused && window.__firnSetPaused(\(paused))"
     }
 
     /// One frame's report, checked field by field: exactly a short frame

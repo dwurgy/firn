@@ -19,6 +19,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var loadError: LoadError?
     private(set) var zoom: Double = 1
     private(set) var sound: PageSound = .silent
+    private(set) var isPausedByFirn = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
 
@@ -49,6 +50,8 @@ final class WebKitPageController: NSObject, PageController {
     /// frame, to mute it, and whether it's sounding. Cleared on each new page.
     @ObservationIgnored private var soundFrames: [String: (info: WKFrameInfo, sounding: Bool)] = [:]
     @ObservationIgnored private var isMuted = false
+    /// The frames Firn paused, to play them again.
+    @ObservationIgnored private var pausedFrames: [WKFrameInfo] = []
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -128,6 +131,27 @@ final class WebKitPageController: NSObject, PageController {
         isMuted = muted
         for frame in soundFrames.values { tellMuted(frame.info) }
         updateSound()
+    }
+
+    func setPaused(_ paused: Bool) {
+        if paused {
+            guard sound != .silent else { return }
+            pausedFrames = soundFrames.values.filter(\.sounding).map(\.info)
+            isPausedByFirn = true
+        } else {
+            guard isPausedByFirn else { return }
+            isPausedByFirn = false
+        }
+        let script = PageSoundScript.setPausedScript(paused)
+        for frame in pausedFrames {
+            webView.evaluateJavaScript(script, in: frame, in: Self.firnWorld) { _ in }
+        }
+        if !paused { pausedFrames = [] }
+    }
+
+    func forgetPause() {
+        pausedFrames = []
+        if isPausedByFirn { isPausedByFirn = false }
     }
 
     func focus() {
@@ -337,6 +361,7 @@ extension WebKitPageController: WKNavigationDelegate {
         url = webView.url
         // The old page's frames are gone, and their sound with them.
         soundFrames = [:]
+        forgetPause()
         updateSound()
         // A different site: its old icon must not linger beside the new title.
         if previous?.host()?.lowercased() != url?.host()?.lowercased() {
@@ -439,6 +464,8 @@ extension WebKitPageController {
         let sounding = soundFrames.values.contains { $0.sounding }
         let new: PageSound = !sounding ? .silent : isMuted ? .muted : .playing
         if new != sound { sound = new }
+        // Playing again on its own: the pause is over.
+        if sounding && isPausedByFirn { forgetPause() }
     }
 }
 

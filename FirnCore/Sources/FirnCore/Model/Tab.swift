@@ -127,6 +127,17 @@ public final class Tab: Identifiable {
         page?.setMuted(sound == .playing)
     }
 
+    /// Whether the mini player paused this tab's sound.
+    public var isPausedByFirn: Bool { page?.isPausedByFirn ?? false }
+
+    /// Pauses a tab making sound, or plays one the mini player paused.
+    public func togglePaused() {
+        if isPausedByFirn { page?.setPaused(false) } else if sound != .silent { page?.setPaused(true) }
+    }
+
+    /// The tab is on screen: its page's own controls take over from the mini player.
+    public func forgetPause() { page?.forgetPause() }
+
     /// Whether the tab has no page right now (closed Basecamp tiles rest
     /// until clicked, as do tabs not yet shown since launch).
     public var isResting: Bool { page == nil }

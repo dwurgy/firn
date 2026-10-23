@@ -113,7 +113,7 @@ private struct CommandBar: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15))
-                .foregroundStyle(Theme.faint)
+                .foregroundStyle(Theme.muted)
                 .accessibilityHidden(true)
             TextField(window.splitPickAnchor == nil ? "Search or enter address" : "Search, enter address, or find a tab",
                       text: $text)
@@ -396,11 +396,12 @@ struct CommandBarGlass: View {
                 .overlay { shape.fill(color.opacity(Theme.groupTint)) }
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
         } else if #available(macOS 26, *) {
-            shape.fill(.clear)
+            shape.fill(Theme.commandVeil)
                 .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
                 .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
         } else {
             shape.fill(.regularMaterial)
+                .overlay { shape.fill(Theme.commandVeil) }
                 .overlay { shape.fill(color.opacity(Theme.groupTint)) }
                 .overlay {
                     shape.strokeBorder(

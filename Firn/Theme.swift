@@ -42,7 +42,12 @@ enum Theme {
     static let lookoutDim = Color(light: 0x3C2814, lightOpacity: 0.16, dark: 0x000000, darkOpacity: 0.35)
     /// The page behind the command bar: lighter than a Lookout's, since the
     /// bar is small and quick.
-    static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.10, dark: 0x000000, darkOpacity: 0.25)
+    static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)
+    /// The page's own color inside the command bar's glass, so the glass
+    /// keeps the system's light or dark whatever page is behind it (glass
+    /// alone turns mid-grey over a bright page in dark mode, and the ink
+    /// washes out).
+    static let commandVeil = Color(light: 0xFBFAF8, lightOpacity: 0.62, dark: 0x2B2826, darkOpacity: 0.62)
 
     /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
     static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xF5F1EC, darkOpacity: 0.08)

@@ -125,6 +125,36 @@ final class WebKitPageController: NSObject, PageController {
         webView.pageZoom = zoom
     }
 
+    func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int {
+        let query = FindOnPage.query(text)
+        guard url != nil, loadError == nil, !query.isEmpty else { return 0 }
+        // Firn's world, and the words passed as a value, never as code.
+        if direction == .fromHere {
+            _ = try? await webView.callAsyncJavaScript(
+                FindOnPage.collapseScript, arguments: [:], in: nil, contentWorld: Self.firnWorld)
+        }
+        let counted = try? await webView.callAsyncJavaScript(
+            FindOnPage.countScript, arguments: ["query": query, "limit": FindOnPage.countLimit],
+            in: nil, contentWorld: Self.firnWorld)
+        let configuration = WKFindConfiguration()
+        configuration.backwards = direction == .previous
+        configuration.wraps = true
+        guard let result = try? await webView.find(query, configuration: configuration),
+              result.matchFound else { return 0 }
+        // The count reads the visible text; WebKit's find may also see a match
+        // it can't (in a frame, say), so a match found is never "No matches".
+        let count = (counted as? NSNumber)?.intValue ?? 0
+        return min(max(count, 1), FindOnPage.countLimit)
+    }
+
+    func selectedText() async -> String {
+        guard url != nil, loadError == nil else { return "" }
+        let selected = try? await webView.callAsyncJavaScript(
+            FindOnPage.selectionScript, arguments: ["limit": FindOnPage.maxLength],
+            in: nil, contentWorld: Self.firnWorld)
+        return FindOnPage.query((selected as? String) ?? "")
+    }
+
     @objc private func printOperationDidRun(
         _ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?
     ) {

@@ -255,6 +255,9 @@ private struct CommandBar: View {
         add("print", "Print…", ["printer", "pdf"], "⌘P", when: page?.url != nil && page?.loadError == nil) {
             page?.printPage()
         }
+        add("find", "Find on Page…", ["search page", "look for"], "⌘F", when: window.canFindInFront) {
+            window.openFindBar()
+        }
         add("zoom-in", "Zoom In", ["bigger", "larger", "magnify"], "⌘+", when: window.canZoomFront(.larger)) {
             window.zoomFront(.larger)
             window.focusPage()

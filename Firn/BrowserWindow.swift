@@ -279,6 +279,66 @@ final class WindowModel {
         frontPage?.setZoom(zoom)
     }
 
+    // MARK: Find on page
+
+    /// Whether the find bar (⌘F) is open over the page in front.
+    private(set) var showsFindBar = false
+    /// What's being looked for. Kept after the bar closes, so ⌘G can go on;
+    /// never saved.
+    var findText = ""
+    /// How many matches the last search found; nil before one has run.
+    private(set) var findCount: Int?
+    /// Goes up each time the find field is asked to take focus.
+    private(set) var findRequest = 0
+
+    var canFindInFront: Bool { frontPage.map { $0.url != nil && $0.loadError == nil } ?? false }
+
+    /// ⌘F: opens the bar, or gives it focus again, with its words selected.
+    func openFindBar() {
+        guard canFindInFront else { return }
+        showsFindBar = true
+        findRequest += 1
+    }
+
+    /// Esc, the close button, or the page in front changing: the bar goes,
+    /// and the page keeps the match selected, as in Safari.
+    func closeFindBar(focusingPage: Bool = true) {
+        guard showsFindBar else { return }
+        showsFindBar = false
+        findCount = nil
+        if focusingPage { focusPage() }
+    }
+
+    /// Looks for `findText` on the page in front. ⌘G and ⇧⌘G open the bar
+    /// first, so the count can be seen.
+    func find(_ direction: FindOnPage.Direction) {
+        guard let page = frontPage, canFindInFront else { return }
+        if direction != .fromHere, !showsFindBar { showsFindBar = true }
+        let text = findText
+        guard !FindOnPage.query(text).isEmpty else {
+            findCount = nil
+            return
+        }
+        Task { @MainActor in
+            let count = await page.find(text, direction)
+            // A newer search, or a closed bar, has the last word.
+            guard text == findText, showsFindBar, page === frontPage else { return }
+            findCount = count
+        }
+    }
+
+    /// ⌘E: looks for what's selected on the page.
+    func useSelectionForFind() {
+        guard let page = frontPage, canFindInFront else { return }
+        Task { @MainActor in
+            let selected = await page.selectedText()
+            guard !selected.isEmpty, page === frontPage else { return }
+            findText = selected
+            showsFindBar = true
+            find(.fromHere)
+        }
+    }
+
     func setSidebarCollapsed(_ collapsed: Bool) {
         guard collapsed != sidebarCollapsed else { return }
         sidebarCollapsed = collapsed
@@ -490,6 +550,7 @@ struct BrowserWindow: View {
             // The page and the sidebar move together, frame by frame, on one curve.
             PageArea(store: store, window: window)
                 .overlay { LookoutLayer(store: store, window: window) }
+                .overlay { FindBarLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
                 .overlay { SpaceSheetLayer(window: window) }
                 .modifier(PageBesideSidebar(
@@ -1265,6 +1326,22 @@ struct BrowserCommands: Commands {
             Button("Copy Link") { window.copyFrontLink() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(window.frontURL == nil)
+        }
+        // Safari's Find menu, for the page in front (a Lookout's while one is
+        // open). In place of the Mac's own, which would act on text fields only.
+        CommandGroup(replacing: .textEditing) {
+            Menu("Find") {
+                Button("Find…") { window.openFindBar() }
+                    .keyboardShortcut("f")
+                Button("Find Next") { window.find(.next) }
+                    .keyboardShortcut("g")
+                Button("Find Previous") { window.find(.previous) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                Divider()
+                Button("Use Selection for Find") { window.useSelectionForFind() }
+                    .keyboardShortcut("e")
+            }
+            .disabled(!window.canFindInFront)
         }
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {

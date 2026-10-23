@@ -38,6 +38,13 @@ public protocol PageController: AnyObject, Observable {
     var zoom: Double { get }
     /// One of `PageZoom.steps`.
     func setZoom(_ zoom: Double)
+    /// Finds `text` on the page, wrapping round at the end, and selects and
+    /// scrolls to the match. Returns how many matches the page has (counted
+    /// up to `FindOnPage.countLimit`); 0 if none, or nothing is loaded.
+    func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int
+    /// The text selected on the page, at most `FindOnPage.maxLength`
+    /// characters; "" if none.
+    func selectedText() async -> String
 
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.

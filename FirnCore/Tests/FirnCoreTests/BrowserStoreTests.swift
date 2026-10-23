@@ -32,6 +32,8 @@ final class FakePage: PageController {
     func printPage() {}
     var zoom: Double = 1
     func setZoom(_ zoom: Double) { self.zoom = zoom }
+    func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int { 0 }
+    func selectedText() async -> String { "" }
 }
 
 @MainActor

@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- The loading indicator David picked (B, "Frost forming", 2026-10-23). A was the frost line, not chosen. -->
+<!-- The loading indicator David picked (B, "Frost forming", 2026-10-23). A was the frost line, not chosen.
+     Later the same day: 32% (28% dark) instead of 22%, so it shows; a sinking horizon and a sunrise pulse were tried and dropped. -->
 <meta charset="utf-8"><title>Loading frost</title>
 <style>
 body{font-family:-apple-system,system-ui;margin:24px;background:#FBFAF8}
@@ -21,7 +22,7 @@ const st={};
 function prog(t){if(t<.15)return .1*(t/.15);if(t<1.6)return .1+.6*(1-Math.pow(1-(t-.15)/1.45,2));if(t<2.1)return .7+.3*((t-1.6)/.5);return 1}
 function run(k){
   const f=document.getElementById('f'+k),ic=document.getElementById('i'+k);
-  f.style.background='linear-gradient(90deg,color-mix(in srgb,var(--sp) 22%,transparent) 75%,transparent)';
+  f.style.background='linear-gradient(90deg,color-mix(in srgb,var(--sp) 32%,transparent) 75%,transparent)';
   f.style.transition='none';f.style.opacity=1;const t0=performance.now();cancelAnimationFrame(st[k]);
   const step=n=>{const t=(n-t0)/1000,p=prog(t);f.style.width=(p*112)+'%';
     ic.style.opacity=t>.3&&p<1?(.55+.45*(.5+.5*Math.cos((t-.3)*Math.PI*1.4))):1;

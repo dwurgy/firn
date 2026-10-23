@@ -118,86 +118,61 @@ private struct ChromeButtonStyle: ButtonStyle {
 /// Shows where the tab on screen is, and takes an address or a search.
 /// At rest it shows just the site; clicking in shows the whole address.
 /// The page's zoom in the address bar: quiet text; a click goes back to actual size.
-/// While the page in front loads, the space's color fills the address field
-/// and its top edge, a plain horizon, sinks as the page comes in. On longer
-/// loads, First light's sky rises above it; when the page is in, the light
-/// holds a moment as the horizon drops away, then fades (David, 2026-10-23).
-/// A failed load just fades. Reduce Motion: no sinking, only fades.
-private struct LoadingHorizon: View {
+/// While the page in front loads, a wash of the space's color forms across
+/// the address field from the left, like frost on glass, then thaws once the
+/// page is in (David, 2026-10-23, after trying a sinking horizon and a
+/// sunrise: just the space color, no sunrise). Its front edge stays soft, so
+/// it never reads as a hard progress bar. Reduce Motion: it fades in and out whole.
+private struct LoadingFrost: View {
     let isLoading: Bool
     let progress: Double
-    let failed: Bool
     @Environment(\.spaceColorName) private var space
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// How far the horizon has sunk, 0 (field full) to 1 (gone).
-    @State private var sunk = 0.0
-    @State private var sky = 0.0
+    /// How far across the frost has formed, 0 to 1.
+    @State private var formed = 0.0
     @State private var shown = false
-    /// Counts loads, so an old load's steps stand down when a new one starts
+    /// Counts loads, so an old load's thaw stands down when a new one starts
     /// (a view's closures see its values from when they were made).
     @State private var load = 0
-    /// The sky waits for a load you'd notice, so it stays special on sites
-    /// that load all day.
-    private static let skyAfter: Duration = .seconds(1)
-    /// The horizon keeps some way to go until the page is really in.
-    private static let sinkWhileLoading = 0.8
 
     var body: some View {
         GeometryReader { geo in
             let tint = colorScheme == .dark ? Theme.loadingTintDark : Theme.loadingTint
-            ZStack {
-                LinearGradient(colors: [Theme.sunHaze, Theme.sunPeach, Theme.sunApricot],
-                               startPoint: .top, endPoint: .bottom)
-                    .opacity(sky)
-                Rectangle()
-                    .fill(Theme.spaceColor(space).opacity(tint))
-                    .offset(y: reduceMotion ? 0 : geo.size.height * sunk)
-            }
+            let color = Theme.spaceColor(space).opacity(tint)
+            LinearGradient(stops: [.init(color: color, location: 0), .init(color: color, location: 0.8),
+                                   .init(color: color.opacity(0), location: 1)],
+                           startPoint: .leading, endPoint: .trailing)
+                // A little past the end, so the soft edge leaves the field when it's done.
+                .frame(width: geo.size.width * (reduceMotion ? 1.25 : formed * 1.25))
         }
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onChange(of: isLoading, initial: true) { _, loading in
-            if loading { start() } else if shown { finish() }
-        }
-        .onChange(of: failed) { _, failed in
-            guard failed else { return }
-            withAnimation(.easeOut(duration: 0.45)) { shown = false }
+            if loading { start() } else if shown { thaw() }
         }
         .onChange(of: progress) { _, value in
-            let target = value * Self.sinkWhileLoading
-            guard isLoading, target > sunk else { return }
-            withAnimation(.easeOut(duration: 0.3)) { sunk = target }
+            guard isLoading, value > formed else { return }
+            withAnimation(.easeOut(duration: 0.3)) { formed = value }
         }
     }
 
     private func start() {
         load += 1
-        let this = load
-        sunk = 0
-        sky = 0
+        formed = 0
         withAnimation(.easeOut(duration: 0.2)) { shown = true }
-        Task {
-            try? await Task.sleep(for: Self.skyAfter)
-            guard load == this, shown, sunk < 1 else { return }
-            withAnimation(.easeOut(duration: 0.8)) { sky = 0.9 }
-        }
+        withAnimation(.easeOut(duration: 0.3)) { formed = max(progress, 0.1) }
     }
 
-    /// The horizon drops away (the light brightening if it's up), then all fades.
-    private func finish() {
-        guard !failed else {
-            withAnimation(.easeOut(duration: 0.45)) { shown = false }
-            return
-        }
+    /// Finishes forming, then fades.
+    private func thaw() {
         let this = load
-        withAnimation(.easeOut(duration: 0.35)) {
-            sunk = 1
-            if sky > 0 { sky = 1 }
+        withAnimation(.easeOut(duration: 0.2)) {
+            formed = 1
         } completion: {
             guard load == this else { return }
-            withAnimation(.easeOut(duration: 0.6)) { shown = false }
+            withAnimation(.easeOut(duration: 0.45)) { shown = false }
         }
     }
 }
@@ -274,9 +249,8 @@ private struct AddressBar: View {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
                     .fill(focused ? Theme.page : hovering ? Theme.press : Theme.hover)
                     .overlay {
-                        LoadingHorizon(isLoading: frontPage?.isLoading ?? false, progress: frontPage?.progress ?? 0,
-                                       failed: frontPage?.loadError != nil)
-                            // A new page in front starts fresh, never finishing the last one's load.
+                        LoadingFrost(isLoading: frontPage?.isLoading ?? false, progress: frontPage?.progress ?? 0)
+                            // A new page in front starts fresh, never thawing the last one's frost.
                             .id(frontPage.map { ObjectIdentifier($0) })
                             .clipShape(RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous))
                     }

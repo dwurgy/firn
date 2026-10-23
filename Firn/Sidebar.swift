@@ -19,6 +19,7 @@ struct Sidebar: View {
                 .padding(.bottom, Theme.sectionSpacing)
             BasecampGrid(store: store, window: window)
             TabList(store: store, window: window)
+            MiniPlayer(store: store)
             SpaceRow(store: store, window: window)
                 .padding(.bottom, Theme.pageInset)
         }

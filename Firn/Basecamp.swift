@@ -649,7 +649,18 @@ private struct ArrivalFlight: View, Animatable {
                 .opacity(min(1, max(0, progress * 2 - 1)))
         }
         .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-        .background { shape.fill(Theme.liftedTab) }
+        .background {
+            LiftBacking(shape: shape)
+                .overlay {
+                    // The tab on screen leaves as its row did, a sheet, which
+                    // fades over the first half as the tile's ice comes in.
+                    if arrival.isActive {
+                        shape.fill(Theme.activeTab)
+                            .overlay { shape.strokeBorder(Theme.activeTabHairline, lineWidth: 0.5) }
+                            .opacity(max(0, 1 - progress * 2))
+                    }
+                }
+        }
         .clipShape(shape)
         .shadow(color: Theme.shadowPageFar, radius: 8, y: 3)
         .offset(x: frame.minX, y: frame.minY)
@@ -742,16 +753,10 @@ private struct TileButtonStyle: ButtonStyle {
 
     @ViewBuilder private var resting: some View {
         if lifted {
-            // A lifted tab row's sheet: solid, lit along its top edge, a warm
-            // hairline, a contact shadow, and a wider one beneath it.
-            shape.fill(Theme.liftedTab)
-                .overlay {
-                    shape.inset(by: 0.5).strokeBorder(
-                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
-                        lineWidth: 0.5)
-                }
-                .overlay { shape.strokeBorder(Theme.activeTabHairline, lineWidth: 0.5) }
-                .shadow(color: Theme.shadowSoft, radius: 1, y: 1)
+            // The same ice as at rest, over the frame so it stays frost over
+            // the page, with a wider shadow beneath it.
+            TileGlass()
+                .background { LiftBacking(shape: shape) }
                 .shadow(color: Theme.shadowPageFar, radius: 9, y: 4)
         } else {
             TileGlass(hovering: hovering)

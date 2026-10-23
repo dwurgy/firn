@@ -516,6 +516,7 @@ struct BrowserWindow: View {
             .ignoresSafeArea()
         }
         .ignoresSafeArea()
+        .environment(\.spaceColorName, store.activeSpace.color)
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))
         .onAppear {
@@ -1018,7 +1019,7 @@ private struct LiftPlacement: ViewModifier, Animatable {
         let lift = card
         return content
             .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-            .background { shape.fill(Theme.liftedTab) }
+            .background { LiftBacking(shape: shape) }
             .clipShape(shape)
             .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1).opacity(lift) }
             .shadow(color: Theme.shadowPageFar, radius: 8 + 6 * lift, y: 3 + 3 * lift)

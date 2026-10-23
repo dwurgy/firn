@@ -21,9 +21,10 @@ enum Theme {
     static let activeTab = Color(light: 0xFBFAF8, lightOpacity: 1, dark: 0xF5F1EC, darkOpacity: 0.17)
     /// Its edge: a warm hairline, so it reads as a sheet, not a lighter patch.
     static let activeTabHairline = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.25)
-    /// A tab lifted off the sidebar: the row on screen's own color, but solid,
-    /// so it never turns see-through over the page (dark: 17% warm white over the frame).
-    static let liftedTab = Color(light: 0xFBFAF8, dark: 0x5A5753)
+    /// Under anything lifted off the sidebar (a tab, a tile, a group's card):
+    /// the frame itself, nearly opaque, so the glass on top looks as it does
+    /// at rest but never turns see-through over the page (`LiftBacking`).
+    static let liftBacking = Color(light: 0xE9E3DA, lightOpacity: 0.88, dark: 0x3A3734, darkOpacity: 0.88)
     /// The other tabs' titles rest a step back, so the tab on screen leads.
     static let tabRest = Color(light: 0x5E564E, dark: 0xBDB5AC)
 

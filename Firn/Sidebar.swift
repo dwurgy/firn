@@ -816,7 +816,8 @@ private struct TabList: View {
             let dy = windowOrigin.point.y - shownInWindow.rect.minY
             GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
-                      foldLocked: true, thawed: false, closing: false, store: store, ungroup: {}, close: {}) {
+                      foldLocked: true, thawed: false, closing: false, lifted: true, store: store,
+                      ungroup: {}, close: {}) {
                 ForEach(store.rows(in: groupDrag.group)) { tab in
                     liftedRow(tab, isActive: tab.id == store.activeTabID)
                 }
@@ -1467,6 +1468,9 @@ final class RectBox {
 struct FrostGlass: View {
     let shape: RoundedRectangle
     var color: Color? = nil
+    /// Picked up by a drag: the same glass over the frame (`LiftBacking`),
+    /// so it never turns see-through over the page.
+    var lifted = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -1477,6 +1481,7 @@ struct FrostGlass: View {
         } else {
             // Frosted fills, like the tiles: never glass on the window's glass.
             shape.fill(color == nil ? Theme.tileFill : Theme.groupFill)
+                .background { if lifted { LiftBacking(shape: shape) } }
                 .overlay { shape.fill((color ?? .clear).opacity(Theme.groupTint)) }
                 .overlay {
                     shape.strokeBorder(
@@ -1487,6 +1492,25 @@ struct FrostGlass: View {
                 .shadow(color: color == nil ? Theme.shadowSoft : .clear, radius: 1, y: 0.5)
         }
     }
+}
+
+
+/// What's under anything lifted off the sidebar: the frame and the space's
+/// tint, nearly opaque. Over the sidebar, the glass on it looks just as it
+/// does at rest; over the page, it stays frost instead of turning clear.
+struct LiftBacking: View {
+    let shape: RoundedRectangle
+    @Environment(\.spaceColorName) private var space
+
+    var body: some View {
+        shape.fill(Theme.liftBacking)
+            .overlay { shape.fill(Theme.frameTint(space)) }
+    }
+}
+
+extension EnvironmentValues {
+    /// The active space's color, for what's drawn over the frame (`LiftBacking`).
+    @Entry var spaceColorName = "glacier"
 }
 
 
@@ -1508,6 +1532,8 @@ private struct GroupCard<Rows: View>: View {
     /// True while it lifts away (Close Group): it folds up under its name
     /// line and fades.
     let closing: Bool
+    /// True for the copy a drag carries: solid, not frosted.
+    var lifted = false
     let store: BrowserStore
     let ungroup: () -> Void
     let close: () -> Void
@@ -1613,7 +1639,7 @@ private struct GroupCard<Rows: View>: View {
             }
     }
 
-    private var card: some View { FrostGlass(shape: shape) }
+    private var card: some View { FrostGlass(shape: shape, lifted: lifted) }
 
     private func toggleFold() {
         animate { store.setFolded(group, !group.folded) }

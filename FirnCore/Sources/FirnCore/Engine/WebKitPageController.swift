@@ -41,6 +41,9 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var dialogsShown = 0
     @ObservationIgnored private var dialogsBlocked = false
     @ObservationIgnored private var isShowingPanel = false
+    /// Camera and microphone answers of Allow, kept in memory until the tab
+    /// closes (never saved), so a call that reconnects isn't asked again.
+    @ObservationIgnored private var mediaGrants: Set<String> = []
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -618,6 +621,52 @@ extension WebKitPageController {
             self.isShowingPanel = false
             if alert.suppressionButton?.state == .on { self.dialogsBlocked = true }
             done(response == .alertFirstButtonReturn ? (field?.stringValue ?? "") : nil)
+        }
+    }
+
+    /// A site asking for the camera, the microphone, or both. Firn asks in a
+    /// sheet headed by the asking frame's real origin (and the page's, if a
+    /// frame inside it is the one asking). Only https sites, and only a page
+    /// on screen with no other sheet up; anything else is refused quietly.
+    func webView(
+        _ webView: WKWebView,
+        requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        type: WKMediaCaptureType,
+        decisionHandler: @escaping @MainActor @Sendable (WKPermissionDecision) -> Void
+    ) {
+        let devices: [String]
+        let wanted: String
+        switch type {
+        case .camera: devices = ["camera"]; wanted = "your camera"
+        case .microphone: devices = ["microphone"]; wanted = "your microphone"
+        case .cameraAndMicrophone: devices = ["camera", "microphone"]; wanted = "your camera and microphone"
+        @unknown default: return decisionHandler(.deny)
+        }
+        let host = origin.host.lowercased()
+        let pageHost = url?.host()?.lowercased() ?? ""
+        guard origin.protocol == "https", !host.isEmpty, !pageHost.isEmpty else { return decisionHandler(.deny) }
+        // Keyed by who asks, on which page, for which device.
+        let keys = devices.map { "\(host):\(origin.port)|\(pageHost)|\($0)" }
+        if mediaGrants.isSuperset(of: keys) { return decisionHandler(.grant) }
+        guard let window = webView.window, !isShowingPanel else { return decisionHandler(.deny) }
+
+        let alert = NSAlert()
+        alert.messageText = "Allow \(host) to use \(wanted)?"
+        alert.informativeText = host == pageHost ? "" : "It’s part of the page on \(pageHost)."
+        // Don't Allow comes first, so it's the one Return picks.
+        alert.addButton(withTitle: "Don’t Allow")
+        alert.addButton(withTitle: "Allow")
+        isShowingPanel = true
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return decisionHandler(.deny) }
+            self.isShowingPanel = false
+            if response == .alertSecondButtonReturn {
+                self.mediaGrants.formUnion(keys)
+                decisionHandler(.grant)
+            } else {
+                decisionHandler(.deny)
+            }
         }
     }
 

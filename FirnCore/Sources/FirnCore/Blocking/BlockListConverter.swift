@@ -155,6 +155,10 @@ public enum BlockListConverter {
                           ":matches-css", ":min-text-length(", ":watch-attr(", ":matches-path(", ":others(",
                           ":if(", ":if-not(", ":nth-ancestor(", ":matches-attr(", ":matches-prop("]
             if selector.hasPrefix("+js(") || selector.hasPrefix("^") { return false }
+            // "body {padding-top:0}" restyles rather than hides; WebKit would drop the whole group.
+            if selector.contains("{") || selector.contains("}") { return false }
+            // CSS doesn't allow ":has()" inside ":has()"; a second one may be nested, so skip it.
+            if selector.components(separatedBy: ":has(").count > 2 { return false }
             return !extras.contains { selector.contains($0) }
         }
 

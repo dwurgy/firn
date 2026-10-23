@@ -321,10 +321,19 @@ extension WebKitPageController: WKNavigationDelegate {
         let allows = NavigationPolicy.allows(url, isMainFrame: isMainFrame)
         // Before WebKit goes ahead, so the rules this site wants apply to its
         // load. Redirects ask again, so the site that ends up showing decides.
-        if allows, isMainFrame, WebAddress.isWebURL(url) {
-            ContentBlocker.shared.setBlocks(blocksContent?(url) ?? true, for: webView.configuration.userContentController)
-        }
+        if allows, isMainFrame, WebAddress.isWebURL(url) { followBlocking(of: url) }
         decisionHandler(allows ? .allow : .cancel)
+    }
+
+    /// Blocks ads and trackers unless `url`'s site is one where this space doesn't.
+    private func followBlocking(of url: URL) {
+        ContentBlocker.shared.setBlocks(blocksContent?(url) ?? true, for: webView.configuration.userContentController)
+    }
+
+    /// A load that never showed (failed, stopped, or became a download)
+    /// leaves the page that's still showing, so its site decides again.
+    private func followBlockingOfShownPage() {
+        if let url, WebAddress.isWebURL(url) { followBlocking(of: url) }
     }
 
     /// A response the page can't show, or one the site marks as an
@@ -348,6 +357,7 @@ extension WebKitPageController: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        if navigationResponse.isForMainFrame { followBlockingOfShownPage() }
         startedDownload(download)
     }
 
@@ -411,6 +421,7 @@ extension WebKitPageController: WKNavigationDelegate {
         isProvisional = false
         if let failure = LoadError(error, fallbackURL: provisionalURL) { loadError = failure }
         provisionalURL = nil
+        followBlockingOfShownPage()
         syncState()
     }
 

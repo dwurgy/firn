@@ -64,10 +64,12 @@ struct BlockListTests {
         example.com#?#div:-abp-has(.ad)
         example.*##.ad
         ##div:has-text(Sponsored)
+        example.com##body {padding-top:0;}
+        ##li:has(div:has(.sponsored))
         """
         let output = BlockListConverter.convert(list)
         #expect(output.ruleCount == 0)
-        #expect(output.skipped == 7)
+        #expect(output.skipped == 9)
     }
 
     @Test func hidingRules() throws {
@@ -136,6 +138,32 @@ struct BlockListTests {
         let compiled = try await store.compileContentRuleList(forIdentifier: list.rawValue, encodedContentRuleList: output.json)
         print("\(list.rawValue): compiled in \(Date.now.timeIntervalSince(started) - converted)s")
         #expect(compiled != nil)
+    }
+
+    /// Every hiding rule's selector is CSS WebKit understands. WebKit drops
+    /// a whole rule silently for one bad selector, and rules share 50, so a
+    /// bad one would quietly stop dozens of others. Run after refreshing the lists.
+    @MainActor @Test(arguments: BlockList.allCases)
+    func shippedSelectorsAreValid(_ list: BlockList) async throws {
+        let text = try #require(list.text())
+        let selectors = try rules(text).compactMap { action($0)["selector"] as? String }
+        #expect(!selectors.isEmpty)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+        webView.loadHTMLString("<!doctype html><p>page</p>", baseURL: URL(string: "https://news.example.test/")!)
+        var bad: [String]?
+        for _ in 0..<100 where bad == nil {
+            try await Task.sleep(for: .milliseconds(50))
+            let script = """
+                if (document.readyState != "complete") return null;
+                return selectors.filter(s => { try { document.querySelector(s); return false } catch { return true } });
+                """
+            bad = try? await webView.callAsyncJavaScript(script, arguments: ["selectors": selectors],
+                                                         contentWorld: .defaultClient) as? [String]
+        }
+        let invalid = try #require(bad)
+        #expect(invalid.isEmpty, "\(list.rawValue): \(invalid.count) hiding rules WebKit would drop, e.g. \(invalid.prefix(3))")
     }
 
     @Test func identifiersChangeWithTheList() {

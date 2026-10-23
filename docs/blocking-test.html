@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Firn's ad and tracker blocking test page. Open it in Firn through a local
+  server, so "Stop Blocking on localhost" works too:
+    python3 -m http.server 8000 --directory docs
+  then go to http://localhost:8000/blocking-test.html
+
+  Each check asks for a real ad or tracker address (never runs it). With
+  blocking on, they're stopped before leaving the Mac; with it off, they're
+  fetched like on any site. The last row checks the Mac is online at all.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocking test</title>
+<style>
+  :root { --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389; --line: rgba(70, 55, 40, .1);
+          --good: #5F7F5B; --bad: #B0503A; }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85; --line: rgba(245, 241, 236, .1);
+            --good: #A9C4A5; --bad: #E3907A; }
+  }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 560px; margin: 64px auto; padding: 0 24px; }
+  h1 { font-weight: 600; font-size: 22px; margin: 0 0 6px; }
+  p.lede { color: var(--muted); margin: 0 0 32px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+  li span:first-child { color: var(--muted); }
+  .result { font-weight: 600; white-space: nowrap; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .wait { color: var(--faint); }
+  .box { display: none; }
+  p.note { color: var(--faint); font-size: 13px; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Blocking test</h1>
+  <p class="lede">With blocking on, every row says Blocked or Hidden.</p>
+  <ul>
+    <li><span>An ad box</span><span class="result wait" id="hide-1">Checking…</span></li>
+    <li><span>Another ad box</span><span class="result wait" id="hide-2">Checking…</span></li>
+    <li><span>An ad (Google ads)</span><span class="result wait" id="ad">Checking…</span></li>
+    <li><span>A tracker (Google Tag Manager)</span><span class="result wait" id="tracker">Checking…</span></li>
+    <li><span>An ordinary site (example.com)</span><span class="result wait" id="control">Checking…</span></li>
+  </ul>
+  <p class="note">Turn blocking off for this page with View › Stop Blocking on localhost; the rows should change after it reloads.</p>
+
+  <!-- Boxes EasyList hides everywhere ("##.ADBox", "##.ad-slot"). -->
+  <div class="ADBox" id="box-1"><span class="box">ad</span></div>
+  <div class="ad-slot" id="box-2"><span class="box">ad</span></div>
+</main>
+<script>
+  function show(id, ok, okText, badText) {
+    const el = document.getElementById(id);
+    el.textContent = ok ? okText : badText;
+    el.className = "result " + (ok ? "good" : "bad");
+  }
+  // Hidden by a rule: the box itself gets display: none.
+  for (const n of [1, 2]) {
+    const hidden = getComputedStyle(document.getElementById("box-" + n)).display === "none";
+    show("hide-" + n, hidden, "Hidden", "Showing");
+  }
+  // "no-cors" fetches only: nothing is run, and a blocked one fails at once.
+  const reaches = url => fetch(url, { mode: "no-cors", cache: "no-store" }).then(() => true, () => false);
+  reaches("https://www.example.com/").then(online => {
+    show("control", online, "Loaded", "Offline");
+    const checks = [["ad", "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"],
+                    ["tracker", "https://www.googletagmanager.com/gtm.js?id=GTM-TEST"]];
+    for (const [id, url] of checks) {
+      reaches(url).then(loaded => {
+        if (!online) {
+          const el = document.getElementById(id);
+          el.textContent = "Can't tell offline";
+          el.className = "result wait";
+        } else {
+          show(id, !loaded, "Blocked", "Loaded");
+        }
+      });
+    }
+  });
+</script>
+</body>
+</html>

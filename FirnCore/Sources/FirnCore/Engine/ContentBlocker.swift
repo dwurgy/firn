@@ -13,7 +13,7 @@ final class ContentBlocker {
     static let shared = ContentBlocker(store: .default())
 
     /// Raise when the converter changes what it writes, so lists compile again.
-    nonisolated static let converterVersion = 1
+    nonisolated static let converterVersion = 2
     nonisolated static let identifierPrefix = "firn-"
 
     private let store: WKContentRuleListStore

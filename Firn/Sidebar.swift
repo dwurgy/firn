@@ -346,23 +346,27 @@ private struct TabList: View {
     /// landed, the button says so. (Reduce Motion never gets here; see
     /// `BrowserWindow`.)
     private func tidyAway() async {
-        let queue = window.tidyQueue.filter { $0.place == .open }
+        let queue = window.tidyQueue
         guard !queue.isEmpty else { return }
-        var count = 0
         for tab in queue {
             guard tab.place == .open, tab.spaceID == store.activeSpaceID else { continue }
             let frame = drag == nil && groupDrag == nil ? frames[tab.id] : nil
             withAnimation(.easeOut(duration: 0.25)) { store.drift(tab) }
             guard tab.place == .drifted else { continue }
-            count += 1
             if let frame {
                 window.flyingIcons.append(FlyingIcon(id: tab.id, icon: tab.icon, row: iconPoint(in: frame)))
             }
             try? await Task.sleep(for: .milliseconds(90))
+            // More tabs joined the queue (Firn came back to the front again):
+            // the next run carries on from here, one by one, and says it once.
+            guard !Task.isCancelled else { return }
         }
         // Then a moment more, so the box's lid has settled shut before
         // the frost forms over it.
         try? await Task.sleep(for: .seconds(FlyingIcon.duration + 0.3))
+        guard !Task.isCancelled else { return }
+        // Counting any an interrupted run already tidied.
+        let count = queue.count { $0.place == .drifted }
         if count > 0 { window.announceTidied(count) }
         window.tidyQueue = []
     }

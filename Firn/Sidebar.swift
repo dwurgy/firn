@@ -118,33 +118,58 @@ private struct ChromeButtonStyle: ButtonStyle {
 /// Shows where the tab on screen is, and takes an address or a search.
 /// At rest it shows just the site; clicking in shows the whole address.
 /// The page's zoom in the address bar: quiet text; a click goes back to actual size.
-/// While the page in front loads, a faint wash of the space's color forms
-/// across the address field from the left, like frost on glass, then thaws
-/// once the page is in (David, 2026-10-23). Its front edge stays soft, so it
-/// never reads as a hard progress bar. Reduce Motion: it fades in and out whole.
+/// While the page in front loads, the space's color forms across the address
+/// field from the left, lighter at its front edge; when the page is in, a
+/// short sunrise pulse (First light's peach and apricot) warms the field, and
+/// it all fades (David, 2026-10-23: the sunrise only at the end, never the
+/// whole load). A load that fails just fades. Reduce Motion: it fades in and
+/// out whole, and the pulse is a fade too.
 private struct LoadingFrost: View {
     let isLoading: Bool
     let progress: Double
+    let failed: Bool
     @Environment(\.spaceColorName) private var space
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// How far across the frost has formed, 0 to 1.
+    /// How far across the color has formed, 0 to 1.
     @State private var formed = 0.0
     @State private var shown = false
+    @State private var sunrise = false
+    /// Counts loads, so the steps of an old load's finish stand down when a
+    /// new one starts (a view's closures see its values from when they were made).
+    @State private var load = 0
 
     var body: some View {
-        GeometryReader { geo in
-            let color = Theme.spaceColor(space).opacity(Theme.loadingTint)
-            LinearGradient(stops: [.init(color: color, location: 0), .init(color: color, location: 0.8),
-                                   .init(color: color.opacity(0), location: 1)],
-                           startPoint: .leading, endPoint: .trailing)
+        ZStack(alignment: .leading) {
+            GeometryReader { geo in
+                let tint = colorScheme == .dark ? Theme.loadingTintDark : Theme.loadingTint
+                let color = Theme.spaceColor(space)
+                ZStack {
+                    LinearGradient(stops: [.init(color: color.opacity(tint), location: 0),
+                                           .init(color: color.opacity(tint), location: 0.64),
+                                           .init(color: color.opacity(tint * 0.45), location: 0.84),
+                                           .init(color: color.opacity(0), location: 1)],
+                                   startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(stops: [.init(color: Theme.loadingEdge.opacity(0), location: 0.6),
+                                           .init(color: Theme.loadingEdge, location: 0.84),
+                                           .init(color: Theme.loadingEdge.opacity(0), location: 1)],
+                                   startPoint: .leading, endPoint: .trailing)
+                }
                 // A little past the end, so the soft edge leaves the field when it's done.
                 .frame(width: geo.size.width * (reduceMotion ? 1.25 : formed * 1.25))
+            }
+            LinearGradient(colors: [Theme.sunPeach, Theme.sunApricot], startPoint: .leading, endPoint: .trailing)
+                .opacity(sunrise ? 1 : 0)
         }
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onChange(of: isLoading, initial: true) { _, loading in
-            if loading { start() } else if shown { thaw() }
+            if loading { start() } else if shown { finish() }
+        }
+        .onChange(of: failed) { _, failed in
+            guard failed else { return }
+            withAnimation(.easeOut(duration: 0.45)) { shown = false }
         }
         .onChange(of: progress) { _, value in
             guard isLoading, value > formed else { return }
@@ -153,18 +178,30 @@ private struct LoadingFrost: View {
     }
 
     private func start() {
+        load += 1
         formed = 0
+        sunrise = false
         withAnimation(.easeOut(duration: 0.2)) { shown = true }
         withAnimation(.easeOut(duration: 0.3)) { formed = max(progress, 0.1) }
     }
 
-    /// Finishes forming, then fades.
-    private func thaw() {
+    /// Finishes forming, warms for a moment, then fades.
+    private func finish() {
+        guard !failed else {
+            withAnimation(.easeOut(duration: 0.45)) { shown = false }
+            return
+        }
+        let this = load
         withAnimation(.easeOut(duration: 0.2)) {
             formed = 1
         } completion: {
-            guard !isLoading else { return }
-            withAnimation(.easeOut(duration: 0.45)) { shown = false }
+            guard load == this, shown else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                sunrise = true
+            } completion: {
+                guard load == this else { return }
+                withAnimation(.easeOut(duration: 0.6)) { shown = false }
+            }
         }
     }
 }
@@ -241,7 +278,8 @@ private struct AddressBar: View {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
                     .fill(focused ? Theme.page : hovering ? Theme.press : Theme.hover)
                     .overlay {
-                        LoadingFrost(isLoading: frontPage?.isLoading ?? false, progress: frontPage?.progress ?? 0)
+                        LoadingFrost(isLoading: frontPage?.isLoading ?? false, progress: frontPage?.progress ?? 0,
+                                     failed: frontPage?.loadError != nil)
                             // A new page in front starts fresh, never thawing the last one's frost.
                             .id(frontPage.map { ObjectIdentifier($0) })
                             .clipShape(RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous))

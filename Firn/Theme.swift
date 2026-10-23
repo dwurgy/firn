@@ -238,3 +238,19 @@ private extension NSColor {
         )
     }
 }
+
+/// Something dragged that wants to stay where it belongs (a Basecamp tile,
+/// a tab row, a group's card): free between its limits, and past them it
+/// gives only a little, more slowly the further it's pulled.
+enum Tug {
+    /// The most it gives past a limit.
+    static let give: CGFloat = 10
+
+    static func held(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat,
+                     give lowGive: CGFloat = give, _ highGive: CGFloat = give) -> CGFloat {
+        let high = max(low, high)
+        if value < low { return low - lowGive * tanh((low - value) / 50) }
+        if value > high { return high + highGive * tanh((value - high) / 50) }
+        return value
+    }
+}

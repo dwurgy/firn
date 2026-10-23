@@ -87,25 +87,14 @@ struct BasecampGrid: View {
         }
     }
 
-    /// The lifted tile's top-left. It wants to stay in Basecamp: it follows
-    /// the pointer freely over the tiles, but past Basecamp's edges it only
-    /// gives a little, more slowly the further it's pulled, as a tab row
-    /// does at its column. It never crosses the window's edge.
+    /// The lifted tile's top-left. It wants to stay in Basecamp (`Tug`),
+    /// and never crosses the window's edge.
     private func position(of drag: TileDrag) -> CGPoint {
         let height = BasecampLayout.make(count: store.basecampTabs.count, width: width).height
-        let left = max(0, min(Self.give, originInWindow.x - 2))
+        let left = max(0, min(Tug.give, originInWindow.x - 2))
         return CGPoint(
-            x: Self.held(drag.location.x - drag.grab.width, 0, width - drag.size.width, give: left, right: Self.give),
-            y: Self.held(drag.location.y - drag.grab.height, 0, height - drag.size.height, give: Self.give, right: Self.give))
-    }
-
-    /// The most a held tile gives past Basecamp's edge.
-    private static let give: CGFloat = 10
-
-    private static func held(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat, give: CGFloat, right: CGFloat) -> CGFloat {
-        if value < low { return low - give * tanh((low - value) / 50) }
-        if value > high { return high + right * tanh((value - high) / 50) }
-        return value
+            x: Tug.held(drag.location.x - drag.grab.width, 0, width - drag.size.width, give: left),
+            y: Tug.held(drag.location.y - drag.grab.height, 0, height - drag.size.height))
     }
 
     /// The slot the lifted tile is over. It moves on only once the tile is

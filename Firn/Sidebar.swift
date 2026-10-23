@@ -315,6 +315,7 @@ private struct TabList: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserWindow.space)) } action: {
             shownInWindow.rect = $0
         }
+        .overlay(alignment: .topLeading) { liftedGroup }
         .onChange(of: window.tileInList) { tileChanged(window.tileInList) }
         .background {
             if window.tileInList?.released == false {
@@ -793,7 +794,16 @@ private struct TabList: View {
                 .transaction { if !drag.settling && !drag.overPage { $0.animation = nil } }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-        } else if let groupDrag, let slot = frames[groupDrag.group.id] {
+        }
+    }
+
+    /// The dragged group's card. Drawn over the list rather than in its
+    /// scrolling content, so tugging at the list's edge never clips it.
+    @ViewBuilder private var liftedGroup: some View {
+        if let groupDrag, let slot = frames[groupDrag.group.id] {
+            // The list's content, from where the list shows.
+            let dx = windowOrigin.point.x - shownInWindow.rect.minX
+            let dy = windowOrigin.point.y - shownInWindow.rect.minY
             GroupCard(group: groupDrag.group, hasRows: !store.tabs(in: groupDrag.group).isEmpty,
                       color: Theme.spaceColor(store.activeSpace.color), renaming: .constant(nil),
                       foldLocked: true, thawed: false, closing: false, store: store, ungroup: {}, close: {}) {
@@ -803,7 +813,7 @@ private struct TabList: View {
             }
             .shadow(color: groupDrag.settling ? .clear : Theme.shadowPageFar, radius: 8, y: 3)
             .frame(width: slot.width)
-            .offset(x: slot.minX, y: groupDrag.location.y - groupDrag.grab.height)
+            .offset(x: slot.minX + dx, y: cardTop(of: groupDrag, height: slot.height) + dy)
             .transaction { if !groupDrag.settling { $0.animation = nil } }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -881,6 +891,7 @@ private struct TabList: View {
         var arriving = TabDrag(tab: tile.tab, grab: CGSize(width: 0, height: grab),
                                location: listPoint(window.dragPointer), target: .list(0), fromBasecamp: true)
         arriving.target = target(at: arriving.location.y - grab + Theme.rowHeight / 2, for: tile.tab)
+        window.tabLift?.reach = rowReach
         withAnimation(reduceMotion ? nil : Self.glide) { drag = arriving }
     }
 
@@ -905,12 +916,31 @@ private struct TabList: View {
         window.dragPointer = inWindow(value.location)
         window.tabLift = TabLift(tab: tab, row: AnyView(liftedRow(tab, isActive: true)), grab: grab,
                                  width: frame.width, column: frame.minX + windowOrigin.point.x)
+        window.tabLift?.reach = rowReach
         guard store.canDropOnPage(tab), let page = tab.page else { return }
         Task {
             // Twice the card's width, so it's sharp on a Retina screen.
             let picture = await page.snapshot(width: Theme.liftedCard.width * 2)
             if window.tabLift?.tab.id == tab.id { window.tabLift?.preview = picture }
         }
+    }
+
+    /// A dragged row keeps to the list as it shows (`Tug`): it can't be
+    /// pulled up over Basecamp or down over the spaces.
+    private var rowReach: ClosedRange<CGFloat> {
+        let list = shownInWindow.rect
+        return list.minY...max(list.minY, list.maxY - Self.bottomRoom - Theme.rowHeight)
+    }
+
+    /// Room kept below a dragged row or card, so even fully tugged it
+    /// stops a row's gap short of the spaces.
+    private static let bottomRoom = Tug.give + Theme.rowSpacing
+
+    /// A dragged group's card top, kept to the list in the same way.
+    private func cardTop(of drag: GroupDrag, height: CGFloat) -> CGFloat {
+        let top = shownInWindow.rect.minY - windowOrigin.point.y
+        let bottom = shownInWindow.rect.maxY - windowOrigin.point.y
+        return Tug.held(drag.location.y - drag.grab.height, top, bottom - Self.bottomRoom - height)
     }
 
     /// A point in the list's space, in the window's.

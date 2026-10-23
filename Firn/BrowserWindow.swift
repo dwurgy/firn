@@ -767,6 +767,9 @@ struct TabLift {
     var tile: CGRect?
     /// Drawn as the tile (in Basecamp), not the row (over the tab list).
     var isTile = false
+    /// How high and low the row's top may go, in the window's space: the
+    /// tab list's. Past these it only tugs (`Tug`).
+    var reach: ClosedRange<CGFloat>?
 }
 
 /// A Basecamp tile dragged out over the tab list (see `WindowModel.tileInList`).
@@ -809,7 +812,7 @@ private struct TabLiftGhost: View {
             .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
                                     pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
-                                    tile: lift.tile, tileness: lift.isTile ? 1 : 0))
+                                    tile: lift.tile, tileness: lift.isTile ? 1 : 0, reach: lift.reach))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -833,7 +836,8 @@ private struct TabLiftGhost: View {
                     .multilineTextAlignment(.center)
             }
             .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The card's own size, not the row's it grows from, so it's centered.
+            .frame(width: Theme.liftedCard.width, height: Theme.liftedCard.height)
         }
     }
 }
@@ -874,6 +878,7 @@ private struct LiftPlacement: ViewModifier, Animatable {
     let tile: CGRect?
     /// 0 the row, 1 the tile.
     var tileness: CGFloat
+    let reach: ClosedRange<CGFloat>?
 
     nonisolated var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>,
                                                    AnimatablePair<CGFloat, CGFloat>> {
@@ -891,8 +896,10 @@ private struct LiftPlacement: ViewModifier, Animatable {
         // The row keeps to its column, giving at most 8pt toward the pointer,
         // as if about to come loose.
         let pull = pointer.x - (column + grab.x * width)
+        var top = pointer.y - grab.y * Theme.rowHeight
+        if let reach { top = Tug.held(top, reach.lowerBound, reach.upperBound) }
         var row = CGRect(x: column + 8 * CGFloat(tanh(Double(pull) / 60)),
-                         y: pointer.y - grab.y * Theme.rowHeight, width: width, height: Theme.rowHeight)
+                         y: top, width: width, height: Theme.rowHeight)
         if let slot { row = Self.mix(row, slot, settled) }
         if let tile { row = Self.mix(row, tile, tileness) }
         let size = Theme.liftedCard

@@ -30,6 +30,9 @@ final class WindowModel {
     var pageDrop: PageDrop?
     /// A tab lifted off the sidebar, following the pointer (see `TabLiftGhost`).
     var tabLift: TabLift?
+    /// A Basecamp tile dragged out over the tab list: the list makes room
+    /// for it as a row, and settles it there once it's let go (see `TabList`).
+    var tileInList: TileInList?
     /// The pointer while a tab is lifted, in the window's space. Apart from
     /// `tabLift` and `pageDrop`, so only the lifted tab redraws as it moves.
     var dragPointer: CGPoint = .zero
@@ -758,9 +761,28 @@ struct TabLift {
     var settle: CGRect?
     /// Settling into a folded group: it fades into the name line.
     var fades = false
-    /// A Basecamp tile, not a row: where the tile is held, in the window's
-    /// space. It's the tile until it comes loose over the page.
+    /// Picked up from Basecamp: the tile as drawn there, and where it's
+    /// held, in the window's space.
+    var tileFace: AnyView?
     var tile: CGRect?
+    /// Drawn as the tile (in Basecamp), not the row (over the tab list).
+    var isTile = false
+}
+
+/// A Basecamp tile dragged out over the tab list (see `WindowModel.tileInList`).
+struct TileInList: Equatable {
+    let tab: FirnCore.Tab
+    /// The tab's id, kept here so comparing needs no main actor.
+    private let tabID: UUID
+    /// Let go: the list settles it into its place.
+    var released = false
+
+    @MainActor init(tab: FirnCore.Tab) {
+        self.tab = tab
+        tabID = tab.id
+    }
+
+    static func == (a: Self, b: Self) -> Bool { a.tabID == b.tabID && a.released == b.released }
 }
 
 private struct TabLiftGhost: View {
@@ -770,8 +792,13 @@ private struct TabLiftGhost: View {
         if let lift = window.tabLift {
             ZStack(alignment: .topLeading) {
                 lift.row
-                    .frame(width: lift.tile?.width ?? lift.width, height: lift.tile?.height ?? Theme.rowHeight)
-                    .opacity(lift.isCard ? 0 : 1)
+                    .frame(width: lift.width, height: Theme.rowHeight)
+                    .opacity(lift.isCard || lift.isTile ? 0 : 1)
+                if let face = lift.tileFace, let tile = lift.tile {
+                    face
+                        .frame(width: tile.width, height: tile.height)
+                        .opacity(lift.isTile && !lift.isCard ? 1 : 0)
+                }
                 card(lift)
                     // At least the picture's size, so turning from the row
                     // (or tile) uncovers it rather than squeezing it.
@@ -782,7 +809,7 @@ private struct TabLiftGhost: View {
             .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
                                     pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
-                                    tile: lift.tile))
+                                    tile: lift.tile, tileness: lift.isTile ? 1 : 0))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -845,12 +872,16 @@ private struct LiftPlacement: ViewModifier, Animatable {
     let slot: CGRect?
     /// A tile's held place, standing in for the row.
     let tile: CGRect?
+    /// 0 the row, 1 the tile.
+    var tileness: CGFloat
 
-    nonisolated var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(AnimatablePair(card, settled), AnimatablePair(width, column)) }
+    nonisolated var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>,
+                                                   AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(AnimatablePair(card, settled), tileness), AnimatablePair(width, column)) }
         set {
-            card = newValue.first.first
-            settled = newValue.first.second
+            card = newValue.first.first.first
+            settled = newValue.first.first.second
+            tileness = newValue.first.second
             width = newValue.second.first
             column = newValue.second.second
         }
@@ -863,12 +894,12 @@ private struct LiftPlacement: ViewModifier, Animatable {
         var row = CGRect(x: column + 8 * CGFloat(tanh(Double(pull) / 60)),
                          y: pointer.y - grab.y * Theme.rowHeight, width: width, height: Theme.rowHeight)
         if let slot { row = Self.mix(row, slot, settled) }
-        if let tile { row = tile }
+        if let tile { row = Self.mix(row, tile, tileness) }
         let size = Theme.liftedCard
         let picture = CGRect(x: pointer.x - grab.x * size.width, y: pointer.y - grab.y * size.height,
                              width: size.width, height: size.height)
         let frame = Self.mix(row, picture, card)
-        let corner = tile == nil ? Theme.tabRadius : Theme.tileRadius
+        let corner = Theme.tabRadius + (Theme.tileRadius - Theme.tabRadius) * (tile == nil ? 0 : tileness)
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
         let lift = card
         return content

@@ -315,6 +315,12 @@ private struct TabList: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserWindow.space)) } action: {
             shownInWindow.rect = $0
         }
+        .onChange(of: window.tileInList) { tileChanged(window.tileInList) }
+        .background {
+            if window.tileInList?.released == false {
+                PointerWatch(window: window) { tileMoved(to: $0) }
+            }
+        }
         .task(id: window.tidyQueue.map(\.id)) { await tidyAway() }
         .task(id: window.riseQueue.map(\.id)) { await riseBack() }
         // Hidden partway through, the rest simply go, or simply come back.
@@ -779,12 +785,9 @@ private struct TabList: View {
                 // Dragged by the pointer, the window draws it instead
                 // (`TabLiftGhost`); this copy only keeps its slot in step.
                 .opacity(!drag.follows || (drag.settling && intoFoldedGroup) ? 0 : 1)
-                .onChange(of: slot) {
-                    withAnimation(reduceMotion ? nil : Self.glide) {
-                        window.tabLift?.width = slot.width
-                        window.tabLift?.column = slot.minX + windowOrigin.point.x
-                    }
-                }
+                .onChange(of: slot) { keepLift(to: slot) }
+                // A tile arriving from Basecamp takes its first slot's width.
+                .onAppear { if drag.fromBasecamp { keepLift(to: slot) } }
                 // It sticks to the pointer; only settling into place, or
                 // resting while over the page, glides.
                 .transaction { if !drag.settling && !drag.overPage { $0.animation = nil } }
@@ -804,6 +807,14 @@ private struct TabList: View {
             .transaction { if !groupDrag.settling { $0.animation = nil } }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+        }
+    }
+
+    /// The window's lifted copy keeps to the width and column of the slot it's over.
+    private func keepLift(to slot: CGRect) {
+        withAnimation(reduceMotion ? nil : Self.glide) {
+            window.tabLift?.width = slot.width
+            window.tabLift?.column = slot.minX + windowOrigin.point.x
         }
     }
 
@@ -831,14 +842,57 @@ private struct TabList: View {
                 current.location = value.location
                 window.dragPointer = inWindow(value.location)
                 if overPage(value.location, current: &current) { return }
-                let target = target(at: value.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
-                if target == current.target {
-                    drag = current
-                } else {
-                    current.target = target
-                    withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
-                }
+                follow(current)
             }
+    }
+
+    /// The lifted tab at its new place: the list makes room where it'd land.
+    private func follow(_ moved: TabDrag) {
+        var current = moved
+        let target = target(at: current.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
+        if target == current.target {
+            drag = current
+        } else {
+            current.target = target
+            withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
+        }
+    }
+
+    /// A Basecamp tile out over the list, as a row: the list makes room for
+    /// it, as for one of its own. Taken back up (or out over the page), the
+    /// room closes; let go, it settles in and leaves Basecamp.
+    private func tileChanged(_ tile: TileInList?) {
+        guard let tile else {
+            if drag?.fromBasecamp == true, drag?.settling == false {
+                withAnimation(reduceMotion ? nil : Self.glide) { drag = nil }
+            }
+            return
+        }
+        if tile.released {
+            guard let current = drag, current.fromBasecamp, !current.settling else {
+                window.tileInList = nil
+                window.tabLift = nil
+                return
+            }
+            return settle(current)
+        }
+        guard drag == nil, groupDrag == nil else { return }
+        let grab = (window.tabLift?.grab.y ?? 0.5) * Theme.rowHeight
+        var arriving = TabDrag(tab: tile.tab, grab: CGSize(width: 0, height: grab),
+                               location: listPoint(window.dragPointer), target: .list(0), fromBasecamp: true)
+        arriving.target = target(at: arriving.location.y - grab + Theme.rowHeight / 2, for: tile.tab)
+        withAnimation(reduceMotion ? nil : Self.glide) { drag = arriving }
+    }
+
+    private func tileMoved(to pointer: CGPoint) {
+        guard var current = drag, current.fromBasecamp, !current.settling else { return }
+        current.location = listPoint(pointer)
+        follow(current)
+    }
+
+    /// A point in the window's space, in the list's.
+    private func listPoint(_ pointer: CGPoint) -> CGPoint {
+        CGPoint(x: pointer.x - windowOrigin.point.x, y: pointer.y - windowOrigin.point.y)
     }
 
     /// Lifts `tab` off the list: from here it's drawn over the whole window
@@ -945,11 +999,10 @@ private struct TabList: View {
         }
     }
 
-    /// The lifted copy settles into its slot, then the tab really moves
-    /// there (which looks like nothing, since it's already showing there).
+    /// A tab let go: over the page, or back in the list.
     private func drop() {
         if groupDrag != nil { return dropGroup() }
-        guard var current = drag, !current.settling else { return }
+        guard let current = drag, !current.settling, !current.fromBasecamp else { return }
         window.isDraggingTab = false
         // Let go over the page: it opens there at once (no show on the way,
         // you just want the page), its picture fading as it does, and its row
@@ -959,19 +1012,25 @@ private struct TabList: View {
             withAnimation(.easeOut(duration: 0.15)) { window.tabLift = nil }
             return window.dropOnPage()
         }
+        settle(current)
+    }
+
+    /// The lifted copy settles into its slot, then the tab really moves
+    /// there (which looks like nothing, since it's already showing there).
+    private func settle(_ dropped: TabDrag) {
+        var current = dropped
         @MainActor func commit() {
-            if store.openTabs.contains(where: { $0.id == current.tab.id }) {
-                switch current.target {
-                case let .group(id, position):
-                    if let group = store.tabGroups.first(where: { $0.id == id }) {
-                        store.move(current.tab, toGroup: group, at: position)
-                    }
-                case let .list(position):
-                    store.move(current.tab, toGroup: nil, at: position)
+            switch current.target {
+            case let .group(id, position):
+                if let group = store.tabGroups.first(where: { $0.id == id }) {
+                    land(current.tab, fromBasecamp: current.fromBasecamp, in: group, at: position)
                 }
+            case let .list(position):
+                land(current.tab, fromBasecamp: current.fromBasecamp, in: nil, at: position)
             }
             drag = nil
             window.tabLift = nil
+            window.tileInList = nil
         }
         guard !reduceMotion, let slot = slot(for: current) else { return commit() }
         current.settling = true
@@ -987,6 +1046,29 @@ private struct TabList: View {
             // A group the tab left empty fades away.
             withAnimation(Self.glide) { commit() }
         }
+    }
+
+    /// The tab really moves where it was let go. A Basecamp tile leaves
+    /// Basecamp there, as an everyday tab.
+    private func land(_ tab: FirnCore.Tab, fromBasecamp: Bool, in group: TabGroup?, at position: Int) {
+        if fromBasecamp {
+            if store.basecampTabs.contains(where: { $0.id == tab.id }) {
+                store.removeFromBasecamp(tab, toGroup: group, at: position)
+            }
+        } else if store.openTabs.contains(where: { $0.id == tab.id }) {
+            store.move(tab, toGroup: group, at: position)
+        }
+    }
+}
+
+/// Watches the pointer while a Basecamp tile is over the tab list, so only
+/// this redraws as it moves, not the list.
+private struct PointerWatch: View {
+    let window: WindowModel
+    let moved: (CGPoint) -> Void
+
+    var body: some View {
+        Color.clear.onChange(of: window.dragPointer) { moved(window.dragPointer) }
     }
 }
 
@@ -1010,6 +1092,8 @@ private struct TabDrag {
     var follows = false
     /// True while it's out over the page (see `TabList.overPage`).
     var overPage = false
+    /// A Basecamp tile held out over the list (Basecamp's drag moves it).
+    var fromBasecamp = false
 }
 
 private struct GroupDrag {

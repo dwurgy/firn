@@ -63,7 +63,7 @@ public struct SessionFile: Sendable {
     }()
 }
 
-/// Saves the session about a second after anything in it changes, and on
+/// Saves the session about five seconds after anything in it changes, and on
 /// request (at quit). It notices changes through Observation, so nothing
 /// runs while Firn sits idle.
 @MainActor
@@ -76,7 +76,7 @@ public final class SessionSaver {
 
     /// - Parameter snapshot: The session as it is now. Whatever it reads is
     ///   watched; a change to any of it schedules a save.
-    public init(file: SessionFile, delay: Duration = .seconds(1), snapshot: @escaping @MainActor () -> Session) {
+    public init(file: SessionFile, delay: Duration = .seconds(5), snapshot: @escaping @MainActor () -> Session) {
         self.file = file
         self.delay = delay
         self.snapshot = snapshot

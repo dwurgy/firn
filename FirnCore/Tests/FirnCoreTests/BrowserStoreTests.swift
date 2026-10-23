@@ -14,6 +14,7 @@ final class FakePage: PageController {
     var canGoBack = false
     var canGoForward = false
     var isLoading = false
+    var progress = 0.0
     var icon: Data?
     var loadError: LoadError?
     var stopped = false

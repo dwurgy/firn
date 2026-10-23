@@ -15,6 +15,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var canGoBack = false
     private(set) var canGoForward = false
     private(set) var isLoading = false
+    private(set) var progress = 0.0
     private(set) var icon: Data?
     private(set) var loadError: LoadError?
     private(set) var zoom: Double = 1
@@ -251,6 +252,10 @@ final class WebKitPageController: NSObject, PageController {
             webView.observe(\.canGoBack, changeHandler: sync),
             webView.observe(\.canGoForward, changeHandler: sync),
             webView.observe(\.isLoading, changeHandler: sync),
+            // Apart from the rest: it changes many times a load.
+            webView.observe(\.estimatedProgress) { [weak self] _, _ in
+                MainActor.assumeIsolated { if let self { self.progress = self.webView.estimatedProgress } }
+            },
             webView.observe(\.url) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.sameDocumentURLChanged() }
             },

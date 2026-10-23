@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- The loading indicator David picked (B, "Frost forming", 2026-10-23). A was the frost line, not chosen. -->
+<meta charset="utf-8"><title>Loading frost</title>
+<style>
+body{font-family:-apple-system,system-ui;margin:24px;background:#FBFAF8}
+.fz{--frame:#E9E3DA;--field:rgba(251,250,248,.72);--ink:#241F1B;--muted:#5E564E;--sp:#7F9CB0}
+@media (prefers-color-scheme:dark){body{background:#2B2826}.fz{--frame:#3A3734;--field:rgba(43,40,38,.7);--ink:#F5F1EC;--muted:#D4CDC5;--sp:#6E98B2}}
+.fz .side{background:color-mix(in srgb,var(--frame) 84%,var(--sp));border-radius:12px;padding:14px 12px;width:260px}
+.fz .addr{position:relative;height:30px;border-radius:8px;background:var(--field);overflow:hidden;display:flex;align-items:center;padding:0 10px;font-size:13px;color:var(--muted)}
+.fz .fill{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none}
+.fz .row{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;font-size:13px;color:var(--ink);margin-top:10px;background:color-mix(in srgb,var(--field) 70%,transparent)}
+.fz .ic{width:16px;height:16px;border-radius:4px;background:var(--sp);flex:none}
+</style>
+<div class="fz">
+  <div class="side"><div class="addr"><div class="fill" id="fb"></div><span style="position:relative">youtube.com</span></div>
+    <div class="row"><div class="ic" id="ib"></div>YouTube</div></div>
+  <p><button onclick="run('b')">Load a page</button></p>
+</div>
+<script>
+const st={};
+function prog(t){if(t<.15)return .1*(t/.15);if(t<1.6)return .1+.6*(1-Math.pow(1-(t-.15)/1.45,2));if(t<2.1)return .7+.3*((t-1.6)/.5);return 1}
+function run(k){
+  const f=document.getElementById('f'+k),ic=document.getElementById('i'+k);
+  f.style.background='linear-gradient(90deg,color-mix(in srgb,var(--sp) 22%,transparent) 75%,transparent)';
+  f.style.transition='none';f.style.opacity=1;const t0=performance.now();cancelAnimationFrame(st[k]);
+  const step=n=>{const t=(n-t0)/1000,p=prog(t);f.style.width=(p*112)+'%';
+    ic.style.opacity=t>.3&&p<1?(.55+.45*(.5+.5*Math.cos((t-.3)*Math.PI*1.4))):1;
+    if(p<1)st[k]=requestAnimationFrame(step);else{f.style.transition='opacity .45s ease-out';f.style.opacity=0;ic.style.opacity=1}};
+  st[k]=requestAnimationFrame(step)}
+</script>

@@ -69,6 +69,8 @@ enum Theme {
     static let groupTint = 0.10
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
+    /// The frost that forms across the address field while a page loads.
+    static let loadingTint = 0.22
 
     /// A chosen Basecamp tile's colors: a main color for its wash and glow,
     /// and a ring of eight for its edge, clockwise from the right.

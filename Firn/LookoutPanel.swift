@@ -181,7 +181,9 @@ private struct LookoutButton: View {
             .background {
                 let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
                 ZStack {
-                    FrostGlass(shape: shape, color: color)
+                    // The lifted tabs' backing under the frost, so it stays
+                    // frost over a bright or dark page and the words never wash out.
+                    FrostGlass(shape: shape, color: color, lifted: true)
                     shape.fill(hovering ? Theme.hover : .clear)
                 }
                 .shadow(color: Theme.shadowSoft, radius: 6, y: 2)

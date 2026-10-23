@@ -46,8 +46,11 @@ final class FakePage: PageController {
     var sound: PageSound = .silent
     func setMuted(_ muted: Bool) {}
     var isPausedByFirn = false
-    func setPaused(_ paused: Bool) { isPausedByFirn = paused }
-    func forgetPause() { isPausedByFirn = false }
+    var isResuming = false
+    func setPaused(_ paused: Bool) {
+        if paused { isResuming = false; isPausedByFirn = true } else if isPausedByFirn { isResuming = true }
+    }
+    func forgetPause() { isPausedByFirn = false; isResuming = false }
 }
 
 @MainActor

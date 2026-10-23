@@ -65,6 +65,9 @@ public protocol PageController: AnyObject, Observable {
     /// can be played again. Cleared when the page changes, when it plays
     /// again on its own, or with `forgetPause()`.
     var isPausedByFirn: Bool { get }
+    /// Asked to play again, and waiting for the page to start (it stays
+    /// paused by Firn until then, or until it gives up after 2 seconds).
+    var isResuming: Bool { get }
     /// Pauses what's playing on the page, or plays just that again.
     func setPaused(_ paused: Bool)
     /// Lets go of a pause, leaving the page as it is (the tab came on

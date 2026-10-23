@@ -34,6 +34,12 @@ struct MiniPlayerTests {
         music.togglePaused()
         page.sound = .silent
         #expect(store.miniPlayerTab?.id == music.id)
+        // Asked to play again: it stays until the page starts sounding.
+        music.togglePaused()
+        #expect(!music.showsPlay)
+        #expect(store.miniPlayerTab?.id == music.id)
+        music.togglePaused()
+        #expect(music.showsPlay)
         store.select(music)
         #expect(!music.isPausedByFirn)
         store.openTab(url("more"))

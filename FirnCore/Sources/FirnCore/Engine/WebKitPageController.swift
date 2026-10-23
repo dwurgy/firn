@@ -20,6 +20,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var zoom: Double = 1
     private(set) var sound: PageSound = .silent
     private(set) var isPausedByFirn = false
+    private(set) var isResuming = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
 
@@ -52,6 +53,7 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var isMuted = false
     /// The frames Firn paused, to play them again.
     @ObservationIgnored private var pausedFrames: [WKFrameInfo] = []
+    @ObservationIgnored private var resumeTimeout: Task<Void, Never>?
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -135,22 +137,38 @@ final class WebKitPageController: NSObject, PageController {
 
     func setPaused(_ paused: Bool) {
         if paused {
-            guard sound != .silent else { return }
-            pausedFrames = soundFrames.values.filter(\.sounding).map(\.info)
-            isPausedByFirn = true
+            if isResuming {
+                // Paused again before it started: the same frames.
+                isResuming = false
+            } else {
+                guard sound != .silent else { return }
+                pausedFrames = soundFrames.values.filter(\.sounding).map(\.info)
+                isPausedByFirn = true
+            }
         } else {
-            guard isPausedByFirn else { return }
-            isPausedByFirn = false
+            guard isPausedByFirn, !isResuming else { return }
+            // Still paused until the page says it's sounding (about 150ms),
+            // so the mini player doesn't leave and come back in between.
+            isResuming = true
+            resumeTimeout?.cancel()
+            resumeTimeout = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                // The site wouldn't play again.
+                guard !Task.isCancelled, let self, self.isResuming else { return }
+                self.forgetPause()
+            }
         }
         let script = PageSoundScript.setPausedScript(paused)
         for frame in pausedFrames {
             webView.evaluateJavaScript(script, in: frame, in: Self.firnWorld) { _ in }
         }
-        if !paused { pausedFrames = [] }
     }
 
     func forgetPause() {
         pausedFrames = []
+        resumeTimeout?.cancel()
+        resumeTimeout = nil
+        if isResuming { isResuming = false }
         if isPausedByFirn { isPausedByFirn = false }
     }
 

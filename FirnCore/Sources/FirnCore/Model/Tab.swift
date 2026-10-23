@@ -130,9 +130,13 @@ public final class Tab: Identifiable {
     /// Whether the mini player paused this tab's sound.
     public var isPausedByFirn: Bool { page?.isPausedByFirn ?? false }
 
+    /// Whether the mini player's button shows Play: paused, and not yet
+    /// asked to play again.
+    public var showsPlay: Bool { isPausedByFirn && !(page?.isResuming ?? false) }
+
     /// Pauses a tab making sound, or plays one the mini player paused.
     public func togglePaused() {
-        if isPausedByFirn { page?.setPaused(false) } else if sound != .silent { page?.setPaused(true) }
+        if showsPlay { page?.setPaused(false) } else if sound != .silent || isPausedByFirn { page?.setPaused(true) }
     }
 
     /// The tab is on screen: its page's own controls take over from the mini player.

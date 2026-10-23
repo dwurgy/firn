@@ -36,7 +36,7 @@ private struct MiniPlayerCard: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
-        let paused = tab.isPausedByFirn
+        let paused = tab.showsPlay
         Button(action: show) {
             HStack(spacing: 10) {
                 SiteIconView(icon: tab.icon, size: 16) {

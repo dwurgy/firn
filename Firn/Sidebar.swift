@@ -1461,34 +1461,32 @@ final class RectBox {
 
 // MARK: - Groups
 
-/// The same frosted glass as the Basecamp tiles, washed with the space's
-/// color: group cards, and the overflow button's "Tidied away" pill.
+/// The same frosted glass as the Basecamp tiles. With a color, washed in it
+/// (the overflow button's "Tidied away" pill, drop spots); without one, exactly
+/// a tile's frost (group cards, David 2026-10-22, so the sidebar has one glass).
 struct FrostGlass: View {
     let shape: RoundedRectangle
-    let color: Color
+    var color: Color? = nil
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         if reduceTransparency {
             shape.fill(Theme.tileSolid)
-                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+                .overlay { shape.fill((color ?? .clear).opacity(Theme.groupTint)) }
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-        } else if #available(macOS 26, *) {
-            shape.fill(.clear)
-                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
-                .glassEffect(.regular.tint(color.opacity(Theme.groupTint)), in: shape)
         } else {
-            shape.fill(Theme.groupFill)
-                .overlay { shape.fill(color.opacity(Theme.groupTint)) }
+            // Frosted fills, like the tiles: never glass on the window's glass.
+            shape.fill(color == nil ? Theme.tileFill : Theme.groupFill)
+                .overlay { shape.fill((color ?? .clear).opacity(Theme.groupTint)) }
                 .overlay {
                     shape.strokeBorder(
                         LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
                         lineWidth: 1)
                 }
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(color == nil ? -0.5 : 0) }
+                .shadow(color: color == nil ? Theme.shadowSoft : .clear, radius: 1, y: 0.5)
         }
     }
-
 }
 
 
@@ -1615,7 +1613,7 @@ private struct GroupCard<Rows: View>: View {
             }
     }
 
-    private var card: some View { FrostGlass(shape: shape, color: color) }
+    private var card: some View { FrostGlass(shape: shape) }
 
     private func toggleFold() {
         animate { store.setFolded(group, !group.folded) }

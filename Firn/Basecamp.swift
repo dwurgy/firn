@@ -727,11 +727,15 @@ private struct TileButtonStyle: ButtonStyle {
                 shape.strokeBorder(
                     AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
                     lineWidth: Theme.tileRingWidth)
-                    .opacity(reduceTransparency ? 1 : (dark ? 0.85 : 0.75))
+                    .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
             }
             .overlay {
-                shape.inset(by: Theme.tileRingWidth)
-                    .strokeBorder(Theme.tileLip, lineWidth: 0.5)
+                // Light catching the ring's outer edge along the top, gone by
+                // the middle: a thin line, so the color underneath stays full.
+                shape.strokeBorder(
+                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
+                                   startPoint: .top, endPoint: .center),
+                    lineWidth: 1)
             }
             .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
     }
@@ -769,13 +773,9 @@ private struct TileGlass: View {
         if reduceTransparency {
             shape.fill(Theme.tileSolid)
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-        } else if #available(macOS 26, *) {
-            // Glass on the plain frame (the sidebar itself isn't glass), so
-            // it never stacks glass on glass.
-            shape.fill(hovering ? Theme.tileFillHover : .clear)
-                .overlay { shape.strokeBorder(Theme.tileFrostEdge, lineWidth: 0.5) }
-                .glassEffect(.regular.tint(Theme.tileFrost), in: shape)
         } else {
+            // Frosted fills, not Liquid Glass: the window is already glass, and
+            // glass on glass turns muddy. The tile reads as etched into the frame.
             shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)
                 .overlay {
                     shape.strokeBorder(

@@ -6,6 +6,8 @@ import SwiftUI
 /// Views never hard-code a color.
 enum Theme {
     static let frame = Color(light: 0xE9E3DA, dark: 0x3A3734)
+    /// The frame over the window's glass: mostly frame, a little desktop showing through.
+    static let frameWash = Color(light: 0xE9E3DA, lightOpacity: 0.45, dark: 0x3A3734, darkOpacity: 0.55)
     static let page = Color(light: 0xFBFAF8, dark: 0x2B2826)
     static let ink = Color(light: 0x241F1B, dark: 0xF5F1EC)
     static let muted = Color(light: 0x5E564E, dark: 0xD4CDC5)
@@ -42,7 +44,6 @@ enum Theme {
     static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.10, dark: 0x000000, darkOpacity: 0.25)
 
     /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
-    /// Used under macOS 26's Liquid Glass, and on their own before it.
     static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xF5F1EC, darkOpacity: 0.08)
     static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// With Reduce Transparency: the same tile, solid.
@@ -51,9 +52,7 @@ enum Theme {
     static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
     static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)
     static let tileHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.30)
-    /// A cool, snowy tint that turns Liquid Glass from a bubble into frosted
-    /// ice, and the crisp edge that goes with it.
-    static let tileFrost = Color(light: 0xF4F8FA, lightOpacity: 0.35, dark: 0xA0C4D6, darkOpacity: 0.08)
+    /// The crisp, frosty edge on Liquid Glass (the command bar).
     static let tileFrostEdge = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xC8DCE6, darkOpacity: 0.14)
     /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
     static let tileRadius: CGFloat = 9
@@ -86,9 +85,10 @@ enum Theme {
     }
 
     /// The chosen tile's ring is a little thicker than a hairline, so it reads
-    /// as a lip of colored glass; just inside it, a bright edge of ice.
+    /// as a lip of colored glass.
     static let tileRingWidth: CGFloat = 2.5
-    static let tileLip = Color(light: 0xFFFFFF, lightOpacity: 0.75, dark: 0xFFFFFF, darkOpacity: 0.2)
+    /// The thin sheen along the ring's outer top edge.
+    static let tileRingSheen = Color(light: 0xFFFFFF, lightOpacity: 0.65, dark: 0xFFFFFF, darkOpacity: 0.4)
 
     /// A calm color for a site's letter mark (and its tile, until the site's
     /// icon arrives). Picked steadily from the address so it never changes.

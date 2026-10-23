@@ -80,6 +80,9 @@ struct WindowSetup: NSViewRepresentable {
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
+            // See-through, so the frame's glass shows the desktop behind it.
+            window.isOpaque = false
+            window.backgroundColor = .clear
             // The title bar lays its buttons out after this, so measure on the next turn.
             DispatchQueue.main.async { [weak self] in self?.measure() }
         }
@@ -95,6 +98,45 @@ struct WindowSetup: NSViewRepresentable {
             report(TrafficLights(centerY: centerY, trailingX: zoomRect.maxX))
         }
     }
+}
+
+/// The window's frosted frame: the desktop, blurred by macOS, under a warm
+/// wash of the frame color, so it stays sand and brown whatever is behind it.
+/// Over the page (the sidebar peeking) it frosts the page instead. With
+/// Reduce Transparency, the plain frame color.
+struct FrameGlass: View {
+    var overPage = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        if reduceTransparency {
+            Theme.frame
+        } else {
+            ZStack {
+                if overPage {
+                    Rectangle().fill(.ultraThinMaterial)
+                } else {
+                    BehindWindowBlur()
+                }
+                Theme.frameWash
+            }
+        }
+    }
+}
+
+/// The system's behind-window blur. AppKit because SwiftUI's materials only
+/// blur what's inside the window. Always active, so the frame doesn't change
+/// when another app comes to the front.
+private struct BehindWindowBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .underWindowBackground
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 /// Moves the window's own traffic lights sideways (or fades them, with Reduce

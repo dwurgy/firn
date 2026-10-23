@@ -493,7 +493,7 @@ struct BrowserWindow: View {
         .coordinateSpace(.named(Self.space))
         .background {
             ZStack {
-                Theme.frame
+                FrameGlass()
                 SpaceTint(color: store.activeSpace.color)
                 // Empty frame (around the page, the sidebar's top row) moves the window.
                 WindowDragArea()
@@ -599,7 +599,7 @@ struct BrowserWindow: View {
         }
     }
 
-    /// The frame's own color, so the sidebar sits on the window seamlessly.
+    /// Nothing while docked, so the sidebar sits on the window's glass seamlessly.
     /// While it peeks over the page it's a card floating just outside the
     /// page's edge, its corners nesting with the page's: a little wider than the
     /// sidebar, so its buttons have room at the right, with a soft shadow.
@@ -609,10 +609,12 @@ struct BrowserWindow: View {
         let floating = window.sidebarCollapsed
         let radius = floating ? Theme.peekCornerRadius : 0
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        // Docked, it's clear: the window's own glass is the sidebar.
         return ZStack {
-            Theme.frame
+            FrameGlass(overPage: true)
             SpaceTint(color: store.activeSpace.color)
         }
+        .opacity(floating ? 1 : 0)
         .clipShape(shape)
         .overlay {
             // Always drawn, so it never has to fade in or out apart from the card.

@@ -16,7 +16,9 @@ struct MiniPlayer: View {
             if let tab {
                 MiniPlayerCard(tab: tab) { store.select(tab) }
                     .id(tab.id)
-                    .padding(.vertical, Theme.rowSpacing)
+                    .padding(.top, Theme.rowSpacing)
+                    // Room above the spaces row, so it doesn't sit on them.
+                    .padding(.bottom, 8)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
             }
         }
@@ -35,7 +37,9 @@ private struct MiniPlayerCard: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+        // A pill, so it reads as its own thing, not a tile or a group card
+        // (David, 2026-10-23). The radius is clamped to half its height.
+        let shape = RoundedRectangle(cornerRadius: 100, style: .continuous)
         let paused = tab.showsPlay
         Button(action: show) {
             HStack(spacing: 10) {
@@ -55,8 +59,8 @@ private struct MiniPlayerCard: View {
                 Spacer(minLength: 0)
             }
             // Room for the play or pause button.
-            .padding(.leading, 12)
-            .padding(.trailing, 40)
+            .padding(.leading, 16)
+            .padding(.trailing, 44)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background { FrostGlass(shape: shape) }
@@ -73,7 +77,7 @@ private struct MiniPlayerCard: View {
                 tab.togglePaused()
             }
             .contentTransition(.symbolEffect(.replace))
-            .padding(.trailing, 6)
+            .padding(.trailing, 9)
         }
     }
 }

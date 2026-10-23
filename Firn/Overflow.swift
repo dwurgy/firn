@@ -1,11 +1,14 @@
 import FirnCore
 import SwiftUI
 
-/// The overflow: one small button in the space row, always in view, opening
-/// a calm panel with the space's tidied-away tabs and Recently closed (and
-/// later its history). Only the space on screen, so nothing crosses
-/// between spaces. A dot in the space's color says tabs were tidied away
-/// since it was last opened.
+/// The overflow: one small button in the space row, opening a calm panel
+/// with the space's tidied-away tabs. Only the space on screen, so nothing
+/// crosses between spaces. It's there only while it holds something: it
+/// fades in as the first tabs are tidied away, just before their icons fall
+/// in, and fades out once the last has gone (its spot stays, so the spaces
+/// don't shift). A dot in the space's color says tabs were tidied away
+/// since it was last opened. (Recently closed lives in File › Reopen Closed
+/// Tab and the command bar; David, 2026-10-23.)
 struct OverflowButton: View {
     let store: BrowserStore
     let window: WindowModel
@@ -15,7 +18,8 @@ struct OverflowButton: View {
     var body: some View {
         let unseen = store.hasUnseenTidied
         let falling = window.flyingIcons.contains { !$0.rising }
-        ChromeButton("Tidied away and recently closed tabs") {
+        let shown = holdsSomething
+        ChromeButton("Tidied away tabs") {
             window.showsOverflow.toggle()
         } icon: {
             ArchiveBoxIcon(lidOpen: lidOpen || window.boxOpen)
@@ -42,12 +46,25 @@ struct OverflowButton: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: unseen)
         .accessibilityValue(unseen ? "New tabs tidied away" : "")
+        // Faded rather than removed, so its spot (and where icons land) stays.
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .accessibilityHidden(!shown)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: shown)
+        // Nothing left to show (the last one closed from the panel, say).
+        .onChange(of: store.driftedTabs.isEmpty) { if store.driftedTabs.isEmpty { window.showsOverflow = false } }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Sidebar.space)) } action: {
             window.overflowButtonFrame = $0
         }
         .popover(isPresented: Bindable(window).showsOverflow, arrowEdge: .top) {
             OverflowPanel(store: store, window: window)
         }
+    }
+
+    /// Tidied tabs, or tabs on their way in or out of the box.
+    private var holdsSomething: Bool {
+        !store.driftedTabs.isEmpty || !window.tidyQueue.isEmpty || !window.riseQueue.isEmpty
+            || !window.flyingIcons.isEmpty || window.boxOpen || window.tidyAnnouncement != nil
     }
 }
 
@@ -58,32 +75,13 @@ private struct OverflowPanel: View {
 
     var body: some View {
         let drifted = store.driftedTabs
-        let closed = store.recentlyClosed
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-                if drifted.isEmpty && closed.isEmpty {
-                    Text("Nothing here yet. Tabs you haven’t looked at in a while, and tabs you close, wait here.")
-                        .font(Theme.labelFont)
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 4)
-                }
-                if !drifted.isEmpty {
-                    section("Tidied away", note: "Tabs you haven’t looked at in a while. They’re deleted after 30 days.",
-                            action: ("Restore all", restoreAll)) {
-                        ForEach(drifted) { tab in
-                            TabRow(tab: tab, isActive: false) { bringBack(tab) } close: { window.close(tab) } menu: {
-                                Button("Close Tab", systemImage: "xmark") { window.close(tab) }
-                            }
-                        }
-                    }
-                }
-                if !closed.isEmpty {
-                    section("Recently closed", note: nil, action: nil) {
-                        ForEach(closed) { entry in
-                            ClosedRow(entry: entry, color: Theme.spaceColor(store.activeSpace.color)) {
-                                reopen(entry)
-                            }
+                section("Tidied away", note: "Tabs you haven’t looked at in a while. They’re deleted after 30 days.",
+                        action: ("Restore all", restoreAll)) {
+                    ForEach(drifted) { tab in
+                        TabRow(tab: tab, isActive: false) { bringBack(tab) } close: { window.close(tab) } menu: {
+                            Button("Close Tab", systemImage: "xmark") { window.close(tab) }
                         }
                     }
                 }
@@ -141,12 +139,6 @@ private struct OverflowPanel: View {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.select(tab) }
         window.focusPage()
     }
-
-    private func reopen(_ entry: ClosedEntry) {
-        window.showsOverflow = false
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { store.reopen(entry) }
-        window.focusPage()
-    }
 }
 
 /// A small word button in a section's header ("Restore all"): ink, with
@@ -166,50 +158,6 @@ struct TextActionStyle: ButtonStyle {
             }
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
-    }
-}
-
-/// A closed tab (its icon and title) or group (a dot in the space's color,
-/// standing in for an icon among the tabs, and its name) in Recently closed.
-private struct ClosedRow: View {
-    let entry: ClosedEntry
-    let color: Color
-    let reopen: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: reopen) {
-            HStack(spacing: 8) {
-                Group {
-                    switch entry.kind {
-                    case .tab:
-                        SiteIconView(icon: entry.icon, size: 16) { Image(systemName: "globe") }
-                    case .group:
-                        Circle().fill(color).frame(width: 8, height: 8)
-                    }
-                }
-                .frame(width: 16, height: 16)
-                .foregroundStyle(Theme.muted)
-                .accessibilityHidden(true)
-                Text(entry.title)
-                    .font(Theme.tabFont)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Theme.rowPadding)
-            .frame(height: Theme.rowHeight)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .fill(hovering ? Theme.hover : .clear)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help(entry.kind == .group ? "Reopen this group" : "Reopen this tab")
-        .accessibilityLabel(entry.kind == .group ? "Group: \(entry.title)" : entry.title)
-        .accessibilityHint(entry.kind == .group ? "Reopens the group" : "Reopens the tab")
     }
 }
 

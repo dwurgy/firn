@@ -93,7 +93,7 @@ final class WindowModel {
     @ObservationIgnored var overflowButtonFrame: CGRect = .zero
     /// "Tidied away 4 tabs", while the overflow button says so.
     var tidyAnnouncement: TidyAnnouncement?
-    /// Whether the overflow (drifted tabs and Recently closed) is open.
+    /// Whether the overflow (the tidied-away tabs) is open.
     var showsOverflow = false
     /// Whether the downloads popover is open.
     var showsDownloads = false

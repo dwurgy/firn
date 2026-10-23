@@ -165,14 +165,25 @@ private struct AddressBar: View {
         return PageZoom.percent(zoom)
     }
 
+    /// Room kept clear at the right for the zoom and reload buttons.
+    private var trailingRoom: CGFloat {
+        let reload: CGFloat = reloadablePage == nil ? 0 : 24
+        let zoom: CGFloat = zoomLabel == nil ? 0 : 40
+        return Theme.rowPadding + reload + zoom
+    }
+
     var body: some View {
         TextField("Search or enter address", text: $text)
             .textFieldStyle(.plain)
             .font(Theme.tabFont)
             .foregroundStyle(Theme.ink)
             .focused($focused)
+            // At rest, a long address fades out before the zoom and reload
+            // buttons, as tab titles do before the close button. Not while
+            // typing, where the end of the text is where the cursor is.
+            .mask { TrailingFade(width: focused ? 0 : 18) }
             .padding(.leading, Theme.rowPadding)
-            .padding(.trailing, Theme.rowPadding + (reloadablePage == nil ? 0 : 24) + (zoomLabel == nil ? 0 : 40))
+            .padding(.trailing, trailingRoom)
             .frame(height: Theme.rowHeight)
             .background {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
@@ -1475,13 +1486,20 @@ private struct FadesAtEdge: ViewModifier {
             .fixedSize()
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .clipped()
-            .mask {
-                HStack(spacing: 0) {
-                    Rectangle()
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 18)
-                }
-            }
+            .mask { TrailingFade(width: 18) }
+    }
+}
+
+/// A mask that fades its view out over the last `width` points at the right.
+private struct TrailingFade: View {
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: width)
+        }
     }
 }
 

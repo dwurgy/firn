@@ -11,6 +11,9 @@
 	<!-- Only files a person picks in an Open or Save panel (uploading to a site, saving a PDF), nothing else on disk. -->
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- The Downloads folder, so a download saves there without a Save panel. Nothing else on disk. -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
 	<!-- Printing a page from File › Print. -->
 	<key>com.apple.security.print</key>
 	<true/>

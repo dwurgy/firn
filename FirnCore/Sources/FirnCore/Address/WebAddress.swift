@@ -72,3 +72,11 @@ public enum NavigationPolicy {
         }
     }
 }
+
+/// Which addresses may be saved as a download: web addresses, and files a
+/// page made itself (blob: and data:), which are saved but never shown.
+public enum DownloadPolicy {
+    public static func allows(_ url: URL) -> Bool {
+        ["http", "https", "blob", "data"].contains(url.scheme?.lowercased() ?? "")
+    }
+}

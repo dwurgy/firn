@@ -6,7 +6,7 @@ import AppKit
 #endif
 
 /// A page backed by WKWebView. Everything WebKit-specific stays in this file
-/// and PageView.
+/// and PageView (and WebKitDownload, for downloads).
 @MainActor
 @Observable
 final class WebKitPageController: NSObject, PageController {
@@ -219,6 +219,11 @@ extension WebKitPageController: WKNavigationDelegate {
     ) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        // A link marked `download`: saved, never shown, so a file the page
+        // made itself (blob: or data:) is fine here.
+        if navigationAction.shouldPerformDownload {
+            return decisionHandler(DownloadPolicy.allows(url) ? .download : .cancel)
+        }
         if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url) {
             if let click = specialClick(for: navigationAction) {
                 decisionHandler(.cancel)
@@ -235,6 +240,40 @@ extension WebKitPageController: WKNavigationDelegate {
             }
         }
         decisionHandler(NavigationPolicy.allows(url, isMainFrame: isMainFrame) ? .allow : .cancel)
+    }
+
+    /// A response the page can't show, or one the site marks as an
+    /// attachment, is saved to Downloads. A frame inside the page only
+    /// downloads what's marked as an attachment, so an unseen frame can't
+    /// turn any odd file into a download.
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+    ) {
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")
+        let isAttachment = disposition?.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment") ?? false
+        let cantShow = navigationResponse.isForMainFrame && !navigationResponse.canShowMIMEType
+        decisionHandler(isAttachment || cantShow ? .download : .allow)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        startedDownload(download)
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        startedDownload(download)
+    }
+
+    private func startedDownload(_ download: WKDownload) {
+        guard let store = webView.configuration.websiteDataStore.identifier else {
+            // Every page has its space's store; without one, nothing is saved.
+            return download.cancel { _ in }
+        }
+        WebKitDownload.follow(download, dataStoreID: store)
+        // A popup opened only to download a file would stay behind empty.
+        if isPopup, url == nil { onRequest?(.close) }
     }
 
     /// A tile's link that would take it to another site, or open a new

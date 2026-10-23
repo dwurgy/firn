@@ -524,14 +524,15 @@ public final class BrowserStore {
         return true
     }
 
-    /// An awake tile becomes a loose tab where new tabs go, so its page
-    /// isn't lost. A resting one has nothing open to keep, so it goes.
+    /// A tile becomes a loose tab where new tabs go, so nothing is lost.
+    /// Even a resting one stays (it loads when clicked); only Close removes
+    /// a tile. It counts as just seen, so it isn't tidied away straight after.
     public func removeFromBasecamp(_ tab: Tab) {
         guard tab.place == .basecamp, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
-        guard !tab.isResting else { return }
         tab.place = .open
         tab.homeURL = nil
+        tab.lastActiveAt = now()
         tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
     }
 

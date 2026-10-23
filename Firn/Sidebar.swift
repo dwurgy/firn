@@ -530,6 +530,25 @@ private struct TabList: View {
         }
     }
 
+    /// Add to Basecamp: the tab joins Basecamp at once, so the list closes
+    /// up, while a chip where its row was rises into its tile's slot (see
+    /// `TileArrivalChip` and `BasecampGrid.arrive`). Reduce Motion: a fade.
+    private func addToBasecamp(_ tab: FirnCore.Tab) {
+        guard !reduceMotion, drag == nil, groupDrag == nil, window.tabLift == nil, window.tileArrival == nil,
+              let frame = frames[rowTab(of: tab).id] else {
+            _ = withAnimation(.easeOut(duration: 0.2)) { store.addToBasecamp(tab) }
+            return
+        }
+        // The chip takes the row's place at once, so no fading copy of the row lingers.
+        window.tileArrival = TileArrival(
+            tab: tab, isActive: tab.id == store.activeTabID,
+            row: frame.offsetBy(dx: windowOrigin.point.x, dy: windowOrigin.point.y))
+        Task { @MainActor in
+            let added = withAnimation(Self.glide) { store.addToBasecamp(tab) }
+            if !added { window.tileArrival = nil }
+        }
+    }
+
     private func card(_ group: TabGroup) -> some View {
         let members = shownTabs(in: group)
         return GroupCard(
@@ -601,7 +620,8 @@ private struct TabList: View {
             // Becoming a split or leaving one, the row swaps for its new self
             // at once: the two look the same at that moment.
             .transaction(value: tab.splitID) { $0.animation = nil }
-            .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id) ? 0 : 1)
+            .opacity(drag?.tab.id == tab.id || window.arrivingTabIDs.contains(tab.id)
+                     || window.tileArrival?.tab.id == tab.id ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
                 frames[tab.id] = $0
             }
@@ -730,7 +750,7 @@ private struct TabList: View {
     /// Later: Move to Space (Phase 4).
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
         if tab.place == .open {
-            Button("Add to Basecamp", systemImage: "mountain.2") { store.addToBasecamp(tab) }
+            Button("Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) }
                 .disabled(!store.canAddToBasecamp)
             // Beside the tab on screen, or, for that tab, beside a page picked
             // in the command bar. (A split's halves have Separate Tabs instead.)

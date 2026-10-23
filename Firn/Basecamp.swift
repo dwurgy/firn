@@ -34,6 +34,11 @@ struct BasecampGrid: View {
                 originInWindow = $0
             }
             .onChange(of: window.tabInBasecamp) { tabChanged(window.tabInBasecamp) }
+            .onChange(of: window.tileArrival?.tab.id) {
+                guard let id = window.tileArrival?.tab.id else { return }
+                // A frame later, so the chip is drawn where the row was and rises from there.
+                Task { @MainActor in arrive(id) }
+            }
             .background {
                 if window.tabInBasecamp?.released == false {
                     PointerWatch(window: window) { tabMoved(to: $0) }
@@ -102,7 +107,40 @@ struct BasecampGrid: View {
         // what shows (as a row, over the tab list, until it lands there).
         // Out over the page, the tile stays where it is.
         .opacity((drag?.tab.id == tab.id && drag?.place != .page)
-                 || window.tileInList?.tab.id == tab.id ? 0 : 1)
+                 || window.tileInList?.tab.id == tab.id
+                 || window.tileArrival.map { $0.tab.id == tab.id && !$0.handedOver } == true ? 0 : 1)
+    }
+
+    /// A tab added from its menu (see `TabList.addToBasecamp`): its chip
+    /// rises to just over the new tile's slot as the lifted tile a drag
+    /// shows, then lands the way a dropped tile does: it settles into the
+    /// slot, and only then does the glass tile take over.
+    private func arrive(_ id: UUID, tries: Int = 3) {
+        let tiles = store.basecampTabs
+        let slots = slots(count: tiles.count)
+        guard let index = tiles.firstIndex(where: { $0.id == id }), index < slots.count else {
+            // The tab joins Basecamp a frame after its chip shows; wait for it a moment.
+            if tries > 0, window.tileArrival?.tab.id == id {
+                Task { @MainActor in arrive(id, tries: tries - 1) }
+            } else {
+                window.tileArrival = nil
+            }
+            return
+        }
+        window.tileArrival?.tile = CGRect(origin: inWindow(slots[index].origin), size: slots[index].size)
+        withAnimation(.smooth(duration: 0.3)) {
+            window.tileArrival?.landed = true
+        } completion: {
+            // As `drop()`: it settles into its slot, then the tile takes over.
+            withAnimation(Self.glide) {
+                window.tileArrival?.settled = true
+            } completion: {
+                withAnimation(Self.glide) {
+                    window.tileArrival?.handedOver = true
+                    window.tileArrival = nil
+                }
+            }
+        }
     }
 
     /// The tiles as they'd be if the dragged one landed where it is now.
@@ -492,10 +530,7 @@ private struct BasecampTile: View {
     let remove: () -> Void
     let close: () -> Void
 
-    private var site: String {
-        let host = (tab.homeURL ?? tab.url)?.host(percentEncoded: false) ?? ""
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-    }
+    private var site: String { siteName(of: tab) }
 
     var body: some View {
         Button(action: select) {
@@ -518,6 +553,106 @@ private struct BasecampTile: View {
         }
         .accessibilityLabel(site.isEmpty ? tab.title : site)
         .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+}
+
+/// A tile's site, as its tile shows it: the home address's host, without "www.".
+@MainActor private func siteName(of tab: FirnCore.Tab) -> String {
+    let host = (tab.homeURL ?? tab.url)?.host(percentEncoded: false) ?? ""
+    return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+}
+
+/// A tab added to Basecamp from its menu, on its way up: where its row
+/// was, and its tile's slot once Basecamp has made room (window space).
+struct TileArrival {
+    let tab: FirnCore.Tab
+    /// The tab on screen, so its lifted tile looks chosen, as a dragged one does.
+    let isActive: Bool
+    let row: CGRect
+    var tile: CGRect?
+    /// Up over its slot, lifted (this is what the trip animates).
+    var landed = false
+    /// Down in its slot, as a dropped tile settles.
+    var settled = false
+    /// The tile itself shows now; the chip fades off it.
+    var handedOver = false
+}
+
+/// The trip up into Basecamp (`TileArrival`). The row's title goes at
+/// once, so no squashed half-row ever shows: what travels is the site's
+/// icon on a small chip, which grows into the lifted tile a drag shows
+/// (a touch larger than the slot), its icon gliding from the row's
+/// leading edge to the tile's middle. Then it settles like a dropped tile.
+struct TileArrivalChip: View {
+    let window: WindowModel
+
+    var body: some View {
+        if let arrival = window.tileArrival {
+            ArrivalFlight(arrival: arrival, progress: arrival.landed ? 1 : 0, settled: arrival.settled ? 1 : 0)
+                .transition(.opacity)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct ArrivalFlight: View, Animatable {
+    let arrival: TileArrival
+    /// 0 where the row was, 1 lifted over the tile's slot.
+    var progress: CGFloat
+    /// 0 lifted, 1 down in the slot.
+    var settled: CGFloat
+
+    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(progress, settled) }
+        set {
+            progress = newValue.first
+            settled = newValue.second
+        }
+    }
+
+    var body: some View {
+        let slot = arrival.tile ?? arrival.row
+        // Lifted, it's a touch larger than its slot, as a dragged tile is (`heldInWindow`).
+        let grown = (1 - settled) * 0.015
+        let to = slot.insetBy(dx: -slot.width * grown, dy: -slot.height * grown)
+        let from = arrival.row
+        let frame = CGRect(x: from.minX + (to.minX - from.minX) * progress,
+                           y: from.minY + (to.minY - from.minY) * progress,
+                           width: from.width + (to.width - from.width) * progress,
+                           height: from.height + (to.height - from.height) * progress)
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius + (Theme.tileRadius - Theme.tabRadius) * progress,
+                                     style: .continuous)
+        // The row's icon sits 8pt into its padding (16pt wide), centered on the row's height.
+        let rowIcon = CGPoint(x: Theme.rowPadding + 8, y: Theme.rowHeight / 2)
+        let icon = CGPoint(x: rowIcon.x + (frame.width / 2 - rowIcon.x) * progress,
+                           y: rowIcon.y + (frame.height / 2 - rowIcon.y) * progress)
+        ZStack(alignment: .topLeading) {
+            Text(arrival.tab.title)
+                .font(Theme.tabFont)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                // Cut off where the row's was.
+                .frame(width: max(0, arrival.row.width - Theme.rowPadding * 2 - 24),
+                       height: Theme.rowHeight, alignment: .leading)
+                .offset(x: Theme.rowPadding + 24)
+                .opacity(max(0, 1 - progress * 5))
+            // 16pt in the row, 18pt on the tile.
+            SiteMark(site: siteName(of: arrival.tab), icon: arrival.tab.icon)
+                .scaleEffect((16 + 2 * progress) / 18)
+                .position(icon)
+            // Over the second half of the trip, it becomes the lifted tile a drag shows.
+            BasecampTile(tab: arrival.tab, isActive: arrival.isActive, lifted: true,
+                         select: {}, goHome: {}, split: {}, remove: {}, close: {})
+                .frame(width: frame.width, height: frame.height)
+                .opacity(min(1, max(0, progress * 2 - 1)))
+        }
+        .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+        .background { shape.fill(Theme.liftedTab) }
+        .clipShape(shape)
+        .shadow(color: Theme.shadowPageFar, radius: 8, y: 3)
+        .offset(x: frame.minX, y: frame.minY)
     }
 }
 

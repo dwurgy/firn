@@ -93,7 +93,7 @@ struct BasecampAndSessionTests {
         #expect(hosts(store.openTabs) == ["a.example", "b.example"])
     }
 
-    @Test func removingARestingTileRemovesIt() {
+    @Test func removingARestingTileKeepsItAsATab() {
         let store = makeStore()
         let a = store.openTab(url("a"))
         store.openTab(url("b"))
@@ -101,7 +101,8 @@ struct BasecampAndSessionTests {
         store.close(a)
         store.removeFromBasecamp(a)
         #expect(store.basecampTabs.isEmpty)
-        #expect(hosts(store.openTabs) == ["b.example"])
+        #expect(hosts(store.openTabs) == ["b.example", "a.example"])
+        #expect(a.isResting)
     }
 
     @Test func linksFromATileOpenWhereNewTabsGo() {

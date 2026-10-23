@@ -39,6 +39,9 @@ final class WindowModel {
     /// A tab dragged up out of the tab list over Basecamp: Basecamp makes
     /// room for it as a tile, and settles it there once it's let go (see `BasecampGrid`).
     var tabInBasecamp: TileInList?
+    /// A tab just added to Basecamp from its menu, on its way up to its
+    /// tile (see `TabList.addToBasecamp` and `TileArrivalChip`).
+    var tileArrival: TileArrival?
     /// A tab held up over a full Basecamp: a quiet line says so.
     var basecampFullHint = false
     /// The pointer while a tab is lifted, in the window's space. Apart from
@@ -435,6 +438,7 @@ struct BrowserWindow: View {
         }
         // A dragged tab follows the pointer over everything, off the sidebar and onto the page.
         .overlay(alignment: .topLeading) { TabLiftGhost(window: window) }
+        .overlay(alignment: .topLeading) { TileArrivalChip(window: window) }
         .coordinateSpace(.named(Self.space))
         .background {
             ZStack {

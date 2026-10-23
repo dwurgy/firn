@@ -74,9 +74,9 @@ final class WindowModel {
     /// A group just made: its card starts thawed (looking like a loose tab)
     /// and frost forms around its tab (see `TabList`).
     var formingGroupID: UUID?
-    /// The New space or Edit space sheet, while it's open. Here so the menu
+    /// The New space or Edit space card, while it's open. Here so the menu
     /// bar's New Space… can open it too.
-    var spaceSheet: SpaceSheetMode?
+    private(set) var spaceSheet: SpaceSheetMode?
     /// Idle tabs waiting to be tidied away, one by one, so each is seen
     /// going (see `TabList`).
     var tidyQueue: [FirnCore.Tab] = []
@@ -126,8 +126,23 @@ final class WindowModel {
         focusPage()
     }
 
-    /// Opens the New space sheet.
-    func newSpace() { spaceSheet = .new }
+    /// Opens the New space card, in place of the command bar if it's open.
+    func newSpace() { openSpaceSheet(.new) }
+
+    /// Opens the Edit space card for `space`.
+    func editSpace(_ space: Space) { openSpaceSheet(.edit(space.id)) }
+
+    private func openSpaceSheet(_ mode: SpaceSheetMode) {
+        closeCommandBar(focusingPage: false)
+        spaceSheet = mode
+    }
+
+    /// Closes the space card; the page in front gets the keys back.
+    func closeSpaceSheet() {
+        guard spaceSheet != nil else { return }
+        spaceSheet = nil
+        focusPage()
+    }
 
     /// The icon a new space starts on, picked the same way as its color.
     var freeSpaceIcon: SpaceIcon {
@@ -313,6 +328,7 @@ final class WindowModel {
     func openCommandBar() {
         // A pick whose page has gone (closed, say) is over: the bar opens whole.
         if !isPickingSplit { splitPickAnchor = nil }
+        spaceSheet = nil
         commandBarHalf = isPickingSplit ? splitPickSide.other : nil
         showsCommandBar = true
     }
@@ -456,6 +472,7 @@ struct BrowserWindow: View {
             PageArea(store: store, window: window)
                 .overlay { LookoutLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
+                .overlay { SpaceSheetLayer(window: window) }
                 .modifier(PageBesideSidebar(
                     reveal: window.sidebarCollapsed ? 0 : 1,
                     sidebarWidth: window.sidebarWidth
@@ -501,9 +518,6 @@ struct BrowserWindow: View {
         .ignoresSafeArea()
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))
-        .sheet(item: Binding(get: { window.spaceSheet }, set: { window.spaceSheet = $0 })) { mode in
-            SpaceSheet(window: window, mode: mode)
-        }
         .onAppear {
             if store.activeTab == nil { window.openCommandBar() }
             // Launching may bring Firn to the front before this window listens.

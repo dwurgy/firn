@@ -64,7 +64,7 @@ struct SpaceRow: View {
                     window.showSpace { store.selectSpace(space) }
                 }
                 .contextMenu {
-                    Button("Edit Space…") { window.spaceSheet = .edit(space.id) }
+                    Button("Edit Space…") { window.editSpace(space) }
                     // The last space can't be deleted.
                     if store.spaces.count > 1 {
                         Button("Delete Space…") { deleting = space }

@@ -9,15 +9,43 @@ enum SpaceSheetMode: Hashable, Identifiable {
     var id: Self { self }
 }
 
-/// The New space and Edit space sheet: a name, a color, an icon, and (for a new space)
-/// the one sharing choice (CLAUDE.md, How spaces work). Nothing changes until
-/// Create or Save; Stop Sharing is the exception, after its own confirmation.
-/// A native sheet, so Esc, Return, focus, and VoiceOver come from macOS.
+/// The New space and Edit space card over the page, drawn like the command
+/// bar: Firn's glass over a dimmed page. Not a system sheet: a sheet is its
+/// own window, so its glass can't see the page behind it. Esc, Cancel, or a
+/// click on the dim closes it; it rises a hair as it fades in (Reduce Motion: fades).
+struct SpaceSheetLayer: View {
+    let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if let mode = window.spaceSheet {
+                RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
+                    .fill(Theme.commandDim)
+                    .contentShape(Rectangle())
+                    .onTapGesture { window.closeSpaceSheet() }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                SpaceSheet(window: window, mode: mode)
+                    .id(mode)
+                    .padding(24)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.2), value: window.spaceSheet)
+    }
+}
+
+/// The card itself: a name, a color, an icon, and (for a new space) the one
+/// sharing choice (CLAUDE.md, How spaces work). Nothing changes until Create
+/// or Save; Stop Sharing is the exception, after its own confirmation. Its
+/// glass takes the color being chosen, so it previews the space as it's made.
 struct SpaceSheet: View {
     let window: WindowModel
     let mode: SpaceSheetMode
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var name = ""
     @State private var color = Theme.spaceColorNames[0]
     @State private var icon = SpaceIcon.default
@@ -36,6 +64,7 @@ struct SpaceSheet: View {
     }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
         VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
             Text(editing == nil ? "New space" : "Edit space")
                 .font(Theme.panelTitleFont)
@@ -48,7 +77,7 @@ struct SpaceSheet: View {
             }
             HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { window.closeSpaceSheet() }
                     .buttonStyle(SheetButtonStyle(prominent: false))
                     .keyboardShortcut(.cancelAction)
                 Button(editing == nil ? "Create Space" : "Save", action: finish)
@@ -59,8 +88,22 @@ struct SpaceSheet: View {
         }
         .padding(24)
         .frame(width: 380)
-        .presentationBackground(Theme.page)
+        .background {
+            CommandBarGlass(shape: shape, color: Theme.spaceColor(color))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: color)
+        }
+        .clipShape(shape)
+        .shadow(color: Theme.shadowPeek, radius: 24, y: 8)
+        .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)
+        .onExitCommand { window.closeSpaceSheet() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(editing == nil ? "New space" : "Edit space")
+        .accessibilityAddTraits(.isModal)
         .onAppear(perform: start)
+        // The space being edited was deleted meanwhile: nothing left to edit.
+        .onChange(of: editing == nil) {
+            if case .edit = mode, editing == nil { window.closeSpaceSheet() }
+        }
         .confirmationDialog(
             "Stop sharing sign-ins?",
             isPresented: $confirmingStopSharing,
@@ -190,7 +233,11 @@ struct SpaceSheet: View {
             icon = window.freeSpaceIcon
             shareWith = store.activeSpaceID
         }
-        nameFocused = true
+        // Once the card is in the window, as the command bar does.
+        Task { @MainActor in
+            await Task.yield()
+            nameFocused = true
+        }
     }
 
     private func finish() {
@@ -198,10 +245,10 @@ struct SpaceSheet: View {
         finished = true
         if let editing {
             store.updateSpace(editing, name: name, icon: icon.rawValue, color: color)
-            dismiss()
+            window.closeSpaceSheet()
         } else {
             let sharing = shares ? shareTarget : nil
-            dismiss()
+            window.closeSpaceSheet()
             window.showSpace { store.addSpace(name: name, icon: icon.rawValue, color: color, sharingWith: sharing) }
         }
     }

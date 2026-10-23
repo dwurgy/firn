@@ -383,8 +383,9 @@ private struct CommandRowView: View {
 
 /// The bar's glass: Liquid Glass on macOS 26, a regular material before,
 /// tinted by the space's color. It sits over web pages, so it's the
-/// regular (denser) glass, not the sidebar groups' thinner frost.
-private struct CommandBarGlass: View {
+/// regular (denser) glass, not the sidebar groups' thinner frost. The space
+/// card (`SpaceSheet`) wears it too.
+struct CommandBarGlass: View {
     let shape: RoundedRectangle
     let color: Color
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency

@@ -72,6 +72,9 @@ final class WebKitPageController: NSObject, PageController {
     /// over for a popup, which is a copy of the opener's.
     private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
+        // Ad and tracker blocking, for every page in every space. A popup's
+        // configuration may share its opener's controller; attaching twice is harmless.
+        ContentBlocker.shared.attach(configuration.userContentController)
         // A real starting size, not zero: a page that loads before it's ever
         // on screen (a split's new half, say) laid out at 0×0 sat blank for
         // seconds once shown. Its holder gives it the true size when shown.

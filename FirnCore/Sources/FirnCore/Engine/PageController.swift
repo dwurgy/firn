@@ -115,4 +115,11 @@ public enum BrowserEngine {
     public static func makePage(dataStoreID: UUID) -> any PageController {
         WebKitPageController(dataStoreID: dataStoreID)
     }
+
+    /// Starts ad and tracker blocking: finds the compiled lists (or compiles
+    /// them, in the background, the first time). Call once at launch, before
+    /// pages load; pages made earlier still get the rules when they're ready.
+    public static func startBlocking() {
+        Task { await ContentBlocker.shared.start() }
+    }
 }

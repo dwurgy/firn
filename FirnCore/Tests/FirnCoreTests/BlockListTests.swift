@@ -138,6 +138,52 @@ struct BlockListTests {
         #expect(compiled != nil)
     }
 
+    @Test func identifiersChangeWithTheList() {
+        let first = ContentBlocker.identifier(for: .ads, text: "##.ad")
+        #expect(first == ContentBlocker.identifier(for: .ads, text: "##.ad"))
+        #expect(first != ContentBlocker.identifier(for: .ads, text: "##.ads"))
+        #expect(first.hasPrefix("firn-easylist-"))
+    }
+
+    /// A page made before the rules were ready gets them, and they really hide
+    /// an ad box; the second start finds the compiled list instead of compiling.
+    /// (The doctype matters: in quirks mode WebKit misses mixed-case classes.)
+    @MainActor @Test func pagesGetTheRules() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FirnBlockListTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try #require(WKContentRuleListStore(url: folder))
+        let blocker = ContentBlocker(store: store)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        blocker.attach(configuration.userContentController)
+        await blocker.start([.ads])
+        #expect(blocker.lists.count == 1)
+
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+        webView.loadHTMLString(#"<!doctype html><div class="ADBox">ad</div><div id="story">story</div>"#,
+                               baseURL: URL(string: "https://news.example.test/")!)
+        var display: (ad: String, story: String)?
+        for _ in 0..<100 {
+            try await Task.sleep(for: .milliseconds(50))
+            let script = #"document.readyState == "complete" ? getComputedStyle(document.querySelector(".ADBox")).display + "," + getComputedStyle(document.getElementById("story")).display : """#
+            if let result = try? await webView.evaluateJavaScript(script) as? String, !result.isEmpty {
+                let parts = result.split(separator: ",").map(String.init)
+                display = (parts[0], parts[1])
+                break
+            }
+        }
+        #expect(display?.ad == "none")
+        #expect(display?.story == "block")
+
+        let again = ContentBlocker(store: store)
+        await again.start([.ads])
+        #expect(again.lists.count == 1)
+        let identifiers = try #require(await withCheckedContinuation { continuation in
+            store.getAvailableContentRuleListIdentifiers { continuation.resume(returning: $0) }
+        })
+        #expect(identifiers.count == 1)
+    }
+
     /// The real check: WebKit itself accepts everything the converter writes.
     @MainActor @Test func webKitCompilesTheRules() async throws {
         let list = """

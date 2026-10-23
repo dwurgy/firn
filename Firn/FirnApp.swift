@@ -11,6 +11,7 @@ struct FirnApp: App {
     /// Picks up where the last session left off, then saves as things change
     /// and once more at quit.
     init() {
+        BrowserEngine.startBlocking()
         let file = SessionFile.standard
         let session = file.load()
         let store = BrowserStore(

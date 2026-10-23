@@ -7,9 +7,21 @@ import UniformTypeIdentifiers
 /// the space has some; otherwise its spot stays empty, so the space icons
 /// don't shift. While files arrive, a thin ring around the arrow fills.
 /// The popover opens on its own as a download starts in the space on screen.
+/// As a file arrives, the arrow dips and settles, and frost forms over the
+/// button in the space's color, holds, and thaws, like the tidy pill.
 struct DownloadsButton: View {
     let store: BrowserStore
     let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Counts arrivals; each one plays the arrow's dip.
+    @State private var landings = 0
+    @State private var frosted = false
+    @State private var thawTask: Task<Void, Never>?
+    /// The popover is about to open on its own; the finish isn't needed then.
+    @State private var opening = false
+    /// The ring shows only once a file has been arriving for a beat, so a
+    /// quick one doesn't flash it.
+    @State private var showsRing = false
 
     var body: some View {
         let dataStoreID = store.activeSpace.dataStoreID
@@ -21,7 +33,16 @@ struct DownloadsButton: View {
                 ChromeButton("Downloads") {
                     window.showsDownloads.toggle()
                 } icon: {
-                    DownloadsIcon(progress: progress(of: downloads), active: downloads.contains { $0.state == .downloading })
+                    DownloadsIcon(progress: progress(of: downloads),
+                                  active: showsRing,
+                                  landings: landings)
+                }
+                .background {
+                    if frosted {
+                        FrostGlass(shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
+                                   color: Theme.spaceColor(store.activeSpace.color))
+                            .transition(.opacity)
+                    }
                 }
                 .popover(isPresented: Bindable(window).showsDownloads, arrowEdge: .top) {
                     DownloadsPanel(dataStoreID: dataStoreID, window: window)
@@ -29,19 +50,61 @@ struct DownloadsButton: View {
                 .transition(.opacity)
             }
         }
+        // Fades in and out, as the overflow box does.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: downloads.isEmpty)
         .onChange(of: Downloads.shared.latest?.id) {
             // Only one from the space on screen, and only where it can be seen.
             guard let latest = Downloads.shared.latest, latest.dataStoreID == dataStoreID,
                   !window.sidebarCollapsed else { return }
             window.showsOverflow = false
-            // A beat, so the button is there to open from when it's the first.
+            opening = true
+            // Once the button has faded in, so it opens from a settled spot.
             Task {
-                try? await Task.sleep(for: .milliseconds(150))
+                try? await Task.sleep(for: .milliseconds(reduceMotion ? 0 : 260))
                 window.showsDownloads = true
+                opening = false
             }
         }
         .onChange(of: downloads.isEmpty) { if downloads.isEmpty { window.showsDownloads = false } }
-        .onChange(of: store.activeSpaceID) { window.showsDownloads = false }
+        .onChange(of: store.activeSpaceID) {
+            window.showsDownloads = false
+            thawTask?.cancel()
+            frosted = false
+        }
+        .task(id: downloads.contains { $0.state == .downloading }) {
+            guard downloads.contains(where: { $0.state == .downloading }) else {
+                showsRing = false
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { showsRing = true }
+        }
+        .onChange(of: downloads.map { Arrival(id: $0.id, state: $0.state) }) { old, new in
+            // Only a file in this list that was arriving and now has.
+            let arriving = Set(old.filter { $0.state == .downloading }.map(\.id))
+            guard new.contains(where: { $0.state == .finished && arriving.contains($0.id) }) else { return }
+            land()
+        }
+    }
+
+    private struct Arrival: Equatable {
+        let id: UUID
+        let state: Download.State
+    }
+
+    /// The finish: the arrow dips, frost forms, holds a moment, and thaws.
+    /// Reduce Motion: no dip; the frost just fades in and out. Not while the
+    /// popover is showing (or about to): its "Done" already says so.
+    private func land() {
+        guard !window.showsDownloads, !opening else { return }
+        if !reduceMotion { landings += 1 }
+        withAnimation(.easeOut(duration: 0.3)) { frosted = true }
+        thawTask?.cancel()
+        thawTask = Task {
+            try? await Task.sleep(for: .milliseconds(1300))
+            guard !Task.isCancelled else { return }
+            withAnimation(Theme.thaw) { frosted = false }
+        }
     }
 
     /// How far along the files still arriving are, together; nil when none
@@ -57,20 +120,38 @@ struct DownloadsButton: View {
 private struct DownloadsIcon: View {
     let progress: Double?
     let active: Bool
+    let landings: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
+            // Scaled rather than resized, so it glides between sizes.
             Image(systemName: "arrow.down")
-                .font(.system(size: active ? 10 : 13, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
+                .scaleEffect(active ? 10.0 / 13 : 1)
+                // As a file arrives: a soft dip, then settling back, no bounce.
+                .keyframeAnimator(initialValue: 0.0, trigger: landings) { arrow, dip in
+                    arrow.offset(y: dip)
+                } keyframes: { _ in
+                    CubicKeyframe(3, duration: 0.18)
+                    CubicKeyframe(0, duration: 0.32)
+                }
             if active {
-                Circle()
-                    .stroke(Theme.faint.opacity(0.35), lineWidth: 1.5)
-                Circle()
-                    .trim(from: 0, to: progress ?? 0)
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
+                Group {
+                    Circle()
+                        .stroke(Theme.faint.opacity(0.35), lineWidth: 1.5)
+                    Circle()
+                        .trim(from: 0, to: progress ?? 0)
+                        .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        // Fills smoothly between progress updates.
+                        .animation(reduceMotion ? nil : .linear(duration: 0.3), value: progress)
+                }
+                .transition(.opacity)
             }
         }
+        // The arrow shrinks as the ring fades in, and grows back as it goes.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: active)
         .frame(width: 18, height: 18)
         .accessibilityHidden(true)
     }

@@ -13,6 +13,9 @@ final class WindowModel {
     /// tab on screen, or a tile): it moves to the left half, and the command
     /// bar sits over an empty right half until something is picked.
     private(set) var splitPickAnchor: FirnCore.Tab?
+    /// The half that tab takes; the empty half is the other. Open as Split
+    /// puts it on the left; dragged onto the page, it goes where it's let go.
+    private(set) var splitPickSide = SplitSide.left
     /// A split just made: its row opens from its left tab's row (see `SplitRow`).
     var formingSplitID: UUID?
     /// Whether that's happening now, with its tab on screen.
@@ -20,8 +23,8 @@ final class WindowModel {
         splitPickAnchor != nil && splitPickAnchor?.id == store.activeTabID
     }
     /// The command bar was opened to pick a split's page, so it sits over
-    /// the right half. Kept until it's next opened, so it fades out where it was.
-    private(set) var commandBarOnRightHalf = false
+    /// the empty half. Kept until it's next opened, so it fades out where it was.
+    private(set) var commandBarHalf: SplitSide?
     /// Goes up each time the address bar is asked to take focus.
     private(set) var addressRequest = 0
 
@@ -33,6 +36,11 @@ final class WindowModel {
     /// A Basecamp tile dragged out over the tab list: the list makes room
     /// for it as a row, and settles it there once it's let go (see `TabList`).
     var tileInList: TileInList?
+    /// A tab dragged up out of the tab list over Basecamp: Basecamp makes
+    /// room for it as a tile, and settles it there once it's let go (see `BasecampGrid`).
+    var tabInBasecamp: TileInList?
+    /// A tab held up over a full Basecamp: a quiet line says so.
+    var basecampFullHint = false
     /// The pointer while a tab is lifted, in the window's space. Apart from
     /// `tabLift` and `pageDrop`, so only the lifted tab redraws as it moves.
     var dragPointer: CGPoint = .zero
@@ -167,6 +175,15 @@ final class WindowModel {
         if wasShowing { focusPage() }
     }
 
+    /// Close on a tile's menu: it leaves Basecamp (⇧⌘T brings it back).
+    func closeTile(_ tab: FirnCore.Tab) {
+        let wasShowing = tab.id == store.activeTabID
+        withAnimation(Theme.glide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+            store.closeTile(tab)
+        }
+        if wasShowing { focusPage() }
+    }
+
     /// ⌘W: closes the Lookout if one is open (as in Arc), or else the tab on screen.
     func closeFront() {
         if store.lookout != nil {
@@ -268,7 +285,7 @@ final class WindowModel {
     /// Opens the command bar (⌘T, the New tab button, an empty window). No
     /// tab exists until something in it is picked.
     func openCommandBar() {
-        commandBarOnRightHalf = splitPickAnchor != nil
+        commandBarHalf = splitPickAnchor == nil ? nil : splitPickSide.other
         showsCommandBar = true
     }
 
@@ -287,22 +304,24 @@ final class WindowModel {
         if focusingPage { focusPage() }
     }
 
-    /// Open as Split on the tab on screen or a Basecamp tile: the page
-    /// glides over to the left half, and the command bar opens over the
-    /// empty right half to pick what goes there. Esc leaves things as they were.
-    func pickSplit(beside tab: FirnCore.Tab) {
+    /// Open as Split on the tab on screen or a Basecamp tile (or the tab on
+    /// screen dragged onto the page): the page glides over to `side`, and
+    /// the command bar opens over the empty other half to pick what goes
+    /// there. Esc leaves things as they were.
+    func pickSplit(beside tab: FirnCore.Tab, on side: SplitSide = .left) {
         store.select(tab)
         withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
             splitPickAnchor = tab
+            splitPickSide = side
         }
         openCommandBar()
     }
 
-    /// Shows `incoming` beside `anchor` in split view; a new split's row
-    /// forms in the sidebar.
-    func openSplit(_ incoming: FirnCore.Tab, beside anchor: FirnCore.Tab) {
+    /// Shows `incoming` beside `anchor` in split view, on `side`; a new
+    /// split's row forms in the sidebar.
+    func openSplit(_ incoming: FirnCore.Tab, beside anchor: FirnCore.Tab, on side: SplitSide = .right) {
         let existing = Set(store.splits.map(\.id))
-        if let split = store.openSplit(incoming, beside: anchor), !existing.contains(split.id) {
+        if let split = store.openSplit(incoming, beside: anchor, on: side), !existing.contains(split.id) {
             formingSplitID = split.id
         }
     }
@@ -312,7 +331,7 @@ final class WindowModel {
     /// so a peeking sidebar counts), or when it can't.
     func pageSide(at pointer: CGPoint, for tab: FirnCore.Tab, past sidebarEdge: CGFloat) -> SplitSide? {
         let pages = pagesFrame
-        guard store.canDropOnPage(tab), !isPickingSplit, !showsCommandBar,
+        guard canDragOntoPage(tab), !isPickingSplit, !showsCommandBar,
               pages.contains(pointer), pointer.x > sidebarEdge else { return nil }
         // A split's halves meet at its divider; one page is split down the middle.
         let fraction = store.activeTab.flatMap { store.split(of: $0) }?.leftFraction ?? 0.5
@@ -320,10 +339,29 @@ final class WindowModel {
         return pointer.x < middle ? .left : .right
     }
 
+    /// Whether `tab` can be dragged onto the page: one that would open in
+    /// split view, or the tab on screen itself (not a split), which makes
+    /// room for a new page beside it, as Open as Split does.
+    func canDragOntoPage(_ tab: FirnCore.Tab) -> Bool {
+        store.canDropOnPage(tab) || isAloneOnScreen(tab)
+    }
+
+    private func isAloneOnScreen(_ tab: FirnCore.Tab) -> Bool {
+        tab.id == store.activeTabID && tab.splitID == nil && store.lookout == nil
+    }
+
     /// A dragged tab let go over the page: it opens on the half the frost
-    /// showed, the frost giving way to the page.
+    /// showed, the frost giving way to the page. The tab on screen goes to
+    /// the half it was let go over, and the command bar opens over the
+    /// other to pick a page for it.
     func dropOnPage() {
         guard let drop = pageDrop else { return }
+        if isAloneOnScreen(drop.tab) {
+            withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+                pageDrop = nil
+            }
+            return pickSplit(beside: drop.tab, on: drop.side)
+        }
         let existing = Set(store.splits.map(\.id))
         let split = withAnimation(Theme.slide(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
             pageDrop = nil
@@ -684,13 +722,16 @@ private struct PageArea: View {
         }
         let id = active?.id ?? PageSlot.emptyID
         if let drop {
-            return [PageSlot(id: id, tab: active, side: drop.side == .left ? .right : .left),
-                    PageSlot(id: drop.side == .left ? PageSlot.leftFrostID : PageSlot.rightFrostID,
-                             tab: nil, side: drop.side, isFrost: true)]
+            // The tab on screen dragged over a half goes there; the frost
+            // shows where a new page will be.
+            let frostSide = drop.tab.id == active?.id ? drop.side.other : drop.side
+            return [PageSlot(id: id, tab: active, side: frostSide.other),
+                    PageSlot(id: frostSide == .left ? PageSlot.leftFrostID : PageSlot.rightFrostID,
+                             tab: nil, side: frostSide, isFrost: true)]
         }
         if window.isPickingSplit {
-            return [PageSlot(id: id, tab: active, side: .left),
-                    PageSlot(id: PageSlot.emptyID, tab: nil, side: .right)]
+            return [PageSlot(id: id, tab: active, side: window.splitPickSide),
+                    PageSlot(id: PageSlot.emptyID, tab: nil, side: window.splitPickSide.other)]
         }
         return [PageSlot(id: id, tab: active, side: nil)]
     }
@@ -772,7 +813,8 @@ struct TabLift {
     var reach: ClosedRange<CGFloat>?
 }
 
-/// A Basecamp tile dragged out over the tab list (see `WindowModel.tileInList`).
+/// A Basecamp tile dragged out over the tab list (see `WindowModel.tileInList`),
+/// or a tab dragged up over Basecamp (`WindowModel.tabInBasecamp`).
 struct TileInList: Equatable {
     let tab: FirnCore.Tab
     /// The tab's id, kept here so comparing needs no main actor.
@@ -1022,6 +1064,10 @@ private struct DropFrost: View {
 }
 
 /// Where the pages sit while a split is being picked: halves, as a new split has.
+extension SplitSide {
+    var other: SplitSide { self == .left ? .right : .left }
+}
+
 enum SplitPicking {
     static func leftWidth(in width: CGFloat) -> CGFloat {
         max(width - Theme.pageInset, 1) * 0.5

@@ -451,18 +451,27 @@ public final class BrowserStore {
         close(tab, showing: next, remembering: true)
     }
 
+    /// Close on a tile's menu: it leaves Basecamp altogether, rather than
+    /// resting there. ⇧⌘T brings it back to its place among the tiles.
+    public func closeTile(_ tab: Tab) {
+        guard tab.place == .basecamp else { return }
+        close(tab, showing: nil, remembering: true, leavingBasecamp: true)
+    }
+
     /// `remembering`: whether ⇧⌘T can bring it back (not a popup that
-    /// closed itself).
-    private func close(_ tab: Tab, showing next: Tab?, remembering: Bool) {
+    /// closed itself). `leavingBasecamp`: a tile goes, rather than resting.
+    private func close(_ tab: Tab, showing next: Tab?, remembering: Bool, leavingBasecamp: Bool = false) {
         guard tabs.contains(where: { $0.id == tab.id }) else { return }
         let partner = endSplit(of: tab)
         let next = next ?? partner
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         let siblings = siblings(of: tab)
         let position = tab.place == .open ? siblings.firstIndex { $0.id == tab.id } : nil
-        if remembering { rememberClosing(tab) }
+        if remembering {
+            if leavingBasecamp { rememberClosingTile(tab) } else { rememberClosing(tab) }
+        }
         tab.sleep()
-        if tab.place != .basecamp {
+        if tab.place != .basecamp || leavingBasecamp {
             tabs.remove(at: index)
             endIfEmpty(tab.groupID)
         }
@@ -941,6 +950,19 @@ public final class BrowserStore {
 
     private func reopen(at index: Int) {
         switch closed.remove(at: index) {
+        case let .tab(tab, position, _) where tab.place == .basecamp:
+            // A closed tile goes back among the tiles; with no room left,
+            // it comes back as an everyday tab where new tabs go.
+            let tiles = list(.basecamp, in: tab.spaceID)
+            if tiles.count < Self.basecampLimit {
+                insert(tab, at: position, in: tiles)
+            } else {
+                tab.place = .open
+                tab.homeURL = nil
+                tab.lastActiveAt = now()
+                tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
+            }
+            select(tab)
         case let .tab(tab, position, listPosition):
             tab.place = .open
             tab.driftedAt = nil
@@ -980,6 +1002,14 @@ public final class BrowserStore {
                 ? 0 : tabListPosition(of: tab.id, in: tab.spaceID)
             remember(.tab(tab, position: position, listPosition: position))
         }
+    }
+
+    /// Remembers a tile leaving Basecamp, and its place among the tiles.
+    private func rememberClosingTile(_ tab: Tab) {
+        guard tab.homeURL ?? tab.url != nil else { return }
+        let tiles = list(.basecamp, in: tab.spaceID)
+        let position = tiles.firstIndex { $0.id == tab.id } ?? tiles.count
+        remember(.tab(tab, position: position, listPosition: position))
     }
 
     private func rememberClosing(_ group: TabGroup, members: [Tab]) {

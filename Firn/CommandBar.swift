@@ -15,8 +15,9 @@ struct CommandBarLayer: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
         GeometryReader { proxy in
-            // Picking a page for a split, the bar sits over the empty right half.
-            let leftWidth = window.commandBarOnRightHalf ? SplitPicking.leftWidth(in: proxy.size.width) : 0
+            // Picking a page for a split, the bar sits over the empty half.
+            let half = window.commandBarHalf
+            let leftWidth = half != nil ? SplitPicking.leftWidth(in: proxy.size.width) : 0
             let rightStart = leftWidth == 0 ? 0 : leftWidth + Theme.pageInset
             ZStack(alignment: .top) {
                 if window.showsCommandBar {
@@ -32,7 +33,8 @@ struct CommandBarLayer: View {
                     CommandBar(store: store, window: window)
                         .frame(width: min(560, max(0, proxy.size.width - rightStart - 64)))
                         .frame(maxWidth: .infinity)
-                        .padding(.leading, rightStart)
+                        .padding(.leading, half == .right ? rightStart : 0)
+                        .padding(.trailing, half == .left ? rightStart : 0)
                         // About a fifth of the way down, as a glance, not a page.
                         .padding(.top, max(48, proxy.size.height * 0.22))
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
@@ -204,7 +206,7 @@ private struct CommandBar: View {
                 incoming = nil
             }
             if let incoming, incoming.id != anchor.id {
-                window.openSplit(incoming, beside: anchor)
+                window.openSplit(incoming, beside: anchor, on: window.splitPickSide.other)
             } else {
                 store.select(anchor)
             }

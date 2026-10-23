@@ -317,6 +317,12 @@ private struct TabList: View {
         }
         .overlay(alignment: .topLeading) { liftedGroup }
         .onChange(of: window.tileInList) { tileChanged(window.tileInList) }
+        // Settled into Basecamp: its row's open slot here closes.
+        .onChange(of: window.tabInBasecamp) {
+            if window.tabInBasecamp == nil, drag?.overBasecamp == true {
+                withAnimation(reduceMotion ? nil : Self.glide) { drag = nil }
+            }
+        }
         .background {
             if window.tileInList?.released == false {
                 PointerWatch(window: window) { tileMoved(to: $0) }
@@ -852,6 +858,7 @@ private struct TabList: View {
                 current.location = value.location
                 window.dragPointer = inWindow(value.location)
                 if overPage(value.location, current: &current) { return }
+                if overBasecamp(value.location, current: &current) { return }
                 follow(current)
             }
     }
@@ -917,7 +924,7 @@ private struct TabList: View {
         window.tabLift = TabLift(tab: tab, row: AnyView(liftedRow(tab, isActive: true)), grab: grab,
                                  width: frame.width, column: frame.minX + windowOrigin.point.x)
         window.tabLift?.reach = rowReach
-        guard store.canDropOnPage(tab), let page = tab.page else { return }
+        guard window.canDragOntoPage(tab), let page = tab.page else { return }
         Task {
             // Twice the card's width, so it's sharp on a Retina screen.
             let picture = await page.snapshot(width: Theme.liftedCard.width * 2)
@@ -964,6 +971,8 @@ private struct TabList: View {
             return false
         }
         if !current.overPage {
+            if current.overBasecamp { leaveBasecamp(&current) }
+            window.basecampFullHint = false
             current.overPage = true
             withAnimation(reshape) { window.tabLift?.isCard = true }
             current.target = currentTarget(of: current.tab)
@@ -974,6 +983,49 @@ private struct TabList: View {
         let drop = PageDrop(tab: current.tab, side: side)
         if window.pageDrop != drop { withAnimation(slide) { window.pageDrop = drop } }
         return true
+    }
+
+    /// Held up past the top of the list, a tab that can join Basecamp
+    /// comes loose there as a tile (`BasecampGrid` makes room and draws
+    /// it). Its row's slot here stays open until it lands, so nothing in
+    /// the list jumps under the pointer. A full Basecamp makes no room: a
+    /// quiet line says so, and the row only tugs at the top. Coming back
+    /// down takes a little more, so it doesn't flicker at the line. True
+    /// while it's up there.
+    private func overBasecamp(_ location: CGPoint, current: inout TabDrag) -> Bool {
+        let pointer = inWindow(location)
+        let list = shownInWindow.rect
+        let above = pointer.x <= list.maxX && pointer.y < list.minY + (current.overBasecamp ? 8 : 0)
+        let joining = basecampTab(for: current.tab)
+        let full = above && !store.canAddToBasecamp
+        if window.basecampFullHint != full { window.basecampFullHint = full }
+        guard above, store.canAddToBasecamp, joining.url != nil else {
+            if current.overBasecamp { leaveBasecamp(&current) }
+            return false
+        }
+        if !current.overBasecamp {
+            current.overBasecamp = true
+            current.target = currentTarget(of: current.tab)
+            withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
+            window.tabInBasecamp = TileInList(tab: joining)
+        } else {
+            drag = current
+        }
+        return true
+    }
+
+    /// Back down over the list (or out over the page): Basecamp closes up, and it's a row again.
+    private func leaveBasecamp(_ current: inout TabDrag) {
+        current.overBasecamp = false
+        window.tabInBasecamp = nil
+        withAnimation(reshape) { window.tabLift?.isTile = false }
+    }
+
+    /// The tab a dragged row would put in Basecamp: for a split, the half
+    /// it was picked up by (the other stays here as an everyday tab).
+    private func basecampTab(for tab: FirnCore.Tab) -> FirnCore.Tab {
+        guard let split = store.split(of: tab), let partner = store.splitPartner(of: tab) else { return tab }
+        return Double(window.tabLift?.grab.x ?? 0) < split.leftFraction ? tab : partner
     }
 
     /// The row turning into its page's picture and back: a short glide; a fade with Reduce Motion.
@@ -1034,6 +1086,13 @@ private struct TabList: View {
         if groupDrag != nil { return dropGroup() }
         guard let current = drag, !current.settling, !current.fromBasecamp else { return }
         window.isDraggingTab = false
+        window.basecampFullHint = false
+        // Let go over Basecamp: it settles in there as a tile (see
+        // `BasecampGrid`); its row here goes once it has.
+        if current.overBasecamp {
+            window.tabInBasecamp?.released = true
+            return
+        }
         // Let go over the page: it opens there at once (no show on the way,
         // you just want the page), its picture fading as it does, and its row
         // becomes the split's.
@@ -1091,9 +1150,9 @@ private struct TabList: View {
     }
 }
 
-/// Watches the pointer while a Basecamp tile is over the tab list, so only
-/// this redraws as it moves, not the list.
-private struct PointerWatch: View {
+/// Watches the pointer while a Basecamp tile is over the tab list (or a tab
+/// over Basecamp), so only this redraws as it moves, not the list.
+struct PointerWatch: View {
     let window: WindowModel
     let moved: (CGPoint) -> Void
 
@@ -1122,6 +1181,8 @@ private struct TabDrag {
     var follows = false
     /// True while it's out over the page (see `TabList.overPage`).
     var overPage = false
+    /// True while it's held up over Basecamp (see `TabList.overBasecamp`).
+    var overBasecamp = false
     /// A Basecamp tile held out over the list (Basecamp's drag moves it).
     var fromBasecamp = false
 }

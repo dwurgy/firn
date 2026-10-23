@@ -26,34 +26,38 @@ struct BasecampGrid: View {
     private nonisolated static let space = "basecamp"
 
     var body: some View {
-        let tiles = shownTiles
-        if !tiles.isEmpty {
-            BasecampFlow {
-                ForEach(tiles) { tab in
-                    BasecampTile(tab: tab, isActive: tab.id == store.activeTabID) {
-                        store.select(tab)
-                        window.focusPage()
-                    } goHome: {
-                        store.goHome(tab)
-                        window.focusPage()
-                    } split: {
-                        window.pickSplit(beside: tab)
-                    } remove: {
-                        store.removeFromBasecamp(tab)
-                    } close: {
-                        window.close(tab)
-                    }
-                    // While dragged, a tile holds its slot open; the lifted copy is
-                    // what shows (as a row, over the tab list, until it lands there).
-                    // Out over the page, the tile stays where it is.
-                    .opacity((drag?.tab.id == tab.id && drag?.place != .page)
-                             || window.tileInList?.tab.id == tab.id ? 0 : 1)
-                }
-            }
+        // Measured even while empty, so a tab arriving knows where to go.
+        VStack(spacing: 0) { grid }
+            .frame(maxWidth: .infinity)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(BrowserWindow.space)).origin } action: {
                 originInWindow = $0
             }
+            .onChange(of: window.tabInBasecamp) { tabChanged(window.tabInBasecamp) }
+            .background {
+                if window.tabInBasecamp?.released == false {
+                    PointerWatch(window: window) { tabMoved(to: $0) }
+                }
+            }
+    }
+
+    @ViewBuilder private var grid: some View {
+        let tiles = shownTiles
+        if !tiles.isEmpty {
+            BasecampFlow {
+                ForEach(tiles) { tab in
+                    if drag?.incoming == true, drag?.tab.id == tab.id {
+                        // A tab arriving from the list: its slot waits open. In an
+                        // empty Basecamp, it's a blank spot of frost (no words).
+                        TileGlass().opacity(store.basecampTabs.isEmpty ? 1 : 0)
+                    } else {
+                        tile(tab)
+                    }
+                }
+            }
+            // A tab held up over a full Basecamp: no room opens, and a small
+            // frost pill over the tiles says why (clear of the row tugging below).
+            .overlay { fullHint }
             .overlay(alignment: .topLeading) { lifted }
             .coordinateSpace(.named(Self.space))
             // One drag for the whole grid, as in the tab list.
@@ -63,6 +67,42 @@ struct BasecampGrid: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Basecamp")
         }
+    }
+
+    private var fullHint: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return Text("Basecamp is full")
+            .font(Theme.labelFont)
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background { FrostGlass(shape: shape, color: Theme.spaceColor(store.activeSpace.color)) }
+            .clipShape(shape)
+            .opacity(window.basecampFullHint ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: window.basecampFullHint)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func tile(_ tab: FirnCore.Tab) -> some View {
+        BasecampTile(tab: tab, isActive: tab.id == store.activeTabID) {
+            store.select(tab)
+            window.focusPage()
+        } goHome: {
+            store.goHome(tab)
+            window.focusPage()
+        } split: {
+            window.pickSplit(beside: tab)
+        } remove: {
+            store.removeFromBasecamp(tab)
+        } close: {
+            window.closeTile(tab)
+        }
+        // While dragged, a tile holds its slot open; the lifted copy is
+        // what shows (as a row, over the tab list, until it lands there).
+        // Out over the page, the tile stays where it is.
+        .opacity((drag?.tab.id == tab.id && drag?.place != .page)
+                 || window.tileInList?.tab.id == tab.id ? 0 : 1)
     }
 
     /// The tiles as they'd be if the dragged one landed where it is now.
@@ -76,8 +116,15 @@ struct BasecampGrid: View {
 
     /// Where each tile sits, in order. Reordering never changes the count,
     /// so these stay put while the tiles move between them.
-    private var slots: [CGRect] {
-        let layout = BasecampLayout.make(count: store.basecampTabs.count, width: width)
+    private var slots: [CGRect] { slots(count: tileCount(with: drag)) }
+
+    /// The tiles, counting one arriving from the tab list.
+    private func tileCount(with drag: TileDrag?) -> Int {
+        store.basecampTabs.count + (drag?.incoming == true ? 1 : 0)
+    }
+
+    private func slots(count: Int) -> [CGRect] {
+        let layout = BasecampLayout.make(count: count, width: width)
         return layout.rows.enumerated().flatMap { row, count in
             (0..<count).map { column in
                 CGRect(x: CGFloat(column) * (layout.tileWidth + BasecampLayout.gap),
@@ -90,7 +137,7 @@ struct BasecampGrid: View {
     /// The lifted tile's top-left. It wants to stay in Basecamp (`Tug`),
     /// and never crosses the window's edge.
     private func position(of drag: TileDrag) -> CGPoint {
-        let height = BasecampLayout.make(count: store.basecampTabs.count, width: width).height
+        let height = BasecampLayout.make(count: tileCount(with: drag), width: width).height
         let left = max(0, min(Tug.give, originInWindow.x - 2))
         return CGPoint(
             x: Tug.held(drag.location.x - drag.grab.width, 0, width - drag.size.width, give: left),
@@ -102,7 +149,7 @@ struct BasecampGrid: View {
     private func target(for drag: TileDrag) -> Int {
         let origin = position(of: drag)
         let middle = CGPoint(x: origin.x + drag.size.width / 2, y: origin.y + drag.size.height / 2)
-        let distances = slots.map { hypot($0.midX - middle.x, $0.midY - middle.y) }
+        let distances = slots(count: tileCount(with: drag)).map { hypot($0.midX - middle.x, $0.midY - middle.y) }
         guard let nearest = distances.indices.min(by: { distances[$0] < distances[$1] }) else { return drag.target }
         if drag.target < distances.count, distances[drag.target] - distances[nearest] < 12 { return drag.target }
         return nearest
@@ -150,15 +197,67 @@ struct BasecampGrid: View {
                 current.location = value.location
                 window.dragPointer = inWindow(value.location)
                 if comesLoose(&current) { return }
-                if window.tabLift != nil { window.tabLift?.tile = heldInWindow(current) }
-                let target = target(for: current)
-                if target == current.target {
-                    drag = current
-                } else {
-                    current.target = target
-                    withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
-                }
+                follow(current)
             }
+    }
+
+    /// The held tile at its new place: the tiles make room where it'd land.
+    private func follow(_ moved: TileDrag) {
+        var current = moved
+        if window.tabLift != nil { window.tabLift?.tile = heldInWindow(current) }
+        let target = target(for: current)
+        if target == current.target {
+            drag = current
+        } else {
+            current.target = target
+            withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
+        }
+    }
+
+    /// A tab dragged up out of the tab list (see `TabList.overBasecamp`):
+    /// the tiles make room for it, and the window's lifted copy turns from
+    /// its row into a tile. Taken back down, the room closes; let go, it
+    /// settles into its slot and joins Basecamp there.
+    private func tabChanged(_ arriving: TileInList?) {
+        guard let arriving else {
+            if drag?.incoming == true, drag?.settling == false {
+                withAnimation(reduceMotion ? nil : Self.glide) { drag = nil }
+                raised = false
+            }
+            return
+        }
+        if arriving.released {
+            guard drag?.incoming == true else {
+                // Nothing here to settle (it never got a slot): it simply goes back.
+                window.tabInBasecamp = nil
+                window.tabLift = nil
+                return
+            }
+            return drop()
+        }
+        guard drag == nil, let lift = window.tabLift else { return }
+        let count = store.basecampTabs.count
+        let layout = BasecampLayout.make(count: count + 1, width: width)
+        let size = CGSize(width: layout.tileWidth, height: BasecampLayout.tileHeight)
+        var incoming = TileDrag(
+            tab: arriving.tab, grab: CGSize(width: lift.grab.x * size.width, height: lift.grab.y * size.height),
+            size: size, location: gridPoint(window.dragPointer), home: count, target: count, incoming: true)
+        incoming.target = target(for: incoming)
+        window.tabLift?.tileFace = AnyView(liftedTile(arriving.tab))
+        window.tabLift?.tile = heldInWindow(incoming)
+        withAnimation(reduceMotion ? nil : Self.glide) { drag = incoming }
+        withAnimation(reshape) { window.tabLift?.isTile = true }
+    }
+
+    private func tabMoved(to pointer: CGPoint) {
+        guard var current = drag, current.incoming, !current.settling else { return }
+        current.location = gridPoint(pointer)
+        follow(current)
+    }
+
+    /// A point in the window's space, in the grid's.
+    private func gridPoint(_ pointer: CGPoint) -> CGPoint {
+        CGPoint(x: pointer.x - originInWindow.x, y: pointer.y - originInWindow.y)
     }
 
     /// A point in the grid's space, in the window's.
@@ -178,7 +277,7 @@ struct BasecampGrid: View {
     /// taken as it's picked up; a resting tile is never woken for it.
     private func picture(_ tab: FirnCore.Tab) {
         preview = nil
-        guard store.canDropOnPage(tab), let page = tab.page else { return }
+        guard window.canDragOntoPage(tab), let page = tab.page else { return }
         Task {
             // Twice the card's width, so it's sharp on a Retina screen.
             let picture = await page.snapshot(width: Theme.liftedCard.width * 2)
@@ -307,7 +406,14 @@ struct BasecampGrid: View {
         window.tabLift = nil
         preview = nil
         @MainActor func commit() {
-            if let tab = store.basecampTabs.first(where: { $0.id == current.tab.id }) {
+            if current.incoming {
+                // Its row's open slot in the tab list closes as it joins (see `TabList`).
+                withAnimation(reduceMotion ? nil : Self.glide) {
+                    store.addToBasecamp(current.tab, at: current.target)
+                    drag = nil
+                    window.tabInBasecamp = nil
+                }
+            } else if let tab = store.basecampTabs.first(where: { $0.id == current.tab.id }) {
                 store.move(tab, to: current.target)
             }
             drag = nil
@@ -340,6 +446,8 @@ private struct TileDrag {
     var place = TilePlace.basecamp
     /// True while the lifted copy glides into its slot after the drop.
     var settling = false
+    /// A tab from the tab list, not yet a tile (the list's drag moves it).
+    var incoming = false
 }
 
 /// Where a held tile is: in Basecamp, or loose over the tab list or the page.
@@ -506,7 +614,24 @@ private struct TileButtonStyle: ButtonStyle {
                 .overlay { shape.strokeBorder(Theme.activeTabHairline, lineWidth: 0.5) }
                 .shadow(color: Theme.shadowSoft, radius: 1, y: 1)
                 .shadow(color: Theme.shadowPageFar, radius: 9, y: 4)
-        } else if reduceTransparency {
+        } else {
+            TileGlass(hovering: hovering)
+        }
+    }
+}
+
+/// A tile's frosted ice, with nothing on it: under every resting tile, and
+/// alone as the spot an empty Basecamp shows while a tab is held over it.
+private struct TileGlass: View {
+    var hovering = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+    }
+
+    var body: some View {
+        if reduceTransparency {
             shape.fill(Theme.tileSolid)
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
         } else if #available(macOS 26, *) {

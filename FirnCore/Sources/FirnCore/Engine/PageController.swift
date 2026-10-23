@@ -46,6 +46,16 @@ public protocol PageController: AnyObject, Observable {
     /// characters; "" if none.
     func selectedText() async -> String
 
+    /// What the page needs to pick up where it left off after sleeping: its
+    /// back and forward history and scroll position. Nil if there's nothing
+    /// to keep. Kept in memory only, never saved.
+    func memory() -> PageMemory?
+    /// Picks up from `memory` instead of loading an address.
+    func resume(from memory: PageMemory)
+    /// Whether sleeping would stop something the page is doing: playing
+    /// sound or video, or using the camera or microphone.
+    func isInUse() async -> Bool
+
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.
     var sendsOtherSitesToLookout: Bool { get set }
@@ -53,6 +63,12 @@ public protocol PageController: AnyObject, Observable {
     /// Where the page sends what it asks of the browser (new tabs, closing).
     /// Set by whoever owns the page; nil means nobody is listening.
     var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
+}
+
+/// A sleeping page's place (see `PageController.memory()`), opaque to all
+/// but the engine that made it.
+public struct PageMemory {
+    let state: Any
 }
 
 /// Something a page asks of the browser. Always started by a click: sites

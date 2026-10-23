@@ -189,8 +189,9 @@ public final class BrowserStore {
         spaces[index].lastChangedAt = now()
         if lookout?.spaceID == space.id { closeLookout() }
         let onScreen = onScreenTabIDs
-        for tab in tabs where tab.spaceID == space.id && !tab.isResting {
+        for tab in tabs where tab.spaceID == space.id {
             tab.sleep()
+            tab.forgetPlace()
             if onScreen.contains(tab.id) { wake(tab) }
         }
     }
@@ -1192,6 +1193,33 @@ public final class BrowserStore {
     private static func cleanDays(_ days: [String]) -> [String] {
         let wellFormed = days.filter { $0.wholeMatch(of: /\d{4}-\d{2}-\d{2}/) != nil }
         return Array(Set(wellFormed).sorted().suffix(usedDaysKept))
+    }
+
+    // MARK: - Sleeping
+
+    /// How long a tab can be out of sight before its page sleeps.
+    static let sleepAfter: TimeInterval = 60 * 60
+
+    /// Lets the pages of tabs out of sight for an hour sleep, keeping each
+    /// one's place (history and scroll position) for when it's shown again;
+    /// with `memoryIsShort` (the Mac says so), any tab out of sight. Never
+    /// asleep: the tab on screen and its split partner, Basecamp tiles,
+    /// and pages playing sound or video or using the camera or microphone.
+    /// The app calls this after the tab on screen changes and when memory
+    /// runs short; nothing runs on a timer.
+    public func sleepIdleTabs(memoryIsShort: Bool = false) async {
+        for tab in tabs where mayLetSleep(tab, memoryIsShort: memoryIsShort) {
+            guard let page = tab.page, !(await page.isInUse()) else { continue }
+            // Things may have changed while the page answered.
+            guard tab.page === page, tabs.contains(where: { $0.id == tab.id }),
+                  mayLetSleep(tab, memoryIsShort: memoryIsShort) else { continue }
+            tab.sleep(keepingPlace: true)
+        }
+    }
+
+    private func mayLetSleep(_ tab: Tab, memoryIsShort: Bool) -> Bool {
+        guard !tab.isResting, tab.place != .basecamp, !onScreenTabIDs.contains(tab.id) else { return false }
+        return memoryIsShort || now().timeIntervalSince(tab.lastActiveAt) >= Self.sleepAfter
     }
 
     // MARK: - Switching

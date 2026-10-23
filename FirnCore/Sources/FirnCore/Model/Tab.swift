@@ -42,6 +42,9 @@ public final class Tab: Identifiable {
     private var restingURL: URL?
     private var restingTitle: String
     private var restingIcon: Data?
+    /// Where a page that slept while idle was (its history and scroll
+    /// position), so it picks up there when it wakes.
+    private var restingMemory: PageMemory?
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
@@ -135,6 +138,7 @@ public final class Tab: Identifiable {
             if !Self.sameHost(homeURL, restingURL) { restingIcon = nil }
             restingURL = homeURL
             restingTitle = ""
+            restingMemory = nil
         }
     }
 
@@ -144,16 +148,29 @@ public final class Tab: Identifiable {
         let page = makePage()
         self.page = page
         applyLinkRule()
-        if let restingURL { page.load(restingURL) }
+        if let restingMemory {
+            page.resume(from: restingMemory)
+        } else if let restingURL {
+            page.load(restingURL)
+        }
+        restingMemory = nil
     }
 
-    /// Lets the page go, remembering where it was.
-    func sleep() {
+    /// Lets the page go, remembering where it was. `keepingPlace` also
+    /// keeps its history and scroll position, for a page that only slept.
+    func sleep(keepingPlace: Bool = false) {
         guard let page else { return }
         restingIcon = icon
         restingTitle = page.loadError == nil ? currentTitle : ""
         restingURL = url
+        restingMemory = keepingPlace ? page.memory() : nil
         page.stopLoading()
         self.page = nil
+    }
+
+    /// Forgets a sleeping page's history and scroll position, so it wakes
+    /// fresh at its address.
+    func forgetPlace() {
+        restingMemory = nil
     }
 }

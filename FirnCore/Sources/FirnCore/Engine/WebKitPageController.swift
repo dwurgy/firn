@@ -99,6 +99,23 @@ final class WebKitPageController: NSObject, PageController {
     }
     func stopLoading() { webView.stopLoading() }
 
+    func memory() -> PageMemory? {
+        guard url != nil, loadError == nil, let state = webView.interactionState else { return nil }
+        return PageMemory(state: state)
+    }
+
+    /// The history's entries were pages this view already showed, and the
+    /// one it reopens still goes through the navigation delegate; the
+    /// address bar waits for its commit, as with any load.
+    func resume(from memory: PageMemory) {
+        webView.interactionState = memory.state
+    }
+
+    func isInUse() async -> Bool {
+        if webView.cameraCaptureState != .none || webView.microphoneCaptureState != .none { return true }
+        return await webView.requestMediaPlaybackState() == .playing
+    }
+
     func focus() {
         webView.window?.makeFirstResponder(webView)
     }

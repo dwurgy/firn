@@ -34,6 +34,15 @@ final class FakePage: PageController {
     func setZoom(_ zoom: Double) { self.zoom = zoom }
     func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int { 0 }
     func selectedText() async -> String { "" }
+    /// Where it resumed from, if it woke from a sleep that kept its place.
+    var resumedFrom: URL?
+    var inUse = false
+    func memory() -> PageMemory? { url.map { PageMemory(state: $0) } }
+    func resume(from memory: PageMemory) {
+        resumedFrom = memory.state as? URL
+        url = resumedFrom
+    }
+    func isInUse() async -> Bool { inUse }
 }
 
 @MainActor

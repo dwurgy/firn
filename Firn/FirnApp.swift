@@ -6,6 +6,7 @@ import SwiftUI
 struct FirnApp: App {
     @State private var window: WindowModel
     private let saver: SessionSaver
+    private let sleeper: TabSleeper
 
     /// Picks up where the last session left off, then saves as things change
     /// and once more at quit.
@@ -28,6 +29,8 @@ struct FirnApp: App {
             store.session(sidebarWidth: window.sidebarWidth, sidebarCollapsed: window.sidebarCollapsed)
         }
         saver.start()
+        sleeper = TabSleeper(store: store)
+        sleeper.start()
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [saver] _ in

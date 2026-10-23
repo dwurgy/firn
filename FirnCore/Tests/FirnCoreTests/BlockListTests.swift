@@ -184,6 +184,75 @@ struct BlockListTests {
         #expect(identifiers.count == 1)
     }
 
+    /// A page on a site where blocking is off shows the ad box; turning
+    /// blocking off everywhere does the same, and back on hides it again.
+    @MainActor @Test func blockingCanBeTurnedOff() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FirnBlockListTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try #require(WKContentRuleListStore(url: folder))
+        let blocker = ContentBlocker(store: store)
+        await blocker.start([.ads])
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let controller = configuration.userContentController
+        blocker.attach(controller)
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+
+        func adDisplay() async throws -> String? {
+            webView.loadHTMLString(#"<!doctype html><div class="ADBox">ad</div>"#,
+                                   baseURL: URL(string: "https://news.example.test/")!)
+            for _ in 0..<100 {
+                try await Task.sleep(for: .milliseconds(50))
+                let script = #"document.readyState == "complete" && document.querySelector(".ADBox") ? getComputedStyle(document.querySelector(".ADBox")).display : """#
+                if let result = try? await webView.evaluateJavaScript(script) as? String, !result.isEmpty { return result }
+            }
+            return nil
+        }
+
+        blocker.setBlocks(false, for: controller)
+        #expect(try await adDisplay() == "block")
+        blocker.setBlocks(true, for: controller)
+        #expect(try await adDisplay() == "none")
+        blocker.setEnabled(false)
+        #expect(try await adDisplay() == "block")
+        blocker.setEnabled(true)
+        #expect(try await adDisplay() == "none")
+    }
+
+    /// WebKit takes a popup with its own content controller (as Firn gives
+    /// every popup), and it still loads and stays tied to its opener.
+    @MainActor @Test func popupsCanHaveTheirOwnController() async throws {
+        final class Opener: NSObject, WKUIDelegate {
+            var popup: WKWebView?
+            func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                         for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+                configuration.userContentController = WKUserContentController()
+                popup = WKWebView(frame: .zero, configuration: configuration)
+                return popup
+            }
+        }
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let delegate = Opener()
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+        webView.uiDelegate = delegate
+        webView.loadHTMLString("<!doctype html><p>opener</p>", baseURL: URL(string: "https://a.example.test/")!)
+        var opened = false
+        for _ in 0..<100 {
+            try await Task.sleep(for: .milliseconds(50))
+            if !opened, (try? await webView.evaluateJavaScript("document.readyState")) as? String == "complete" {
+                _ = try? await webView.evaluateJavaScript("window.open('about:blank', '_blank'); 1")
+                opened = true
+            }
+            if let popup = delegate.popup,
+               (try? await popup.evaluateJavaScript("window.opener !== null")) as? Bool == true { break }
+        }
+        let popup = try #require(delegate.popup)
+        #expect(popup.configuration.userContentController !== webView.configuration.userContentController)
+        #expect((try? await popup.evaluateJavaScript("window.opener !== null")) as? Bool == true)
+    }
+
     /// The real check: WebKit itself accepts everything the converter writes.
     @MainActor @Test func webKitCompilesTheRules() async throws {
         let list = """

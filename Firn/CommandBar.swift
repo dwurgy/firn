@@ -66,6 +66,7 @@ private struct CommandBar: View {
     private static let fieldHeight: CGFloat = 48
 
     @Environment(\.openSettings) private var openSettings
+    @AppStorage(Preference.blocksContent) private var blocksContent = true
 
     private func rows(actions: [BarAction]) -> [CommandRow] {
         // Picking a page for a split, it's pages only, not actions.
@@ -270,6 +271,12 @@ private struct CommandBar: View {
             when: window.canZoomFront(.actualSize)) {
             window.zoomFront(.actualSize)
             window.focusPage()
+        }
+        if let name = window.frontBlockingName(enabled: blocksContent) {
+            add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
+                window.toggleFrontBlocking()
+                window.focusPage()
+            }
         }
         add("duplicate", "Duplicate Tab", ["copy"], when: tab?.url != nil) {
             if let tab { window.duplicate(tab) }

@@ -78,6 +78,11 @@ public protocol PageController: AnyObject, Observable {
     /// for a new window, goes to a Lookout instead, so the tile stays itself.
     var sendsOtherSitesToLookout: Bool { get set }
 
+    /// Whether ads and trackers are blocked on an address, asked as the page
+    /// starts loading it (its space may have turned blocking off for that
+    /// site). Set by whoever owns the page; nil means blocked everywhere.
+    var blocksContent: (@MainActor (URL) -> Bool)? { get set }
+
     /// Where the page sends what it asks of the browser (new tabs, closing).
     /// Set by whoever owns the page; nil means nobody is listening.
     var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
@@ -119,7 +124,14 @@ public enum BrowserEngine {
     /// Starts ad and tracker blocking: finds the compiled lists (or compiles
     /// them, in the background, the first time). Call once at launch, before
     /// pages load; pages made earlier still get the rules when they're ready.
-    public static func startBlocking() {
+    /// `enabled` is the "Block ads and trackers" setting.
+    public static func startBlocking(enabled: Bool) {
+        ContentBlocker.shared.setEnabled(enabled)
         Task { await ContentBlocker.shared.start() }
+    }
+
+    /// The "Block ads and trackers" setting. Each page follows from its next load.
+    public static func setBlocking(enabled: Bool) {
+        ContentBlocker.shared.setEnabled(enabled)
     }
 }

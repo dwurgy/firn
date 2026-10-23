@@ -281,6 +281,25 @@ final class WindowModel {
         frontPage?.setZoom(zoom)
     }
 
+    // MARK: Blocking
+
+    /// What turning blocking on or off for the page in front is called
+    /// ("Stop Blocking on example.com"), or nil if there's no site to do it
+    /// for: no page, an error page, or blocking off everywhere (`enabled`).
+    func frontBlockingName(enabled: Bool) -> String? {
+        guard enabled, let page = frontPage, page.loadError == nil, let url = page.url,
+              let site = BlockingSite.of(url) else { return nil }
+        return store.blocksContent(on: url) ? "Stop Blocking on \(site)" : "Block Ads and Trackers on \(site)"
+    }
+
+    /// Turns blocking on or off for the front page's site, in this space
+    /// only, and loads the page again so the change shows.
+    func toggleFrontBlocking() {
+        guard let page = frontPage, page.loadError == nil, let url = page.url else { return }
+        store.setBlocksContent(!store.blocksContent(on: url), on: url)
+        page.reload()
+    }
+
     // MARK: Find on page
 
     /// Whether the find bar (⌘F) is open over the page in front.
@@ -541,6 +560,7 @@ struct BrowserWindow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
+    @AppStorage(Preference.blocksContent) private var blocksContent = true
     /// Waiting out the beat before idle tabs drift.
     @State private var driftTask: Task<Void, Never>?
 
@@ -607,6 +627,7 @@ struct BrowserWindow: View {
             driftIdleTabs(afterABeat: true)
         }
         .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
+        .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
         .onChange(of: driftAfter, initial: true) { old, new in
             store.driftAfter = driftAfter
             if old != new { driftIdleTabs(afterABeat: false) }
@@ -1294,6 +1315,7 @@ private struct TabShortcuts: View {
 /// shortcuts as a bonus.
 struct BrowserCommands: Commands {
     let window: WindowModel
+    @AppStorage(Preference.blocksContent) private var blocksContent = true
 
     private var store: BrowserStore { window.store }
     private var page: (any PageController)? { window.frontPage }
@@ -1394,6 +1416,10 @@ struct BrowserCommands: Commands {
             Button("Actual Size") { window.zoomFront(.actualSize) }
                 .keyboardShortcut("0")
                 .disabled(!window.canZoomFront(.actualSize))
+            if let name = window.frontBlockingName(enabled: blocksContent) {
+                Divider()
+                Button(name) { window.toggleFrontBlocking() }
+            }
         }
         CommandGroup(before: .windowArrangement) {
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }

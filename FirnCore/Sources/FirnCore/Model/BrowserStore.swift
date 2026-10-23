@@ -1037,6 +1037,39 @@ public final class BrowserStore {
             guard let self, let tab else { return }
             self.handle(request, from: tab)
         }
+        followBlocking(of: page, in: tab.spaceID)
+    }
+
+    // MARK: - Blocking
+
+    /// Whether ads and trackers are blocked on `url` in the space on screen.
+    public func blocksContent(on url: URL) -> Bool {
+        activeSpace.blocksContent(on: url)
+    }
+
+    /// Turns blocking on or off for `url`'s site in the space on screen, and
+    /// only there. Pages follow from their next load. Turning it back on also
+    /// clears a wider site that covered this one (example.com, for shop.example.com).
+    public func setBlocksContent(_ blocks: Bool, on url: URL) {
+        guard let site = BlockingSite.of(url), let host = BlockingSite.host(of: url),
+              let index = spaces.firstIndex(where: { $0.id == activeSpaceID }) else { return }
+        var space = spaces[index]
+        if blocks {
+            space.blockingOffSites.removeAll { BlockingSite.covers($0, host: host) }
+        } else if space.blocksContent(on: url) {
+            space.blockingOffSites.append(site)
+            space.blockingOffSites = Array(space.blockingOffSites.suffix(BlockingSite.limit))
+        }
+        guard space != spaces[index] else { return }
+        space.lastChangedAt = now()
+        spaces[index] = space
+    }
+
+    /// The page asks its space, as it is then, each time it loads an address.
+    private func followBlocking(of page: any PageController, in spaceID: UUID) {
+        page.blocksContent = { [weak self] url in
+            self?.spaces.first { $0.id == spaceID }?.blocksContent(on: url) ?? true
+        }
     }
 
     func handle(_ request: PageRequest, from tab: Tab) {
@@ -1068,6 +1101,7 @@ public final class BrowserStore {
         page.onRequest = { [weak self] request in
             self?.handle(request, fromLookout: lookout.id)
         }
+        followBlocking(of: page, in: activeSpaceID)
         self.lookout = lookout
         page.load(url)
     }

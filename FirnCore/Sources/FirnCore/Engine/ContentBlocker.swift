@@ -21,6 +21,13 @@ final class ContentBlocker {
     /// Every page's content controller, so rules that arrive later reach it.
     /// Weak: a closed page's controller simply drops out.
     private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    /// The controllers that have the rules now; the rest are on a site
+    /// where blocking is off, or blocking is off everywhere.
+    private let blocking = NSHashTable<WKUserContentController>.weakObjects()
+    /// The controllers whose page is on a site where blocking is off.
+    private let exempt = NSHashTable<WKUserContentController>.weakObjects()
+    /// The "Block ads and trackers" setting.
+    private(set) var isEnabled = true
     private var started = false
 
     init(store: WKContentRuleListStore) {
@@ -31,7 +38,37 @@ final class ContentBlocker {
     func attach(_ controller: WKUserContentController) {
         guard !controllers.contains(controller) else { return }
         controllers.add(controller)
-        for list in lists { controller.add(list) }
+        update(controller)
+    }
+
+    /// Turns blocking on or off everywhere. Each page follows from its next load.
+    func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
+        for controller in controllers.allObjects { update(controller) }
+    }
+
+    /// Whether this page's site blocks (true unless it's one where blocking
+    /// is off). Called as a page starts loading a new address, before WebKit
+    /// goes ahead, so the change applies to that load.
+    func setBlocks(_ blocks: Bool, for controller: WKUserContentController) {
+        guard blocks == exempt.contains(controller) else { return }
+        if blocks { exempt.remove(controller) } else { exempt.add(controller) }
+        update(controller)
+    }
+
+    /// Adds or removes the rules, only when that changes something.
+    private func update(_ controller: WKUserContentController) {
+        guard controllers.contains(controller) else { return }
+        let wanted = isEnabled && !exempt.contains(controller)
+        guard wanted != blocking.contains(controller) else { return }
+        if wanted {
+            blocking.add(controller)
+            for list in lists { controller.add(list) }
+        } else {
+            blocking.remove(controller)
+            for list in lists { controller.remove(list) }
+        }
     }
 
     /// Finds or compiles each list, then removes compiled lists no longer used.
@@ -59,7 +96,7 @@ final class ContentBlocker {
 
     private func add(_ list: WKContentRuleList) {
         lists.append(list)
-        for controller in controllers.allObjects { controller.add(list) }
+        for controller in blocking.allObjects { controller.add(list) }
     }
 
     /// "firn-easylist-…": the list's name and a fingerprint of its text and

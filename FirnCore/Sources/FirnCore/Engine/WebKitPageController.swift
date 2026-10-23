@@ -23,6 +23,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var isResuming = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
+    @ObservationIgnored var blocksContent: (@MainActor (URL) -> Bool)?
 
     @ObservationIgnored let webView: WKWebView
     /// Only pages a site opened as popups may close themselves.
@@ -72,8 +73,7 @@ final class WebKitPageController: NSObject, PageController {
     /// over for a popup, which is a copy of the opener's.
     private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
-        // Ad and tracker blocking, for every page in every space. A popup's
-        // configuration may share its opener's controller; attaching twice is harmless.
+        // Ad and tracker blocking, for every page in every space.
         ContentBlocker.shared.attach(configuration.userContentController)
         // A real starting size, not zero: a page that loads before it's ever
         // on screen (a split's new half, say) laid out at 0×0 sat blank for
@@ -318,7 +318,13 @@ extension WebKitPageController: WKNavigationDelegate {
                 return
             }
         }
-        decisionHandler(NavigationPolicy.allows(url, isMainFrame: isMainFrame) ? .allow : .cancel)
+        let allows = NavigationPolicy.allows(url, isMainFrame: isMainFrame)
+        // Before WebKit goes ahead, so the rules this site wants apply to its
+        // load. Redirects ask again, so the site that ends up showing decides.
+        if allows, isMainFrame, WebAddress.isWebURL(url) {
+            ContentBlocker.shared.setBlocks(blocksContent?(url) ?? true, for: webView.configuration.userContentController)
+        }
+        decisionHandler(allows ? .allow : .cancel)
     }
 
     /// A response the page can't show, or one the site marks as an
@@ -642,6 +648,10 @@ extension WebKitPageController: WKUIDelegate {
         // WebKit's copy does; anything else is refused rather than risk a leak.
         guard let store = configuration.websiteDataStore.identifier,
               store == webView.configuration.websiteDataStore.identifier else { return nil }
+        // Its own content controller, not the opener's, so blocking can follow
+        // each page's own site (a sign-in popup mustn't turn it back on for
+        // the site it came from). Firn's scripts are added to it as for any page.
+        configuration.userContentController = WKUserContentController()
         let page = WebKitPageController(configuration: configuration, isPopup: true)
         onRequest(.openPage(page, inBackground: false))
         // Only a page a tab took in gets listened to. One nobody took (its

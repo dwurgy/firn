@@ -10,7 +10,8 @@ let package = Package(
         .library(name: "FirnCore", targets: ["FirnCore"]),
     ],
     targets: [
-        .target(name: "FirnCore"),
+        // The ad and tracker lists ship inside Firn (BlockLists.swift).
+        .target(name: "FirnCore", resources: [.copy("Blocking/Lists")]),
         .testTarget(name: "FirnCoreTests", dependencies: ["FirnCore"]),
     ]
 )

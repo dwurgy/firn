@@ -1,10 +1,10 @@
-# Project Brief — Firn (native Apple prototype)
+# Project Brief — Firn (native Apple)
 
 **Firn** (firnbrowser.com) is a calm, minimalist desktop browser. The name comes from firn, the settled, compacted snow high on alpine glaciers: quiet, clean, and still. Let that idea quietly inform the visual identity (soft whites, frost, gentle glacier tones alongside warm neutrals) without getting literal or icy-cold.
 
-**This repo (`dwurgy/firn-swift-test`) is a private experiment:** Firn rebuilt from scratch as a native Apple app in Swift, SwiftUI, and WebKit, for macOS first and iOS later. The shipping Firn is the Electron app in `dwurgy/firn` (Windows and Mac); it stays the real product until David decides otherwise. If he goes ahead, this code moves into `dwurgy/firn` and Firn becomes Apple-only. Until then, nothing about this prototype is public: no mentions on the website, socials, or release notes.
+**This repo (`dwurgy/firn-swift-test`) is the new Firn:** rebuilt from scratch as a native Apple app in Swift, SwiftUI, and WebKit, for macOS first and iOS later. It's decided (David, 2026-10-22): this code takes over Firn, and Firn becomes Apple-only. The native Mac version has been announced. The Electron app has had its last update and is out of support; its code now lives in `dwurgy/firn-legacy`. `dwurgy/firn` is empty and ready, and this code can move there any time David chooses.
 
-This prototype also tries a new idea the Electron app doesn't have yet: **every space is truly separate** (its own Basecamp, sign-ins, cookies, and history), and the archive is a visible group in the sidebar. See "How spaces work."
+The native Firn also brings a new idea the Electron app never had: **every space is truly separate** (its own Basecamp, sign-ins, cookies, and history), and the archive is a visible group in the sidebar. See "How spaces work."
 
 Built by David with Claude. David is not a professional developer, so explain decisions in plain language and keep changes small and testable. Personal use first. No rush: quality and feel over speed.
 
@@ -111,7 +111,7 @@ Firn's brand moments use the "First light" look: sunrise in a snowy cabin near S
 
 ## How spaces work
 
-Each space is its own browser. This is the heart of the prototype; get it right before polishing anything else.
+Each space is its own browser. This is the heart of the new Firn; get it right before polishing anything else.
 
 - **Always the space's own:** Basecamp tiles, groups, loose tabs, and the Archived group. Nothing in the sidebar is shared between spaces.
 - **Separate by default:** each new space has its own sign-ins, cookies, site data, history, and saved passwords. Signing into Gmail in Work doesn't sign you into Personal.
@@ -234,13 +234,14 @@ Each phase has a "done" test. Don't start the next until the current one passes.
 4. **Spaces, truly separate:** create, switch, color, and delete spaces, each with its own data store and Basecamp, plus the "share sign-ins" choice. *Done:* two spaces signed into two different Google accounts at once, and a shared space that's already signed in.
 5. **Archived, Lookout, split view, and the command bar:** *Done:* used daily without reaching for another browser.
 6. **First light and the two looks:** the welcome, the empty page, and the address bar setting.
-7. **Decision point:** David compares this with the Electron app and decides whether to continue. If yes, plan the move into `dwurgy/firn` as its own step (see "If this replaces the Electron app" below). Only then: privacy features, signing and notarization, updates, and iOS.
+7. **Decision: made** (2026-10-22). This code takes over Firn. Next: the move into `dwurgy/firn` (see "Taking over from the Electron app" below), then privacy features, signing and notarization, updates, and iOS.
 
-### If this replaces the Electron app
+### Taking over from the Electron app
 
-Not now; this is so nothing is a surprise at the decision point. Each is its own step, planned with David, on Opus.
+Each is its own step, planned with David, on Opus.
 
-- **Existing users.** Installed Electron copies update themselves from `dwurgy/firn`'s releases. They need one last Electron release that tells Mac users where the native app is, and tells Windows users plainly that Firn is now Mac-only.
+- **Existing users: done.** The Electron app's last release announced the end of support; its code is in `dwurgy/firn-legacy`.
+- **The move.** This code goes into the empty `dwurgy/firn`, any time David chooses. David does the move himself.
 - **Their data.** The Electron app keeps tabs, spaces, history, and passwords in `~/Library/Application Support/Firn`. A sandboxed app can't read that folder on its own, so moving people's tabs and spaces over needs a deliberate import. Passwords need extra care. Electron's shared Basecamp has to become per-space Basecamps (probably copied into each space).
 - **Same identity.** Keep the app's name, icon, and signing team so macOS treats it as Firn. The bundle ID can be new.
 - **Public copy.** The README, the website, and "a calm browser for everyone" all assume Windows. David decides how to say it.
@@ -258,7 +259,7 @@ Not now; this is so nothing is a surprise at the decision point. Each is its own
 
 ## How to work on this project (instructions for Claude)
 
-- **Only work in `dwurgy/firn-swift-test`.** The Electron app (`dwurgy/firn`) and the website (`dwurgy/firn-site`) have their own sessions. Never attach, clone, or change another repository, even when the plan is to move this code into `dwurgy/firn` later: that move is its own step, done by David. You may describe how the Electron app does something only if David pastes it in.
+- **Only work in `dwurgy/firn-swift-test`.** The Electron app (`dwurgy/firn-legacy`) and the website (`dwurgy/firn-site`) have their own sessions. Never attach, clone, or change another repository, including `dwurgy/firn` and `dwurgy/firn-legacy`: moving this code into `dwurgy/firn` is its own step, done by David. You may describe how the Electron app does something only if David pastes it in.
 - **Pick the model before starting** (David is on the Pro plan and wants his limits to last the week). Before any task, say in one line which model it needs and why: "Sonnet is fine: <reason>" or "This needs Opus: <reason>. Switch with /model, then say go." If it needs Opus and you're on Sonnet, stop and wait. If you're on Opus and Sonnet would do, say so and wait. If a Sonnet task turns out harder than it looked, stop and say so rather than guessing on.
   - **Sonnet (only the most basic tasks):** copy and wording, README edits, renames, and simple questions about the code. David's rule (2026-10-18): Sonnet wasted his time on design work, so anything visual, any SwiftUI view or layout, and anything else goes to Opus.
   - **Opus:** all design and SwiftUI work, core architecture and the data model, per-space data stores and sharing, the engine layer and `WKWebView` delegates (navigation, UI delegate, downloads, script messages), multi-window and app lifecycle, sandbox and entitlements, anything security-related (passwords, content worlds, permissions, content blocking, URL handling), performance work, signing, notarization, and updates, sync, and "look back" reviews.

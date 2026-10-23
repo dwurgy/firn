@@ -260,19 +260,14 @@ private struct TabList: View {
                     VStack(spacing: Theme.rowSpacing) {
                         // The New tab button sits where new tabs appear.
                         if atTop { newTabRow }
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            Group {
-                                switch item {
-                                case let .group(group): card(group)
-                                case let .tab(tab): row(tab)
-                                }
+                        // Cards and rows keep one rhythm, the same gap between them all.
+                        ForEach(items) { item in
+                            switch item {
+                            case let .group(group): card(group)
+                            case let .tab(tab): row(tab)
                             }
-                            .padding(.top, extraSpace(above: index, in: items))
                         }
-                        if !atTop {
-                            newTabRow
-                                .padding(.top, isCard(items.last) ? Theme.groupSpacing : 0)
-                        }
+                        if !atTop { newTabRow }
                     }
                     .overlay(alignment: .topLeading) { lifted }
                     // A split forming or ending: the rows around it glide.
@@ -415,12 +410,6 @@ private struct TabList: View {
     /// padding, then half a 16pt icon.
     private func iconPoint(in frame: CGRect) -> CGPoint {
         CGPoint(x: origin.point.x + frame.minX + Theme.rowPadding + 8, y: origin.point.y + frame.midY)
-    }
-
-    /// A card thawing away, lifting away, or not yet formed spaces itself
-    /// like loose tabs.
-    private func isCard(_ item: TabListItem?) -> Bool {
-        if case let .group(group) = item { !isThawed(group) && group.id != closingGroupID } else { false }
     }
 
     /// A card without its frost: thawing away (Ungroup), or new and about to form.
@@ -572,15 +561,6 @@ private struct TabList: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
             frames[group.id] = $0
         }
-    }
-
-    /// Air around the group cards, on top of the usual gap between rows.
-    /// The cards' own edges keep them apart from loose tabs; a little extra
-    /// below a card lets that read.
-    private func extraSpace(above index: Int, in items: [TabListItem]) -> CGFloat {
-        let afterCard = index > 0 && isCard(items[index - 1])
-        if afterCard && !isCard(items[index]) { return Theme.groupSpacing }
-        return afterCard || isCard(items[index]) ? Theme.groupSpacing - Theme.rowSpacing : 0
     }
 
     /// A tab's row, or a split's (`tab` is its left half).
@@ -1439,6 +1419,18 @@ private struct FadingTitle: View {
         Text(text)
             .font(Theme.tabFont)
             .foregroundStyle(onScreen ? Theme.ink : Theme.tabRest)
+            .modifier(FadesAtEdge())
+            .accessibilityLabel(text)
+    }
+}
+
+/// A one-line title that fades out at the row's edge rather than ending in
+/// "…". Its text never changes as the row's width does, so it glides with
+/// its row (re-cut with "…" mid-glide, a title was redrawn and broke away
+/// from its row; David, 2026-10-22).
+private struct FadesAtEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        content
             .lineLimit(1)
             .fixedSize()
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -1450,7 +1442,6 @@ private struct FadingTitle: View {
                         .frame(width: 18)
                 }
             }
-            .accessibilityLabel(text)
     }
 }
 
@@ -1497,8 +1488,8 @@ struct FrostGlass: View {
 }
 
 
-/// A group: a soft frosted card tinted by the space's color, with its name,
-/// a dot in the space's color, and a fold arrow. The close button shows
+/// A group: a soft frosted card tinted by the space's color, with its name
+/// (over the tabs' icons) and a fold arrow. The close button shows
 /// only while the pointer is on the name line.
 private struct GroupCard<Rows: View>: View {
     let group: TabGroup
@@ -1564,12 +1555,8 @@ private struct GroupCard<Rows: View>: View {
     }
 
     private var header: some View {
+        // No dot: the card's tint already carries the space's color (David, 2026-10-22).
         HStack(spacing: 6) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-                .padding(.trailing, 2)
-                .accessibilityHidden(true)
             if isRenaming {
                 nameField
             } else {
@@ -1658,8 +1645,7 @@ private struct RowLabelStyle: LabelStyle {
             configuration.title
                 .font(Theme.tabFont)
                 .foregroundStyle(color)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .modifier(FadesAtEdge())
         }
     }
 }

@@ -160,10 +160,10 @@ enum Theme {
     static let rowSpacing: CGFloat = 4
     static let rowPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 20
-    /// Air between group cards. Their name line is shorter than a tab row,
-    /// so it reads as a label, not another tab.
-    static let groupSpacing: CGFloat = 6
-    static let groupHeaderHeight: CGFloat = 30
+    /// A group's name line is a tab row's height, so a folded group is a
+    /// tab's size and the list keeps one rhythm; its frost sets it apart
+    /// (David, 2026-10-22).
+    static let groupHeaderHeight: CGFloat = rowHeight
     /// How the sidebar slides in and out. The traffic lights follow the same
     /// curve (see `WindowSetup`), so the two stay together.
     static let slideDuration = 0.2

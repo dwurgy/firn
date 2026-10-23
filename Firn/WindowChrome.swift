@@ -14,6 +14,12 @@ struct WindowDragArea: NSViewRepresentable {
 
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }
+            // A click on blank space ends typing (a group's new name is
+            // kept), as a click on the page does. Only then: dragging the
+            // window never takes the keys away from the page.
+            if (window.firstResponder as? NSTextView)?.isFieldEditor == true {
+                window.makeFirstResponder(nil)
+            }
             if event.clickCount == 2 {
                 switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
                 case "Minimize": window.performMiniaturize(nil)

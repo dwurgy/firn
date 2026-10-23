@@ -170,7 +170,7 @@ private struct TextActionStyle: ButtonStyle {
 }
 
 /// A closed tab (its icon and title) or group (a dot in the space's color,
-/// as on its card, and its name) in Recently closed.
+/// standing in for an icon among the tabs, and its name) in Recently closed.
 private struct ClosedRow: View {
     let entry: ClosedEntry
     let color: Color

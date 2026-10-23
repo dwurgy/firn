@@ -215,11 +215,34 @@ final class WindowModel {
         focusPage()
     }
 
+    /// The address of the page in front, as the address bar shows it: a
+    /// Lookout's while one is open; after a failed load, the address that failed.
+    var frontURL: URL? {
+        if let page = store.lookout?.page { return page.loadError?.url ?? page.url }
+        return store.activeTab?.url
+    }
+
     /// Puts the tab's address on the clipboard (only http and https reach a tab).
     func copyLink(of tab: FirnCore.Tab) {
-        guard let url = tab.url else { return }
+        copy(tab.url)
+    }
+
+    /// ⇧⌘C: the page in front's address, so with a Lookout open it's the
+    /// Lookout's, as the address bar shows.
+    func copyFrontLink() {
+        copy(frontURL)
+    }
+
+    private func copy(_ url: URL?) {
+        guard let url else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    /// Whether the page in front can be loaded again: it has an address,
+    /// or its first one failed (the error page's Try Again).
+    var canReloadFront: Bool {
+        frontPage.map { $0.url != nil || $0.loadError != nil } ?? false
     }
 
     func setSidebarCollapsed(_ collapsed: Bool) {
@@ -1194,9 +1217,9 @@ struct BrowserCommands: Commands {
         }
         // As in Arc and Dia.
         CommandGroup(after: .pasteboard) {
-            Button("Copy Link") { if let tab = store.activeTab { window.copyLink(of: tab) } }
+            Button("Copy Link") { window.copyFrontLink() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
-                .disabled(store.activeTab?.url == nil)
+                .disabled(window.frontURL == nil)
         }
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {
@@ -1220,7 +1243,7 @@ struct BrowserCommands: Commands {
             Divider()
             Button("Reload Page") { page?.reload() }
                 .keyboardShortcut("r")
-                .disabled(page?.url == nil)
+                .disabled(!window.canReloadFront)
             #if DEBUG
             Divider()
             // For trying drifting without waiting days; never in a release build.

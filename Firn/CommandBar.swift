@@ -236,7 +236,7 @@ private struct CommandBar: View {
         let page = window.frontPage
         let tab = window.everydayTab
 
-        add("reload", "Reload Page", ["refresh"], "⌘R", when: page?.url != nil) {
+        add("reload", "Reload Page", ["refresh"], "⌘R", when: window.canReloadFront) {
             page?.reload()
             window.focusPage()
         }
@@ -248,8 +248,8 @@ private struct CommandBar: View {
             page?.goForward()
             window.focusPage()
         }
-        add("copy-link", "Copy Link", ["address", "url", "share"], "⇧⌘C", when: store.activeTab?.url != nil) {
-            if let tab = store.activeTab { window.copyLink(of: tab) }
+        add("copy-link", "Copy Link", ["address", "url", "share"], "⇧⌘C", when: window.frontURL != nil) {
+            window.copyFrontLink()
             window.focusPage()
         }
         add("duplicate", "Duplicate Tab", ["copy"], when: tab?.url != nil) {

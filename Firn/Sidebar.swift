@@ -125,15 +125,12 @@ private struct AddressBar: View {
 
     /// The page in front: a Lookout's while one is open, so the bar always
     /// tells the truth about what's on screen, and typing goes there too.
-    private var frontPage: (any PageController)? { store.lookout?.page ?? store.activeTab?.page }
-    private var frontURL: URL? {
-        if let lookout = store.lookout { return lookout.page.url }
-        return store.activeTab?.url
-    }
+    private var frontPage: (any PageController)? { window.frontPage }
+    private var frontURL: URL? { window.frontURL }
     /// Reload sits inside the bar, as in Safari, so the top row fits at the narrowest width.
     private var reloadablePage: (any PageController)? {
-        guard !focused, let page = frontPage, page.url != nil || page.loadError != nil else { return nil }
-        return page
+        guard !focused, window.canReloadFront else { return nil }
+        return frontPage
     }
 
     var body: some View {
@@ -178,8 +175,7 @@ private struct AddressBar: View {
             .onChange(of: focused) {
                 if !focused { cancel() } else { text = frontURL?.absoluteString ?? "" }
             }
-            .onChange(of: store.activeTab?.url) { showRestingAddress() }
-            .onChange(of: store.lookout?.page.url) { showRestingAddress() }
+            .onChange(of: frontURL) { showRestingAddress() }
             .onChange(of: store.lookout?.id) { showRestingAddress() }
             .onChange(of: store.activeTabID) { showRestingAddress() }
             .onAppear(perform: showRestingAddress)

@@ -29,6 +29,7 @@ final class FakePage: PageController {
     func stopLoading() { stopped = true }
     func focus() {}
     func snapshot(width: CGFloat) async -> CGImage? { nil }
+    func printPage() {}
 }
 
 @MainActor

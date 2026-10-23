@@ -252,6 +252,9 @@ private struct CommandBar: View {
             window.copyFrontLink()
             window.focusPage()
         }
+        add("print", "Print…", ["printer", "pdf"], "⌘P", when: page?.url != nil && page?.loadError == nil) {
+            page?.printPage()
+        }
         add("duplicate", "Duplicate Tab", ["copy"], when: tab?.url != nil) {
             if let tab { window.duplicate(tab) }
         }

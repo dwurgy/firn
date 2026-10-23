@@ -1232,6 +1232,12 @@ struct BrowserCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .control])
             .disabled(everydayTab == nil || everydayTab?.groupID != nil)
         }
+        CommandGroup(replacing: .printItem) {
+            // The page in front: a Lookout's while one is open.
+            Button("Print…") { page?.printPage() }
+                .keyboardShortcut("p")
+                .disabled(page?.url == nil || page?.loadError != nil)
+        }
         // As in Arc and Dia.
         CommandGroup(after: .pasteboard) {
             Button("Copy Link") { window.copyFrontLink() }

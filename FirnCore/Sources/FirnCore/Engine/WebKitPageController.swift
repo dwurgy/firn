@@ -107,6 +107,24 @@ final class WebKitPageController: NSObject, PageController {
         return image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
+    func printPage() {
+        guard let window = webView.window, url != nil, loadError == nil, !isShowingPanel else { return }
+        let operation = webView.printOperation(with: NSPrintInfo.shared)
+        // WebKit prints blank pages unless its print view has a size.
+        operation.view?.frame = webView.bounds
+        isShowingPanel = true
+        operation.runModal(
+            for: window, delegate: self,
+            didRun: #selector(printOperationDidRun(_:success:contextInfo:)), contextInfo: nil
+        )
+    }
+
+    @objc private func printOperationDidRun(
+        _ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?
+    ) {
+        isShowingPanel = false
+    }
+
     // MARK: - Keeping state in step with WebKit
 
     private func observeWebView() {

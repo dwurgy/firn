@@ -1328,7 +1328,7 @@ struct SplitRow<MenuItems: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-        SplitPanes(share: share ?? fraction, gap: 0) {
+        SplitPanes(share: share ?? fraction) {
             half(left)
             half(right)
         }
@@ -1406,18 +1406,14 @@ struct SplitRow<MenuItems: View>: View {
 }
 
 /// A split row's two halves, side by side: the left takes `share` of the
-/// width after the gap, the right the rest. Animatable, so the halves grow,
-/// part, and follow the divider smoothly.
+/// width, the right the rest. Animatable, so the halves grow and follow
+/// the divider smoothly.
 private struct SplitPanes: Layout {
     var share: Double
-    var gap: CGFloat
 
-    var animatableData: AnimatablePair<Double, CGFloat> {
-        get { AnimatablePair(share, gap) }
-        set {
-            share = newValue.first
-            gap = newValue.second
-        }
+    var animatableData: Double {
+        get { share }
+        set { share = newValue }
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -1426,11 +1422,10 @@ private struct SplitPanes: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard subviews.count == 2 else { return }
-        let room = max(bounds.width - gap, 0)
-        let left = room * min(max(share, 0), 1)
+        let left = bounds.width * min(max(share, 0), 1)
         subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(width: left, height: bounds.height))
-        subviews[1].place(at: CGPoint(x: bounds.minX + left + gap, y: bounds.minY),
-                          proposal: ProposedViewSize(width: room - left, height: bounds.height))
+        subviews[1].place(at: CGPoint(x: bounds.minX + left, y: bounds.minY),
+                          proposal: ProposedViewSize(width: bounds.width - left, height: bounds.height))
     }
 }
 

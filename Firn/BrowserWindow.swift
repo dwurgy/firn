@@ -288,8 +288,19 @@ final class WindowModel {
     /// Opens the command bar (⌘T, the New tab button, an empty window). No
     /// tab exists until something in it is picked.
     func openCommandBar() {
-        commandBarHalf = splitPickAnchor == nil ? nil : splitPickSide.other
+        // A pick whose page has gone (closed, say) is over: the bar opens whole.
+        if !isPickingSplit { splitPickAnchor = nil }
+        commandBarHalf = isPickingSplit ? splitPickSide.other : nil
         showsCommandBar = true
+    }
+
+    /// The tab on screen changed some other way while a page was being
+    /// picked for a split (⌘1–9, ⌃Tab, a click in the sidebar, its page
+    /// closed): the pick ends, so the bar never sits over half of a page
+    /// that's back to full width.
+    func tabOnScreenChanged() {
+        guard let anchor = splitPickAnchor, anchor.id != store.activeTabID else { return }
+        if showsCommandBar { closeCommandBar() } else { splitPickAnchor = nil }
     }
 
     /// Closes the command bar, leaving nothing behind. The page in front
@@ -488,6 +499,7 @@ struct BrowserWindow: View {
         .onChange(of: store.activeTab == nil) {
             if store.activeTab == nil { window.openCommandBar() }
         }
+        .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }
@@ -756,6 +768,16 @@ private struct PageArea: View {
         )
         .frame(width: Theme.pageInset)
         .accessibilityLabel("Resize split view")
+        .accessibilityValue("Left page \(Int((split.leftFraction * 100).rounded())) percent")
+        // VoiceOver can move the divider too, a twentieth of the way at a time.
+        .accessibilityAdjustableAction { direction in
+            let step = switch direction {
+            case .increment: 0.05
+            case .decrement: -0.05
+            @unknown default: 0.0
+            }
+            store.setLeftFraction(of: split, to: split.leftFraction + step)
+        }
     }
 
     /// A page; in split view (`inUseID` set), ringed when it's the one in
@@ -999,7 +1021,7 @@ struct PageDrop: Equatable {
 }
 
 /// Where a dragged tab would open: frost over that half, in the space's
-/// color (`docs/split-drop-design.html`), with a haze following its picture.
+/// color (`docs/split-drop-design.html`), forming from under its picture.
 private struct DropFrost: View {
     let window: WindowModel
     let color: Color
@@ -1067,11 +1089,11 @@ private struct DropFrost: View {
     }
 }
 
-/// Where the pages sit while a split is being picked: halves, as a new split has.
 extension SplitSide {
     var other: SplitSide { self == .left ? .right : .left }
 }
 
+/// Where the pages sit while a split is being picked: halves, as a new split has.
 enum SplitPicking {
     static func leftWidth(in width: CGFloat) -> CGFloat {
         max(width - Theme.pageInset, 1) * 0.5

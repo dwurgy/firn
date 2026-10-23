@@ -79,7 +79,7 @@ private struct CommandBar: View {
         let selected = selectedIndex(in: rows)
         let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
         VStack(spacing: 0) {
-            field(rows: rows, actions: actions, selected: selected)
+            field()
             if !rows.isEmpty {
                 Rectangle()
                     .fill(Theme.tileHairline)
@@ -109,7 +109,7 @@ private struct CommandBar: View {
         }
     }
 
-    private func field(rows: [CommandRow], actions: [BarAction], selected: Int) -> some View {
+    private func field() -> some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15))
@@ -121,7 +121,9 @@ private struct CommandBar: View {
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.ink)
                 .focused($focused)
-                .onSubmit { if rows.indices.contains(selected) { pick(rows[selected], actions: actions) } }
+                // Read fresh at Return, not from this render: a held copy
+                // of the rows could miss the row the arrows just chose.
+                .onSubmit { submit() }
                 .onExitCommand { window.closeCommandBar() }
                 .onChange(of: text) { selection = nil }
                 .onChange(of: focused) {
@@ -132,6 +134,14 @@ private struct CommandBar: View {
         }
         .padding(.horizontal, Theme.rowPadding + 4)
         .frame(height: Self.fieldHeight)
+    }
+
+    /// Return: picks the chosen row as things are right now.
+    private func submit() {
+        let actions = actions
+        let rows = rows(actions: actions)
+        let selected = selectedIndex(in: rows)
+        if rows.indices.contains(selected) { pick(rows[selected], actions: actions) }
     }
 
     private func selectedIndex(in rows: [CommandRow]) -> Int {

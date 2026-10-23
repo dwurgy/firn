@@ -116,6 +116,32 @@ private struct ChromeButtonStyle: ButtonStyle {
 
 /// Shows where the tab on screen is, and takes an address or a search.
 /// At rest it shows just the site; clicking in shows the whole address.
+/// The page's zoom in the address bar: quiet text; a click goes back to actual size.
+private struct ZoomLabel: View {
+    let text: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(Theme.hintFont.monospacedDigit())
+                .foregroundStyle(Theme.muted)
+                .frame(width: 38, height: 22)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                        .fill(hovering ? Theme.hover : .clear)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Actual Size")
+        .accessibilityLabel("Zoomed to \(text)")
+        .accessibilityHint("Goes back to actual size")
+    }
+}
+
 private struct AddressBar: View {
     let store: BrowserStore
     let window: WindowModel
@@ -132,6 +158,12 @@ private struct AddressBar: View {
         guard !focused, window.canReloadFront else { return nil }
         return frontPage
     }
+    /// The page's zoom, shown only while it isn't actual size, so a page
+    /// zoomed and forgotten doesn't just look wrong.
+    private var zoomLabel: String? {
+        guard !focused, window.canZoomFront(.actualSize), let zoom = frontPage?.zoom else { return nil }
+        return PageZoom.percent(zoom)
+    }
 
     var body: some View {
         TextField("Search or enter address", text: $text)
@@ -140,7 +172,7 @@ private struct AddressBar: View {
             .foregroundStyle(Theme.ink)
             .focused($focused)
             .padding(.leading, Theme.rowPadding)
-            .padding(.trailing, reloadablePage == nil ? Theme.rowPadding : Theme.rowPadding + 24)
+            .padding(.trailing, Theme.rowPadding + (reloadablePage == nil ? 0 : 24) + (zoomLabel == nil ? 0 : 40))
             .frame(height: Theme.rowHeight)
             .background {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
@@ -153,16 +185,19 @@ private struct AddressBar: View {
                 }
             }
             .overlay(alignment: .trailing) {
-                if let page = reloadablePage {
-                    Group {
+                HStack(spacing: 0) {
+                    if let zoomLabel {
+                        ZoomLabel(text: zoomLabel) { window.zoomFront(.actualSize) }
+                    }
+                    if let page = reloadablePage {
                         if page.isLoading {
                             ChromeButton("Stop loading", systemImage: "xmark") { page.stopLoading() }
                         } else {
                             ChromeButton("Reload this page", systemImage: "arrow.clockwise") { page.reload() }
                         }
                     }
-                    .padding(.trailing, 4)
                 }
+                .padding(.trailing, 4)
             }
             .onHover { hovering = $0 }
             .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")

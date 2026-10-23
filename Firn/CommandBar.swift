@@ -255,6 +255,19 @@ private struct CommandBar: View {
         add("print", "Print…", ["printer", "pdf"], "⌘P", when: page?.url != nil && page?.loadError == nil) {
             page?.printPage()
         }
+        add("zoom-in", "Zoom In", ["bigger", "larger", "magnify"], "⌘+", when: window.canZoomFront(.larger)) {
+            window.zoomFront(.larger)
+            window.focusPage()
+        }
+        add("zoom-out", "Zoom Out", ["smaller"], "⌘−", when: window.canZoomFront(.smaller)) {
+            window.zoomFront(.smaller)
+            window.focusPage()
+        }
+        add("actual-size", "Actual Size", ["reset zoom", "normal size", "100%"], "⌘0",
+            when: window.canZoomFront(.actualSize)) {
+            window.zoomFront(.actualSize)
+            window.focusPage()
+        }
         add("duplicate", "Duplicate Tab", ["copy"], when: tab?.url != nil) {
             if let tab { window.duplicate(tab) }
         }

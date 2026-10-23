@@ -34,6 +34,10 @@ public protocol PageController: AnyObject, Observable {
     /// Opens the Mac's print sheet for the page, attached to its window.
     /// Does nothing without a loaded page or while another sheet is up.
     func printPage()
+    /// How big the page is drawn (1 is actual size). This tab's only; not saved.
+    var zoom: Double { get }
+    /// One of `PageZoom.steps`.
+    func setZoom(_ zoom: Double)
 
     /// A Basecamp tile's page: a clicked link to another site, or one meant
     /// for a new window, goes to a Lookout instead, so the tile stays itself.

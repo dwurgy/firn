@@ -30,6 +30,8 @@ final class FakePage: PageController {
     func focus() {}
     func snapshot(width: CGFloat) async -> CGImage? { nil }
     func printPage() {}
+    var zoom: Double = 1
+    func setZoom(_ zoom: Double) { self.zoom = zoom }
 }
 
 @MainActor

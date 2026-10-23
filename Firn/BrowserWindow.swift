@@ -260,6 +260,25 @@ final class WindowModel {
         frontPage.map { $0.url != nil || $0.loadError != nil } ?? false
     }
 
+    enum ZoomChange { case larger, smaller, actualSize }
+
+    /// The zoom a change would give the page in front, or nil if it would do nothing.
+    private func zoom(after change: ZoomChange) -> Double? {
+        guard let page = frontPage, page.url != nil, page.loadError == nil else { return nil }
+        switch change {
+        case .larger: return PageZoom.larger(than: page.zoom)
+        case .smaller: return PageZoom.smaller(than: page.zoom)
+        case .actualSize: return PageZoom.isActualSize(page.zoom) ? nil : 1
+        }
+    }
+
+    func canZoomFront(_ change: ZoomChange) -> Bool { zoom(after: change) != nil }
+
+    func zoomFront(_ change: ZoomChange) {
+        guard let zoom = zoom(after: change) else { return }
+        frontPage?.setZoom(zoom)
+    }
+
     func setSidebarCollapsed(_ collapsed: Bool) {
         guard collapsed != sidebarCollapsed else { return }
         sidebarCollapsed = collapsed
@@ -1191,6 +1210,9 @@ private struct TabShortcuts: View {
                 .keyboardShortcut("]", modifiers: [.command, .shift])
             Button("Previous Tab") { select { store.selectTab(by: -1) } }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
+            // ⌘+ needs Shift on most keyboards; ⌘= is the same key without it.
+            Button("Zoom In") { window.zoomFront(.larger) }
+                .keyboardShortcut("=")
         }
         .opacity(0)
         .frame(width: 0, height: 0)
@@ -1280,6 +1302,17 @@ struct BrowserCommands: Commands {
         CommandGroup(replacing: .sidebar) {
             Button(window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") { window.toggleSidebar() }
                 .keyboardShortcut("s")
+            Divider()
+            // The page in front, as with Print. ⌘= also zooms in (TabShortcuts).
+            Button("Zoom In") { window.zoomFront(.larger) }
+                .keyboardShortcut("+")
+                .disabled(!window.canZoomFront(.larger))
+            Button("Zoom Out") { window.zoomFront(.smaller) }
+                .keyboardShortcut("-")
+                .disabled(!window.canZoomFront(.smaller))
+            Button("Actual Size") { window.zoomFront(.actualSize) }
+                .keyboardShortcut("0")
+                .disabled(!window.canZoomFront(.actualSize))
         }
         CommandGroup(before: .windowArrangement) {
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }

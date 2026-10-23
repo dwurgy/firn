@@ -17,6 +17,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var isLoading = false
     private(set) var icon: Data?
     private(set) var loadError: LoadError?
+    private(set) var zoom: Double = 1
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
 
@@ -117,6 +118,11 @@ final class WebKitPageController: NSObject, PageController {
             for: window, delegate: self,
             didRun: #selector(printOperationDidRun(_:success:contextInfo:)), contextInfo: nil
         )
+    }
+
+    func setZoom(_ zoom: Double) {
+        self.zoom = zoom
+        webView.pageZoom = zoom
     }
 
     @objc private func printOperationDidRun(

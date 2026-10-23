@@ -122,7 +122,8 @@ private struct ChromeButtonStyle: ButtonStyle {
 /// field from the left, lighter at its front edge; when the page is in, a
 /// short sunrise pulse (First light's peach and apricot) warms the field, and
 /// it all fades (David, 2026-10-23: the sunrise only at the end, never the
-/// whole load). A load that fails just fades. Reduce Motion: it fades in and
+/// whole load, and only after a load you noticed). A quick or failed load
+/// just fades. Reduce Motion: it fades in and
 /// out whole, and the pulse is a fade too.
 private struct LoadingFrost: View {
     let isLoading: Bool
@@ -138,6 +139,10 @@ private struct LoadingFrost: View {
     /// Counts loads, so the steps of an old load's finish stand down when a
     /// new one starts (a view's closures see its values from when they were made).
     @State private var load = 0
+    @State private var startedAt = Date.distantPast
+    /// The sunrise is for loads you waited on; quicker ones just fade, so it
+    /// stays special on sites that load all day.
+    private static let sunriseAfter: TimeInterval = 0.5
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -179,6 +184,7 @@ private struct LoadingFrost: View {
 
     private func start() {
         load += 1
+        startedAt = .now
         formed = 0
         sunrise = false
         withAnimation(.easeOut(duration: 0.2)) { shown = true }
@@ -187,7 +193,7 @@ private struct LoadingFrost: View {
 
     /// Finishes forming, warms for a moment, then fades.
     private func finish() {
-        guard !failed else {
+        guard !failed, Date.now.timeIntervalSince(startedAt) >= Self.sunriseAfter else {
             withAnimation(.easeOut(duration: 0.45)) { shown = false }
             return
         }

@@ -335,7 +335,7 @@ private struct TabList: View {
                     // the scroll view would otherwise clip; taken back below.
                     .padding(.horizontal, Theme.pageInset)
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                    .background { WindowDragArea() }
+                    .background { WindowDragArea { window.newSpace() } }
                 }
                 .scrollIndicators(.never)
                 .padding(.horizontal, -Theme.pageInset)
@@ -1771,7 +1771,7 @@ private struct ActiveTabBackground: View {
     }
 }
 
-private struct CloseButtonStyle: ButtonStyle {
+struct CloseButtonStyle: ButtonStyle {
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {

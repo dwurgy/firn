@@ -6,11 +6,31 @@ import SwiftUI
 /// minimizes it on double-click (following the system setting), like a title bar.
 /// AppKit because SwiftUI's WindowDragGesture needs macOS 15.
 struct WindowDragArea: NSViewRepresentable {
+    /// What a right-click on the blank space offers (New Space…); nothing when nil.
+    var newSpace: (@MainActor () -> Void)?
+
     func makeNSView(context: Context) -> NSView { DragView() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? DragView)?.newSpace = newSpace
+    }
 
     private final class DragView: NSView {
+        var newSpace: (@MainActor () -> Void)?
+
         override var mouseDownCanMoveWindow: Bool { true }
+
+        // AppKit, since this blank space is an AppKit view and SwiftUI's
+        // context menu doesn't reach it.
+        override func menu(for event: NSEvent) -> NSMenu? {
+            guard newSpace != nil else { return nil }
+            let menu = NSMenu()
+            let item = NSMenuItem(title: "New Space…", action: #selector(makeNewSpace), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            return menu
+        }
+
+        @objc private func makeNewSpace() { newSpace?() }
 
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }

@@ -95,6 +95,8 @@ final class WindowModel {
     var tidyAnnouncement: TidyAnnouncement?
     /// Whether the overflow (drifted tabs and Recently closed) is open.
     var showsOverflow = false
+    /// Whether the downloads popover is open.
+    var showsDownloads = false
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -1314,6 +1316,8 @@ struct BrowserCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: [.command, .control])
             .disabled(everydayTab == nil || everydayTab?.groupID != nil)
+            Divider()
+            Button("New Space…") { window.newSpace() }
         }
         CommandGroup(replacing: .printItem) {
             // The page in front: a Lookout's while one is open.
@@ -1410,7 +1414,6 @@ struct BrowserCommands: Commands {
             Button("Show Previous Space") { window.showSpace { store.selectSpace(by: -1) } }
                 .keyboardShortcut(.leftArrow, modifiers: [.option, .command])
                 .disabled(store.spaces.count < 2)
-            Button("New Space…") { window.newSpace() }
             Divider()
         }
     }

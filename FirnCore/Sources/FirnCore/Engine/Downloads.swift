@@ -55,6 +55,8 @@ public final class Downloads {
     public static let shared = Downloads()
 
     public private(set) var all: [Download] = []
+    /// The download that started last, so the window can show it starting.
+    public private(set) var latest: Download?
     /// Names given to downloads still in progress, so two at once never
     /// share one.
     @ObservationIgnored private var reserved: Set<URL> = []
@@ -72,6 +74,7 @@ public final class Downloads {
     func start(dataStoreID: UUID) -> Download {
         let download = Download(dataStoreID: dataStoreID)
         all.append(download)
+        latest = download
         return download
     }
 

@@ -151,7 +151,7 @@ private struct OverflowPanel: View {
 
 /// A small word button in a section's header ("Restore all"): ink, with
 /// the warm wash on hover, never system blue.
-private struct TextActionStyle: ButtonStyle {
+struct TextActionStyle: ButtonStyle {
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {

@@ -1,9 +1,10 @@
 import FirnCore
 import SwiftUI
 
-/// The row at the bottom of the sidebar: one button per space, in order, and
-/// a button to add one (the New space sheet), with the overflow on the left.
-/// Each space shows its own icon in its color.
+/// The row at the bottom of the sidebar: one button per space, in order,
+/// with the overflow on the left and, while there are any, the space's
+/// downloads on the right. Each space shows its own icon in its color.
+/// New Space… is in the icons' right-click menu (and the File menu).
 struct SpaceRow: View {
     let store: BrowserStore
     let window: WindowModel
@@ -17,13 +18,14 @@ struct SpaceRow: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            // As wide as "+", so the spaces sit truly centered between the two.
+            // As wide as the downloads button's spot, so the spaces sit truly
+            // centered between the two.
             OverflowButton(store: store, window: window)
             Group {
                 buttons
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, (Theme.rowHeight - 28) / 2)
-                ChromeButton("New space", systemImage: "plus") { window.newSpace() }
+                DownloadsButton(store: store, window: window)
             }
             // The spaces step back while the pill speaks.
             .opacity(pill == .open ? 0 : 1)
@@ -64,6 +66,8 @@ struct SpaceRow: View {
                     window.showSpace { store.selectSpace(space) }
                 }
                 .contextMenu {
+                    Button("New Space…") { window.newSpace() }
+                    Divider()
                     Button("Edit Space…") { window.editSpace(space) }
                     // The last space can't be deleted.
                     if store.spaces.count > 1 {

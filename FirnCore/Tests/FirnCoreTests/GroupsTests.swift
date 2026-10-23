@@ -489,4 +489,25 @@ struct GroupsTests {
         #expect(store.activeTabID == tabs[0].id)
         #expect(store.tabGroups.first?.folded == false)
     }
+
+    @Test func pickingATabInAFoldedGroupOpensTheGroup() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.setFolded(group, true)
+        store.select(tabs[0]) // As from the command bar.
+        #expect(store.activeTabID == tabs[0].id)
+        #expect(store.tabGroups.first?.folded == false)
+    }
+
+    @Test func aGroupFoldedAroundTheTabOnScreenStaysFolded() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        store.select(tabs[0])
+        store.setFolded(group, true)
+        let restored = makeStore(restoring: save(store))
+        #expect(restored.activeTabID == tabs[0].id)
+        #expect(restored.tabGroups.first?.folded == true)
+    }
 }

@@ -134,7 +134,7 @@ public final class BrowserStore {
         activeSpaceID = space.id
         activeTabID = nil
         if let id = lastTabBySpace[space.id], let tab = tabs.first(where: { $0.id == id && $0.spaceID == space.id }) {
-            select(tab)
+            show(tab)
         } else {
             selectMostRecent()
         }
@@ -490,14 +490,13 @@ public final class BrowserStore {
 
     /// Shows the awake tab in this space that was on screen most recently, if
     /// any, preferring one the sidebar shows. A tab hidden in a folded group
-    /// opens its group, so the tab on screen never vanishes.
+    /// opens its group (`select`), so the tab on screen never vanishes.
     private func selectMostRecent() {
         let awake = tabs.filter { $0.spaceID == activeSpaceID && !$0.isResting }
         let shown = Set(sidebarTabs.map(\.id))
         let byRecent = { (a: Tab, b: Tab) in a.lastActiveAt < b.lastActiveAt }
         guard let recent = awake.filter({ shown.contains($0.id) }).max(by: byRecent) ?? awake.max(by: byRecent)
         else { return }
-        if let group = groups.first(where: { $0.id == recent.groupID }), group.folded { setFolded(group, false) }
         select(recent)
     }
 
@@ -969,7 +968,6 @@ public final class BrowserStore {
             tab.driftedAt = nil
             if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
                 insert(tab, at: position, in: tabs(in: group), fallback: arrivalIndex(in: tab.spaceID))
-                setFolded(group, false)
             } else {
                 tab.groupID = nil
                 insertInTabList([tab], at: listPosition, fallback: arrivalIndex(in: tab.spaceID))
@@ -1200,7 +1198,19 @@ public final class BrowserStore {
 
     /// Shows a tab. A drifted one comes back first, where new tabs go. A
     /// tab in split view shows with its other half, and is the one in use.
+    /// One in a folded group opens its group (picked in the command bar,
+    /// say), so the tab on screen never vanishes.
     public func select(_ tab: Tab) {
+        if let group = groups.first(where: { $0.id == tab.groupID }), group.folded,
+           tabs.contains(where: { $0.id == tab.id }) {
+            setFolded(group, false)
+        }
+        show(tab)
+    }
+
+    /// Shows a tab, leaving its group folded if it is: coming back to a
+    /// space, or to a session, finds the sidebar as it was left.
+    private func show(_ tab: Tab) {
         guard tabs.contains(where: { $0.id == tab.id }) else { return }
         closeLookout()
         bringBack(tab)
@@ -1406,7 +1416,7 @@ public final class BrowserStore {
         lastTabBySpace = session.window.spaceTabIDs.filter { tabSpaces[$0.value] == $0.key }
         if let id = session.window.activeTabID,
            let tab = tabs.first(where: { $0.id == id && $0.spaceID == activeSpaceID }) {
-            select(tab)
+            show(tab)
         }
     }
 

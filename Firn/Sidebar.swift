@@ -285,10 +285,14 @@ private struct TabList: View {
                     .simultaneousGesture(dragGesture)
                     .onChange(of: dragging) { if !dragging { drop() } }
                     .padding(.bottom, Theme.pageInset)
+                    // Room at the sides for the group cards' glass shadow, which
+                    // the scroll view would otherwise clip; taken back below.
+                    .padding(.horizontal, Theme.pageInset)
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
                     .background { WindowDragArea() }
                 }
                 .scrollIndicators(.never)
+                .padding(.horizontal, -Theme.pageInset)
                 // A tab coming on screen (a new one at the bottom of a long
                 // list, say) scrolls into view, by as little as it takes.
                 .onChange(of: store.activeTabID) {

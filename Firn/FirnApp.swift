@@ -20,7 +20,8 @@ struct FirnApp: App {
             removeData: { id in
                 BrowserEngine.removeData(for: id)
                 Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
-            }
+            },
+            passwords: .keychain
         )
         // Erase what's left of deleted spaces: data their open pages still
         // held, and passwords the Keychain couldn't be reached for. Only after a session really loaded: a fresh start after a damaged

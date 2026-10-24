@@ -54,7 +54,7 @@ struct LoadErrorView: View {
 }
 
 /// Firn's one strong button: ink, with page-colored words.
-private struct InkButtonStyle: ButtonStyle {
+struct InkButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 

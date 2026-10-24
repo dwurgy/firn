@@ -21,10 +21,17 @@ public final class BrowserStore {
     /// `tabs`, left first, in the same group if any.
     public private(set) var splits: [SplitGroup] = []
     public private(set) var activeSpaceID: UUID
-    public private(set) var activeTabID: UUID?
+    public private(set) var activeTabID: UUID? {
+        // Showing another tab answers the save prompt with "Not now".
+        didSet { if let offer = passwordOffer, !onScreenTabIDs.contains(offer.tabID) { passwordOffer = nil } }
+    }
     /// The link preview over the tab on screen, if one is open. Showing
     /// another tab or space closes it.
     public private(set) var lookout: Lookout?
+    /// The offer to save a password just used on the tab on screen, if
+    /// there is one; answered with `savePasswordOffer()`,
+    /// `dismissPasswordOffer()`, or `neverSavePasswordsForOffer()`.
+    public private(set) var passwordOffer: PasswordOffer?
     /// Where new tabs go in a space's tab list (a setting; the app keeps it).
     /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
     public var newTabPlacement: NewTabPlacement = .bottom
@@ -51,6 +58,7 @@ public final class BrowserStore {
     @ObservationIgnored private let makePage: @MainActor (_ dataStoreID: UUID) -> any PageController
     @ObservationIgnored private let removeData: @MainActor (_ dataStoreID: UUID) -> Void
     @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private let passwords: PasswordStore?
     @ObservationIgnored private var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.
@@ -62,11 +70,14 @@ public final class BrowserStore {
     ///   - makePage: Makes a page for a data store; `BrowserEngine.makePage` in the app.
     ///   - removeData: Erases a data store no space uses any more;
     ///     `BrowserEngine.removeData` in the app.
+    ///   - passwords: Where saved passwords are kept; `PasswordStore.keychain`
+    ///     in the app. Without one, Firn never offers to save a password.
     ///   - now: The clock, replaceable in tests.
     public init(
         spaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
+        passwords: PasswordStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         precondition(!spaces.isEmpty, "Firn always has at least one space")
@@ -74,6 +85,7 @@ public final class BrowserStore {
         self.activeSpaceID = spaces[0].id
         self.makePage = makePage
         self.removeData = removeData
+        self.passwords = passwords
         self.now = now
         renumberSpaces()
     }
@@ -86,6 +98,7 @@ public final class BrowserStore {
         defaultSpaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
+        passwords: PasswordStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         var seen = Set<UUID>()
@@ -98,7 +111,8 @@ public final class BrowserStore {
                 return space
             }
         self.init(
-            spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData, now: now
+            spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData,
+            passwords: passwords, now: now
         )
         if let session { restore(session) }
     }
@@ -1121,8 +1135,12 @@ public final class BrowserStore {
             guard tab.id == activeTabID else { return }
             openLookout(url)
         case .close:
-            // A popup that's done (a sign-in, say) hands back to its opener.
+            // A popup that's done (a sign-in, say) hands back to its opener,
+            // and so does its offer to save the password.
+            if passwordOffer?.tabID == tab.id, let opener = tab.openerTabID { passwordOffer?.tabID = opener }
             close(tab, showing: tabs.first { $0.id == tab.openerTabID }, remembering: false)
+        case let .offerToSave(login):
+            offerToSave(login, from: tab)
         }
     }
 
@@ -1177,7 +1195,62 @@ public final class BrowserStore {
             adopt(page, opener: opener, inBackground: inBackground)
         case .close:
             closeLookout()
+        case .offerToSave:
+            // A Lookout is a glance; sign in from a tab to save a password.
+            break
         }
+    }
+
+    // MARK: - Saving passwords
+
+    /// A page on screen says someone just signed in. Offers to save it,
+    /// unless that login is already saved in the tab's data store, its site
+    /// is on a "Never" list there, or the Keychain can't be read.
+    private func offerToSave(_ login: SubmittedLogin, from tab: Tab) {
+        guard let passwords, onScreenTabIDs.contains(tab.id),
+              let space = spaces.first(where: { $0.id == tab.spaceID }),
+              !neverSavesPasswords(on: login.site, in: space.dataStoreID),
+              let needsUpdate = (try? passwords.needsUpdate(for: login, in: space.dataStoreID)) ?? nil
+        else { return }
+        passwordOffer = PasswordOffer(tabID: tab.id, spaceID: space.id, dataStoreID: space.dataStoreID, login: login, isUpdate: needsUpdate)
+    }
+
+    /// Saves the password offered, in the data store it was used in.
+    /// Returns false if the Keychain said no.
+    @discardableResult
+    public func savePasswordOffer() -> Bool {
+        guard let offer = passwordOffer, let passwords else { return false }
+        passwordOffer = nil
+        do {
+            try passwords.save(username: offer.login.username, password: offer.login.password,
+                               for: offer.login.site, in: offer.dataStoreID)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// "Not now": nothing is saved, and Firn asks again next time.
+    public func dismissPasswordOffer() {
+        passwordOffer = nil
+    }
+
+    /// "Never for this site": in the offering tab's space, Firn stops asking
+    /// to save passwords for the site.
+    public func neverSavePasswordsForOffer() {
+        guard let offer = passwordOffer else { return }
+        passwordOffer = nil
+        guard let index = spaces.firstIndex(where: { $0.id == offer.spaceID }) else { return }
+        var space = spaces[index]
+        guard !space.neverSavePasswordSites.contains(offer.login.site.name) else { return }
+        space.neverSavePasswordSites = Array((space.neverSavePasswordSites + [offer.login.site.name]).suffix(Space.neverSaveLimit))
+        space.lastChangedAt = now()
+        spaces[index] = space
+    }
+
+    /// Whether any space using this data store said "Never" for the site.
+    func neverSavesPasswords(on site: PasswordSite, in dataStoreID: UUID) -> Bool {
+        spaces.contains { $0.dataStoreID == dataStoreID && $0.neverSavePasswordSites.contains(site.name) }
     }
 
     // MARK: - Drifting

@@ -6,7 +6,7 @@ import Testing
 /// Saved logins in a plain list, standing in for the Keychain (tests run
 /// unsigned, and the data protection keychain refuses unsigned apps).
 /// Known by data store, site, and username, as `KeychainVault` is.
-private final class MemoryVault: PasswordVault, @unchecked Sendable {
+final class MemoryVault: PasswordVault, @unchecked Sendable {
     private let lock = NSLock()
     private var items: [SavedLogin] = []
 

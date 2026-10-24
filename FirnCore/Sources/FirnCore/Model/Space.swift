@@ -20,6 +20,10 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     /// (`BlockingSite`), in the order they were added. Its own, even when
     /// it shares sign-ins with another space.
     public var blockingOffSites: [String] = []
+    /// The sites where "Never for this site" was chosen when Firn offered
+    /// to save a password (`PasswordSite.name`), oldest first. A space
+    /// sharing sign-ins honors its partner's too, since they share passwords.
+    public var neverSavePasswordSites: [String] = []
     public var lastChangedAt: Date
 
     public init(
@@ -36,10 +40,11 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, icon, color, order, dataStoreID, blockingOffSites, lastChangedAt
+        case id, name, icon, color, order, dataStoreID, blockingOffSites, neverSavePasswordSites, lastChangedAt
     }
 
-    /// Spaces saved before blocking could be turned off for a site have no list.
+    /// Spaces saved before blocking could be turned off for a site, or
+    /// before passwords, have no lists.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -50,6 +55,8 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
         dataStoreID = try container.decode(UUID.self, forKey: .dataStoreID)
         let sites = try container.decodeIfPresent([String].self, forKey: .blockingOffSites) ?? []
         blockingOffSites = BlockingSite.clean(sites)
+        let never = try container.decodeIfPresent([String].self, forKey: .neverSavePasswordSites) ?? []
+        neverSavePasswordSites = Self.cleanPasswordSites(never)
         lastChangedAt = try container.decode(Date.self, forKey: .lastChangedAt)
     }
 
@@ -57,6 +64,17 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     public func blocksContent(on url: URL) -> Bool {
         guard let host = BlockingSite.host(of: url) else { return true }
         return !blockingOffSites.contains { BlockingSite.covers($0, host: host) }
+    }
+
+    /// How many "Never" sites a space keeps; the oldest goes past this.
+    static let neverSaveLimit = 500
+
+    /// Drops anything that isn't exactly a password site (a damaged or
+    /// edited file), and repeats.
+    static func cleanPasswordSites(_ sites: [String]) -> [String] {
+        var seen = Set<String>()
+        let kept = sites.filter { PasswordSite(name: $0) != nil && seen.insert($0).inserted }
+        return Array(kept.suffix(neverSaveLimit))
     }
 
     /// A name fit to show, by the same rules as a group's: one line,

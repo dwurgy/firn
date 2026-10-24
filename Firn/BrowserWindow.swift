@@ -53,7 +53,7 @@ final class WindowModel {
     /// until it's let go, wherever the pointer goes.
     var isDraggingTab = false {
         didSet {
-            if !isDraggingTab, sidebarCollapsed, !pointerNearSidebar, !peekHeldForTyping { isPeeking = false }
+            if !isDraggingTab, sidebarCollapsed, !pointerNearSidebar, !peekHeld { isPeeking = false }
         }
     }
 
@@ -67,6 +67,10 @@ final class WindowModel {
     /// The address bar was asked for while the sidebar was hidden: it stays
     /// out, wherever the pointer goes, until typing is done.
     private var peekHeldForTyping = false
+    /// The address bar's prompt (saving a password) is up while the sidebar
+    /// is hidden: it stays out until the prompt is answered.
+    private var peekHeldForPrompt = false
+    private var peekHeld: Bool { peekHeldForTyping || peekHeldForPrompt }
     private var peekHideTask: Task<Void, Never>?
     /// The group whose name is being edited, if any. Here rather than in the
     /// sidebar so the menu bar's New Group can ask for a name too.
@@ -465,10 +469,10 @@ final class WindowModel {
         peekHideTask?.cancel()
         if near {
             isPeeking = true
-        } else if !peekHeldForTyping {
+        } else if !peekHeld {
             peekHideTask = Task { @MainActor in
                 try? await Task.sleep(for: delay)
-                guard !Task.isCancelled, !pointerNearSidebar, !peekHeldForTyping, !isDraggingTab else { return }
+                guard !Task.isCancelled, !pointerNearSidebar, !peekHeld, !isDraggingTab else { return }
                 isPeeking = false
             }
         }
@@ -488,7 +492,21 @@ final class WindowModel {
 
     func finishEditingAddress() {
         peekHeldForTyping = false
-        if sidebarCollapsed, !pointerNearSidebar { isPeeking = false }
+        if sidebarCollapsed, !pointerNearSidebar, !peekHeld { isPeeking = false }
+    }
+
+    /// Holds a hidden sidebar out while the address bar's prompt is up, or
+    /// lets it go.
+    func holdPeekForPrompt(_ held: Bool) {
+        guard held != peekHeldForPrompt else { return }
+        peekHeldForPrompt = held
+        guard sidebarCollapsed else { return }
+        if held {
+            peekHideTask?.cancel()
+            isPeeking = true
+        } else if !pointerNearSidebar, !peekHeld, !isDraggingTab {
+            isPeeking = false
+        }
     }
 
     // MARK: Command bar

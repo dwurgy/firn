@@ -112,6 +112,10 @@ public enum PageRequest {
     case openInLookout(URL)
     /// A page opened as a popup closed itself (`window.close`).
     case close
+    /// Someone signed in on the page, over https, and it seems to have
+    /// worked (the page moved on, or its password field went away): offer
+    /// to save the password. At most once per sign-in.
+    case offerToSave(SubmittedLogin)
 }
 
 /// Makes pages. The only place that knows which engine Firn uses.

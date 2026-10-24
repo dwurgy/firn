@@ -292,6 +292,8 @@ private struct AddressBar: View {
             .onChange(of: store.lookout?.id) { showRestingAddress() }
             .onChange(of: store.activeTabID) { showRestingAddress() }
             .onAppear(perform: showRestingAddress)
+            // The offer to save a password just used drops from here.
+            .modifier(SavePasswordPopover(store: store, window: window))
     }
 
     private func open() {

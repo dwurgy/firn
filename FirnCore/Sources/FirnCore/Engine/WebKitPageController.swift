@@ -56,6 +56,9 @@ final class WebKitPageController: NSObject, PageController {
     /// The frames Firn paused, to play them again.
     @ObservationIgnored private var pausedFrames: [WKFrameInfo] = []
     @ObservationIgnored private var resumeTimeout: Task<Void, Never>?
+    /// A sign-in just sent, held (in memory only) until it seems to have
+    /// worked, for at most `SignInScript.pendingLimit` seconds.
+    @ObservationIgnored private var pendingSignIn: (login: SubmittedLogin, at: TimeInterval)?
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -91,6 +94,7 @@ final class WebKitPageController: NSObject, PageController {
         observeWebView()
         IconChangeWatcher.shared.watch(webView, for: self)
         SoundWatcher.shared.watch(webView, for: self)
+        SignInWatcher.shared.watch(webView, for: self)
         #if os(macOS)
         ClickRecorder.start() // Before the first click, or it would be missed.
         #endif
@@ -402,6 +406,8 @@ extension WebKitPageController: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // The page moved on after a sign-in: it seems to have worked.
+        offerPendingSignIn()
         isProvisional = false
         provisionalURL = nil
         loadError = nil
@@ -518,6 +524,39 @@ extension WebKitPageController {
         if new != sound { sound = new }
         // Playing again on its own: the pause is over.
         if sounding && isPausedByFirn { forgetPause() }
+    }
+}
+
+// MARK: - Sign-ins
+
+extension WebKitPageController {
+    /// What `SignInScript` heard. A sign-in counts only from an https page
+    /// that's the very site on screen, by WebKit's own origin for the frame,
+    /// never anything the page says; it's held until it seems to have worked.
+    fileprivate func heard(_ message: SignInScript.Message, from origin: WKSecurityOrigin) {
+        switch message {
+        case let .submitted(username, password):
+            guard let url, let site = PasswordSite(url), Self.origin(origin, is: site) else { return }
+            pendingSignIn = (SubmittedLogin(site: site, username: username, password: password),
+                             ProcessInfo.processInfo.systemUptime)
+        case .gone:
+            // The password field left the page it was typed into.
+            guard let pending = pendingSignIn, Self.origin(origin, is: pending.login.site) else { return }
+            offerPendingSignIn()
+        }
+    }
+
+    /// Offers the sign-in held, if any and not too old, once, and lets it go.
+    fileprivate func offerPendingSignIn() {
+        guard let pending = pendingSignIn else { return }
+        pendingSignIn = nil
+        guard ProcessInfo.processInfo.systemUptime - pending.at < SignInScript.pendingLimit else { return }
+        onRequest?(.offerToSave(pending.login))
+    }
+
+    private static func origin(_ origin: WKSecurityOrigin, is site: PasswordSite) -> Bool {
+        origin.protocol.lowercased() == "https" && origin.host.lowercased() == site.host
+            && (origin.port == 0 ? 443 : origin.port) == site.port
     }
 }
 
@@ -644,6 +683,37 @@ private final class SoundWatcher: NSObject, WKScriptMessageHandler {
     }
 }
 
+/// Hears sign-ins (see `SignInScript`). Like the watchers above, its script
+/// and handler live only in Firn's content world, so a page can't post to
+/// it; even so, a message counts only from the main frame, in its exact
+/// shape, and the page checks the frame's real origin.
+@MainActor
+private final class SignInWatcher: NSObject, WKScriptMessageHandler {
+    static let shared = SignInWatcher()
+
+    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
+
+    func watch(_ webView: WKWebView, for page: WebKitPageController) {
+        pages.setObject(page, forKey: webView)
+        let controller = webView.configuration.userContentController
+        guard !controllers.contains(controller) else { return }
+        controllers.add(controller)
+        let world = WebKitPageController.firnWorld
+        controller.add(self, contentWorld: world, name: SignInScript.handlerName)
+        controller.addUserScript(WKUserScript(
+            source: SignInScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world
+        ))
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.world.name == WebKitPageController.firnWorld.name,
+              let heard = SignInScript.parse(message.body),
+              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
+        page.heard(heard, from: message.frameInfo.securityOrigin)
+    }
+}
+
 // MARK: - New windows
 
 extension WebKitPageController: WKUIDelegate {
@@ -694,6 +764,8 @@ extension WebKitPageController: WKUIDelegate {
     /// close itself out from under someone.
     func webViewDidClose(_ webView: WKWebView) {
         guard isPopup else { return }
+        // A sign-in popup that closes itself has done its job.
+        offerPendingSignIn()
         onRequest?(.close)
     }
 

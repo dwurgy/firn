@@ -22,6 +22,33 @@ public struct PasswordSite: Hashable, Sendable {
     /// How the site reads to people: the host, plus the port if it isn't
     /// the usual one.
     public var name: String { port == 443 ? host : "\(host):\(port)" }
+
+    /// The site a `name` stands for, or nil if it isn't exactly one (read
+    /// back from a saved file, which may be damaged or edited).
+    init?(name: String) {
+        guard let url = URL(string: "https://\(name)/"), let site = PasswordSite(url), site.name == name else { return nil }
+        self = site
+    }
+}
+
+/// A sign-in a page just sent, as the engine noticed it: the username and
+/// password typed, and the exact site they were typed into (WebKit's own
+/// origin for the page, never what the page claimed). Kept in memory only.
+public struct SubmittedLogin: Hashable, Sendable {
+    public let site: PasswordSite
+    public let username: String
+    public let password: String
+
+    public init(site: PasswordSite, username: String, password: String) {
+        self.site = site
+        self.username = username
+        self.password = password
+    }
+}
+
+extension SubmittedLogin: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "SubmittedLogin(\(site.name), password hidden)" }
+    public var debugDescription: String { description }
 }
 
 /// One saved sign-in: a username and password for one site, in one data
@@ -41,6 +68,24 @@ public struct SavedLogin: Hashable, Sendable {
         self.password = password
         self.lastChangedAt = lastChangedAt
     }
+}
+
+/// Firn's offer to save (or update) a password just used on a tab, for its
+/// data store. In memory only, until answered.
+public struct PasswordOffer: Identifiable, Sendable {
+    public let id = UUID()
+    /// The tab it was used on (its opener, once a sign-in popup closes).
+    public internal(set) var tabID: UUID
+    public let spaceID: UUID
+    public let dataStoreID: UUID
+    public let login: SubmittedLogin
+    /// That username is saved with another password: "Update", not "Save".
+    public let isUpdate: Bool
+}
+
+extension PasswordOffer: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "PasswordOffer(\(login.site.name), password hidden)" }
+    public var debugDescription: String { description }
 }
 
 /// Never print a password by accident, in a log or a test failure.
@@ -105,6 +150,22 @@ public struct PasswordStore: Sendable {
     /// Every login in this data store, by site, then username.
     public func allLogins(in dataStoreID: UUID) throws -> [SavedLogin] {
         try sorted(vault.logins(in: dataStoreID, for: nil))
+    }
+
+    /// What to ask about a sign-in a page just sent: nil when there's nothing
+    /// to ask (that login is already saved, or what was sent can't be one),
+    /// `false` to save a new one, `true` to update the password saved for
+    /// that username. A sign-in with no username (a site's second step,
+    /// often) matching a saved password counts as saved. Throws if the
+    /// Keychain can't be read, so nothing is offered that couldn't be saved.
+    public func needsUpdate(for login: SubmittedLogin, in dataStoreID: UUID) throws -> Bool? {
+        guard !login.password.isEmpty, login.password.count <= Self.passwordLimit,
+              login.username.count <= Self.usernameLimit else { return nil }
+        let saved = try vault.logins(in: dataStoreID, for: login.site)
+        if saved.contains(where: { $0.password == login.password && (login.username.isEmpty || $0.username == login.username) }) {
+            return nil
+        }
+        return saved.contains { $0.username == login.username }
     }
 
     public func delete(_ login: SavedLogin) throws {

@@ -744,6 +744,12 @@ public final class BrowserStore {
         }
     }
 
+    /// A group as `newGroup` would make it in the current space, for the
+    /// sidebar to show while a tab is held over another; nothing is saved.
+    public func previewGroup() -> TabGroup {
+        TabGroup(spaceID: activeSpaceID, name: freeGroupName(in: activeSpaceID))
+    }
+
     /// "New Group", or "New Group 2", 3, … if this space already has one,
     /// so Move to Group never lists two the same (until groups name
     /// themselves). The lowest number not in use, as Finder does.

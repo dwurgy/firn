@@ -344,7 +344,11 @@ private struct TabList: View {
     /// The group being let go (Ungroup): its card is thawing away around its tabs.
     @State private var releasingGroupID: UUID?
     /// The group being closed: its frost lifts away, tabs and all.
-    @State private var closingGroupID: UUID?    /// Where the list's content sits in the sidebar (it moves as it
+    @State private var closingGroupID: UUID?
+    /// A tab held over a loose row: the group the two would make, shown
+    /// around that row before anything changes (see `holdOnto`).
+    @State private var preview: GroupPreview?
+    /// Where the list's content sits in the sidebar (it moves as it
     /// scrolls), so a tidied tab's icon knows where it starts. A plain box,
     /// so scrolling doesn't redraw anything.
     @State private var origin = PointBox()
@@ -437,6 +441,7 @@ private struct TabList: View {
         }
         .task(id: window.tidyQueue.map(\.id)) { await tidyAway() }
         .task(id: window.riseQueue.map(\.id)) { await riseBack() }
+        .task(id: drag?.onto) { await holdOnto() }
         // Hidden partway through, the rest simply go, or simply come back.
         .onDisappear {
             for tab in window.tidyQueue { store.drift(tab) }
@@ -537,6 +542,10 @@ private struct TabList: View {
     /// exact shape; now the glass and insets gather and the name line
     /// unfolds above. Once it has settled, the name field takes focus.
     private func form(_ group: TabGroup) {
+        if group.id == preview?.group.id, preview?.formed == false {
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.thaw) { preview?.formed = true }
+            return
+        }
         guard group.id == window.formingGroupID else { return }
         withAnimation(Theme.thaw) {
             window.formingGroupID = nil
@@ -655,14 +664,17 @@ private struct TabList: View {
     }
 
     private func card(_ group: TabGroup) -> some View {
-        let members = shownTabs(in: group)
+        let isPreview = group.id == preview?.group.id
+        let members = isPreview ? previewRows : shownTabs(in: group)
         return GroupCard(
             group: group,
             hasRows: !members.isEmpty,
             color: Theme.spaceColor(store.activeSpace.color),
             renaming: Bindable(window).renamingGroupID,
             foldLocked: foldLocked,
-            thawed: isThawed(group),            closing: group.id == closingGroupID,
+            thawed: isThawed(group) || (isPreview && preview?.formed == false),
+            closing: group.id == closingGroupID,
+            preview: isPreview,
             store: store,
             ungroup: { release(group) },
             close: { close(group) }
@@ -715,7 +727,7 @@ private struct TabList: View {
             // A tab held over it: a hint of the card the two would make.
             .background {
                 // It thaws as the dropped tab settles; the group's own frost forms next.
-                if drag?.onto == tab.id, drag?.settling == false {
+                if drag?.onto == tab.id, drag?.settling == false, preview?.formed != true {
                     FrostGlass(shape: RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous),
                                color: Theme.spaceColor(store.activeSpace.color))
                         .padding(.horizontal, Theme.tabRadius - Theme.panelRadius)
@@ -776,12 +788,30 @@ private struct TabList: View {
             list.insert(.group(groupDrag.group), at: min(groupDrag.target, list.count))
             return list
         }
-        guard let drag else { return list }
-        list.removeAll { $0.id == drag.tab.id }
-        if case let .list(position) = drag.target {
-            list.insert(.tab(drag.tab), at: min(position, list.count))
+        if let drag {
+            list.removeAll { $0.id == drag.tab.id }
+            // Held in a forming group, its slot is in the card instead.
+            if case let .list(position) = drag.target, !holdsPreview(drag) {
+                list.insert(.tab(drag.tab), at: min(position, list.count))
+            }
+        }
+        // The row it's held over, in the card the two would make.
+        if let preview, let index = list.firstIndex(where: { $0.id == preview.other.id }) {
+            list[index] = .group(preview.group)
         }
         return list
+    }
+
+    /// The forming group's rows: the row held over, and the dragged tab's
+    /// slot beside it while it's still held there.
+    private var previewRows: [FirnCore.Tab] {
+        guard let preview else { return [] }
+        guard let drag, holdsPreview(drag) else { return [preview.other] }
+        return preview.above ? [drag.tab, preview.other] : [preview.other, drag.tab]
+    }
+
+    private func holdsPreview(_ drag: TabDrag) -> Bool {
+        preview != nil && drag.onto == preview?.other.id
     }
 
     /// The tab rows on show (folded groups hide theirs; a split is one row,
@@ -1023,6 +1053,12 @@ private struct TabList: View {
     private func follow(_ moved: TabDrag) {
         var current = moved
         let y = current.location.y - current.grab.height + Theme.rowHeight / 2
+        // Once their group is forming, it holds until the tab clearly leaves
+        // the card, so the rows moving under it don't undo it.
+        if let preview, holdsPreview(current), let card = frames[preview.group.id], y > card.minY, y < card.maxY {
+            drag = current
+            return
+        }
         let onto = current.fromBasecamp ? nil : looseRow(at: y, for: current.tab)
         let target = onto.map { slot(beside: $0, for: current) } ?? target(at: y, for: current.tab)
         if target == current.target, onto?.id == current.onto {
@@ -1030,6 +1066,7 @@ private struct TabList: View {
         } else {
             current.target = target
             current.onto = onto?.id
+            if let preview, onto?.id != preview.other.id { thawPreview() }
             withAnimation(reduceMotion ? nil : Self.glide) { window.tabLift?.solid = onto != nil }
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
         }
@@ -1137,6 +1174,7 @@ private struct TabList: View {
             withAnimation(reshape) { window.tabLift?.isCard = true }
             current.target = currentTarget(of: current.tab)
             current.onto = nil
+            thawPreview()
             window.tabLift?.solid = false
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
         } else {
@@ -1169,6 +1207,7 @@ private struct TabList: View {
             current.overBasecamp = true
             current.target = currentTarget(of: current.tab)
             current.onto = nil
+            thawPreview()
             window.tabLift?.solid = false
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
             window.tabInBasecamp = TileInList(tab: joining)
@@ -1271,6 +1310,7 @@ private struct TabList: View {
     /// The lifted copy settles into its slot, then the tab really moves
     /// there (which looks like nothing, since it's already showing there).
     private func settle(_ dropped: TabDrag) {
+        if let preview, preview.formed, holdsPreview(dropped) { return settleIntoPreview(dropped, preview) }
         if dropped.onto != nil, !reduceMotion { return settleIntoGroup(dropped) }
         var current = dropped
         @MainActor func commit() {
@@ -1353,6 +1393,76 @@ private struct TabList: View {
         }
     }
 
+    /// Held over a loose row a moment, like folders on the iPhone's home
+    /// screen: the group the two would make starts forming around that
+    /// row, as New Group's frost does, with a slot for the tab beside it.
+    /// The store doesn't change until it's let go there. The card appears
+    /// thawed, in the rows' exact shape, and forms once it shows (`form`).
+    private func holdOnto() async {
+        guard let id = drag?.onto else { return }
+        try? await Task.sleep(for: .seconds(0.5))
+        guard !Task.isCancelled, preview == nil, let current = drag, current.onto == id, !current.settling,
+              let other = store.openTabs.first(where: { $0.id == id }) else { return }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            preview = GroupPreview(group: store.previewGroup(), other: other, above: isAbove(current.tab, other))
+        }
+    }
+
+    /// Moved off before letting go: the forming group thaws back, and the
+    /// list is as it was.
+    private func thawPreview() {
+        guard let id = preview?.group.id, preview?.formed == true else { return }
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.thaw) {
+            preview?.formed = false
+        } completion: {
+            // Thawed, the card looks just like the row it was around.
+            guard preview?.group.id == id, preview?.formed == false else { return }
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) {
+                preview = nil
+                frames[id] = nil
+            }
+        }
+    }
+
+    /// Let go in a forming group: the tab settles into its slot in the
+    /// card, then the store makes the group (`makeGroup`).
+    private func settleIntoPreview(_ dropped: TabDrag, _ preview: GroupPreview) {
+        guard !reduceMotion, let slot = frames[dropped.tab.id] else { return makeGroup(from: preview, adding: dropped.tab) }
+        window.isDraggingTab = false
+        withAnimation(Self.glide) {
+            drag?.settling = true
+            drag?.location.y = slot.minY + dropped.grab.height
+            window.tabLift?.isCard = false
+            window.tabLift?.solid = false
+            window.tabLift?.bare = true
+            window.tabLift?.settle = slot.offsetBy(dx: windowOrigin.point.x, dy: windowOrigin.point.y)
+        } completion: {
+            makeGroup(from: preview, adding: dropped.tab)
+        }
+    }
+
+    /// The store makes the group the preview showed, in its place at once
+    /// (the two look the same), and its name field opens.
+    private func makeGroup(from preview: GroupPreview, adding tab: FirnCore.Tab) {
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            self.preview = nil
+            frames[preview.group.id] = nil
+            drag = nil
+            window.tabLift = nil
+            window.tileInList = nil
+            guard store.openTabs.contains(where: { $0.id == tab.id }),
+                  let group = store.newGroup(with: preview.other) else { return }
+            store.move(tab, into: group, at: preview.above ? 0 : 1)
+            window.finishForming(group.id)
+        }
+    }
+
     /// A tab let go onto a loose row, with Reduce Motion: the two become a
     /// group in the order they sit, with a fade.
     private func group(_ tab: FirnCore.Tab, with other: FirnCore.Tab) {
@@ -1414,6 +1524,19 @@ private struct TabDrag {
     /// The loose row it's held over, to start a group with; the list
     /// holds still meanwhile (`target` stays where it was).
     var onto: UUID?
+}
+
+/// The group a tab held over a loose row would make with it (see
+/// `TabList.holdOnto`). Not in the store until it's let go there.
+private struct GroupPreview {
+    let group: TabGroup
+    /// The loose row it's held over.
+    let other: FirnCore.Tab
+    /// True if the dragged tab goes above `other`.
+    let above: Bool
+    /// False while it shows as just the rows, before its frost forms or
+    /// once it has thawed.
+    var formed = false
 }
 
 private struct GroupDrag {
@@ -1829,9 +1952,13 @@ private struct GroupCard<Rows: View>: View {
     /// True while it thaws away (Ungroup) or before its frost forms (a new
     /// group): no name line, insets, or glass, so its tabs sit exactly
     /// where they do as loose tabs.
-    let thawed: Bool    /// True while it lifts away (Close Group): it folds up under its name
+    let thawed: Bool
+    /// True while it lifts away (Close Group): it folds up under its name
     /// line and fades.
     let closing: Bool
+    /// True for a group still forming under a held tab: its name shows
+    /// faintly, and it can't be clicked yet.
+    var preview = false
     /// True for the copy a drag carries: solid, not frosted.
     var lifted = false
     let store: BrowserStore
@@ -1853,7 +1980,7 @@ private struct GroupCard<Rows: View>: View {
             header
                 // The name fades a hair ahead of a thaw, and a hair after
                 // its line opens as frost forms.
-                .opacity(thawed ? 0 : 1)
+                .opacity(thawed ? 0 : preview ? 0.6 : 1)
                 .animation(.easeOut(duration: 0.16).delay(thawed ? 0 : 0.14), value: thawed)
                 .frame(height: thawed ? 0 : Theme.groupHeaderHeight, alignment: .top)
                 .clipped()
@@ -1877,7 +2004,8 @@ private struct GroupCard<Rows: View>: View {
         // The clip snaps on (it matches the bounds then); only the height moves.
         .animation(nil) { $0.clipShape(Rectangle().inset(by: closing ? 0 : -Theme.rowHeight)) }
         .opacity(closing ? 0 : 1)
-        .allowsHitTesting(!thawed && !closing)
+        .allowsHitTesting(!thawed && !closing && !preview)
+        .accessibilityHidden(preview)
         .contextMenu {
             Button("Rename", action: startRenaming)
             Button("Ungroup", action: ungroup)

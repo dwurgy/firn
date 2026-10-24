@@ -533,6 +533,17 @@ private struct TabList: View {
         CGPoint(x: origin.point.x + frame.minX + Theme.rowPadding + 8, y: origin.point.y + frame.midY)
     }
 
+    /// Runs `body` once a `Theme.thaw` change has played. A fixed wait, not
+    /// the animation's completion: with tabs not loaded since launch, the
+    /// completion fired after 0.05s and the store's change that followed cut
+    /// the motion short (see docs/HISTORY.md).
+    private func afterThaw(_ body: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            body()
+        }
+    }
+
     /// A card without its frost: thawing away (Ungroup), or new and about to form.
     private func isThawed(_ group: TabGroup) -> Bool {
         group.id == releasingGroupID || group.id == window.formingGroupID
@@ -549,9 +560,8 @@ private struct TabList: View {
         guard group.id == window.formingGroupID else { return }
         withAnimation(Theme.thaw) {
             window.formingGroupID = nil
-        } completion: {
-            window.finishForming(group.id)
         }
+        afterThaw { window.finishForming(group.id) }
     }
 
     /// Ungroup, as frost thawing: the name line folds away, the card's insets
@@ -567,11 +577,7 @@ private struct TabList: View {
         withAnimation(Theme.thaw) {
             releasingGroupID = group.id
         }
-        // A fixed wait, not the animation's completion: with tabs not loaded
-        // since launch, the completion fired after 0.05s and the store's
-        // ungroup cut the thaw short (see docs/HISTORY.md).
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
+        afterThaw {
             var settled = Transaction()
             settled.disablesAnimations = true
             withTransaction(settled) {
@@ -592,7 +598,8 @@ private struct TabList: View {
         }
         withAnimation(Theme.thaw) {
             closingGroupID = group.id
-        } completion: {
+        }
+        afterThaw {
             // The empty slot's last few points close up softly.
             withAnimation(Self.glide) {
                 store.close(group)
@@ -640,7 +647,8 @@ private struct TabList: View {
         withAnimation(Theme.thaw) {
             if let folded { store.setFolded(folded, false) }
             drag?.target = target
-        } completion: {
+        }
+        afterThaw {
             // A group the tab left empty fades away.
             withAnimation(Self.glide) {
                 commit()

@@ -24,8 +24,23 @@ enum Preference {
     }
 }
 
-/// The Settings window (⌘, or Firn › Settings…): a few plain choices, no more.
+/// The Settings window (⌘, or Firn › Settings…): a few plain choices, and
+/// the saved passwords.
 struct SettingsView: View {
+    let store: BrowserStore
+
+    var body: some View {
+        TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            PasswordsSettings(store: store)
+                .tabItem { Label("Passwords", systemImage: "key") }
+        }
+    }
+}
+
+/// Settings › General: a few plain choices, no more.
+private struct GeneralSettings: View {
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(Preference.blocksContent) private var blocksContent = true

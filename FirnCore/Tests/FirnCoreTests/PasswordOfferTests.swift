@@ -139,6 +139,20 @@ struct PasswordOfferTests {
         #expect(store.passwordOffer == nil)
     }
 
+    @Test func removingANeverSiteAsksAgainInEverySharingSpace() {
+        let store = makeStore([personal])
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        signIn(on: tab, login())
+        store.neverSavePasswordsForOffer()
+        let family = store.addSpace(name: "Family", icon: "leaf", color: "sage", sharingWith: store.spaces[0])
+        #expect(store.neverSavePasswordSites(in: family.dataStoreID) == ["example.com"])
+        store.allowSavingPasswords(on: "example.com", in: family.dataStoreID)
+        #expect(store.neverSavePasswordSites(in: personal.dataStoreID).isEmpty)
+        let shared = store.openTab(URL(string: "https://example.com")!)
+        signIn(on: shared, login())
+        #expect(store.passwordOffer != nil)
+    }
+
     @Test func showingAnotherTabDropsTheOffer() {
         let store = makeStore()
         let a = store.openTab(URL(string: "https://example.com")!)

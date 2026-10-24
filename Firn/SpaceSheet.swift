@@ -368,7 +368,7 @@ struct ChoiceRow: View {
 
 /// The sheet's buttons. Firn's buttons are ink, never the system blue: the
 /// main one is filled with ink, the others a quiet wash.
-private struct SheetButtonStyle: ButtonStyle {
+struct SheetButtonStyle: ButtonStyle {
     let prominent: Bool
     @State private var hovering = false
 

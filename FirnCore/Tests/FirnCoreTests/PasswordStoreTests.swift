@@ -179,4 +179,44 @@ struct PasswordStoreTests {
         #expect(KeychainVault.login(from: item, in: personal, for: nil) == nil)
         #expect(KeychainVault.login(from: item, in: work, for: site("https://login.example.com")) == nil)
     }
+
+    // MARK: - Settings › Passwords
+
+    @Test func changingAPasswordKeepsTheUsername() throws {
+        let example = site("https://example.com")
+        try store.save(username: "dana", password: "old", for: example, in: personal)
+        try store.change(username: "dana", on: example, in: personal, toUsername: "dana", password: "new")
+        #expect(try store.password(for: "dana", on: example, in: personal) == "new")
+        #expect(try store.logins(for: example, in: personal).count == 1)
+    }
+
+    @Test func changingAUsernameMovesTheLogin() throws {
+        let example = site("https://example.com")
+        try store.save(username: "dana", password: "snow", for: example, in: personal)
+        try store.change(username: "dana", on: example, in: personal, toUsername: "dana@example.com", password: "snow")
+        #expect(try store.logins(for: example, in: personal).map(\.username) == ["dana@example.com"])
+    }
+
+    @Test func changingToAUsernameAlreadySavedIsRefused() throws {
+        let example = site("https://example.com")
+        try store.save(username: "dana", password: "one", for: example, in: personal)
+        try store.save(username: "sam", password: "two", for: example, in: personal)
+        #expect(throws: PasswordError.usernameTaken) {
+            try store.change(username: "dana", on: example, in: personal, toUsername: "sam", password: "one")
+        }
+        #expect(try store.password(for: "sam", on: example, in: personal) == "two")
+        #expect(throws: PasswordError.notALogin) {
+            try store.change(username: "dana", on: example, in: personal, toUsername: "dana", password: "")
+        }
+    }
+
+    @Test func readingAndDeletingOneLoginStaysInItsDataStore() throws {
+        let example = site("https://example.com")
+        try store.save(username: "dana", password: "home", for: example, in: personal)
+        try store.save(username: "dana", password: "office", for: example, in: work)
+        #expect(try store.password(for: "dana", on: example, in: work) == "office")
+        try store.delete(username: "dana", on: example, in: personal)
+        #expect(try store.password(for: "dana", on: example, in: personal) == nil)
+        #expect(try store.password(for: "dana", on: example, in: work) == "office")
+    }
 }

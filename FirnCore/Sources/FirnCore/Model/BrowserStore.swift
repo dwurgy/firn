@@ -1257,6 +1257,22 @@ public final class BrowserStore {
         spaces[index] = space
     }
 
+    /// The sites no space using this data store saves passwords for
+    /// (`PasswordSite.name`), by name.
+    public func neverSavePasswordSites(in dataStoreID: UUID) -> [String] {
+        Set(spaces.filter { $0.dataStoreID == dataStoreID }.flatMap(\.neverSavePasswordSites)).sorted()
+    }
+
+    /// Settings › Passwords' Remove: Firn offers to save passwords on the
+    /// site again, in every space using this data store (they share passwords).
+    public func allowSavingPasswords(on siteName: String, in dataStoreID: UUID) {
+        for index in spaces.indices
+        where spaces[index].dataStoreID == dataStoreID && spaces[index].neverSavePasswordSites.contains(siteName) {
+            spaces[index].neverSavePasswordSites.removeAll { $0 == siteName }
+            spaces[index].lastChangedAt = now()
+        }
+    }
+
     /// Whether any space using this data store said "Never" for the site.
     func neverSavesPasswords(on site: PasswordSite, in dataStoreID: UUID) -> Bool {
         spaces.contains { $0.dataStoreID == dataStoreID && $0.neverSavePasswordSites.contains(site.name) }

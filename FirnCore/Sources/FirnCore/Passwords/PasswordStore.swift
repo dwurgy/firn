@@ -127,6 +127,8 @@ public enum PasswordError: Error, Equatable {
     case notALogin
     /// The Keychain said no, with its status code (never what was saved).
     case keychain(Int32)
+    /// Changing a login's username to one already saved for that site.
+    case usernameTaken
 }
 
 /// Firn's saved passwords, each kept in its space's data store, so a
@@ -184,6 +186,39 @@ public struct PasswordStore: Sendable {
 
     public func delete(_ login: SavedLogin) throws {
         try vault.delete(login)
+    }
+
+    /// Deletes the login saved for this username (Settings › Passwords,
+    /// which holds only sites and usernames).
+    public func delete(username: String, on site: PasswordSite, in dataStoreID: UUID) throws {
+        try vault.delete(SavedLogin(dataStoreID: dataStoreID, site: site, username: username, password: ""))
+    }
+
+    /// The password saved for this username, read fresh from the vault, or
+    /// nil if it's gone.
+    public func password(for username: String, on site: PasswordSite, in dataStoreID: UUID) throws -> String? {
+        try vault.logins(in: dataStoreID, for: site).first { $0.username == username }?.password
+    }
+
+    /// Changes a saved login's username, password, or both. A username
+    /// already saved for the site is refused (`usernameTaken`) rather than
+    /// quietly replacing that login's password.
+    public func change(
+        username: String, on site: PasswordSite, in dataStoreID: UUID,
+        toUsername newUsername: String, password: String
+    ) throws {
+        guard !password.isEmpty, password.count <= Self.passwordLimit, newUsername.count <= Self.usernameLimit else {
+            throw PasswordError.notALogin
+        }
+        if newUsername != username,
+           try vault.logins(in: dataStoreID, for: site).contains(where: { $0.username == newUsername }) {
+            throw PasswordError.usernameTaken
+        }
+        // The new one first, so a failure never leaves the login gone.
+        try vault.save(SavedLogin(dataStoreID: dataStoreID, site: site, username: newUsername, password: password))
+        if newUsername != username {
+            try delete(username: username, on: site, in: dataStoreID)
+        }
     }
 
     /// Deletes every password in a data store no space uses any more.

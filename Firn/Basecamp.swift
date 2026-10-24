@@ -677,7 +677,7 @@ private struct ArrivalFlight: View, Animatable {
 
 /// The site's own icon, or until it's found (or if the site has none), a
 /// soft rounded square in a calm color with the site's first letter.
-private struct SiteMark: View {
+struct SiteMark: View {
     let site: String
     let icon: Data?
 

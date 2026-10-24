@@ -31,17 +31,12 @@ struct SettingsView: View {
     @AppStorage(Preference.blocksContent) private var blocksContent = true
     @AppStorage(Preference.searchEngine) private var searchEngine = SearchEngine.default
     @AppStorage(Preference.searchSuggestions) private var searchSuggestions = false
-    @AppStorage(Preference.addressBar) private var addressBar = AddressBarPlace.sidebar
 
     var body: some View {
         Form {
-            Section {
-                Picker("Address bar", selection: $addressBar) {
-                    Text("In the sidebar").tag(AddressBarPlace.sidebar)
-                    Text("At the top").tag(AddressBarPlace.top)
-                }
-                .pickerStyle(.radioGroup)
-            }
+            // The address bar's place ("In the sidebar" or "At the top") comes
+            // back here, and in the welcome, once the "At the top" look exists
+            // (David, 2026-10-23); until then the choice would change nothing.
             Section {
                 Picker("Search with", selection: $searchEngine) {
                     ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }

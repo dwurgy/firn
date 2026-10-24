@@ -186,19 +186,11 @@ enum Theme {
         }
     }
 
-    /// The welcome's card and controls over First light (styles.css,
-    /// "Welcome"): semi-clear frost, never blurred, since it's a large surface.
+    /// The welcome's own colors over First light; its card is the command
+    /// bar's glass (`CommandBarGlass`).
     enum Welcome {
-        static let card = Color(light: 0xFBFAF8, lightOpacity: 0.74, dark: 0x2B2826, darkOpacity: 0.66)
-        static let edge = Color(light: 0xFFFFFF, lightOpacity: 0.7, dark: 0xFFFAF5, darkOpacity: 0.1)
-        static let cardShadowNear = Color(light: 0x283C50, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.25)
-        static let cardShadowFar = Color(light: 0x283C50, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.35)
-        static let tile = Color(light: 0xFFFFFF, lightOpacity: 0.66, dark: 0xFFFAF5, darkOpacity: 0.07)
-        static let tileEdge = Color(light: 0x3C2814, lightOpacity: 0.1, dark: 0xFFFAF5, darkOpacity: 0.1)
         /// The little window drawings' bars.
         static let pill = Color(light: 0xFFFFFF, lightOpacity: 0.6, dark: 0xFFFAF5, darkOpacity: 0.12)
-        /// The chosen half of a Yes / No switch.
-        static let segmentShadow = Color(light: 0x1E140A, lightOpacity: 0.12, dark: 0x000000, darkOpacity: 0.3)
         /// The Hello screen's mark: glacier, lighter at the top.
         static let markTop = Color(light: 0x9DB7C8, dark: 0x9DB7C8)
         static let markBottom = Color(light: 0x6E98B2, dark: 0x6E98B2)

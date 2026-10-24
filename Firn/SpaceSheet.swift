@@ -260,7 +260,8 @@ struct SpaceSheet: View {
 }
 
 /// One of the space colors: a soft dot, ringed in its own color when chosen.
-private struct ColorSwatch: View {
+/// The welcome's space step uses it too, so both look the same.
+struct ColorSwatch: View {
     let name: String
     let isSelected: Bool
     let action: () -> Void
@@ -293,7 +294,7 @@ private struct ColorSwatch: View {
 
 /// One icon to pick: ink until chosen, then the space's color on a soft
 /// wash of it, as in the approved draft.
-private struct IconChoice: View {
+struct IconChoice: View {
     let icon: SpaceIcon
     let color: Color
     let isSelected: Bool
@@ -324,7 +325,7 @@ private struct IconChoice: View {
 }
 
 /// A radio-style row: a ring that fills when chosen, a title, and a quiet caption.
-private struct ChoiceRow: View {
+struct ChoiceRow: View {
     let isSelected: Bool
     let title: Text
     let caption: String

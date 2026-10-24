@@ -17,44 +17,57 @@ struct WelcomeLayer: View {
 }
 
 /// The welcome, the first time Firn opens (and from Help): the First light
-/// scene and a few short steps. Ported from the Electron app
-/// (docs/electron-welcome: Welcome.tsx and styles.css, "Welcome"), updated
-/// for the native Firn (plan in docs/HISTORY.md, Phase 6). Every choice
-/// applies right away; from the space step on, the snow takes the space's
-/// color, so choices show live. Esc or "Skip setup" leaves it at any point.
+/// scene and a few short steps. The steps and words come from the Electron
+/// app (docs/electron-welcome), updated for the native Firn (plan in
+/// docs/HISTORY.md, Phase 6); the card, buttons, and controls are the Mac's
+/// own: the command bar's glass, glass buttons, and the space sheet's pickers.
+/// Every choice applies right away; from the space step on, the snow and the
+/// card take the space's color, so choices show live. Esc or "Skip setup"
+/// leaves it at any point.
 private struct Welcome: View {
     let window: WindowModel
     @State private var step = WelcomeStep.hello
     @State private var name = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: BrowserStore { window.store }
     private var space: Space { store.activeSpace }
     private var steps: [WelcomeStep] { WelcomeStep.allCases }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var isLast: Bool { index == steps.count - 1 }
+    /// Glacier until the space step, then the space's own.
+    private var colorName: String { index >= steps.firstIndex(of: .space)! ? space.color : "glacier" }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // The sky and sunrise are always Firn's own; the snow takes the
             // space's color from the space step on.
-            FirstLightScene(spaceColor: index >= steps.firstIndex(of: .space)! ? space.color : "glacier")
+            FirstLightScene(spaceColor: colorName)
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
-            VStack(spacing: 0) {
-                if step == .hello {
-                    HelloScreen(next: next)
-                        .modifier(StepEntrance(duration: 0.3))
-                } else {
-                    StepDots(count: steps.count, current: index)
-                        .padding(.bottom, 22)
-                    card
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    if step == .hello {
+                        HelloScreen(next: next)
+                            .modifier(StepEntrance(duration: 0.3))
+                    } else {
+                        StepDots(count: steps.count - 1, current: index - 1)
+                            .padding(.bottom, 18)
+                        card
+                    }
                 }
+                // Hello sits a little above the middle, clear of the snow. The
+                // cards hang from one fixed line, so the dots and titles stay
+                // put while each step's card grows or shrinks below them.
+                .padding(EdgeInsets(top: step == .hello ? 24 : max(24, proxy.size.height * 0.18),
+                                    leading: 24, bottom: 134, trailing: 24))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: step == .hello ? .center : .top)
             }
-            // A little above the middle, clear of the snow.
-            .padding(EdgeInsets(top: 24, leading: 24, bottom: 134, trailing: 24))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            SkipButton(action: finish)
-                .padding(.leading, 28)
+            Button("Skip setup", action: finish)
+                .modifier(WelcomeButton(prominent: false))
+                .controlSize(.large)
+                .keyboardShortcut(.cancelAction)
+                .padding(.leading, 24)
                 .padding(.bottom, 24)
         }
         .foregroundStyle(Theme.ink)
@@ -65,39 +78,42 @@ private struct Welcome: View {
         .accessibilityAddTraits(.isModal)
     }
 
-    /// The steps after Hello: a frosted card, its words, and Back and Continue.
+    /// The steps after Hello: the command bar's glass, its words, and Back and Continue.
     private var card: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 switch step {
                 case .hello: EmptyView()
-                case .address: AddressStep(accent: Theme.spaceColor(space.color))
-                case .search: SearchStep(accent: Theme.spaceColor(space.color))
+                case .address: AddressStep(colorName: colorName)
+                case .search: SearchStep(accent: Theme.spaceColor(colorName))
                 case .space: SpaceStep(store: store, name: $name)
                 }
             }
             // Each step is new, so it glides in; the last one simply goes.
             .id(step)
             .modifier(StepEntrance(duration: 0.22))
-            HStack {
-                QuietButton(title: "Back", action: back)
+            HStack(spacing: 8) {
+                Button("Back", action: back)
+                    .modifier(WelcomeButton(prominent: false))
                 Spacer()
-                InkButton(title: isLast ? "Start browsing" : "Continue", height: 42, padding: 20, size: 14, action: next)
+                Button(isLast ? "Start Browsing" : "Continue", action: next)
+                    .modifier(WelcomeButton(prominent: true))
+                    .keyboardShortcut(.defaultAction)
             }
-            .padding(.top, 30)
+            .controlSize(.large)
+            .padding(.top, 28)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(EdgeInsets(top: 40, leading: 44, bottom: 30, trailing: 44))
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-            shape
-                .fill(Theme.Welcome.card)
-                .shadow(color: Theme.Welcome.cardShadowNear, radius: 1, y: 1)
-                .shadow(color: Theme.Welcome.cardShadowFar, radius: 24, y: 18)
-                .overlay { shape.strokeBorder(Theme.Welcome.edge, lineWidth: 1) }
-        }
-        .frame(maxWidth: 620)
+        .padding(32)
+        .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
+        .background {
+            CommandBarGlass(shape: shape, color: Theme.spaceColor(colorName))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: colorName)
+        }
+        .clipShape(shape)
+        .shadow(color: Theme.shadowPeek, radius: 24, y: 8)
+        .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)
     }
 
     private func saveName() {
@@ -113,7 +129,7 @@ private struct Welcome: View {
         step = steps[max(0, index - 1)]
     }
 
-    /// "Start browsing", Skip, or Esc. The full finish ("Welcome in.") is a later step.
+    /// "Start Browsing", Skip, or Esc. The full finish ("Welcome in.") is a later step.
     private func finish() {
         saveName()
         window.closeWelcome()
@@ -124,6 +140,10 @@ private struct Welcome: View {
 /// and tips come in later steps (Phase 6, steps 3 and 4).
 private enum WelcomeStep: CaseIterable {
     case hello, address, search, space
+
+    /// The address step waits for the "At the top" look (David, 2026-10-23):
+    /// until then the choice would change nothing. Its view is kept, ready.
+    static var allCases: [WelcomeStep] { [.hello, .search, .space] }
 }
 
 // MARK: - Steps
@@ -140,52 +160,48 @@ private struct HelloScreen: View {
                 startPoint: UnitPoint(x: 0.33, y: 0.03), endPoint: UnitPoint(x: 0.67, y: 0.97)
             )
             .mask { Image("FirnMark").resizable().scaledToFit() }
-            .frame(width: 86, height: 86)
+            .frame(width: 80, height: 80)
             .shadow(color: Theme.Welcome.markShadow, radius: 12, y: 10)
-            .padding(.bottom, 26)
+            .padding(.bottom, 24)
             .accessibilityHidden(true)
             Text("Welcome to Firn")
-                .font(Theme.fraunces(72, weight: 360))
-                .tracking(-1.08)
+                .font(Theme.fraunces(64, weight: 360))
+                .tracking(-0.9)
                 .accessibilityAddTraits(.isHeader)
             Text("A calm place for the web. Ads and trackers are blocked, and Firn never tracks you. Let’s set up a few things; it takes a minute, and you can change any of it later.")
-                .font(.system(size: 19))
-                .lineSpacing(7)
+                .font(.system(size: 17))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.muted)
-                .frame(maxWidth: 520)
+                .frame(maxWidth: 480)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 20)
-                .padding(.bottom, 34)
-            InkButton(title: "Let’s begin", height: 50, padding: 26, size: 16, action: next)
+                .padding(.top, 16)
+                .padding(.bottom, 32)
+            Button(action: next) {
+                // Wide enough to answer the big heading above it.
+                Text("Let’s Begin").frame(minWidth: 130)
+            }
+                .modifier(WelcomeButton(prominent: true))
+                .controlSize(.extraLarge)
+                .keyboardShortcut(.defaultAction)
         }
         .multilineTextAlignment(.center)
     }
 }
 
-/// Where the address bar goes: two little pictures of the window.
+/// Where the address bar goes: two little pictures of the window, picked
+/// like System Settings' Appearance.
 private struct AddressStep: View {
-    let accent: Color
+    let colorName: String
     @AppStorage(Preference.addressBar) private var place = AddressBarPlace.sidebar
 
     var body: some View {
         StepHeading(title: "Where should the address bar go?",
                     words: "You can change this anytime in Settings.")
-        HStack(spacing: 14) {
-            look(.sidebar, "In the sidebar", "Everything in one calm place, with more room for the page.")
-            look(.top, "At the top", "A bar across the top of the window.")
-        }
-    }
-
-    private func look(_ value: AddressBarPlace, _ title: String, _ note: String) -> some View {
-        ChoiceTile(isOn: place == value, accent: accent, action: { place = value }) {
-            LookPicture(top: value == .top)
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .padding(.top, 12)
-            Text(note)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.muted)
-                .padding(.top, 2)
+        HStack(alignment: .top, spacing: 20) {
+            LookChoice(top: false, title: "In the sidebar", note: "Everything in one calm place, with more room for the page.",
+                       isOn: place == .sidebar, colorName: colorName) { place = .sidebar }
+            LookChoice(top: true, title: "At the top", note: "A bar across the top of the window.",
+                       isOn: place == .top, colorName: colorName) { place = .top }
         }
     }
 }
@@ -207,38 +223,39 @@ private struct SearchStep: View {
     var body: some View {
         StepHeading(title: "Which search do you like?",
                     words: "What you type in the address bar searches here. More choices are in Settings.")
-        HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(Self.engines, id: \.0) { choice, note in
-                ChoiceTile(isOn: engine == choice, accent: accent, action: { engine = choice }) {
-                    Text(choice.name)
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(note)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.muted)
-                        .padding(.top, 2)
-                }
+                ChoiceRow(isSelected: engine == choice, title: Text(choice.name), caption: note) { engine = choice }
             }
         }
+        // The rows' own padding lines their text up with the words above.
+        .padding(.horizontal, -8)
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Show suggestions as you type?")
-                    .font(.system(size: 13))
+                Text("Show suggestions as you type")
+                    .font(Theme.tabFont)
                 Text("Your search engine sees what you type.")
-                    .font(.system(size: 12))
+                    .font(Theme.hintFont)
                     .foregroundStyle(Theme.muted)
             }
             Spacer(minLength: 0)
-            YesNoSwitch(isOn: $suggestions, label: "Show suggestions as you type")
+            Toggle("Show suggestions as you type", isOn: $suggestions)
+                .toggleStyle(.switch)
+                // The space's color, not the system blue.
+                .tint(accent)
+                .labelsHidden()
         }
-        .padding(.top, 16)
+        .padding(.top, 18)
     }
 }
 
 /// The first space: each space is its own browser. Its name, color, and
-/// icon change as they're picked; the snow behind follows the color.
+/// icon change as they're picked, with the space sheet's own pickers; the
+/// card and the snow behind follow the color.
 private struct SpaceStep: View {
     let store: BrowserStore
     @Binding var name: String
+    @FocusState private var nameFocused: Bool
 
     private var space: Space { store.activeSpace }
     private var color: Color { Theme.spaceColor(space.color) }
@@ -246,36 +263,62 @@ private struct SpaceStep: View {
     var body: some View {
         StepHeading(title: "Each space is its own browser",
                     words: "Like Work and Personal: each keeps its own tabs, sign-ins, and history. Start with this one; you can add more later.")
-        HStack(spacing: 12) {
-            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 18, color: color)
-            TextField("", text: $name)
-                .textFieldStyle(.plain)
-                .font(.system(size: 17))
-                .accessibilityLabel("Space name")
-                .onChange(of: name) { if name.count > 40 { name = String(name.prefix(40)) } }
-                .onSubmit { store.updateSpace(space, name: name, icon: space.icon, color: space.color) }
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 50)
-        .background(tile(cornerRadius: 12, edge: Theme.Welcome.tileEdge))
-        HStack(spacing: 12) {
-            ForEach(Theme.spaceColorNames, id: \.self) { choice in
-                ColorDot(name: choice, isOn: space.color == choice) {
-                    store.updateSpace(space, name: space.name, icon: space.icon, color: choice)
+        VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+            section("Name") {
+                HStack(spacing: 8) {
+                    SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 16, color: color)
+                        .accessibilityHidden(true)
+                    TextField(Space.defaultName, text: $name)
+                        .textFieldStyle(.plain)
+                        .font(Theme.tabFont)
+                        .focused($nameFocused)
+                        .accessibilityLabel("Space name")
+                        .onChange(of: name) { if name.count > 40 { name = String(name.prefix(40)) } }
+                        .onSubmit { store.updateSpace(space, name: name, icon: space.icon, color: space.color) }
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous).fill(Theme.hover)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                        .strokeBorder(nameFocused ? Theme.frost : .clear, lineWidth: 2)
                 }
             }
-        }
-        .padding(.top, 20)
-        .padding(.bottom, 18)
-        // Two even rows of eight.
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(38), spacing: 8), count: 8), alignment: .leading, spacing: 8) {
-            ForEach(SpaceIcon.allCases, id: \.self) { icon in
-                IconTile(icon: icon, color: color, isOn: SpaceIcon(stored: space.icon) == icon) {
-                    store.updateSpace(space, name: space.name, icon: icon.rawValue, color: space.color)
+            section("Color") {
+                HStack(spacing: 6) {
+                    ForEach(Theme.spaceColorNames, id: \.self) { choice in
+                        ColorSwatch(name: choice, isSelected: space.color == choice) {
+                            store.updateSpace(space, name: space.name, icon: space.icon, color: choice)
+                        }
+                    }
                 }
+                .padding(.leading, -4)
+            }
+            section("Icon") {
+                // Two even rows of eight.
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
+                    ForEach(SpaceIcon.allCases, id: \.self) { icon in
+                        IconChoice(icon: icon, color: color, isSelected: SpaceIcon(stored: space.icon) == icon) {
+                            store.updateSpace(space, name: space.name, icon: icon.rawValue, color: space.color)
+                        }
+                    }
+                }
+                .fixedSize()
+                .padding(.leading, -6)
             }
         }
-        .fixedSize()
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(Theme.labelFont)
+                .foregroundStyle(Theme.muted)
+                .accessibilityAddTraits(.isHeader)
+            content()
+        }
     }
 }
 
@@ -288,20 +331,20 @@ private struct StepHeading: View {
 
     var body: some View {
         Text(title)
-            .font(Theme.fraunces(34, weight: 380))
+            .font(Theme.fraunces(28, weight: 360))
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.bottom, 10)
+            .padding(.bottom, 8)
             .accessibilityAddTraits(.isHeader)
         Text(words)
-            .font(.system(size: 16))
-            .lineSpacing(6)
+            .font(.system(size: 14))
+            .lineSpacing(2)
             .foregroundStyle(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.bottom, 26)
+            .padding(.bottom, 22)
     }
 }
 
-/// Where the step is: a dot for each, the current one drawn out long.
+/// Where the step is: a dot for each, as a page control draws them.
 private struct StepDots: View {
     let count: Int
     let current: Int
@@ -310,10 +353,10 @@ private struct StepDots: View {
     var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == current ? Theme.ink : Theme.faint)
-                    .opacity(index == current ? 0.75 : 0.45)
-                    .frame(width: index == current ? 22 : 7, height: 7)
+                Circle()
+                    .fill(Theme.ink)
+                    .opacity(index == current ? 0.7 : 0.22)
+                    .frame(width: 7, height: 7)
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: current)
@@ -338,36 +381,45 @@ private struct StepEntrance: ViewModifier {
     }
 }
 
-/// The welcome's frosted tiles: a light tile with a fine edge.
-private func tile(cornerRadius: CGFloat, edge: Color, width: CGFloat = 1) -> some View {
-    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    return shape
-        .fill(Theme.Welcome.tile)
-        .overlay {
-            // A 2pt ring sits half outside, as CSS's border plus a 1px shadow.
-            shape.inset(by: width > 1 ? -1 : 0).strokeBorder(edge, lineWidth: width)
-        }
-}
-
-/// One choice on a light tile; the chosen one gets a 2pt ring in the space's color.
-private struct ChoiceTile<Content: View>: View {
+/// One look to pick: its picture (always edged, so it stands off the card),
+/// ringed in the space's color when chosen and faintly on hover, and its
+/// name and a few words below.
+private struct LookChoice: View {
+    let top: Bool
+    let title: String
+    let note: String
     let isOn: Bool
-    let accent: Color
+    let colorName: String
     let action: () -> Void
-    @ViewBuilder let content: Content
     @State private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let picture = RoundedRectangle(cornerRadius: 8, style: .continuous)
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) { content }
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(14)
-                .background(tile(cornerRadius: 14, edge: isOn ? accent : Theme.Welcome.tileEdge,
-                                 width: isOn || hovering ? 2 : 1))
-                .contentShape(Rectangle())
+            VStack(spacing: 0) {
+                LookPicture(top: top, colorName: colorName)
+                    .clipShape(picture)
+                    .overlay { picture.strokeBorder(Theme.faint.opacity(0.4), lineWidth: 1) }
+                    .shadow(color: Theme.shadowSoft, radius: 2, y: 1)
+                    .padding(4)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(isOn ? Theme.spaceColor(colorName) : Theme.faint.opacity(hovering ? 0.45 : 0),
+                                          lineWidth: 2.5)
+                    }
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .padding(.top, 10)
+                Text(note)
+                    .font(Theme.hintFont)
+                    .foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -378,10 +430,12 @@ private struct ChoiceTile<Content: View>: View {
     }
 }
 
-/// A small drawing of Firn's window: the address bar in the sidebar, or in
-/// a bar along the top (Welcome.tsx, `LookPicture`, on a 200 × 120 grid).
+/// A small drawing of Firn's window, on a 200 × 120 grid: the traffic
+/// lights, the address bar in the sidebar or in a bar along the top, a few
+/// tabs, and the page, on the frame tinted by the space as Firn's own is.
 private struct LookPicture: View {
     let top: Bool
+    let colorName: String
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -393,184 +447,91 @@ private struct LookPicture: View {
                 let box = CGRect(x: x * scale, y: y * scale, width: w * scale, height: h * scale)
                 context.fill(Path(roundedRect: box, cornerRadius: r * scale), with: .color(color))
             }
-            rect(0, 0, 200, 120, 10, Theme.frame)
-            if top {
-                rect(92, 7, 64, 11, 5.5, Theme.Welcome.pill)
-                rect(54, 25, 140, 89, 6, Theme.page)
-            } else {
-                rect(8, 10, 40, 11, 5.5, Theme.Welcome.pill)
-                rect(54, 6, 140, 108, 6, Theme.page)
+            rect(0, 0, 200, 120, 0, Theme.frame)
+            rect(0, 0, 200, 120, 0, Theme.frameTint(colorName))
+            // The traffic lights never move between the two looks.
+            for x in [11.0, 19, 27] {
+                let dot = CGRect(x: (x - 2.6) * scale, y: (12 - 2.6) * scale, width: 5.2 * scale, height: 5.2 * scale)
+                context.fill(Path(ellipseIn: dot), with: .color(Theme.faint.opacity(0.7)))
             }
-            for (y, w) in [(30.0, 38.0), (42, 30), (54, 34)] { rect(8, y, w, 7, 3.5, Theme.Welcome.pill) }
+            if top {
+                rect(92, 6.5, 64, 11, 5.5, Theme.Welcome.pill)
+                rect(54, 25, 140, 89, 6, Theme.page)
+                for (y, w) in [(30.0, 38.0), (42, 30), (54, 34)] { rect(8, y, w, 7, 3.5, Theme.Welcome.pill) }
+            } else {
+                rect(8, 22, 40, 10, 5, Theme.Welcome.pill)
+                rect(54, 6, 140, 108, 6, Theme.page)
+                for (y, w) in [(40.0, 38.0), (52, 30), (64, 34)] { rect(8, y, w, 7, 3.5, Theme.Welcome.pill) }
+            }
         }
         .aspectRatio(200 / 120, contentMode: .fit)
         .accessibilityHidden(true)
     }
 }
 
-/// Yes or No, side by side; the chosen half lifts to the page color.
-private struct YesNoSwitch: View {
-    @Binding var isOn: Bool
-    let label: String
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// The welcome's buttons: the system's glass buttons on macOS 26 (the main
+/// one ink-tinted, since Firn's buttons are ink, never the system blue), and
+/// a capsule of the same weight before. Size comes from `.controlSize`.
+private struct WelcomeButton: ViewModifier {
+    let prominent: Bool
 
-    var body: some View {
-        HStack(spacing: 2) {
-            half("Yes", value: true)
-            half("No", value: false)
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            if prominent {
+                content
+                    .buttonStyle(.glassProminent)
+                    .tint(Theme.ink)
+                    .foregroundStyle(Theme.page)
+            } else {
+                content.buttonStyle(.glass)
+            }
+        } else {
+            content.buttonStyle(CapsuleButtonStyle(prominent: prominent))
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.hover))
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isOn)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(label)
+    }
+}
+
+/// macOS 14 and 15: ink for the main button, a frosted capsule for the rest.
+private struct CapsuleButtonStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        CapsuleButton(configuration: configuration, prominent: prominent)
+    }
+}
+
+private struct CapsuleButton: View {
+    let configuration: ButtonStyleConfiguration
+    let prominent: Bool
+    @State private var hovering = false
+    @Environment(\.controlSize) private var controlSize
+
+    private var height: CGFloat {
+        switch controlSize {
+        case .extraLarge: 44
+        case .large: 32
+        default: 26
+        }
     }
 
-    private func half(_ title: String, value: Bool) -> some View {
-        let chosen = isOn == value
-        return Button { isOn = value } label: {
-            Text(title)
-                .font(.system(size: 12))
-                .foregroundStyle(chosen ? Theme.ink : Theme.muted)
-                .padding(.horizontal, 12)
-                .frame(height: 26)
-                .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(chosen ? Theme.page : .clear)
-                        .shadow(color: chosen ? Theme.Welcome.segmentShadow : .clear, radius: 1.5, y: 1)
+    var body: some View {
+        let shape = Capsule()
+        configuration.label
+            .font(.system(size: controlSize == .extraLarge ? 15 : 13, weight: .medium))
+            .foregroundStyle(prominent ? Theme.page : Theme.ink)
+            .padding(.horizontal, height * 0.55)
+            .frame(height: height)
+            .background {
+                if prominent {
+                    shape.fill(Theme.ink.opacity(configuration.isPressed ? 0.8 : hovering ? 0.9 : 1))
+                } else {
+                    shape.fill(.regularMaterial)
+                        .overlay { shape.fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear) }
+                        .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
                 }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(chosen ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// A space color to pick; the chosen one gets an ink ring, a little apart.
-private struct ColorDot: View {
-    let name: String
-    let isOn: Bool
-    let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button(action: action) {
-            Circle()
-                .fill(Theme.spaceColor(name))
-                .frame(width: 30, height: 30)
-                .overlay {
-                    Circle()
-                        .strokeBorder(Theme.ink.opacity(isOn ? 1 : 0), lineWidth: 2)
-                        .padding(-5)
-                }
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isOn)
-        .help(name.capitalized)
-        .accessibilityLabel(name.capitalized)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// A space icon to pick, in the space's color on a light tile.
-private struct IconTile: View {
-    let icon: SpaceIcon
-    let color: Color
-    let isOn: Bool
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button(action: action) {
-            SpaceIconView(icon: icon, size: 18, color: color)
-                .frame(width: 38, height: 38)
-                .background(tile(cornerRadius: 10, edge: isOn ? color : Theme.Welcome.tileEdge,
-                                 width: isOn || hovering ? 2 : 1))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isOn)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: color)
-        .help(icon.spokenName)
-        .accessibilityLabel(icon.spokenName)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// The welcome's main button: ink, dark on light and light on dark. Return presses it.
-private struct InkButton: View {
-    let title: String
-    let height: CGFloat
-    let padding: CGFloat
-    let size: CGFloat
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(Theme.page)
-                .padding(.horizontal, padding)
-                .frame(height: height)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink))
-                .opacity(hovering ? 0.88 : 1)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.defaultAction)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.2), value: hovering)
-    }
-}
-
-/// Back: quiet words, a warm wash on hover.
-private struct QuietButton: View {
-    let title: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.muted)
-                .padding(.horizontal, 10)
-                .frame(height: 42)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.leading, -10)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.2), value: hovering)
-    }
-}
-
-/// "Skip setup": a small frosted pill, bottom left, on every step. Esc presses it.
-private struct SkipButton: View {
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text("Skip setup")
-                .font(.system(size: 13))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background {
-                    Capsule().fill(Theme.Welcome.card)
-                        .overlay { Capsule().strokeBorder(Theme.Welcome.edge, lineWidth: 1) }
-                }
-                .opacity(hovering ? 0.85 : 1)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.cancelAction)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.2), value: hovering)
+            }
+            .contentShape(shape)
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: hovering)
     }
 }

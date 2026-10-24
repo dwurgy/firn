@@ -1054,9 +1054,18 @@ private struct TabList: View {
         var current = moved
         let y = current.location.y - current.grab.height + Theme.rowHeight / 2
         // Once their group is forming, it holds until the tab clearly leaves
-        // the card, so the rows moving under it don't undo it.
+        // the card, so the rows moving under it don't undo it. Inside, its
+        // slot follows it past the other tab's middle, as reordering does.
         if let preview, holdsPreview(current), let card = frames[preview.group.id], y > card.minY, y < card.maxY {
-            drag = current
+            let above = frames[preview.other.id].map { y < $0.midY } ?? preview.above
+            if above == preview.above {
+                drag = current
+            } else {
+                withAnimation(reduceMotion ? nil : Self.glide) {
+                    self.preview?.above = above
+                    drag = current
+                }
+            }
             return
         }
         let onto = current.fromBasecamp ? nil : looseRow(at: y, for: current.tab)
@@ -1532,8 +1541,8 @@ private struct GroupPreview {
     let group: TabGroup
     /// The loose row it's held over.
     let other: FirnCore.Tab
-    /// True if the dragged tab goes above `other`.
-    let above: Bool
+    /// True if the dragged tab goes above `other`; it follows the tab.
+    var above: Bool
     /// False while it shows as just the rows, before its frost forms or
     /// once it has thawed.
     var formed = false

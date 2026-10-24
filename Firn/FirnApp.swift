@@ -16,13 +16,19 @@ struct FirnApp: App {
         let session = file.load()
         let store = BrowserStore(
             restoring: session, defaultSpaces: [FirstSpace.space],
-            makePage: BrowserEngine.makePage, removeData: BrowserEngine.removeData
+            makePage: BrowserEngine.makePage,
+            removeData: { id in
+                BrowserEngine.removeData(for: id)
+                Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
+            }
         )
-        // Erase what's left of spaces deleted while their pages were open.
-        // Only after a session really loaded: a fresh start after a damaged
+        // Erase what's left of deleted spaces: data their open pages still
+        // held, and passwords the Keychain couldn't be reached for. Only after a session really loaded: a fresh start after a damaged
         // file doesn't know which spaces exist, so it erases nothing.
         if let session, !session.spaces.isEmpty {
-            BrowserEngine.removeUnusedData(keeping: Set(store.spaces.map(\.dataStoreID)))
+            let inUse = Set(store.spaces.map(\.dataStoreID))
+            BrowserEngine.removeUnusedData(keeping: inUse)
+            Task.detached(priority: .utility) { try? PasswordStore.keychain.removeUnused(keeping: inUse) }
         }
         let window = WindowModel(store: store, restoring: session?.window)
         // The welcome, the very first time (no session yet).

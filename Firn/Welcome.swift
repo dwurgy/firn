@@ -16,6 +16,61 @@ struct WelcomeLayer: View {
     }
 }
 
+/// The welcome's finish: the sidebar and the page wait low behind the snow,
+/// at 86% of their size, then rise into place (the approved source's
+/// `fl-browser-rise`). Transforms only, from the top's middle; at rest
+/// they're plain identities.
+struct WelcomeLift: ViewModifier {
+    let finish: WindowModel.WelcomeFinish?
+    @State private var height: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        let low = finish == .begun
+        content
+            .scaleEffect(low ? 0.86 : 1, anchor: .top)
+            .offset(y: low ? height * 0.96 : 0)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+    }
+}
+
+/// Behind the real window while the welcome is open: First light's sky,
+/// sun, and flakes, "Welcome in.", and the warm shadow the window casts as
+/// it rises. All of it stays under the window until the finish lowers it;
+/// the snow stays in front, in the welcome (`FirstLightScene.Part`).
+struct WelcomeBackdrop: View {
+    let window: WindowModel
+
+    var body: some View {
+        if window.showsWelcome {
+            let finishing = window.welcomeFinish != nil
+            GeometryReader { proxy in
+                ZStack(alignment: .top) {
+                    FirstLightScene(spaceColor: "glacier", part: .back, sunRises: finishing)
+                    // "Welcome in." sits in the sky; the window rises over it.
+                    Text("Welcome in.")
+                        .font(Theme.fraunces(44, weight: 360))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.top, proxy.size.height * 0.15)
+                        .opacity(finishing ? 1 : 0)
+                        .animation(.easeOut(duration: 0.4).delay(0.2), value: finishing)
+                    // The rising window's frame: Firn's frame color in the
+                    // space's tint, with a panel's corners; it gives way to
+                    // the real glass as the snow fades.
+                    let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+                    shape.fill(Theme.frame)
+                        .overlay { SpaceTint(color: window.store.activeSpace.color).clipShape(shape) }
+                        .shadow(color: Theme.shadowPeek.opacity(0.64), radius: 4, y: 2)
+                        .shadow(color: Theme.shadowPeek, radius: 24, y: 18)
+                        .opacity(window.welcomeFinish == .begun || window.welcomeFinish == .rising ? 1 : 0)
+                        .modifier(WelcomeLift(finish: window.welcomeFinish))
+                }
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+        }
+    }
+}
+
 /// The welcome, the first time Firn opens (and from Help): the First light
 /// scene and a few short steps. The steps and words come from the Electron
 /// app (docs/electron-welcome), updated for the native Firn (plan in
@@ -37,6 +92,7 @@ private struct Welcome: View {
 
     private var store: BrowserStore { window.store }
     private var space: Space { store.activeSpace }
+    private var finish: WindowModel.WelcomeFinish? { window.welcomeFinish }
     private var steps: [WelcomeStep] { WelcomeStep.allCases.filter { $0 != .defaultBrowser || offersDefault } }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var isLast: Bool { index == steps.count - 1 }
@@ -46,8 +102,10 @@ private struct Welcome: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // The sky and sunrise are always Firn's own; the snow takes the
-            // space's color from the space step on.
-            FirstLightScene(spaceColor: colorName)
+            // space's color from the space step on. At the finish only the
+            // snow stays here, in front of the rising window; the sky is
+            // behind it (`WelcomeBackdrop`).
+            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front)
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             GeometryReader { proxy in
@@ -68,14 +126,18 @@ private struct Welcome: View {
                                     leading: 24, bottom: 134, trailing: 24))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: step == .hello ? .center : .top)
             }
-            Button("Skip setup", action: finish)
+            .modifier(FinishFade(finishing: finish != nil))
+            Button("Skip setup", action: finishWelcome)
                 .modifier(WelcomeButton(prominent: false))
                 .controlSize(.large)
                 .keyboardShortcut(.cancelAction)
                 .padding(.leading, 24)
                 .padding(.bottom, 24)
+                .modifier(FinishFade(finishing: finish != nil))
         }
         .foregroundStyle(Theme.ink)
+        // Last, the snow fades away to the browser.
+        .opacity(finish == .fading ? 0 : 1)
         .ignoresSafeArea()
         .onAppear { name = space.name }
         // Fetched from the start, so they're there by the Basecamp step; the
@@ -143,17 +205,29 @@ private struct Welcome: View {
     private func next() {
         if step == .hello { offersDefault = !DefaultBrowser.isFirn }
         if step == .space { saveName() }
-        if isLast { finish() } else { step = steps[index + 1] }
+        if isLast { finishWelcome() } else { step = steps[index + 1] }
     }
 
     private func back() {
         step = steps[max(0, index - 1)]
     }
 
-    /// "Start Browsing", Skip, or Esc. The full finish ("Welcome in.") is a later step.
-    private func finish() {
+    /// "Start Browsing", Skip, or Esc: "Welcome in.", and the browser rises.
+    private func finishWelcome() {
+        guard finish == nil else { return }
         saveName()
-        window.closeWelcome()
+        window.finishWelcome(reduceMotion: reduceMotion)
+    }
+}
+
+/// At the finish, the step and "Skip setup" fade first (250ms).
+private struct FinishFade: ViewModifier {
+    let finishing: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(finishing ? 0 : 1)
+            .animation(.easeOut(duration: 0.25), value: finishing)
     }
 }
 

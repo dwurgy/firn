@@ -134,11 +134,51 @@ final class WindowModel {
     /// The welcome, over the whole window (see `WelcomeLayer`).
     private(set) var showsWelcome = false
 
+    /// The welcome's finish, while it plays (see `finishWelcome`).
+    private(set) var welcomeFinish: WelcomeFinish?
+    private var welcomeFinishTask: Task<Void, Never>?
+
+    enum WelcomeFinish {
+        /// The step fades, the sun rises, "Welcome in.", and the real window
+        /// waits low behind the snow, a little smaller.
+        case begun
+        /// The window rises over the words into its place.
+        case rising
+        /// The snow fades away, leaving the browser.
+        case fading
+    }
+
     /// Opens the welcome: the first time Firn opens, or Help › Show Welcome Again.
     func showWelcome() {
         closeCommandBar(focusingPage: false)
         spaceSheet = nil
+        welcomeFinishTask?.cancel()
+        welcomeFinish = nil
         showsWelcome = true
+    }
+
+    /// "Start Browsing", Skip, or Esc: "Welcome in.", and the real window
+    /// (your sidebar, color, and tiles) rises out of the scene, about 2.4s
+    /// as in the approved source (docs/electron-welcome, styles.css). With
+    /// Reduce Motion, the welcome simply fades (300ms).
+    func finishWelcome(reduceMotion: Bool) {
+        guard showsWelcome, welcomeFinish == nil else { return }
+        guard !reduceMotion else { return closeWelcome() }
+        welcomeFinish = .begun
+        AccessibilityNotification.Announcement("Welcome in.").post()
+        welcomeFinishTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            withAnimation(.timingCurve(0.25, 0.7, 0.3, 1, duration: 1.1)) { welcomeFinish = .rising }
+            try? await Task.sleep(for: .milliseconds(1000))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.5)) { welcomeFinish = .fading }
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            // `welcomeFinish` stays `.fading` until the welcome opens again:
+            // cleared now, the faded card would flash back as the welcome goes.
+            closeWelcome()
+        }
     }
 
     /// The welcome is done (finished or skipped): it doesn't come back on
@@ -625,12 +665,18 @@ struct BrowserWindow: View {
         .overlay(alignment: .topLeading) { TabLiftGhost(window: window) }
         .overlay(alignment: .topLeading) { TileArrivalChip(window: window) }
         .accessibilityHidden(window.showsWelcome)
-        .overlay { WelcomeLayer(window: window) }
         .coordinateSpace(.named(Self.space))
+        // The welcome's finish lifts the sidebar and the page out of the
+        // scene; the frame stays put, and its glass gives way to the rising
+        // card's (`WelcomeBackdrop`) until it's in place.
+        .modifier(WelcomeLift(finish: window.welcomeFinish))
         .background {
             ZStack {
-                FrameGlass()
-                SpaceTint(color: store.activeSpace.color)
+                Group {
+                    FrameGlass()
+                    SpaceTint(color: store.activeSpace.color)
+                }
+                .opacity(window.welcomeFinish == .begun || window.welcomeFinish == .rising ? 0 : 1)
                 // Empty frame (around the page, the sidebar's top row) moves the window.
                 WindowDragArea()
                 WindowSetup(lights: $lights)
@@ -652,6 +698,10 @@ struct BrowserWindow: View {
             .ignoresSafeArea()
         }
         .ignoresSafeArea()
+        // At the welcome's finish, the sky is behind the window and the snow
+        // in front (see `WelcomeLayer`).
+        .background { WelcomeBackdrop(window: window) }
+        .overlay { WelcomeLayer(window: window) }
         .environment(\.spaceColorName, store.activeSpace.color)
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))

@@ -14,26 +14,38 @@ import SwiftUI
 struct FirstLightScene: View {
     /// The space's color name (`Space.color`); only the snow takes it.
     let spaceColor: String
+    /// The whole scene, or one half of it: the welcome's finish lifts the
+    /// real window between the sky (back) and the snow (front).
+    var part = Part.whole
+    /// The welcome's finish: the sun brightens and rises.
+    var sunRises = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    enum Part { case whole, back, front }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .bottom) {
-                FirstLightSky()
-                FirstLightFlakes(reduceMotion: reduceMotion)
-                FirstLightSnow(colors: Theme.FirstLight.snow(spaceColor))
-                    .frame(height: proxy.size.height * 0.25)
-                    // A new space's snow fades in over about 400ms.
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.4), value: spaceColor)
-                Image("FirstLightGrain")
-                    .resizable(resizingMode: .tile)
-                    .opacity(Theme.FirstLight.grainOpacity(dark: colorScheme == .dark))
-                    .blendMode(colorScheme == .dark ? .softLight : .multiply)
+                if part != .front {
+                    FirstLightSky()
+                    FirstLightSun(rises: sunRises)
+                    FirstLightFlakes(reduceMotion: reduceMotion)
+                }
+                if part != .back {
+                    FirstLightSnow(colors: Theme.FirstLight.snow(spaceColor))
+                        .frame(height: proxy.size.height * 0.25)
+                        // A new space's snow fades in over about 400ms.
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.4), value: spaceColor)
+                    Image("FirstLightGrain")
+                        .resizable(resizingMode: .tile)
+                        .opacity(Theme.FirstLight.grainOpacity(dark: colorScheme == .dark))
+                        .blendMode(colorScheme == .dark ? .softLight : .multiply)
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .background(Theme.page)
+        .background(part == .front ? .clear : Theme.page)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -59,15 +71,6 @@ private struct FirstLightSky: View {
                       radii: CGSize(width: 0.56 * w, height: 0.60 * h), fade: 0.68)
             Self.glow(context, size, color: FL.cool, center: CGPoint(x: 0.50 * w, y: -0.12 * h),
                       radii: CGSize(width: 0.70 * w, height: 0.58 * h), fade: 0.70)
-            // The sun: a glow just behind the snowline, in a box 94% wide (at
-            // most 1200pt) and 52% tall whose bottom sits 7.5% below the window.
-            let sun = CGSize(width: min(1200, 0.94 * w), height: 0.52 * h)
-            Self.ellipse(context, size, Gradient(stops: [
-                .init(color: FL.sun, location: 0),
-                .init(color: FL.sunMid, location: 0.5),
-                .init(color: FL.sunMid.opacity(0), location: 1),
-            ]), center: CGPoint(x: w / 2, y: 1.075 * h - sun.height / 2),
-               radii: CGSize(width: sun.width / 2, height: sun.height / 2))
         }
     }
 
@@ -80,8 +83,8 @@ private struct FirstLightSky: View {
     }
 
     /// An elliptical gradient, as CSS draws one: a unit circle stretched to `radii`.
-    private static func ellipse(_ context: GraphicsContext, _ size: CGSize, _ gradient: Gradient,
-                                center: CGPoint, radii: CGSize) {
+    fileprivate static func ellipse(_ context: GraphicsContext, _ size: CGSize, _ gradient: Gradient,
+                                    center: CGPoint, radii: CGSize) {
         guard radii.width > 0, radii.height > 0 else { return }
         var layer = context
         layer.translateBy(x: center.x, y: center.y)
@@ -89,6 +92,46 @@ private struct FirstLightSky: View {
         let whole = CGRect(x: -center.x / radii.width, y: -center.y / radii.height,
                            width: size.width / radii.width, height: size.height / radii.height)
         layer.fill(Path(whole), with: .radialGradient(gradient, center: .zero, startRadius: 0, endRadius: 1))
+    }
+}
+
+/// The sun: a glow just behind the snowline, in a box 94% wide (at most
+/// 1200pt) and 52% tall whose bottom sits 7.5% below the window. Its own
+/// layer, so the welcome's finish can lift it (6% of the height, 12% larger,
+/// over 1.2s) while a brighter sun fades in on top, transforms and opacity only.
+private struct FirstLightSun: View {
+    let rises: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        // Read so a change of look redraws the sun.
+        let _ = colorScheme
+        GeometryReader { proxy in
+            let (w, h) = (proxy.size.width, proxy.size.height)
+            let box = CGSize(width: min(1200, 0.94 * w), height: 0.52 * h)
+            ZStack {
+                Self.glow([.init(color: Theme.FirstLight.sun, location: 0),
+                           .init(color: Theme.FirstLight.sunMid, location: 0.5),
+                           .init(color: Theme.FirstLight.sunMid.opacity(0), location: 1)])
+                Self.glow([.init(color: Theme.FirstLight.sun, location: 0),
+                           .init(color: Theme.FirstLight.sun.opacity(0), location: 0.72)])
+                    .opacity(rises ? 1 : 0)
+            }
+            .frame(width: box.width, height: box.height)
+            .scaleEffect(rises ? 1.12 : 1)
+            .offset(y: rises ? -0.06 * h : 0)
+            .position(x: w / 2, y: 1.075 * h - box.height / 2)
+            .animation(.easeOut(duration: 1.2), value: rises)
+        }
+    }
+
+    /// An elliptical gradient filling the box, as CSS's `closest-side`.
+    private static func glow(_ stops: [Gradient.Stop]) -> some View {
+        Canvas { context, size in
+            FirstLightSky.ellipse(context, size, Gradient(stops: stops),
+                                  center: CGPoint(x: size.width / 2, y: size.height / 2),
+                                  radii: CGSize(width: size.width / 2, height: size.height / 2))
+        }
     }
 }
 

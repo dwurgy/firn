@@ -193,7 +193,7 @@ Firn is a browser: people trust it with their passwords, history, and everything
 - **Only http and https** (plus the existing local file cases) reach navigation, new tabs, and links from other apps. Anything else is refused or asked about. Check addresses before handing them to `NSWorkspace.open`.
 - **The address bar must never lie.** Show the committed URL, not a pending one; watch for spoofing during slow or failed navigations and in popups.
 - **Saved passwords** (later): encrypted in the Keychain, per data store, filled only into the very same site over https, only after a click into a sign-in form. Opus, and a plan first.
-- **Ad and tracker blocking** (later): WebKit content rule lists compiled from the public lists; check rule limits per list. **Scam warnings** (later): WebKit has no built-in Safe Browsing for third-party browsers, so this needs its own design; ask before adding any network traffic for it.
+- **Ad and tracker blocking** (later): WebKit content rule lists compiled from the public lists; check rule limits per list. **Scam warnings:** on, through WebKit's Deceptive Website Warning (macOS's Safe Browsing service, via one sandbox exception for `com.apple.Safari.SafeBrowsing.Service`). It's Apple's look; a Firn-styled warning would be its own design.
 - **Secrets and personal data:** none in the repo, logs, error messages, or anything sent over the network. Logs never contain addresses people visited.
 - **No new network traffic without asking David,** and every privacy claim stays literally true. **Sync (CloudKit or otherwise) changes "your data stays on your device":** ask David first.
 - **Dependencies:** ask before adding one (Sparkle for updates and a reading-mode parser included). Pin exact versions in `Package.resolved`.

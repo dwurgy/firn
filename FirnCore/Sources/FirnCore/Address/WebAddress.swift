@@ -16,8 +16,10 @@ public enum WebAddress {
     }
 
     /// Just the site, as the address bar shows it at rest: "example.com",
-    /// without "www.", with a port if there is one. Empty without a host.
+    /// without "www.", with a port if there is one. A web page file shows
+    /// its name. Empty without a host.
     public static func site(of url: URL?) -> String {
+        if let url, url.isFileURL { return url.lastPathComponent }
         guard let url, let host = url.host(percentEncoded: false) else { return "" }
         let site = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         if let port = url.port { return "\(site):\(port)" }
@@ -46,6 +48,28 @@ public enum WebAddress {
         let isCountryPair = labels[labels.count - 1].count == 2
             && countrySecondLevels.contains(String(labels[labels.count - 2]))
         return labels.suffix(isCountryPair ? 3 : 2).joined(separator: ".")
+    }
+}
+
+/// Web page files (.html) that macOS handed Firn to open, from Finder or
+/// another app (Firn as the default browser). Only these files load, and
+/// only as the whole page: nothing a page asks for, and nothing typed, can
+/// open a file. The sandbox lets Firn read just these, until it quits, so
+/// they're never saved with the session.
+@MainActor
+public enum OpenedFiles {
+    private static var granted: Set<URL> = []
+
+    /// Takes in a file macOS handed over, if it's a web page file.
+    @discardableResult
+    public static func accept(_ url: URL) -> Bool {
+        guard url.isFileURL, ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) else { return false }
+        granted.insert(url.standardizedFileURL)
+        return true
+    }
+
+    public static func contains(_ url: URL) -> Bool {
+        url.isFileURL && granted.contains(url.standardizedFileURL)
     }
 }
 

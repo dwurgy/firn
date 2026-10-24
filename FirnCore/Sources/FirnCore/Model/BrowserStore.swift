@@ -1406,7 +1406,8 @@ public final class BrowserStore {
     /// lives in the app, so it's passed in.
     public func session(sidebarWidth: Double, sidebarCollapsed: Bool) -> Session {
         let stamp = now()
-        let records = tabs.enumerated().map { order, tab in
+        // Files opened from Finder can't be read again after a restart (see `OpenedFiles`).
+        let records = tabs.filter { $0.url?.isFileURL != true }.enumerated().map { order, tab in
             var record = TabRecord(
                 id: tab.id, spaceID: tab.spaceID, place: tab.place, url: tab.url,
                 title: tab.savedTitle, icon: tab.icon, homeURL: tab.homeURL, groupID: tab.groupID,

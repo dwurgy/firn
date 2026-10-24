@@ -97,6 +97,11 @@ final class WebKitPageController: NSObject, PageController {
     }
 
     func load(_ url: URL) {
+        if OpenedFiles.contains(url) {
+            // Read access to that one file only, not the folder around it.
+            webView.loadFileURL(url, allowingReadAccessTo: url)
+            return
+        }
         guard WebAddress.isWebURL(url) else { return }
         webView.load(URLRequest(url: url))
     }
@@ -115,7 +120,8 @@ final class WebKitPageController: NSObject, PageController {
     func stopLoading() { webView.stopLoading() }
 
     func memory() -> PageMemory? {
-        guard url != nil, loadError == nil, let state = webView.interactionState else { return nil }
+        // A file wakes by loading it again, which gives the new page read access.
+        guard url != nil, url?.isFileURL != true, loadError == nil, let state = webView.interactionState else { return nil }
         return PageMemory(state: state)
     }
 
@@ -323,7 +329,10 @@ extension WebKitPageController: WKNavigationDelegate {
                 return
             }
         }
+        // A web page file macOS handed Firn (see `OpenedFiles`), as the
+        // whole page: its own load, a reload, or Back to it.
         let allows = NavigationPolicy.allows(url, isMainFrame: isMainFrame)
+            || (isMainFrame && OpenedFiles.contains(url))
         // Before WebKit goes ahead, so the rules this site wants apply to its
         // load. Redirects ask again, so the site that ends up showing decides.
         if allows, isMainFrame, WebAddress.isWebURL(url) { followBlocking(of: url) }

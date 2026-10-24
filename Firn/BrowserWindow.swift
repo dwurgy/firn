@@ -149,11 +149,12 @@ final class WindowModel {
         if store.activeTab == nil { openCommandBar() }
     }
 
-    /// A link from another app (Firn as the default browser) opens as a new
-    /// tab in the space on screen, the space used last. Only web addresses:
-    /// anything else macOS hands over is refused (CLAUDE.md, Security).
+    /// A link from another app (Firn as the default browser), or a web page
+    /// file opened from Finder, opens as a new tab in the space on screen,
+    /// the space used last. Anything else macOS hands over is refused
+    /// (CLAUDE.md, Security).
     func openFromOtherApp(_ url: URL) {
-        guard WebAddress.isWebURL(url) else { return }
+        guard WebAddress.isWebURL(url) || OpenedFiles.accept(url) else { return }
         closeCommandBar(focusingPage: false)
         store.closeLookout()
         store.openTab(url)

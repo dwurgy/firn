@@ -29,6 +29,9 @@ enum Preference {
 struct SettingsView: View {
     let store: BrowserStore
 
+    /// Every tab is the same size, so the window never jumps between them.
+    static let size = CGSize(width: 540, height: 500)
+
     var body: some View {
         TabView {
             GeneralSettings()
@@ -99,7 +102,6 @@ private struct GeneralSettings: View {
         }
         .formStyle(.grouped)
         .scrollDisabled(true)
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: SettingsView.size.width, height: SettingsView.size.height)
     }
 }

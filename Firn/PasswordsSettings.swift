@@ -61,7 +61,7 @@ struct PasswordsSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 560, height: 500)
+        .frame(width: SettingsView.size.width, height: SettingsView.size.height)
         .onAppear(perform: reload)
         .onDisappear(perform: lock)
         .onChange(of: space.dataStoreID) { lock(); reload() }
@@ -112,6 +112,7 @@ struct PasswordsSettings: View {
             }
             TextField("Search", text: $search, prompt: Text("Search"))
                 .textFieldStyle(.roundedBorder)
+                .labelsHidden()
                 .frame(width: 170)
                 .accessibilityLabel("Search passwords")
         }

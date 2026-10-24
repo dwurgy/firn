@@ -127,6 +127,8 @@ private struct Welcome: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: step == .hello ? .center : .top)
             }
             .modifier(FinishFade(finishing: finish != nil))
+            // Faded, it isn't there for VoiceOver either.
+            .accessibilityHidden(finish != nil)
             Button("Skip setup", action: finishWelcome)
                 .modifier(WelcomeButton(prominent: false))
                 .controlSize(.large)
@@ -134,6 +136,7 @@ private struct Welcome: View {
                 .padding(.leading, 24)
                 .padding(.bottom, 24)
                 .modifier(FinishFade(finishing: finish != nil))
+                .accessibilityHidden(finish != nil)
         }
         .foregroundStyle(Theme.ink)
         // Last, the snow fades away to the browser.
@@ -333,12 +336,15 @@ private struct SearchStep: View {
                     .font(Theme.hintFont)
                     .foregroundStyle(Theme.muted)
             }
+            // VoiceOver reads these with the switch, once.
+            .accessibilityHidden(true)
             Spacer(minLength: 0)
             Toggle("Show suggestions as you type", isOn: $suggestions)
                 .toggleStyle(.switch)
                 // The space's color, not the system blue.
                 .tint(accent)
                 .labelsHidden()
+                .accessibilityHint("Your search engine sees what you type.")
         }
         .padding(.top, 18)
     }
@@ -494,7 +500,8 @@ private struct SiteChoice: View {
                     if isOn {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
+                            // Never pure white, as on Basecamp's letter tiles.
+                            .foregroundStyle(.white.opacity(0.95))
                             .frame(width: 20, height: 20)
                             .background { Circle().fill(accent) }
                             .background { Circle().fill(Theme.page).padding(-2) }
@@ -741,6 +748,7 @@ private struct TipsStep: View {
 /// A key, drawn as a small frosted cap.
 private struct KeyCap: View {
     let key: String
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -748,7 +756,7 @@ private struct KeyCap: View {
             .font(.system(size: 13, weight: .medium))
             .padding(.horizontal, 9)
             .frame(minWidth: 30, minHeight: 26)
-            .background { shape.fill(Theme.tileFill) }
+            .background { shape.fill(reduceTransparency ? Theme.tileSolid : Theme.tileFill) }
             .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 1) }
     }
 }
@@ -787,6 +795,9 @@ private struct StepHeading: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 8)
             .accessibilityAddTraits(.isHeader)
+            // VoiceOver stays on Continue from step to step, so it says
+            // where it is now.
+            .onAppear { AccessibilityNotification.Announcement(title).post() }
         Text(words)
             .font(.system(size: 14))
             .lineSpacing(2)
@@ -812,7 +823,8 @@ private struct StepDots: View {
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: current)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(current + 1) of \(count)")
     }
 }
 

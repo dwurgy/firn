@@ -566,7 +566,12 @@ private struct TabList: View {
         }
         withAnimation(Theme.thaw) {
             releasingGroupID = group.id
-        } completion: {
+        }
+        // A fixed wait, not the animation's completion: with tabs not loaded
+        // since launch, the completion fired after 0.05s and the store's
+        // ungroup cut the thaw short (see docs/HISTORY.md).
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
             var settled = Transaction()
             settled.disablesAnimations = true
             withTransaction(settled) {

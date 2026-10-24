@@ -49,6 +49,8 @@ struct FirnApp: App {
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
         .commands { BrowserCommands(window: window) }
+        // Links from other apps come to this one window (see `openFromOtherApp`).
+        .handlesExternalEvents(matching: ["*"])
 
         Settings {
             SettingsView()

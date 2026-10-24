@@ -149,6 +149,16 @@ final class WindowModel {
         if store.activeTab == nil { openCommandBar() }
     }
 
+    /// A link from another app (Firn as the default browser) opens as a new
+    /// tab in the space on screen, the space used last. Only web addresses:
+    /// anything else macOS hands over is refused (CLAUDE.md, Security).
+    func openFromOtherApp(_ url: URL) {
+        guard WebAddress.isWebURL(url) else { return }
+        closeCommandBar(focusingPage: false)
+        store.closeLookout()
+        store.openTab(url)
+    }
+
     /// Opens the Edit space card for `space`.
     func editSpace(_ space: Space) { openSpaceSheet(.edit(space.id)) }
 
@@ -664,6 +674,7 @@ struct BrowserWindow: View {
             if store.activeTab == nil { window.openCommandBar() }
         }
         .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
+        .onOpenURL { window.openFromOtherApp($0) }
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }

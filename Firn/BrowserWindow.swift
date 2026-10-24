@@ -997,6 +997,12 @@ struct TabLift {
     var settle: CGRect?
     /// Settling into a folded group: it fades into the name line.
     var fades = false
+    /// Held over a tab to make a group with it: solid, so the tab under it
+    /// doesn't show through.
+    var solid = false
+    /// Settling into a group forming under it: just the row, no backing or
+    /// shadow, so it lands on the glass as the row itself.
+    var bare = false
     /// Picked up from Basecamp: the tile as drawn there, and where it's
     /// held, in the window's space.
     var tileFace: AnyView?
@@ -1049,7 +1055,8 @@ private struct TabLiftGhost: View {
             .modifier(LiftPlacement(card: lift.isCard ? 1 : 0, settled: lift.settle == nil ? 0 : 1,
                                     width: lift.width, column: lift.column,
                                     pointer: window.dragPointer, grab: lift.grab, slot: lift.settle,
-                                    tile: lift.tile, tileness: lift.isTile ? 1 : 0, reach: lift.reach))
+                                    tile: lift.tile, tileness: lift.isTile ? 1 : 0, reach: lift.reach,
+                                    solid: lift.solid ? 1 : 0, bare: lift.bare ? 1 : 0))
             .opacity(lift.fades ? 0 : 1)
             .transition(.opacity)
             .allowsHitTesting(false)
@@ -1116,16 +1123,24 @@ private struct LiftPlacement: ViewModifier, Animatable {
     /// 0 the row, 1 the tile.
     var tileness: CGFloat
     let reach: ClosedRange<CGFloat>?
+    /// 0 the usual backing, 1 fully solid.
+    let solid: CGFloat
+    /// 0 lifted, 1 just the row (backing and shadow gone).
+    var bare: CGFloat
 
     nonisolated var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>,
-                                                   AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(AnimatablePair(AnimatablePair(card, settled), tileness), AnimatablePair(width, column)) }
+                                                   AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>> {
+        get {
+            AnimatablePair(AnimatablePair(AnimatablePair(card, settled), tileness),
+                           AnimatablePair(AnimatablePair(width, column), bare))
+        }
         set {
             card = newValue.first.first.first
             settled = newValue.first.first.second
             tileness = newValue.first.second
-            width = newValue.second.first
-            column = newValue.second.second
+            width = newValue.second.first.first
+            column = newValue.second.first.second
+            bare = newValue.second.second
         }
     }
 
@@ -1148,10 +1163,16 @@ private struct LiftPlacement: ViewModifier, Animatable {
         let lift = card
         return content
             .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-            .background { LiftBacking(shape: shape) }
+            .background {
+                ZStack {
+                    shape.fill(Theme.frame).opacity(solid)
+                    LiftBacking(shape: shape)
+                }
+                .opacity(1 - bare)
+            }
             .clipShape(shape)
             .overlay { shape.strokeBorder(Theme.frost, lineWidth: 1).opacity(lift) }
-            .shadow(color: Theme.shadowPageFar, radius: 8 + 6 * lift, y: 3 + 3 * lift)
+            .shadow(color: Theme.shadowPageFar.opacity(1 - bare), radius: 8 + 6 * lift, y: 3 + 3 * lift)
             .offset(x: frame.minX, y: frame.minY)
     }
 

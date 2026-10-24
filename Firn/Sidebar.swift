@@ -344,8 +344,7 @@ private struct TabList: View {
     /// The group being let go (Ungroup): its card is thawing away around its tabs.
     @State private var releasingGroupID: UUID?
     /// The group being closed: its frost lifts away, tabs and all.
-    @State private var closingGroupID: UUID?
-    /// Where the list's content sits in the sidebar (it moves as it
+    @State private var closingGroupID: UUID?    /// Where the list's content sits in the sidebar (it moves as it
     /// scrolls), so a tidied tab's icon knows where it starts. A plain box,
     /// so scrolling doesn't redraw anything.
     @State private var origin = PointBox()
@@ -663,8 +662,7 @@ private struct TabList: View {
             color: Theme.spaceColor(store.activeSpace.color),
             renaming: Bindable(window).renamingGroupID,
             foldLocked: foldLocked,
-            thawed: isThawed(group),
-            closing: group.id == closingGroupID,
+            thawed: isThawed(group),            closing: group.id == closingGroupID,
             store: store,
             ungroup: { release(group) },
             close: { close(group) }
@@ -714,6 +712,17 @@ private struct TabList: View {
     /// shows. Brought back, it waits unseen for its icon to land.
     private func placed(_ row: some View, _ tab: FirnCore.Tab) -> some View {
         row
+            // A tab held over it: a hint of the card the two would make.
+            .background {
+                // It thaws as the dropped tab settles; the group's own frost forms next.
+                if drag?.onto == tab.id, drag?.settling == false {
+                    FrostGlass(shape: RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous),
+                               color: Theme.spaceColor(store.activeSpace.color))
+                        .padding(.horizontal, Theme.tabRadius - Theme.panelRadius)
+                        .padding(.vertical, -Theme.rowSpacing / 2)
+                        .transition(.opacity)
+                }
+            }
             // Becoming a split or leaving one, the row swaps for its new self
             // at once: the two look the same at that moment.
             .transaction(value: tab.splitID) { $0.animation = nil }
@@ -802,6 +811,29 @@ private struct TabList: View {
             return .group(group.id, group.folded ? members.filter { $0.id != tab.id }.count : position(in: members))
         }
         return .list(items.filter { (frames[$0.id]?.midY ?? .infinity) < y }.count)
+    }
+
+    /// The loose row (a tab or a split, outside any group) whose middle half
+    /// the dragged tab's middle is over. Its top and bottom quarters still
+    /// mean above and below it, so tabs can be reordered past it.
+    private func looseRow(at y: CGFloat, for tab: FirnCore.Tab) -> FirnCore.Tab? {
+        for case let .tab(other) in store.tabListItems where other.id != tab.id {
+            guard let frame = frames[other.id] else { continue }
+            if y > frame.minY + frame.height / 4, y < frame.maxY - frame.height / 4 { return other }
+        }
+        return nil
+    }
+
+    /// The slot right beside `other`, on the side the dragged tab's slot is
+    /// on now (so normally it doesn't move): where it'll sit in their group.
+    /// Taking the slot from elsewhere leaves `other` where it is.
+    private func slot(beside other: FirnCore.Tab, for drag: TabDrag) -> DropTarget {
+        let index = store.tabListItems.filter { $0.id != drag.tab.id }.firstIndex { $0.id == other.id } ?? 0
+        return .list(isAbove(drag.tab, other) ? index : index + 1)
+    }
+
+    private func isAbove(_ tab: FirnCore.Tab, _ other: FirnCore.Tab) -> Bool {
+        (frames[tab.id]?.midY ?? .infinity) < (frames[other.id]?.midY ?? 0)
     }
 
     /// Where the dragged group would land in the tab list (not counting
@@ -986,13 +1018,19 @@ private struct TabList: View {
     }
 
     /// The lifted tab at its new place: the list makes room where it'd land.
+    /// Held well over a loose row, the list holds still and that row frosts
+    /// over: let go there, the two become a group.
     private func follow(_ moved: TabDrag) {
         var current = moved
-        let target = target(at: current.location.y - current.grab.height + Theme.rowHeight / 2, for: current.tab)
-        if target == current.target {
+        let y = current.location.y - current.grab.height + Theme.rowHeight / 2
+        let onto = current.fromBasecamp ? nil : looseRow(at: y, for: current.tab)
+        let target = onto.map { slot(beside: $0, for: current) } ?? target(at: y, for: current.tab)
+        if target == current.target, onto?.id == current.onto {
             drag = current
         } else {
             current.target = target
+            current.onto = onto?.id
+            withAnimation(reduceMotion ? nil : Self.glide) { window.tabLift?.solid = onto != nil }
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
         }
     }
@@ -1098,6 +1136,8 @@ private struct TabList: View {
             current.overPage = true
             withAnimation(reshape) { window.tabLift?.isCard = true }
             current.target = currentTarget(of: current.tab)
+            current.onto = nil
+            window.tabLift?.solid = false
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
         } else {
             drag = current
@@ -1128,6 +1168,8 @@ private struct TabList: View {
         if !current.overBasecamp {
             current.overBasecamp = true
             current.target = currentTarget(of: current.tab)
+            current.onto = nil
+            window.tabLift?.solid = false
             withAnimation(reduceMotion ? nil : Self.glide) { drag = current }
             window.tabInBasecamp = TileInList(tab: joining)
         } else {
@@ -1229,8 +1271,19 @@ private struct TabList: View {
     /// The lifted copy settles into its slot, then the tab really moves
     /// there (which looks like nothing, since it's already showing there).
     private func settle(_ dropped: TabDrag) {
+        if dropped.onto != nil, !reduceMotion { return settleIntoGroup(dropped) }
         var current = dropped
         @MainActor func commit() {
+            if let id = current.onto {
+                if let other = store.openTabs.first(where: { $0.id == id }) { group(current.tab, with: other) }
+            } else {
+                place()
+            }
+            drag = nil
+            window.tabLift = nil
+            window.tileInList = nil
+        }
+        @MainActor func place() {
             switch current.target {
             case let .group(id, position):
                 if let group = store.tabGroups.first(where: { $0.id == id }) {
@@ -1239,9 +1292,6 @@ private struct TabList: View {
             case let .list(position):
                 land(current.tab, fromBasecamp: current.fromBasecamp, in: nil, at: position)
             }
-            drag = nil
-            window.tabLift = nil
-            window.tileInList = nil
         }
         guard !reduceMotion, let slot = slot(for: current) else { return commit() }
         current.settling = true
@@ -1257,6 +1307,60 @@ private struct TabList: View {
             // A group the tab left empty fades away.
             withAnimation(Self.glide) { commit() }
         }
+    }
+
+    /// Let go onto a loose row: in one motion, as New Group from the menu.
+    /// The two become a group at once, in the order they sit (the card
+    /// starts thawed, in their exact shape), and as its frost forms, the
+    /// lifted tab glides to its place in the card on the same curve, its
+    /// backing fading so it lands as the row itself.
+    private func settleIntoGroup(_ dropped: TabDrag) {
+        var current = dropped
+        guard let id = current.onto, let other = store.openTabs.first(where: { $0.id == id }),
+              store.openTabs.contains(where: { $0.id == current.tab.id }),
+              let slot = frames[current.tab.id] else {
+            current.onto = nil
+            return settle(current)
+        }
+        let first = isAbove(current.tab, other)
+        // Where its row will be once the card has formed: inside the
+        // card's insets, below the name line.
+        let inset = Theme.panelRadius - Theme.tabRadius
+        let place = CGRect(x: slot.minX + inset, y: slot.minY + Theme.groupHeaderHeight + Theme.rowSpacing,
+                           width: slot.width - 2 * inset, height: slot.height)
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            window.newGroup(with: other)
+            guard let group = store.tabGroups.first(where: { $0.id == other.groupID }) else { return }
+            store.move(current.tab, into: group, at: first ? 0 : 1)
+            current.target = .group(group.id, first ? 0 : 1)
+            drag = current
+        }
+        window.isDraggingTab = false
+        withAnimation(Theme.thaw) {
+            // The hint thaws as the card's own frost forms.
+            drag?.settling = true
+            drag?.location.y = place.minY + current.grab.height
+            window.tabLift?.isCard = false
+            window.tabLift?.solid = false
+            window.tabLift?.bare = true
+            window.tabLift?.settle = place.offsetBy(dx: windowOrigin.point.x, dy: windowOrigin.point.y)
+        } completion: {
+            drag = nil
+            window.tabLift = nil
+            window.tileInList = nil
+        }
+    }
+
+    /// A tab let go onto a loose row, with Reduce Motion: the two become a
+    /// group in the order they sit, with a fade.
+    private func group(_ tab: FirnCore.Tab, with other: FirnCore.Tab) {
+        guard store.openTabs.contains(where: { $0.id == tab.id }) else { return }
+        let first = isAbove(tab, other)
+        window.newGroup(with: other)
+        guard let group = store.tabGroups.first(where: { $0.id == other.groupID }) else { return }
+        withAnimation(.easeOut(duration: 0.2)) { store.move(tab, into: group, at: first ? 0 : 1) }
     }
 
     /// The tab really moves where it was let go. A Basecamp tile leaves
@@ -1307,6 +1411,9 @@ private struct TabDrag {
     var overBasecamp = false
     /// A Basecamp tile held out over the list (Basecamp's drag moves it).
     var fromBasecamp = false
+    /// The loose row it's held over, to start a group with; the list
+    /// holds still meanwhile (`target` stays where it was).
+    var onto: UUID?
 }
 
 private struct GroupDrag {
@@ -1682,6 +1789,32 @@ extension EnvironmentValues {
 }
 
 
+/// A group's glass as its frost forms or thaws, in the same motion as the
+/// card's tabs but ahead of them: its lower edge leads theirs and reaches
+/// its place first (David, 2026-10-23). `progress` moves with the card's
+/// own layout (0 thawed, 1 formed), and `growth` is how much taller the
+/// formed card is.
+private struct GlassLead<Glass: View>: ViewModifier, Animatable {
+    var progress: CGFloat
+    let growth: CGFloat
+    @ViewBuilder let glass: Glass
+
+    nonisolated var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        // Eased ahead of the layout, meeting it at both ends.
+        let ahead = 1 - (1 - progress) * (1 - progress)
+        content.background(alignment: .top) {
+            glass
+                .padding(.bottom, -growth * (ahead - progress))
+                .opacity(min(1, ahead * 2))
+        }
+    }
+}
+
 /// A group: a soft frosted card tinted by the space's color, with its name
 /// (over the tabs' icons) and a fold arrow. The close button shows
 /// only while the pointer is on the name line.
@@ -1696,8 +1829,7 @@ private struct GroupCard<Rows: View>: View {
     /// True while it thaws away (Ungroup) or before its frost forms (a new
     /// group): no name line, insets, or glass, so its tabs sit exactly
     /// where they do as loose tabs.
-    let thawed: Bool
-    /// True while it lifts away (Close Group): it folds up under its name
+    let thawed: Bool    /// True while it lifts away (Close Group): it folds up under its name
     /// line and fades.
     let closing: Bool
     /// True for the copy a drag carries: solid, not frosted.
@@ -1734,7 +1866,11 @@ private struct GroupCard<Rows: View>: View {
         // Rows sit 4pt inside the card, so their 10pt corners nest in its 14pt.
         .padding(.horizontal, inset)
         .padding(.bottom, (group.folded && !thawed) || !hasRows ? 0 : inset)
-        .background { card.opacity(thawed ? 0 : 1) }
+        .modifier(GlassLead(
+            progress: thawed ? 0 : 1,
+            growth: group.folded ? 0 : Theme.groupHeaderHeight + Theme.rowSpacing
+                + (hasRows ? Theme.panelRadius - Theme.tabRadius : 0)
+        ) { card })
         // Closing, it folds up from the bottom: the tabs go first, the name line last.
         .fixedSize(horizontal: false, vertical: true)
         .frame(height: closing ? 0 : nil, alignment: .top)

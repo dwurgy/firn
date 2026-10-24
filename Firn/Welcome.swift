@@ -28,6 +28,8 @@ private struct Welcome: View {
     let window: WindowModel
     @State private var step = WelcomeStep.hello
     @State private var name = ""
+    /// The suggested sites' icons, fetched while the welcome is open.
+    @State private var siteIcons: [URL: Data] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: BrowserStore { window.store }
@@ -73,6 +75,18 @@ private struct Welcome: View {
         .foregroundStyle(Theme.ink)
         .ignoresSafeArea()
         .onAppear { name = space.name }
+        // Fetched from the start, so they're there by the Basecamp step; the
+        // fetch stops if the welcome closes first. A site with none keeps its letter.
+        .task {
+            await withTaskGroup(of: (URL, Data?).self) { group in
+                for site in WelcomeSite.suggestions {
+                    group.addTask { (site.url, await site.fetchIcon()) }
+                }
+                for await (url, icon) in group {
+                    if let icon { siteIcons[url] = icon }
+                }
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Welcome to Firn")
         .accessibilityAddTraits(.isModal)
@@ -88,6 +102,7 @@ private struct Welcome: View {
                 case .address: AddressStep(colorName: colorName)
                 case .search: SearchStep(accent: Theme.spaceColor(colorName))
                 case .space: SpaceStep(store: store, name: $name)
+                case .basecamp: BasecampStep(store: store, icons: siteIcons, colorName: colorName)
                 }
             }
             // Each step is new, so it glides in; the last one simply goes.
@@ -136,14 +151,14 @@ private struct Welcome: View {
     }
 }
 
-/// The welcome's steps, in order. Basecamp and sidebar, default browser,
-/// and tips come in later steps (Phase 6, steps 3 and 4).
+/// The welcome's steps, in order. Default browser and tips come in a later
+/// step (Phase 6, step 4).
 private enum WelcomeStep: CaseIterable {
-    case hello, address, search, space
+    case hello, address, search, space, basecamp
 
     /// The address step waits for the "At the top" look (David, 2026-10-23):
     /// until then the choice would change nothing. Its view is kept, ready.
-    static var allCases: [WelcomeStep] { [.hello, .search, .space] }
+    static var allCases: [WelcomeStep] { [.hello, .search, .space, .basecamp] }
 }
 
 // MARK: - Steps
@@ -319,6 +334,245 @@ private struct SpaceStep: View {
                 .accessibilityAddTraits(.isHeader)
             content()
         }
+    }
+}
+
+/// Basecamp and the sidebar: the suggested sites to pick, and beside them
+/// a small picture of this space's sidebar that builds itself as they're
+/// picked. A pick is a tile at once (Firn's choices all apply right away);
+/// taking it back closes that tile, which ⇧⌘T can bring back.
+private struct BasecampStep: View {
+    let store: BrowserStore
+    let icons: [URL: Data]
+    let colorName: String
+
+    private var accent: Color { Theme.spaceColor(colorName) }
+
+    var body: some View {
+        StepHeading(title: "Start your Basecamp",
+                    words: "Pick a few sites you use every day in this space, or none. You can add more anytime: right-click a tab and choose Add to Basecamp.")
+        HStack(alignment: .top, spacing: 24) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(64), spacing: 14), count: 4), alignment: .leading, spacing: 14) {
+                ForEach(WelcomeSite.suggestions) { site in
+                    let tile = store.basecampTile(for: site.url)
+                    SiteChoice(name: site.name, icon: icons[site.url] ?? tile?.icon, accent: accent,
+                               isOn: tile != nil, canPick: store.canAddToBasecamp) {
+                        if let tile {
+                            store.closeTile(tile)
+                        } else {
+                            store.addBasecampTile(site.url, title: site.name, icon: icons[site.url])
+                        }
+                    }
+                }
+            }
+            .fixedSize()
+            SidebarPicture(tiles: store.basecampTabs, colorName: colorName)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            SidebarLine(title: "Groups", words: "Keep tabs together: drag one tab onto another.")
+            SidebarLine(title: "Tabs", words: "Everything else. Tabs you’re done with tidy themselves away.")
+        }
+        .padding(.top, 22)
+    }
+}
+
+/// One suggested site: a tile of Basecamp's frost with its icon (its letter
+/// until the icon arrives, or if it has none), ringed and checked in the
+/// space's color when picked, and its name below.
+private struct SiteChoice: View {
+    let name: String
+    let icon: Data?
+    let accent: Color
+    let isOn: Bool
+    let canPick: Bool
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14, style: .continuous) }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    frost
+                    if let icon {
+                        SiteIconView(icon: icon, size: 30) { EmptyView() }
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .transition(.opacity)
+                    } else {
+                        Text(name.prefix(1))
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .overlay { shape.strokeBorder(accent.opacity(isOn ? 1 : 0), lineWidth: 2) }
+                .overlay(alignment: .topTrailing) {
+                    if isOn {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background { Circle().fill(accent) }
+                            .background { Circle().fill(Theme.page).padding(-2) }
+                            .offset(x: 7, y: -7)
+                            .transition(.opacity)
+                    }
+                }
+                Text(name)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isOn && !canPick)
+        .opacity(!isOn && !canPick ? 0.5 : 1)
+        .onHover { hovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: icon != nil)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isOn)
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Basecamp's own frost (see `TileGlass`), brighter on hover.
+    @ViewBuilder private var frost: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else {
+            shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(-0.5) }
+                .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+        }
+    }
+}
+
+/// A small picture of this space's sidebar, on the frame tinted by its
+/// color: the traffic lights, the address bar, its real Basecamp tiles
+/// (each frosting in as it's picked), a group's card, and a few tabs.
+private struct SidebarPicture: View {
+    let tiles: [FirnCore.Tab]
+    let colorName: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var accent: Color { Theme.spaceColor(colorName) }
+    private var rows: [[FirnCore.Tab]] {
+        stride(from: 0, to: tiles.count, by: 4).map { Array(tiles[$0..<min($0 + 4, tiles.count)]) }
+    }
+
+    var body: some View {
+        let frame = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Circle().fill(Theme.faint.opacity(0.7)).frame(width: 5, height: 5)
+                }
+            }
+            .padding(.top, 10)
+            Capsule().fill(Theme.Welcome.pill)
+                .frame(width: 84, height: 10)
+                .padding(.top, 8)
+            if !tiles.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(rows.indices, id: \.self) { index in
+                        HStack(spacing: 4) {
+                            ForEach(rows[index]) { tile in
+                                MiniTile(icon: tile.icon, accent: accent)
+                                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.8)))
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 10)
+            }
+            // A group: its card, its name, and two of its tabs.
+            VStack(alignment: .leading, spacing: 6) {
+                Capsule().fill(Theme.faint.opacity(0.45)).frame(width: 26, height: 5)
+                MiniRow(width: 44)
+                MiniRow(width: 34)
+            }
+            .padding(7)
+            .frame(width: 84, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Theme.groupFill)
+                    .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).fill(accent.opacity(Theme.groupTint)) }
+                    .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+            }
+            .padding(.top, 12)
+            VStack(alignment: .leading, spacing: 9) {
+                MiniRow(width: 50)
+                MiniRow(width: 36)
+                MiniRow(width: 44)
+            }
+            .padding(.leading, 7)
+            .padding(.top, 12)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 104, height: 216, alignment: .topLeading)
+        .background { frame.fill(Theme.frame).overlay { frame.fill(Theme.frameTint(colorName)) } }
+        .clipShape(frame)
+        .overlay { frame.strokeBorder(Theme.faint.opacity(0.4), lineWidth: 1) }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: tiles.map(\.id))
+        .accessibilityHidden(true)
+    }
+}
+
+/// A Basecamp tile in the sidebar picture: frost washed with the space's
+/// color, and the site's icon, small.
+private struct MiniTile: View {
+    let icon: Data?
+    let accent: Color
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        shape.fill(Theme.tileFill)
+            .overlay { shape.fill(accent.opacity(0.3)) }
+            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+            .overlay { SiteIconView(icon: icon, size: 10) { EmptyView() } }
+            .frame(width: 18, height: 18)
+    }
+}
+
+/// A tab in the sidebar picture: its icon's dot and its title.
+private struct MiniRow: View {
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(Theme.Welcome.pill).frame(width: 7, height: 7)
+            Capsule().fill(Theme.Welcome.pill).frame(width: width, height: 7)
+        }
+    }
+}
+
+/// One line under the sidebar picture: a part of the sidebar, and what it's for.
+private struct SidebarLine: View {
+    let title: String
+    let words: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 60, alignment: .leading)
+            Text(words)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

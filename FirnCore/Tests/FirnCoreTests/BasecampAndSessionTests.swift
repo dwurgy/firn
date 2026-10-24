@@ -346,3 +346,56 @@ struct BasecampAndSessionTests {
         #expect(file.load()?.tabs.first?.url == url("a"))
     }
 }
+
+// MARK: - The welcome's Basecamp sites
+
+@MainActor
+struct WelcomeBasecampTests {
+    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+
+    private func makeStore() -> BrowserStore {
+        BrowserStore(restoring: nil, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) })
+    }
+
+    @Test func aPickedSiteBecomesARestingTileAtHome() throws {
+        let store = makeStore()
+        let site = URL(string: "https://mail.google.com/")!
+        let tile = try #require(store.addBasecampTile(site, title: "Gmail", icon: nil))
+        #expect(store.basecampTabs.map(\.id) == [tile.id])
+        #expect(tile.isResting)
+        #expect(tile.homeURL == site)
+        #expect(store.activeTabID != tile.id)
+        #expect(store.basecampTile(for: URL(string: "https://mail.google.com/mail/u/0")!)?.id == tile.id)
+    }
+
+    @Test func theSameSiteIsntAddedTwice() {
+        let store = makeStore()
+        store.addBasecampTile(URL(string: "https://www.amazon.com/")!, title: "Amazon", icon: nil)
+        #expect(store.addBasecampTile(URL(string: "https://amazon.com/")!, title: "Amazon", icon: nil) == nil)
+        #expect(store.basecampTabs.count == 1)
+    }
+
+    @Test func aFullBasecampTakesNoMore() {
+        let store = makeStore()
+        for n in 0..<BrowserStore.basecampLimit {
+            store.addBasecampTile(URL(string: "https://site\(n).example/")!, title: "", icon: nil)
+        }
+        #expect(store.addBasecampTile(URL(string: "https://one-more.example/")!, title: "", icon: nil) == nil)
+        #expect(store.basecampTabs.count == BrowserStore.basecampLimit)
+    }
+
+    @Test func onlyWebAddressesAndValidIconsAreTaken() throws {
+        let store = makeStore()
+        #expect(store.addBasecampTile(URL(string: "file:///etc/hosts")!, title: "", icon: nil) == nil)
+        let tile = try #require(store.addBasecampTile(URL(string: "https://a.example/")!, title: "", icon: Data([1, 2, 3])))
+        #expect(tile.icon == nil)
+    }
+
+    @Test func theSuggestionsAreTheEightHttpsSites() {
+        let sites = WelcomeSite.suggestions
+        #expect(sites.map(\.name) == ["Gmail", "Outlook", "Calendar", "Drive", "Claude", "Amazon", "YouTube", "Spotify"])
+        #expect(sites.allSatisfy { site in
+            ([site.url] + site.prefer + site.icons).allSatisfy { $0.scheme == "https" }
+        })
+    }
+}

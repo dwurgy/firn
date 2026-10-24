@@ -524,6 +524,37 @@ public final class BrowserStore {
         return true
     }
 
+    /// Adds a site (picked in the welcome) as a new tile at the end of the
+    /// current space's Basecamp, resting until it's clicked, if there's room
+    /// and no tile there already has the same site. Its icon, if it has one,
+    /// shows straight away, so Basecamp doesn't fetch it again.
+    @discardableResult
+    public func addBasecampTile(_ url: URL, title: String, icon: Data?) -> Tab? {
+        let tiles = list(.basecamp)
+        guard WebAddress.isWebURL(url), tiles.count < Self.basecampLimit,
+              !tiles.contains(where: { Self.sameSite($0.homeURL, url) }) else { return nil }
+        let tab = Tab(
+            spaceID: activeSpaceID, place: .basecamp, url: url, title: title,
+            icon: icon.flatMap { SiteIcon.isValidStored($0) ? $0 : nil }, homeURL: url, lastActiveAt: now()
+        )
+        insert(tab, at: tiles.count, in: tiles)
+        return tab
+    }
+
+    /// The current space's tile for this site (by host, without "www."), if it has one.
+    public func basecampTile(for url: URL) -> Tab? {
+        list(.basecamp).first { Self.sameSite($0.homeURL, url) }
+    }
+
+    private static func sameSite(_ a: URL?, _ b: URL?) -> Bool {
+        func site(_ url: URL?) -> String? {
+            guard let host = url?.host(percentEncoded: false)?.lowercased() else { return nil }
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+        guard let a = site(a) else { return false }
+        return a == site(b)
+    }
+
     /// A tile becomes a loose tab where new tabs go, so nothing is lost.
     /// Even a resting one stays (it loads when clicked); only Close removes
     /// a tile. It counts as just seen, so it isn't tidied away straight after.

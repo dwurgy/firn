@@ -28,13 +28,16 @@ private struct Welcome: View {
     let window: WindowModel
     @State private var step = WelcomeStep.hello
     @State private var name = ""
+    /// Whether "Open links in Firn?" is one of the steps: decided once, on
+    /// leaving Hello, so the steps don't shift under the person afterwards.
+    @State private var offersDefault = false
     /// The suggested sites' icons, fetched while the welcome is open.
     @State private var siteIcons: [URL: Data] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: BrowserStore { window.store }
     private var space: Space { store.activeSpace }
-    private var steps: [WelcomeStep] { WelcomeStep.allCases }
+    private var steps: [WelcomeStep] { WelcomeStep.allCases.filter { $0 != .defaultBrowser || offersDefault } }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var isLast: Bool { index == steps.count - 1 }
     /// Glacier until the space step, then the space's own.
@@ -103,6 +106,8 @@ private struct Welcome: View {
                 case .search: SearchStep(accent: Theme.spaceColor(colorName))
                 case .space: SpaceStep(store: store, name: $name)
                 case .basecamp: BasecampStep(store: store, icons: siteIcons, colorName: colorName)
+                case .defaultBrowser: DefaultBrowserStep()
+                case .tips: TipsStep()
                 }
             }
             // Each step is new, so it glides in; the last one simply goes.
@@ -136,6 +141,7 @@ private struct Welcome: View {
     }
 
     private func next() {
+        if step == .hello { offersDefault = !DefaultBrowser.isFirn }
         if step == .space { saveName() }
         if isLast { finish() } else { step = steps[index + 1] }
     }
@@ -151,14 +157,14 @@ private struct Welcome: View {
     }
 }
 
-/// The welcome's steps, in order. Default browser and tips come in a later
-/// step (Phase 6, step 4).
+/// The welcome's steps, in order. The default browser step shows only
+/// while Firn isn't the default yet (see `offersDefault`).
 private enum WelcomeStep: CaseIterable {
-    case hello, address, search, space, basecamp
+    case hello, address, search, space, basecamp, defaultBrowser, tips
 
     /// The address step waits for the "At the top" look (David, 2026-10-23):
     /// until then the choice would change nothing. Its view is kept, ready.
-    static var allCases: [WelcomeStep] { [.hello, .search, .space, .basecamp] }
+    static var allCases: [WelcomeStep] { [.hello, .search, .space, .basecamp, .defaultBrowser, .tips] }
 }
 
 // MARK: - Steps
@@ -573,6 +579,124 @@ private struct SidebarLine: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Open links in Firn? macOS asks the person to confirm, then the button
+/// gives way to a quiet "Firn is your default browser".
+private struct DefaultBrowserStep: View {
+    @State private var isDefault = DefaultBrowser.isFirn
+    @State private var asking = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        // Firn's own Settings has no such choice, so the words point to the Mac's.
+        StepHeading(title: "Open links in Firn?",
+                    words: "Make Firn your default browser, so links from mail, chat, and other apps open here, as new tabs. You can change this anytime in System Settings.")
+        ZStack(alignment: .topLeading) {
+            if isDefault {
+                Label("Firn is your default browser", systemImage: "checkmark")
+                    .font(.system(size: 14))
+                    .frame(height: 32)
+                    .transition(.opacity)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Make Firn Default") {
+                        asking = true
+                        Task {
+                            await DefaultBrowser.makeFirn()
+                            isDefault = DefaultBrowser.isFirn
+                            asking = false
+                        }
+                    }
+                    .modifier(WelcomeButton(prominent: false))
+                    .controlSize(.large)
+                    .disabled(asking)
+                    Text("Your Mac will ask you to confirm.")
+                        .font(Theme.labelFont)
+                        .foregroundStyle(Theme.muted)
+                }
+                .transition(.opacity)
+            }
+        }
+        // Room for the button and its note, kept when it turns into the
+        // line above, so the card doesn't jump.
+        .frame(minHeight: 68, alignment: .topLeading)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isDefault)
+        // Changed in System Settings meanwhile, perhaps.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isDefault = DefaultBrowser.isFirn
+        }
+    }
+}
+
+/// You're all set: three things worth knowing, each with its keys.
+private struct TipsStep: View {
+    var body: some View {
+        StepHeading(title: "You’re all set", words: "Three things worth knowing:")
+        VStack(alignment: .leading, spacing: 0) {
+            tip(keys: ["⌘", "T"], spoken: "Command T", words: "Go anywhere, or do anything by name.")
+            line
+            tip(keys: ["Right-click"], spoken: "Right-click", words: "Tabs, links, and spaces each have a short menu.")
+            line
+            tip(keys: ["⌘", "S"], spoken: "Command S", words: "Hide the sidebar for more room. It peeks back at the left edge.")
+        }
+    }
+
+    private var line: some View {
+        Rectangle().fill(Theme.tileHairline).frame(height: 1)
+    }
+
+    private func tip(keys: [String], spoken: String, words: String) -> some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 6) {
+                ForEach(keys, id: \.self) { KeyCap(key: $0) }
+            }
+            .frame(width: 120, alignment: .leading)
+            Text(words)
+                .font(.system(size: 14))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(spoken): \(words)")
+    }
+}
+
+/// A key, drawn as a small frosted cap.
+private struct KeyCap: View {
+    let key: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        Text(key)
+            .font(.system(size: 13, weight: .medium))
+            .padding(.horizontal, 9)
+            .frame(minWidth: 30, minHeight: 26)
+            .background { shape.fill(Theme.tileFill) }
+            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 1) }
+    }
+}
+
+/// Whether Firn opens web links, and asking macOS to make it so.
+@MainActor
+private enum DefaultBrowser {
+    /// Asked of Launch Services on this Mac; nothing goes over the network.
+    static var isFirn: Bool {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://example.com")!) else { return false }
+        return Bundle(url: app)?.bundleIdentifier == Bundle.main.bundleIdentifier
+    }
+
+    /// macOS asks the person first. Setting http should carry https with
+    /// it (the Mac has one default browser); if it didn't, https is asked
+    /// for too. A "no" isn't an error to show: the step stays as it was.
+    static func makeFirn() async {
+        let firn = Bundle.main.bundleURL
+        do {
+            try await NSWorkspace.shared.setDefaultApplication(at: firn, toOpenURLsWithScheme: "http")
+            if !isFirn { try await NSWorkspace.shared.setDefaultApplication(at: firn, toOpenURLsWithScheme: "https") }
+        } catch {}
     }
 }
 

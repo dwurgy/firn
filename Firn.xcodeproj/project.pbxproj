@@ -197,6 +197,7 @@
 				CODE_SIGN_ENTITLEMENTS = Firn/Firn.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
+				PROVISIONING_PROFILE_SPECIFIER = "Firn Developer ID";
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -227,6 +228,7 @@
 				CODE_SIGN_ENTITLEMENTS = Firn/Firn.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
+				PROVISIONING_PROFILE_SPECIFIER = "Firn Developer ID";
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;

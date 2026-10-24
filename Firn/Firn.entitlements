@@ -22,6 +22,12 @@
 	<!-- Printing a page from File › Print. -->
 	<key>com.apple.security.print</key>
 	<true/>
+	<!-- Firn's own place in the Keychain, for saved passwords: only Firn can read it (granted by the "Firn Developer ID"
+	     provisioning profile; without the profile, macOS won't open the app). -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.firnbrowser.firn</string>
+	</array>
 	<!-- WebKit's Deceptive Website Warning: lets WebKit ask the Mac's own Safe Browsing service (the one Safari uses)
 	     about a page. Only this one service. Without it the sandbox blocks the check and scam pages load with no warning. -->
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>

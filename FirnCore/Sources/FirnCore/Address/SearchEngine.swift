@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where typed words go when they aren't an address. Google is the default;
-/// the welcome and Settings will let people pick another one later.
+/// people pick another in the welcome or Settings.
 public enum SearchEngine: String, CaseIterable, Codable, Sendable, Identifiable {
     case google
     case bing

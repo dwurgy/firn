@@ -1556,6 +1556,11 @@ public enum NewTabPlacement: String, CaseIterable, Sendable {
     case top, bottom
 }
 
+/// Where the address bar sits: Firn's two looks (CLAUDE.md, "two looks, never more").
+public enum AddressBarPlace: String, CaseIterable, Sendable {
+    case sidebar, top
+}
+
 /// How long an everyday tab can go unseen before it drifts, counted in
 /// days Firn was used.
 public enum DriftAfter: String, CaseIterable, Sendable {

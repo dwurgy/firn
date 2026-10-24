@@ -8,6 +8,15 @@ enum Preference {
     static let newTabPlacement = "newTabPlacement"
     static let driftAfter = "driftAfter"
     static let blocksContent = "blocksContent"
+    static let searchEngine = "searchEngine"
+    /// Whether typing in the command bar asks the search engine for
+    /// suggestions. Off until someone says yes: it's the one place typing
+    /// goes over the network.
+    static let searchSuggestions = "searchSuggestions"
+    /// Saved now; the "At the top" look that reads it is a later step.
+    static let addressBar = "addressBar"
+    /// Set once the welcome has been finished or skipped.
+    static let welcomed = "welcomed"
 
     /// The "Block ads and trackers" setting before any view has read it (on by default).
     static var blocksContentAtLaunch: Bool {
@@ -20,9 +29,30 @@ struct SettingsView: View {
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(Preference.blocksContent) private var blocksContent = true
+    @AppStorage(Preference.searchEngine) private var searchEngine = SearchEngine.default
+    @AppStorage(Preference.searchSuggestions) private var searchSuggestions = false
+    @AppStorage(Preference.addressBar) private var addressBar = AddressBarPlace.sidebar
 
     var body: some View {
         Form {
+            Section {
+                Picker("Address bar", selection: $addressBar) {
+                    Text("In the sidebar").tag(AddressBarPlace.sidebar)
+                    Text("At the top").tag(AddressBarPlace.top)
+                }
+                .pickerStyle(.radioGroup)
+            }
+            Section {
+                Picker("Search with", selection: $searchEngine) {
+                    ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
+                }
+                Toggle("Show suggestions as you type", isOn: $searchSuggestions)
+            } footer: {
+                Text("With suggestions on, your search engine sees what you type.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Section {
                 Picker("New tabs open", selection: $newTabPlacement) {
                     Text("At the top").tag(NewTabPlacement.top)

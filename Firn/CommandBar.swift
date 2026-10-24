@@ -61,8 +61,8 @@ private struct CommandBar: View {
     /// Set once the field has had focus, so losing it can close the bar.
     @State private var hadFocus = false
 
-    /// No search engine setting yet; this follows it once there is one.
-    private let engine = SearchEngine.default
+    @AppStorage(Preference.searchEngine) private var engine = SearchEngine.default
+    @AppStorage(Preference.searchSuggestions) private var asksForSuggestions = false
     private static let fieldHeight: CGFloat = 48
 
     @Environment(\.openSettings) private var openSettings
@@ -162,7 +162,7 @@ private struct CommandBar: View {
     /// A short pause after typing, then the engine's suggestions. Each key
     /// cancels the last request; nothing is sent for an address.
     private func fetchSuggestions() async {
-        guard SearchSuggestions.mayAsk(about: text) else {
+        guard asksForSuggestions, SearchSuggestions.mayAsk(about: text) else {
             suggestions = []
             return
         }

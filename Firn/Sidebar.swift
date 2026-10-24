@@ -208,6 +208,7 @@ private struct AddressBar: View {
     @State private var text = ""
     @FocusState private var focused: Bool
     @State private var hovering = false
+    @AppStorage(Preference.searchEngine) private var searchEngine = SearchEngine.default
 
     /// The page in front: a Lookout's while one is open, so the bar always
     /// tells the truth about what's on screen, and typing goes there too.
@@ -294,7 +295,7 @@ private struct AddressBar: View {
     }
 
     private func open() {
-        guard let url = AddressInput.url(for: text) else { return }
+        guard let url = AddressInput.url(for: text, searchEngine: searchEngine) else { return }
         if store.activeTab == nil {
             store.openTab(url)
         } else {

@@ -131,10 +131,29 @@ final class WindowModel {
     /// Opens the New space card, in place of the command bar if it's open.
     func newSpace() { openSpaceSheet(.new) }
 
+    /// The welcome, over the whole window (see `WelcomeLayer`).
+    private(set) var showsWelcome = false
+
+    /// Opens the welcome: the first time Firn opens, or Help › Show Welcome Again.
+    func showWelcome() {
+        closeCommandBar(focusingPage: false)
+        spaceSheet = nil
+        showsWelcome = true
+    }
+
+    /// The welcome is done (finished or skipped): it doesn't come back on
+    /// its own, and an empty window opens the command bar, as at any launch.
+    func closeWelcome() {
+        UserDefaults.standard.set(true, forKey: Preference.welcomed)
+        showsWelcome = false
+        if store.activeTab == nil { openCommandBar() }
+    }
+
     /// Opens the Edit space card for `space`.
     func editSpace(_ space: Space) { openSpaceSheet(.edit(space.id)) }
 
     private func openSpaceSheet(_ mode: SpaceSheetMode) {
+        guard !showsWelcome else { return }
         closeCommandBar(focusingPage: false)
         spaceSheet = mode
     }
@@ -426,6 +445,8 @@ final class WindowModel {
     /// Opens the command bar (⌘T, the New tab button, an empty window). No
     /// tab exists until something in it is picked.
     func openCommandBar() {
+        // Nothing opens behind the welcome to take its keys.
+        guard !showsWelcome else { return }
         // A pick whose page has gone (closed, say) is over: the bar opens whole.
         if !isPickingSplit { splitPickAnchor = nil }
         spaceSheet = nil
@@ -592,6 +613,8 @@ struct BrowserWindow: View {
         // A dragged tab follows the pointer over everything, off the sidebar and onto the page.
         .overlay(alignment: .topLeading) { TabLiftGhost(window: window) }
         .overlay(alignment: .topLeading) { TileArrivalChip(window: window) }
+        .accessibilityHidden(window.showsWelcome)
+        .overlay { WelcomeLayer(window: window) }
         .coordinateSpace(.named(Self.space))
         .background {
             ZStack {
@@ -1430,6 +1453,10 @@ struct BrowserCommands: Commands {
                 Divider()
                 Button(name) { window.toggleFrontBlocking() }
             }
+        }
+        CommandGroup(replacing: .help) {
+            Button("Show Welcome Again") { window.showWelcome() }
+                .disabled(window.showsWelcome)
         }
         CommandGroup(before: .windowArrangement) {
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }

@@ -186,6 +186,25 @@ enum Theme {
         }
     }
 
+    /// The welcome's card and controls over First light (styles.css,
+    /// "Welcome"): semi-clear frost, never blurred, since it's a large surface.
+    enum Welcome {
+        static let card = Color(light: 0xFBFAF8, lightOpacity: 0.74, dark: 0x2B2826, darkOpacity: 0.66)
+        static let edge = Color(light: 0xFFFFFF, lightOpacity: 0.7, dark: 0xFFFAF5, darkOpacity: 0.1)
+        static let cardShadowNear = Color(light: 0x283C50, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.25)
+        static let cardShadowFar = Color(light: 0x283C50, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.35)
+        static let tile = Color(light: 0xFFFFFF, lightOpacity: 0.66, dark: 0xFFFAF5, darkOpacity: 0.07)
+        static let tileEdge = Color(light: 0x3C2814, lightOpacity: 0.1, dark: 0xFFFAF5, darkOpacity: 0.1)
+        /// The little window drawings' bars.
+        static let pill = Color(light: 0xFFFFFF, lightOpacity: 0.6, dark: 0xFFFAF5, darkOpacity: 0.12)
+        /// The chosen half of a Yes / No switch.
+        static let segmentShadow = Color(light: 0x1E140A, lightOpacity: 0.12, dark: 0x000000, darkOpacity: 0.3)
+        /// The Hello screen's mark: glacier, lighter at the top.
+        static let markTop = Color(light: 0x9DB7C8, dark: 0x9DB7C8)
+        static let markBottom = Color(light: 0x6E98B2, dark: 0x6E98B2)
+        static let markShadow = Color(light: 0x3C5A6E, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.35)
+    }
+
     // MARK: Sizes
 
     /// The page floats this far inside the window frame.
@@ -242,6 +261,37 @@ enum Theme {
     /// Panel titles. Fraunces at 22pt once it's bundled (Phase 6); the
     /// system font until then.
     static let panelTitleFont = Font.system(size: 20, weight: .semibold)
+
+    /// Fraunces, for Firn's few brand moments: soft corners on, wonky letters
+    /// off, optical size following the size, as in the brand. `weight` is
+    /// the font's own axis (360, then 600 for emphasis; never more).
+    @MainActor static func fraunces(_ size: CGFloat, weight: CGFloat) -> Font {
+        guard let base = frauncesDescriptor else { return .system(size: size) }
+        // SwiftUI can't set a font's axes, so Core Text does.
+        func axis(_ tag: String) -> NSNumber {
+            NSNumber(value: tag.utf8.reduce(UInt32(0)) { $0 << 8 | UInt32($1) })
+        }
+        let axes: [NSNumber: CGFloat] = [
+            axis("wght"): weight, axis("SOFT"): 100, axis("WONK"): 0, axis("opsz"): min(max(size, 9), 144),
+        ]
+        let descriptor = CTFontDescriptorCreateCopyWithAttributes(
+            base, [kCTFontVariationAttribute: axes] as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
+    }
+
+    /// The bundled file (SIL Open Font License, Fonts/Fraunces-OFL.txt next
+    /// to it), read once; never downloaded. Nil if it's missing, and the
+    /// system font stands in.
+    @MainActor private static let frauncesDescriptor: CTFontDescriptor? = {
+        let fonts = ["ttf", "otf", "woff2"].flatMap { kind in
+            [nil, "Fonts"].flatMap { Bundle.main.urls(forResourcesWithExtension: kind, subdirectory: $0) ?? [] }
+        }
+        guard let file = fonts.first(where: {
+            let name = $0.lastPathComponent.lowercased()
+            return name.hasPrefix("fraunces") && !name.contains("italic")
+        }) else { return nil }
+        return (CTFontManagerCreateFontDescriptorsFromURL(file as CFURL) as? [CTFontDescriptor])?.first
+    }()
 
     // MARK: Motion
 

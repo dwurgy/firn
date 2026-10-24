@@ -25,6 +25,8 @@ struct FirnApp: App {
             BrowserEngine.removeUnusedData(keeping: Set(store.spaces.map(\.dataStoreID)))
         }
         let window = WindowModel(store: store, restoring: session?.window)
+        // The welcome, the very first time (no session yet).
+        if session == nil, !UserDefaults.standard.bool(forKey: Preference.welcomed) { window.showWelcome() }
         _window = State(initialValue: window)
         saver = SessionSaver(file: file) {
             store.session(sidebarWidth: window.sidebarWidth, sidebarCollapsed: window.sidebarCollapsed)

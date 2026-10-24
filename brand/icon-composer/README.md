@@ -28,8 +28,8 @@ Doing it (on a Mac, about five minutes)
      charcoal #3A3734 with the mark in glacier #7F9CB0, like the dark tile.
   6. Save as AppIcon.icon.
 
-Getting it into Firn (to do: not in the Xcode project yet)
-  The Xcode app target should use Firn.icon as its app icon on macOS 26 and later
-  (Xcode 26 compiles it into Assets.car); the asset catalog's Glacier PNGs
-  covering macOS 14 and 15. To change the icon: edit Firn.icon in Icon Composer
-  and replace the folder.
+Getting it into Firn (done)
+  Firn/AppIcon.icon is a copy of Firn.icon, used on macOS 26 and later
+  (Xcode compiles it into Assets.car). The Glacier PNGs in
+  Firn/Assets.xcassets cover macOS 14 and 15. To change the icon: edit
+  Firn.icon in Icon Composer, then replace both copies.

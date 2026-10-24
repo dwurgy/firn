@@ -18,7 +18,7 @@ wordmark.
   later ("Liquid Glass", made in Apple's Icon Composer), plus the two layer
   SVGs it was made from and step-by-step notes.
 
-Firn uses the **Glacier** app icon (not wired into the Xcode project yet):
+Firn uses the **Glacier** app icon (copies live in `../Firn/`):
 
 - macOS 26 and later: `icon-composer/Firn.icon` (the Liquid Glass icon).
 - macOS 14 and 15: the Glacier PNGs in `app-icons/`, in the app's asset

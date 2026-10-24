@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The exact site a password belongs to: an https host and port. Nothing
@@ -29,6 +30,19 @@ public struct PasswordSite: Hashable, Sendable {
         guard let url = URL(string: "https://\(name)/"), let site = PasswordSite(url), site.name == name else { return nil }
         self = site
     }
+}
+
+/// Saved logins offered under a sign-in field just clicked: who can be
+/// filled in, and where the field is on the tab's page (in points from its
+/// top left). Never holds a password.
+public struct FillOffer: Identifiable, Equatable, Sendable {
+    public let id = UUID()
+    public let tabID: UUID
+    public let site: PasswordSite
+    public let dataStoreID: UUID
+    /// Sorted as the store sorts them; may hold an empty username.
+    public let usernames: [String]
+    public let field: CGRect
 }
 
 /// A sign-in a page just sent, as the engine noticed it: the username and

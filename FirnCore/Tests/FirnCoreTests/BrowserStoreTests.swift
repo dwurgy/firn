@@ -53,6 +53,11 @@ final class FakePage: PageController {
         if paused { isResuming = false; isPausedByFirn = true } else if isPausedByFirn { isResuming = true }
     }
     func forgetPause() { isPausedByFirn = false; isResuming = false }
+    var filled: (username: String, password: String, site: PasswordSite)?
+    func fill(username: String, password: String, on site: PasswordSite) async -> Bool {
+        filled = (username, password, site)
+        return true
+    }
 }
 
 @MainActor

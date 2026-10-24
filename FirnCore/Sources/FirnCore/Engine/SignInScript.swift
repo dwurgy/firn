@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// How Firn notices a sign-in, so it can offer to save the password. A
@@ -16,6 +17,14 @@ import Foundation
 ///
 /// For a change of password (new and confirm), the new one is read; when
 /// it can't tell which field holds the password, it sends nothing.
+///
+/// For filling, a real click (or Tab) into an empty field of a sign-in form
+/// (a password field, or a username field with one after it or marked as a
+/// username) tells Firn only where that field is on screen,
+/// `{kind: "fillable", x, y, width, height}`, never what's in the page. It
+/// remembers that field and its partner; `fillSource` fills them later, once
+/// someone picks a saved login. Sign-up and change-password forms (a
+/// `new-password` field, or two password fields) aren't offered.
 enum SignInScript {
     static let handlerName = "firnSignIn"
     /// How long a sign-in is held, in seconds, waiting to see if it worked.
@@ -25,6 +34,9 @@ enum SignInScript {
     enum Message: Equatable {
         case submitted(username: String, password: String)
         case gone
+        /// A sign-in field was clicked; where it sits, in CSS pixels from
+        /// the top left of the page's visible area.
+        case fillable(CGRect)
     }
 
     /// The message in its exact shape, within the store's limits, or nil.
@@ -39,10 +51,33 @@ enum SignInScript {
                   username.count <= PasswordStore.usernameLimit, password.count <= PasswordStore.passwordLimit
             else { return nil }
             return .submitted(username: username, password: password)
+        case "fillable":
+            guard message.count == 5, let x = number(message["x"]), let y = number(message["y"]),
+                  let width = number(message["width"]), let height = number(message["height"]),
+                  width > 0, height > 0
+            else { return nil }
+            return .fillable(CGRect(x: x, y: y, width: width, height: height))
         default:
             return nil
         }
     }
+
+    /// A finite number of a sane size, or nil. (A JavaScript number arrives
+    /// as NSNumber, and so would a boolean, which isn't wanted.)
+    private static func number(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        return double.isFinite && abs(double) <= 100_000 ? double : nil
+    }
+
+    /// Fills the fields last offered, run with `callAsyncJavaScript` in
+    /// Firn's world, main frame, with `username`, `password`, and `origin`
+    /// as arguments (never pasted into the source). Only on the very origin
+    /// expected. Returns whether anything was filled.
+    static let fillSource = """
+        if (window.location.origin !== origin || typeof window.firnFill !== 'function') return false;
+        return window.firnFill(username, password);
+        """
 
     static let source = """
         (function () {
@@ -115,6 +150,71 @@ enum SignInScript {
                 });
                 watch(password);
             }
+            // Filling. Only Firn's world can see `firnFill`; the page can't.
+            var fillTarget = null;
+            function textLike(el) {
+                var type = (el.type || 'text').toLowerCase();
+                return type === 'text' || type === 'email' || type === 'tel';
+            }
+            function usable(el) {
+                return el && el.isConnected && !el.disabled && !el.readOnly && visible(el);
+            }
+            function fillFields(el) {
+                if (!(el instanceof HTMLInputElement) || !usable(el) || el.value) return null;
+                var root = el.form || document;
+                var inputs = root.querySelectorAll('input');
+                var passwords = [], marked = null, before = null, after = null, passed = false;
+                for (var i = 0; i < inputs.length; i++) {
+                    var field = inputs[i];
+                    if (field === el) { passed = true; }
+                    if (!usable(field)) continue;
+                    if (field.type === 'password') {
+                        if (autocomplete(field).indexOf('new-password') >= 0) return null;
+                        passwords.push(field);
+                        if (passed && !after && field !== el) after = field;
+                    } else if (textLike(field) && field !== el) {
+                        var auto = autocomplete(field);
+                        if (!marked && (auto.indexOf('username') >= 0 || auto.indexOf('email') >= 0)) marked = field;
+                        if (!passed) before = field;
+                    }
+                }
+                if (passwords.length > 1) return null;
+                if (el.type === 'password') return { user: marked || before, pass: el };
+                if (!textLike(el)) return null;
+                if (!after && autocomplete(el).indexOf('username') < 0) return null;
+                return { user: el, pass: after };
+            }
+            function offerFill(el) {
+                fillTarget = fillFields(el);
+                if (!fillTarget) return;
+                var r = el.getBoundingClientRect();
+                window.webkit.messageHandlers.firnSignIn.postMessage({
+                    kind: 'fillable', x: r.left, y: r.top, width: r.width, height: r.height
+                });
+            }
+            function setValue(el, value) {
+                // The element's own setter, so sites that watch typing
+                // (React and the like) see the change, then the usual events.
+                var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                el.focus();
+                setter.call(el, value);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            window.firnFill = function (username, password) {
+                var target = fillTarget;
+                if (!target) return false;
+                var filled = false;
+                if (username && usable(target.user) && textLike(target.user)) { setValue(target.user, username); filled = true; }
+                if (usable(target.pass) && target.pass.type === 'password') { setValue(target.pass, password); filled = true; }
+                return filled;
+            };
+            document.addEventListener('click', function (event) {
+                if (event.isTrusted && event.target instanceof HTMLInputElement) offerFill(event.target);
+            }, true);
+            document.addEventListener('keyup', function (event) {
+                if (event.isTrusted && event.key === 'Tab') offerFill(document.activeElement);
+            }, true);
             document.addEventListener('submit', function (event) {
                 if (event.isTrusted && event.target instanceof HTMLFormElement) capture(event.target);
             }, true);

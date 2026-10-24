@@ -22,8 +22,12 @@ public final class BrowserStore {
     public private(set) var splits: [SplitGroup] = []
     public private(set) var activeSpaceID: UUID
     public private(set) var activeTabID: UUID? {
-        // Showing another tab answers the save prompt with "Not now".
-        didSet { if let offer = passwordOffer, !onScreenTabIDs.contains(offer.tabID) { passwordOffer = nil } }
+        // Showing another tab answers the save prompt with "Not now",
+        // and closes the list of saved logins.
+        didSet {
+            if let offer = passwordOffer, !onScreenTabIDs.contains(offer.tabID) { passwordOffer = nil }
+            if let offer = fillOffer, !onScreenTabIDs.contains(offer.tabID) { fillOffer = nil }
+        }
     }
     /// The link preview over the tab on screen, if one is open. Showing
     /// another tab or space closes it.
@@ -32,6 +36,9 @@ public final class BrowserStore {
     /// there is one; answered with `savePasswordOffer()`,
     /// `dismissPasswordOffer()`, or `neverSavePasswordsForOffer()`.
     public private(set) var passwordOffer: PasswordOffer?
+    /// The saved logins offered under a sign-in field just clicked on a tab
+    /// on screen, if any; answered with `fill(username:)` or `dismissFillOffer()`.
+    public private(set) var fillOffer: FillOffer?
     /// Where new tabs go in a space's tab list (a setting; the app keeps it).
     /// Tabs taken out of a group, ungrouped, or taken off Basecamp go there too.
     public var newTabPlacement: NewTabPlacement = .bottom
@@ -1141,6 +1148,8 @@ public final class BrowserStore {
             close(tab, showing: tabs.first { $0.id == tab.openerTabID }, remembering: false)
         case let .offerToSave(login):
             offerToSave(login, from: tab)
+        case let .offerToFill(site, field):
+            offerToFill(site, at: field, from: tab)
         }
     }
 
@@ -1195,8 +1204,8 @@ public final class BrowserStore {
             adopt(page, opener: opener, inBackground: inBackground)
         case .close:
             closeLookout()
-        case .offerToSave:
-            // A Lookout is a glance; sign in from a tab to save a password.
+        case .offerToSave, .offerToFill:
+            // A Lookout is a glance; sign in from a tab to save or fill a password.
             break
         }
     }
@@ -1251,6 +1260,42 @@ public final class BrowserStore {
     /// Whether any space using this data store said "Never" for the site.
     func neverSavesPasswords(on site: PasswordSite, in dataStoreID: UUID) -> Bool {
         spaces.contains { $0.dataStoreID == dataStoreID && $0.neverSavePasswordSites.contains(site.name) }
+    }
+
+    // MARK: - Filling passwords
+
+    /// A sign-in field was clicked on a tab on screen: offers the site's
+    /// saved logins in the tab's data store under it, if there are any.
+    /// Only usernames are held; the password is read again when one is picked.
+    private func offerToFill(_ site: PasswordSite, at field: CGRect, from tab: Tab) {
+        guard let passwords, onScreenTabIDs.contains(tab.id),
+              let space = spaces.first(where: { $0.id == tab.spaceID }),
+              let logins = try? passwords.logins(for: site, in: space.dataStoreID), !logins.isEmpty
+        else {
+            fillOffer = nil
+            return
+        }
+        fillOffer = FillOffer(tabID: tab.id, site: site, dataStoreID: space.dataStoreID,
+                              usernames: logins.map(\.username), field: field)
+    }
+
+    /// Fills the field offered with the saved login for `username`, read
+    /// fresh from the Keychain. Returns whether the page took it.
+    @discardableResult
+    public func fill(username: String) async -> Bool {
+        guard let offer = fillOffer, let passwords else { return false }
+        fillOffer = nil
+        guard let tab = tabs.first(where: { $0.id == offer.tabID }), onScreenTabIDs.contains(tab.id),
+              let page = tab.page,
+              let login = (try? passwords.logins(for: offer.site, in: offer.dataStoreID))?
+                  .first(where: { $0.username == username })
+        else { return false }
+        return await page.fill(username: login.username, password: login.password, on: offer.site)
+    }
+
+    /// Closes the list of saved logins; nothing is filled.
+    public func dismissFillOffer() {
+        fillOffer = nil
     }
 
     // MARK: - Drifting

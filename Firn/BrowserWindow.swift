@@ -1034,7 +1034,7 @@ private struct PageArea: View {
         let pressable = inUseID != nil && !isInUse
         // With no tab open at all, the empty page is First light, in this space's snow.
         let firstLight = store.activeTab == nil && inUseID == nil ? store.activeSpace.color : nil
-        return PagePane(tab: tab, firstLight: firstLight,
+        return PagePane(store: store, tab: tab, firstLight: firstLight,
                         onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
@@ -1372,6 +1372,7 @@ enum SplitPicking {
 
 /// One page, floating in the frame, or a calm empty page with no tab.
 private struct PagePane: View {
+    let store: BrowserStore
     let tab: FirnCore.Tab?
     /// The space's color, when this is the empty page (no tab open).
     var firstLight: String? = nil
@@ -1406,9 +1407,35 @@ private struct PagePane: View {
                     }
                     // A plain fade either way; quicker with Reduce Motion.
                     .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: page.loadError)
+                    .overlay(alignment: .topLeading) { fillList(on: tab, page: page) }
+                    .onChange(of: page.url) {
+                        if store.fillOffer?.tabID == tab.id { store.dismissFillOffer() }
+                    }
                     .id(tab.id)
             }
         }
+    }
+}
+
+extension PagePane {
+    /// The saved logins under a sign-in field just clicked on this page.
+    /// It fades in and out, with a short drop when motion is on.
+    @ViewBuilder
+    private func fillList(on tab: FirnCore.Tab, page: any PageController) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                if let offer = store.fillOffer, offer.tabID == tab.id, page.loadError == nil {
+                    PasswordFillList(store: store, offer: offer,
+                                     color: Theme.spaceColor(store.activeSpace.color), pageSize: proxy.size)
+                        .id(offer.id)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4)))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .animation(.easeOut(duration: 0.15), value: store.fillOffer?.id)
+        }
+        // Never in the way of the page when there's no list.
+        .allowsHitTesting(store.fillOffer?.tabID == tab.id)
     }
 }
 

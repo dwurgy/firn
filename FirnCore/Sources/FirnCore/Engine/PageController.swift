@@ -85,6 +85,11 @@ public protocol PageController: AnyObject, Observable {
     /// site). Set by whoever owns the page; nil means blocked everywhere.
     var blocksContent: (@MainActor (URL) -> Bool)? { get set }
 
+    /// Fills the sign-in fields last clicked (see `PageRequest.offerToFill`)
+    /// with a saved login, only if the page on screen is still `site`.
+    /// Returns whether anything was filled.
+    func fill(username: String, password: String, on site: PasswordSite) async -> Bool
+
     /// Where the page sends what it asks of the browser (new tabs, closing).
     /// Set by whoever owns the page; nil means nobody is listening.
     var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
@@ -116,6 +121,10 @@ public enum PageRequest {
     /// worked (the page moved on, or its password field went away): offer
     /// to save the password. At most once per sign-in.
     case offerToSave(SubmittedLogin)
+    /// Someone clicked into an empty sign-in field on an https page: offer
+    /// the site's saved logins under it. `field` is where the field sits,
+    /// in points from the page view's top left.
+    case offerToFill(PasswordSite, field: CGRect)
 }
 
 /// Makes pages. The only place that knows which engine Firn uses.

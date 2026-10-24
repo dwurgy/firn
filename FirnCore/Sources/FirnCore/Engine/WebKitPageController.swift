@@ -543,7 +543,30 @@ extension WebKitPageController {
             // The password field left the page it was typed into.
             guard let pending = pendingSignIn, Self.origin(origin, is: pending.login.site) else { return }
             offerPendingSignIn()
+        case let .fillable(field):
+            // Pinch zoom moves the page under its own coordinates; no list then.
+            guard let url, let site = PasswordSite(url), Self.origin(origin, is: site),
+                  loadError == nil, webView.magnification == 1 else { return }
+            let zoom = webView.pageZoom
+            let rect = CGRect(x: field.minX * zoom, y: field.minY * zoom,
+                              width: field.width * zoom, height: field.height * zoom)
+            guard rect.intersects(webView.bounds) else { return }
+            onRequest?(.offerToFill(site, field: rect))
         }
+    }
+
+    /// The login goes in as arguments, never as code, in Firn's world, to
+    /// the main frame, and the script checks the page's origin again.
+    func fill(username: String, password: String, on site: PasswordSite) async -> Bool {
+        guard let url, PasswordSite(url) == site, loadError == nil else { return false }
+        // A click on the list may have taken the keyboard; the page gets it
+        // back, so Return then sends the form.
+        focus()
+        let filled = try? await webView.callAsyncJavaScript(
+            SignInScript.fillSource,
+            arguments: ["username": username, "password": password, "origin": "https://\(site.name)"],
+            in: nil, contentWorld: Self.firnWorld)
+        return (filled as? NSNumber)?.boolValue == true
     }
 
     /// Offers the sign-in held, if any and not too old, once, and lets it go.

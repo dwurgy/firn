@@ -21,6 +21,18 @@ struct SignInScriptTests {
         #expect(SignInScript.parse(["kind": "fill"]) == nil)
     }
 
+    @Test func readsWhereAFieldIs() {
+        #expect(SignInScript.parse(["kind": "fillable", "x": 10, "y": 20.5, "width": 200, "height": 30])
+            == .fillable(CGRect(x: 10, y: 20.5, width: 200, height: 30)))
+        #expect(SignInScript.parse(["kind": "fillable", "x": 10, "y": 20, "width": 200]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": "10", "y": 20, "width": 200, "height": 30]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": true, "y": 20, "width": 200, "height": 30]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": 10, "y": 20, "width": 0, "height": 30]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": Double.infinity, "y": 20, "width": 200, "height": 30]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": 1e9, "y": 20, "width": 200, "height": 30]) == nil)
+        #expect(SignInScript.parse(["kind": "fillable", "x": 10, "y": 20, "width": 200, "height": 30, "value": "x"]) == nil)
+    }
+
     @Test func refusesWhatsTooLong() {
         let long = String(repeating: "a", count: 1025)
         #expect(SignInScript.parse(["kind": "submitted", "username": "dana", "password": long]) == nil)
@@ -183,5 +195,84 @@ struct PasswordNeedsUpdateTests {
     @Test func aNewUsernameIsANewLogin() throws {
         try store.save(username: "dana", password: "snow", for: site, in: id)
         #expect(try store.needsUpdate(for: SubmittedLogin(site: site, username: "sam", password: "firn"), in: id) == false)
+    }
+}
+
+@MainActor
+struct PasswordFillTests {
+    private let personal = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let work = Space(name: "Work", icon: "work", color: "sand", order: 1, dataStoreID: UUID())
+    private let passwords = PasswordStore(vault: MemoryVault())
+    private let site = PasswordSite(URL(string: "https://example.com/login")!)!
+    private let field = CGRect(x: 40, y: 120, width: 240, height: 32)
+
+    private func makeStore() -> BrowserStore {
+        BrowserStore(spaces: [personal, work], makePage: { FakePage(dataStoreID: $0) }, passwords: passwords)
+    }
+
+    private func click(on tab: Tab) {
+        tab.page?.onRequest?(.offerToFill(site, field: field))
+    }
+
+    @Test func offersSavedLoginsAndFillsThePickedOne() async throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)
+        try passwords.save(username: "ari", password: "firn", for: site, in: personal.dataStoreID)
+        let store = makeStore()
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        click(on: tab)
+        let offer = try #require(store.fillOffer)
+        #expect(Set(offer.usernames) == ["dana", "ari"])
+        #expect(offer.field == field)
+        #expect(await store.fill(username: "ari"))
+        #expect(store.fillOffer == nil)
+        let filled = try #require((tab.page as? FakePage)?.filled)
+        #expect(filled.username == "ari" && filled.password == "firn" && filled.site == site)
+    }
+
+    @Test func offersNothingWithoutSavedLogins() throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: work.dataStoreID)
+        let store = makeStore()
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        click(on: tab)
+        // Work's login stays in Work.
+        #expect(store.fillOffer == nil)
+    }
+
+    @Test func closesWhenAnotherTabIsShown() throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)
+        let store = makeStore()
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        click(on: tab)
+        #expect(store.fillOffer != nil)
+        store.openTab(URL(string: "https://other.example")!)
+        #expect(store.fillOffer == nil)
+    }
+
+    @Test func aTabOutOfSightOffersNothing() throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)
+        let store = makeStore()
+        let hidden = store.openTab(URL(string: "https://example.com")!)
+        store.openTab(URL(string: "https://other.example")!)
+        click(on: hidden)
+        #expect(store.fillOffer == nil)
+    }
+
+    @Test func aLookoutOffersNothing() throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)
+        let store = makeStore()
+        store.openTab(URL(string: "https://example.com")!)
+        store.openLookout(URL(string: "https://example.com/login")!)
+        store.lookout?.page.onRequest?(.offerToFill(site, field: field))
+        #expect(store.fillOffer == nil)
+    }
+
+    @Test func aLoginDeletedMeanwhileIsntFilled() async throws {
+        try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)
+        let store = makeStore()
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        click(on: tab)
+        for login in try passwords.logins(for: site, in: personal.dataStoreID) { try passwords.delete(login) }
+        #expect(await store.fill(username: "dana") == false)
+        #expect((tab.page as? FakePage)?.filled == nil)
     }
 }

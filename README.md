@@ -6,7 +6,8 @@
 </p>
 
 <p align="center"><strong>A calm browser, made for Mac.</strong><br>
-Privacy, simplicity, calm, and beauty.</p>
+Privacy, simplicity, calm, and beauty.<br>
+<a href="https://firnbrowser.com">firnbrowser.com</a></p>
 
 ---
 
@@ -27,7 +28,16 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
 
 ## Privacy
 
-Your data stays on your Mac. Firn has no accounts, no tracking, and no telemetry. Each separate space keeps its own website data, and nothing from one space shows up in another.
+- **No telemetry.** Firn has no accounts, doesn't track you, and doesn't report how you use it. Your tabs and spaces stay on your Mac.
+- **Spaces stay separate.** Each separate space keeps its own sign-ins, cookies, and site data, and nothing from one space shows up in another.
+- **Ads and trackers are blocked** with the public EasyList and EasyPrivacy lists, built into the app. If a site breaks, open it and choose **Stop Blocking on** the site in the View menu.
+
+**What Firn sends, and to whom.** Besides the websites you visit, Firn makes only these requests on its own:
+
+- **Site icons**, fetched from the site you're on, without its cookies or your sign-ins. The welcome fetches the suggested sites' icons the same way.
+- **Search suggestions**, only if you turn them on (they're off by default). Then your search engine sees what you type as you type it.
+
+Nothing else: no analytics, no update checks yet, and no Firn server.
 
 ## Requirements
 
@@ -47,10 +57,23 @@ Most of Firn's logic lives in the `FirnCore` Swift package and can be tested fro
 cd FirnCore && swift test --scratch-path ~/Library/Caches/FirnCore-build
 ```
 
+### Where things live
+
+- `Firn/`: the app itself: the window, sidebar, Basecamp, command bar, Lookout, settings, the welcome, and `Theme.swift` (every color in one place).
+- `FirnCore/Sources/FirnCore/Model/`: tabs, spaces, groups, split view, and saving your session. It doesn't depend on WebKit.
+- `FirnCore/Sources/FirnCore/Engine/`: the browser engine. `PageController.swift` describes what a web page can do, and `WebKitPageController.swift` is WebKit's version of it. Views never touch WebKit directly.
+- `FirnCore/Sources/FirnCore/Address/`: turning what you type into an address or a search.
+- `FirnCore/Sources/FirnCore/Blocking/`: the ad and tracker lists, and the converter that turns them into WebKit's rules.
+- `FirnCore/Tests/`: the tests.
+- `brand/`: Firn's logo, wordmark, and app icons.
+- `docs/`: design drafts and `HISTORY.md`, the story of how each part was built and why.
+
+Your data lives in Firn's sandbox container, `~/Library/Containers/` on your Mac.
+
 ## License
 
-Firn's code is open source under the [Mozilla Public License 2.0](LICENSE).
+Firn's code is open source under the [Mozilla Public License 2.0](LICENSE), the license Firefox uses. Anyone can read it, check what Firn does with their data, and build on it; changes to Firn's own files have to stay open under the same license.
 
-The Firn name, logo, and app icons (`brand/` and the app icon) are **not** covered by that license and may not be used without permission.
+**The Firn name, logo, and app icons are not covered by the license.** They identify Firn itself, so please don't use them for your own version or anything that could be mistaken for Firn; give a version you share its own name and look. (That covers `brand/` and the app icon.)
 
 Firn includes the Fraunces typeface, under the [SIL Open Font License](Firn/Fonts/Fraunces-OFL.txt).

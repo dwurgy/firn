@@ -1,8 +1,11 @@
 <p align="center">
-  <img src="brand/svg/firn-lockup.svg" alt="Firn" width="220">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/svg/firn-lockup-on-dark.svg">
+    <img src="brand/svg/firn-lockup.svg" alt="Firn" width="220">
+  </picture>
 </p>
 
-<p align="center"><strong>A calm browser for the Mac.</strong><br>
+<p align="center"><strong>A calm browser, made for Mac.</strong><br>
 Privacy, simplicity, calm, and beauty.</p>
 
 ---

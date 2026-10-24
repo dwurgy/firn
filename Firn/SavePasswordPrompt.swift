@@ -8,6 +8,8 @@ import SwiftUI
 struct SavePasswordPrompt: View {
     let store: BrowserStore
     let offer: PasswordOffer
+    /// The Keychain refused the last Save; the prompt stays to say so.
+    @State private var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -21,6 +23,12 @@ struct SavePasswordPrompt: View {
                     .foregroundStyle(Theme.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if failed {
+                    Text("Firn couldn’t save it. Try again in a moment.")
+                        .font(Theme.labelFont)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.top, 4)
+                }
             }
             HStack(spacing: 4) {
                 Button("Never for this site") { store.neverSavePasswordsForOffer() }
@@ -30,7 +38,11 @@ struct SavePasswordPrompt: View {
                 Button("Not now") { store.dismissPasswordOffer() }
                     .buttonStyle(TextActionStyle())
                     .keyboardShortcut(.cancelAction)
-                Button(offer.isUpdate ? "Update" : "Save") { store.savePasswordOffer() }
+                Button(offer.isUpdate ? "Update" : "Save") {
+                    guard !store.savePasswordOffer() else { return }
+                    failed = true
+                    AccessibilityNotification.Announcement("Firn couldn’t save the password.").post()
+                }
                     .buttonStyle(InkButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }

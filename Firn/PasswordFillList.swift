@@ -58,6 +58,20 @@ struct PasswordFillList: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Saved passwords for \(offer.site.name)")
         .onChange(of: pageSize) { store.dismissFillOffer() }
+        // VoiceOver stays in the page's field, so the list says it's there.
+        .onAppear {
+            AccessibilityNotification.Announcement(
+                "Saved passwords for \(offer.site.name). Press Down Arrow to choose one."
+            ).post()
+        }
+        .onChange(of: marked) {
+            guard let marked, offer.usernames.indices.contains(marked) else { return }
+            AccessibilityNotification.Announcement(Self.spoken(offer.usernames[marked])).post()
+        }
+    }
+
+    private static func spoken(_ username: String) -> String {
+        username.isEmpty ? "Fill saved password" : "Fill \(username)"
     }
 
     private func row(_ index: Int, _ username: String) -> some View {
@@ -86,7 +100,7 @@ struct PasswordFillList: View {
         .buttonStyle(.plain)
         .focusable(false)
         .onHover { hovered = $0 ? index : (hovered == index ? nil : hovered) }
-        .accessibilityLabel(username.isEmpty ? "Fill saved password" : "Fill \(username)")
+        .accessibilityLabel(Self.spoken(username))
     }
 
     private var rowsHeight: CGFloat {

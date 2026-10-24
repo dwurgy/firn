@@ -73,6 +73,16 @@ struct PasswordOfferTests {
         #expect(try passwords.logins(for: site, in: work.dataStoreID).isEmpty)
     }
 
+    @Test func aRefusedSaveKeepsTheOffer() throws {
+        let store = BrowserStore(spaces: [personal], makePage: { FakePage(dataStoreID: $0) },
+                                 passwords: PasswordStore(vault: RefusingVault()))
+        let tab = store.openTab(URL(string: "https://example.com")!)
+        signIn(on: tab, login())
+        let offer = try #require(store.passwordOffer)
+        #expect(!store.savePasswordOffer())
+        #expect(store.passwordOffer?.id == offer.id)
+    }
+
     @Test func noOfferWhenAlreadySaved() throws {
         let store = makeStore()
         try passwords.save(username: "dana", password: "snow", for: site, in: personal.dataStoreID)

@@ -22,6 +22,7 @@ struct PasswordsSettings: View {
     @State private var rows: [Row] = []
     @State private var icons: [String: Data] = [:]
     @State private var cantRead = false
+    @State private var cantDelete = false
     @State private var search = ""
     @State private var unlocked = false
     /// Passwords asked to be shown, until the pane locks.
@@ -119,6 +120,9 @@ struct PasswordsSettings: View {
     }
 
     @ViewBuilder private var list: some View {
+        if cantDelete && !cantRead {
+            quietLine("Firn couldn't delete that password. Try again in a moment.")
+        }
         if cantRead {
             quietLine("Firn can't read the Keychain right now.")
         } else if rows.isEmpty {
@@ -148,8 +152,8 @@ struct PasswordsSettings: View {
             Spacer(minLength: 12)
             Group {
                 if let password = shown[row.id] {
+                    // Not selectable: Copy Password marks the copy concealed, a selection wouldn't.
                     Text(password)
-                        .textSelection(.enabled)
                         .foregroundStyle(Theme.ink)
                         .accessibilityLabel("Password: \(password)")
                 } else {
@@ -256,6 +260,7 @@ struct PasswordsSettings: View {
     private func lock() {
         unlocked = false
         shown = [:]
+        cantDelete = false
     }
 
     /// Runs `action` once the person has proved it's them, asking only if
@@ -309,7 +314,12 @@ struct PasswordsSettings: View {
     }
 
     private func delete(_ row: Row) {
-        try? passwords.delete(username: row.username, on: row.site, in: space.dataStoreID)
+        do {
+            try passwords.delete(username: row.username, on: row.site, in: space.dataStoreID)
+            cantDelete = false
+        } catch {
+            cantDelete = true
+        }
         shown[row.id] = nil
         reload()
     }

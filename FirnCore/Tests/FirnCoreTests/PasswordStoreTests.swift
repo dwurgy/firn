@@ -38,6 +38,16 @@ final class MemoryVault: PasswordVault, @unchecked Sendable {
     }
 }
 
+/// A Keychain that reads (nothing saved) but refuses every save, as a locked
+/// or damaged one might.
+struct RefusingVault: PasswordVault {
+    func save(_ login: SavedLogin) throws { throw PasswordError.keychain(errSecInteractionNotAllowed) }
+    func logins(in dataStoreID: UUID, for site: PasswordSite?) throws -> [SavedLogin] { [] }
+    func delete(_ login: SavedLogin) throws {}
+    func deleteAll(in dataStoreID: UUID) throws {}
+    func dataStoreIDs() throws -> Set<UUID> { [] }
+}
+
 struct PasswordStoreTests {
     private let store = PasswordStore(vault: MemoryVault())
     private let personal = UUID()

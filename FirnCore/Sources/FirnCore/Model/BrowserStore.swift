@@ -1225,14 +1225,15 @@ public final class BrowserStore {
     }
 
     /// Saves the password offered, in the data store it was used in.
-    /// Returns false if the Keychain said no.
+    /// Returns false if the Keychain said no; the offer then stays, so the
+    /// prompt can say so and Save can be tried again.
     @discardableResult
     public func savePasswordOffer() -> Bool {
         guard let offer = passwordOffer, let passwords else { return false }
-        passwordOffer = nil
         do {
             try passwords.save(username: offer.login.username, password: offer.login.password,
                                for: offer.login.site, in: offer.dataStoreID)
+            passwordOffer = nil
             return true
         } catch {
             return false

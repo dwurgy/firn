@@ -154,6 +154,38 @@ enum Theme {
         }
     }
 
+    // MARK: First light
+
+    /// The welcome's and the empty page's scene (docs/electron-welcome/styles.css,
+    /// "First light"). Dark is "blue hour". The sky and sun are always Firn's
+    /// own; only the snow takes the space's color.
+    enum FirstLight {
+        static let skyTop = Color(light: 0xF2F5F6, dark: 0x2E2F31)
+        static let cool = Color(light: 0x9DB7C8, lightOpacity: 0.34, dark: 0x6E98B2, darkOpacity: 0.24)
+        static let warm = Color(light: 0xF2C4A0, lightOpacity: 0.42, dark: 0xD69268, darkOpacity: 0.16)
+        static let warm2 = Color(light: 0xECCEBA, lightOpacity: 0.28, dark: 0xA0786E, darkOpacity: 0.10)
+        static let sun = Color(light: 0xF4C298, lightOpacity: 0.62, dark: 0xD68C60, darkOpacity: 0.32)
+        static let sunMid = Color(light: 0xF4C298, lightOpacity: 0.22, dark: 0xD68C60, darkOpacity: 0.10)
+        /// The flakes: Firn's small mark in Glacier, faint, in both looks.
+        static let flake = NSColor(hex: 0x7F9CB0, opacity: 1)
+        static let flakeOpacity: Float = 0.22
+        /// The paper grain: multiplied in light, soft light in dark.
+        static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
+
+        /// The five snow bands, back to front: Firn's glacier blues for a
+        /// Glacier space, otherwise the space's color mixed into the page.
+        static func snow(_ space: String) -> [Color] {
+            let tint = spaceHex(space)
+            if tint == spaceHex("glacier") {
+                return zip([0xDCE5EB, 0xC3D3DE, 0xA6BFCF, 0x8AABC0, 0x6E98B2] as [UInt32],
+                           [0x34353A, 0x3A3F46, 0x414B55, 0x495865, 0x536777] as [UInt32])
+                    .map { Color(light: $0, dark: $1) }
+            }
+            return zip([0.20, 0.33, 0.47, 0.62, 0.78], [0.12, 0.20, 0.29, 0.38, 0.48])
+                .map { Color(light: mix(0xFBFAF8, tint, $0), dark: mix(0x2B2826, tint, $1)) }
+        }
+    }
+
     // MARK: Sizes
 
     /// The page floats this far inside the window frame.

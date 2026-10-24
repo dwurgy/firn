@@ -929,7 +929,10 @@ private struct PageArea: View {
     private func page(_ tab: FirnCore.Tab?, inUseID: UUID?, frosted: FirnCore.Tab?) -> some View {
         let isInUse = tab != nil && tab?.id == inUseID
         let pressable = inUseID != nil && !isInUse
-        return PagePane(tab: tab, onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
+        // With no tab open at all, the empty page is First light, in this space's snow.
+        let firstLight = store.activeTab == nil && inUseID == nil ? store.activeSpace.color : nil
+        return PagePane(tab: tab, firstLight: firstLight,
+                        onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
                     .strokeBorder(Theme.frost, lineWidth: 2)
@@ -1246,6 +1249,8 @@ enum SplitPicking {
 /// One page, floating in the frame, or a calm empty page with no tab.
 private struct PagePane: View {
     let tab: FirnCore.Tab?
+    /// The space's color, when this is the empty page (no tab open).
+    var firstLight: String? = nil
     var onPointerDown: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1257,6 +1262,11 @@ private struct PagePane: View {
             shape
                 .fill(Theme.page)
                 .shadow(color: Theme.shadowPageFar, radius: 12, x: 4, y: 8)
+            if tab == nil, let firstLight {
+                FirstLightScene(spaceColor: firstLight)
+                    .clipShape(shape)
+                    .transition(.opacity)
+            }
             if let tab, let page = tab.page {
                 PageView(page: page, cornerRadius: Theme.pageCornerRadius, onPointerDown: onPointerDown)
                     .overlay {

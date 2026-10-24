@@ -148,6 +148,7 @@ Each space is its own browser. This is the heart of the new Firn; get it right b
   - **Back and skip in the mini player:** left out for now (David, 2026-10-23: maybe unnecessary; play and pause first). Investigated: a site's own previous and next (Media Session) can't be reached from Firn's world, only by a small script in the page's own world, an exception to the content-world rule that David would have to approve.
   - **Import passwords** from the export file other browsers and password managers make, then offer to delete that file (it holds every password as plain text). Opus.
   - **Move a tab to another space** (David, 2026-10-19: wanted, but not in Phase 4). Between separate spaces the tab reloads with the other space's sign-ins, so the menu should say that plainly.
+  - **Extensions:** look into how Orion (Kagi's browser, Mac native on WebKit) runs Chrome and Firefox extensions: what it built on top of `WKWebExtension` or before it, what works, and what doesn't (David, 2026-10-23). Research so far is in `docs/HISTORY.md` ("Research: extensions"). Opus.
   - **Where a tab came from:** a new tab opened from a link quietly shows which tab it came from (leaning toward a hover echo in the space's color), without a tree, indenting, or extra menus.
 
 Keyboard shortcuts match the Mac version of the Electron app unless David decides otherwise.

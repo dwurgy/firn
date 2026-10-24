@@ -90,7 +90,7 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 - Neutrals lean warm (sand and brown), never blue-gray. Hover and press are a warm brown wash (7% and 13% of rgb(70, 55, 40) in light; warm white in dark).
 - The active space tints the frame and glass at about 16% (14% in dark) and cross-fades on switch.
 - Blue is branding, never text. Sand never carries text. Buttons are ink. Shadows are warm brown, never grey.
-- Glacier stays #7F9CB0 / #6E98B2; no darker "contrast-fixed" versions.
+- Glacier stays #7F9CB0 / #6E98B2; no darker "contrast-fixed" versions. The one exception is the system accent (switches, radio buttons, selection, focus rings): a slightly more saturated Glacier, #689ABB light and #5F98BB dark, so controls don't look washed out (David, 2026-10-24).
 
 **Fraunces:** bundled in the app (SIL Open Font License, keep the license file next to it), never downloaded. Soft corners on, wonky letters off (`SOFT` 100, `WONK` 0, optical size automatic). SwiftUI can't set custom font axes directly, so build the font through Core Text font variations in one helper and use it everywhere. Emphasis in Fraunces headlines is weight (360, then 600), never color, never heavier than 600.
 

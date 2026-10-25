@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firn's update feed. scripts/release.sh adds each release at the top; the website serves a copy at
+     https://firnbrowser.com/appcast.xml. Sparkle installs an update only if it's signed with Firn's private key. -->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+	<channel>
+		<title>Firn</title>
+		<link>https://firnbrowser.com/appcast.xml</link>
+		<language>en</language>
+		<!-- New releases go below this line. -->
+	</channel>
+</rss>

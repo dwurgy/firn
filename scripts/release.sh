@@ -74,6 +74,21 @@ codesign -d --entitlements - --xml "$APP" >"$WORK/entitlements.plist" 2>/dev/nul
 ent() { /usr/libexec/PlistBuddy -c "Print :$1" "$WORK/entitlements.plist" 2>/dev/null || echo missing }
 [[ "$(ent com.apple.security.app-sandbox)" == true ]] || fail "App Sandbox is off"
 [[ "$(ent com.apple.security.get-task-allow)" != true ]] || fail "a debugging entitlement is still on"
+
+# Sparkle compares build numbers, not versions, so each release needs a higher one (CURRENT_PROJECT_VERSION).
+step "Checking the release notes, build number, and update key"
+NOTES=$("$REPO/scripts/release-notes.sh" "$VERSION") || fail "write Firn $VERSION's notes in CHANGELOG.md first"
+[[ "$NOTES" != *']]>'* ]] || fail "the notes can't contain ]]>"
+APPCAST="$REPO/appcast.xml"
+[[ "$BUILD" == <-> ]] || fail "build number \"$BUILD\" isn't a whole number"
+LATEST=$(sed -n 's|.*<sparkle:version>\([0-9]*\)</sparkle:version>.*|\1|p' "$APPCAST" | sort -n | tail -1)
+(( BUILD > ${LATEST:-0} )) || fail "build $BUILD isn't higher than build $LATEST, already in appcast.xml"
+! grep -q "<sparkle:shortVersionString>$VERSION</" "$APPCAST" || fail "Firn $VERSION is already in appcast.xml"
+SPARKLE_BIN="$WORK/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"
+# A DMG signed with the wrong key would be refused by every installed Firn.
+KEYCHAIN_KEY=$("$SPARKLE_BIN/generate_keys" -p 2>/dev/null) || fail "Firn's private update key isn't in this Mac's Keychain"
+[[ "$KEYCHAIN_KEY" == "$(plutil -extract SUPublicEDKey raw "$INFO")" ]] ||
+	fail "the Keychain's update key doesn't match SUPublicEDKey in Info.plist"
 if $CHECK_ONLY; then step "Checks pass; nothing was sent to Apple: $APP"; exit 0; fi
 
 # The app first, so a copy dragged out of the DMG carries its own ticket.
@@ -97,5 +112,32 @@ spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 | grep -q "
 	fail "Gatekeeper doesn't accept the DMG"
 xcrun stapler validate "$DMG" >/dev/null || fail "the DMG's ticket doesn't validate"
 
+# Last, since stapling changes the DMG and the signature covers every byte.
+step "Signing the DMG for updates and adding it to appcast.xml"
+SPARKLE_SIG=$("$SPARKLE_BIN/sign_update" "$DMG") || fail "Sparkle couldn't sign the DMG"
+[[ "$SPARKLE_SIG" == sparkle:edSignature=\"*\"\ length=\"<->\" ]] || fail "unexpected answer from sign_update: $SPARKLE_SIG"
+DOWNLOAD="https://github.com/dwurgy/firn/releases/download/v$VERSION/Firn-$VERSION.dmg"
+cat >"$WORK/item.xml" <<EOF
+		<item>
+			<title>Firn $VERSION</title>
+			<pubDate>$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
+			<sparkle:version>$BUILD</sparkle:version>
+			<sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+			<sparkle:minimumSystemVersion>$(plutil -extract LSMinimumSystemVersion raw "$INFO")</sparkle:minimumSystemVersion>
+			<description><![CDATA[
+$NOTES
+			]]></description>
+			<enclosure url="$DOWNLOAD" type="application/octet-stream" $SPARKLE_SIG/>
+		</item>
+EOF
+awk 'FNR == NR { item = item $0 "\n"; next } { print } /New releases go below this line/ { printf "%s", item }' \
+	"$WORK/item.xml" "$APPCAST" >"$WORK/appcast.xml"
+xmllint --noout "$WORK/appcast.xml" 2>/dev/null || fail "the new appcast.xml isn't valid XML ($WORK/appcast.xml)"
+mv "$WORK/appcast.xml" "$APPCAST"
+
 step "Done: $DMG"
+print "Nothing is published yet. To release Firn $VERSION:"
+print "  1. Commit appcast.xml."
+print "  2. On GitHub, make release v$VERSION and attach $(basename "$DMG") (its notes: Firn $VERSION's section of CHANGELOG.md)."
+print "  3. Once the DMG downloads, have the website session put appcast.xml at https://firnbrowser.com/appcast.xml."
 open -R "$DMG"

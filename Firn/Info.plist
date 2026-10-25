@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Updates (Sparkle). Firn is sandboxed, so Sparkle's own small helper installs an update (the sandbox
+	     won't let Firn replace itself). Firn downloads the update itself: it can already reach the network. -->
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<!-- Never send the Mac's model, macOS version, or other details with an update check. -->
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 	<!-- Firn opens web links (http and https) and web page files, so it can
 	     be the default browser (System Settings lists only apps that open both). -->
 	<key>CFBundleDocumentTypes</key>

@@ -28,11 +28,14 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.firnbrowser.firn</string>
 	</array>
-	<!-- WebKit's Deceptive Website Warning: lets WebKit ask the Mac's own Safe Browsing service (the one Safari uses)
-	     about a page. Only this one service. Without it the sandbox blocks the check and scam pages load with no warning. -->
+	<!-- WebKit's Deceptive Website Warning, then updates. The first lets WebKit ask the Mac's own Safe Browsing service (the one Safari uses)
+	     about a page; without it the sandbox blocks the check and scam pages load with no warning. The other two let Firn
+	     reach only Sparkle's installer helper (inside Firn), which puts a downloaded, signature-checked update in place. -->
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
 		<string>com.apple.Safari.SafeBrowsing.Service</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
 	</array>
 	<!-- Import from Arc: lets Firn read (never change) exactly one file, Arc's sidebar (its spaces, favorites, and
 	     pinned tabs), so no one has to find it in an Open panel. Not Arc's folder: none of Arc's sign-ins, cookies,

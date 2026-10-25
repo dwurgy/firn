@@ -23,9 +23,10 @@ quiet() {
 	"$@" >"$log" 2>&1 || { tail -30 "$log"; fail "$(basename "$1") failed (full log: $log)" }
 }
 
-# Notarizes one file and waits for Apple's answer; on a refusal, shows Apple's reasons.
+# Notarizes one file, waits for Apple's answer, and staples the ticket (onto the third argument if given: a zip
+# can't hold one, so the app inside gets it); on a refusal, shows Apple's reasons.
 notarize() {
-	local file=$1 name=$2
+	local file=$1 name=$2 target=${3:-$1}
 	step "Sending $name to Apple for notarization (usually a few minutes)"
 	xcrun notarytool submit "$file" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json \
 		>"$WORK/notary-$name.json" 2>"$WORK/notary-$name.err" || true
@@ -40,7 +41,7 @@ notarize() {
 		fi
 		fail "notarization of $name: $notary_status"
 	fi
-	xcrun stapler staple "$file" >/dev/null || fail "stapling $name"
+	xcrun stapler staple "$target" >/dev/null || fail "stapling $name"
 }
 
 cd "$REPO"
@@ -77,7 +78,7 @@ if $CHECK_ONLY; then step "Checks pass; nothing was sent to Apple: $APP"; exit 0
 
 # The app first, so a copy dragged out of the DMG carries its own ticket.
 quiet zip-app ditto -c -k --keepParent "$APP" "$WORK/Firn-app.zip"
-notarize "$WORK/Firn-app.zip" app
+notarize "$WORK/Firn-app.zip" app "$APP"
 rm "$WORK/Firn-app.zip"
 
 step "Making the DMG"

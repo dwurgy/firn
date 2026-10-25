@@ -2,6 +2,7 @@ import AppKit
 import FirnCore
 import LocalAuthentication
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings › Passwords: the logins saved in the space on screen (and the
 /// spaces sharing its sign-ins), and the sites Firn never saves for.
@@ -29,6 +30,8 @@ struct PasswordsSettings: View {
     @State private var shown: [Row.ID: String] = [:]
     @State private var editing: EditedLogin?
     @State private var deleting: Row?
+    @State private var choosingFile = false
+    @State private var importing: PasswordImport?
 
     private var space: Space { store.activeSpace }
     private var passwords: PasswordStore { .keychain }
@@ -42,6 +45,9 @@ struct PasswordsSettings: View {
                 list
             } footer: {
                 footnote("Passwords stay on this Mac, in its Keychain. Only spaces that share sign-ins see them.")
+            }
+            Section {
+                importRow
             }
             let never = store.neverSavePasswordSites(in: space.dataStoreID)
             if !never.isEmpty {
@@ -77,6 +83,22 @@ struct PasswordsSettings: View {
                     toUsername: username, password: password
                 )
                 shown = [:]
+                reload()
+            }
+        }
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.commaSeparatedText]) { result in
+            guard case .success(let url) = result else { return }
+            let space = space
+            let others = store.spacesSharingData(with: space).map(\.name)
+            Task {
+                let stage = await PasswordImport.read(url)
+                importing = PasswordImport(file: url, space: space, sharedWith: others, stage: stage)
+            }
+        }
+        .fileDialogMessage("Choose a passwords file exported from another browser or password manager.")
+        .fileDialogConfirmationLabel("Choose")
+        .sheet(item: $importing) { session in
+            PasswordImportSheet(session: session, passwords: passwords) {
                 reload()
             }
         }
@@ -117,6 +139,25 @@ struct PasswordsSettings: View {
                 .frame(width: 170)
                 .accessibilityLabel("Search passwords")
         }
+    }
+
+    private var importRow: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Import passwords")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.ink)
+                Text("From a file exported by Chrome, Arc, Safari, Firefox, 1Password, or Bitwarden.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            Button("Import…") { choosingFile = true }
+                .accessibilityLabel("Import passwords into \(space.name)")
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder private var list: some View {

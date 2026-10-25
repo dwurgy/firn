@@ -7,7 +7,7 @@ import Observation
 @Observable
 public final class BrowserStore {
     /// How many tiles a space's Basecamp holds.
-    public static let basecampLimit = 12
+    public nonisolated static let basecampLimit = 12
 
     public private(set) var spaces: [Space]
     /// Every group in every space. A group sits in the tab list where its
@@ -143,6 +143,40 @@ public final class BrowserStore {
         spaces.append(space)
         selectSpace(space)
         return space
+    }
+
+    /// Adds the spaces read from Arc after the existing ones, without showing
+    /// them. Spaces from the same Arc profile share a new data store; the
+    /// rest are each separate. All start signed out, and every tab rests
+    /// until clicked.
+    @discardableResult
+    public func importFromArc(_ plan: ArcImportPlan, icon: String) -> [Space] {
+        var dataStores: [String: UUID] = [:]
+        var added: [Space] = []
+        for imported in plan.spaces {
+            let dataStoreID = dataStores[imported.profile] ?? UUID()
+            dataStores[imported.profile] = dataStoreID
+            let space = Space(
+                name: imported.name, icon: icon, color: imported.color,
+                order: spaces.count, dataStoreID: dataStoreID, lastChangedAt: now()
+            )
+            spaces.append(space)
+            for site in imported.basecamp {
+                tabs.append(Tab(
+                    spaceID: space.id, place: .basecamp, url: site.url, title: site.title,
+                    homeURL: site.url, lastActiveAt: now()
+                ))
+            }
+            for importedGroup in imported.groups {
+                let group = TabGroup(spaceID: space.id, name: importedGroup.name)
+                groups.append(group)
+                for site in importedGroup.sites {
+                    tabs.append(Tab(spaceID: space.id, url: site.url, title: site.title, groupID: group.id, lastActiveAt: now()))
+                }
+            }
+            added.append(space)
+        }
+        return added
     }
 
     /// Shows a space, on the tab it last had on screen (or the awake tab it

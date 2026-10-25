@@ -86,7 +86,7 @@ private struct GeneralSettings: View {
                     Text("Never").tag(DriftAfter.never)
                 }
             } footer: {
-                Text("Tabs you haven't looked at in a while are tidied away into the box button by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
+                Text("Tabs you haven't looked at in a while are tidied away into a box that appears by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)

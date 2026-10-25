@@ -147,7 +147,7 @@ struct PasswordsSettings: View {
                 Text("Import passwords")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.ink)
-                Text("From a file exported by Chrome, Arc, Safari, Firefox, 1Password, or Bitwarden.")
+                Text("Export your passwords from Chrome, Arc, Safari, Firefox, 1Password, or Bitwarden, then choose the file here.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

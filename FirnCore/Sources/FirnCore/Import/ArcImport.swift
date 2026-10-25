@@ -35,9 +35,6 @@ public struct ArcImportPlan: Sendable {
 
     public struct Space: Hashable, Sendable {
         public let name: String
-        /// One of Firn's space colors, by name: the nearest to the space's
-        /// Arc color, or Glacier.
-        public let color: String
         /// Spaces with the same profile share one data store; Arc's own
         /// description of the profile, not shown.
         let profile: String
@@ -155,7 +152,6 @@ public struct ArcImportPlan: Sendable {
 
             spaces.append(Space(
                 name: (record["title"] as? String).flatMap(FirnCore.Space.cleanName) ?? FirnCore.Space.defaultName,
-                color: Self.nearestColor(to: Self.themeColor(in: record["customInfo"])),
                 profile: profile,
                 basecamp: Array(favorites.prefix(BrowserStore.basecampLimit)),
                 groups: groups
@@ -180,53 +176,5 @@ public struct ArcImportPlan: Sendable {
             .joined()
             .trimmingCharacters(in: .whitespaces)
         return line.isEmpty ? nil : String(line.prefix(titleLimit))
-    }
-
-    // MARK: - Color
-
-    /// Firn's space colors (Theme.swift's, which FirnCore can't see).
-    static let palette: [(name: String, rgb: (Double, Double, Double))] = [
-        ("glacier", (0x7F, 0x9C, 0xB0)), ("sand", (0xC9, 0xA2, 0x7E)), ("sage", (0x8F, 0xAE, 0x8B)),
-        ("heather", (0xB8, 0x8A, 0x9E)), ("ochre", (0xC4, 0xA9, 0x5B)), ("dusk", (0x8E, 0x8F, 0xB8)),
-        ("clay", (0xB0, 0x7F, 0x6A)), ("lagoon", (0x6F, 0xA3, 0xA0)),
-    ].map { ($0.0, (Double($0.1.0) / 255, Double($0.1.1) / 255, Double($0.1.2) / 255)) }
-
-    /// The first color in a space's Arc theme (`customInfo.windowTheme`),
-    /// as red, green, and blue from 0 to 1. Unverified: David's own file has
-    /// no theme, so this follows community notes and looks for any
-    /// `{red, green, blue}` in the theme rather than one exact path.
-    static func themeColor(in customInfo: Any?) -> (Double, Double, Double)? {
-        func find(_ value: Any, depth: Int) -> (Double, Double, Double)? {
-            guard depth <= 12 else { return nil }
-            if let dict = value as? [String: Any] {
-                if let r = (dict["red"] as? NSNumber)?.doubleValue, let g = (dict["green"] as? NSNumber)?.doubleValue,
-                   let b = (dict["blue"] as? NSNumber)?.doubleValue, [r, g, b].allSatisfy(\.isFinite) {
-                    let scale = max(r, g, b) > 1 ? 255.0 : 1.0
-                    return (min(max(r / scale, 0), 1), min(max(g / scale, 0), 1), min(max(b / scale, 0), 1))
-                }
-                for key in dict.keys.sorted() { if let found = find(dict[key]!, depth: depth + 1) { return found } }
-            } else if let list = value as? [Any] {
-                for element in list.prefix(64) { if let found = find(element, depth: depth + 1) { return found } }
-            }
-            return nil
-        }
-        guard let theme = (customInfo as? [String: Any])?["windowTheme"] else { return nil }
-        return find(theme, depth: 0)
-    }
-
-    /// The Firn color nearest to an Arc color by hue; Glacier for none, or
-    /// for a gray, black, or white theme (no hue to match).
-    static func nearestColor(to color: (Double, Double, Double)?) -> String {
-        guard let (r, g, b) = color, max(r, g, b) - min(r, g, b) >= 0.08 else { return "glacier" }
-        func hue(_ c: (Double, Double, Double)) -> Double {
-            let (r, g, b) = c
-            let high = max(r, g, b), spread = high - min(r, g, b)
-            guard spread > 0 else { return 0 }
-            let h = high == r ? (g - b) / spread : high == g ? 2 + (b - r) / spread : 4 + (r - g) / spread
-            return (h * 60 + 360).truncatingRemainder(dividingBy: 360)
-        }
-        let target = hue((r, g, b))
-        func distance(_ a: Double) -> Double { let d = abs(a - target); return min(d, 360 - d) }
-        return palette.min { distance(hue($0.rgb)) < distance(hue($1.rgb)) }!.name
     }
 }

@@ -38,11 +38,9 @@ private struct ArcFile {
         ] as [String: Any]]
     }
 
-    mutating func space(_ id: String, _ title: String, profile: Any = ["default": true], pinned: String, theme: Any? = nil) {
-        var customInfo: [String: Any] = ["iconType": ["emoji_v2": "🙂"]]
-        customInfo["windowTheme"] = theme
+    mutating func space(_ id: String, _ title: String, profile: Any = ["default": true], pinned: String) {
         spaces += [id, [
-            "id": id, "title": title, "profile": profile, "customInfo": customInfo,
+            "id": id, "title": title, "profile": profile, "customInfo": ["iconType": ["emoji_v2": "🙂"]],
             "containerIDs": ["unpinned", "\(id)-unpinned", "pinned", pinned],
         ] as [String: Any]]
     }
@@ -76,7 +74,6 @@ struct ArcImportPlanTests {
         let plan = try ArcImportPlan(file.data)
         let space = try #require(plan.spaces.first)
         #expect(space.name == "Home")
-        #expect(space.color == "glacier")
         #expect(space.basecamp.isEmpty)
         #expect(space.groups.map(\.name) == ["Pinned", "Reading"])
         #expect(space.groups[0].sites.map(\.title) == ["News", "My C"])
@@ -172,20 +169,6 @@ struct ArcImportPlanTests {
         #expect(plan.spaces[0].groups[0].sites[0].title == "Line one")
     }
 
-    @Test func aThemeColorMapsToTheNearestFirnColor() throws {
-        func color(_ theme: Any) -> String? {
-            var file = ArcFile()
-            file.container("pin", children: [])
-            file.space("s1", "Home", pinned: "pin", theme: theme)
-            return (try? ArcImportPlan(file.data))?.spaces[0].color
-        }
-        let green: [String: Any] = ["primaryColorPalette": ["midTone": ["red": 0.3, "green": 0.7, "blue": 0.3, "alpha": 1]]]
-        #expect(color(green) == "sage")
-        #expect(color(["c": ["red": 230, "green": 120, "blue": 170]]) == "heather")
-        #expect(color(["c": ["red": 0.5, "green": 0.5, "blue": 0.5]]) == "glacier")
-        #expect(color(["c": ["red": "x"]]) == "glacier")
-    }
-
     @Test func aDamagedOrForeignFileIsRefused() {
         #expect(throws: ArcImportError.damaged) { try ArcImportPlan(Data("{\"sidebar\":".utf8)) }
         #expect(throws: ArcImportError.notRecognized) { try ArcImportPlan(Data("[1, 2, 3]".utf8)) }
@@ -210,14 +193,17 @@ struct ArcImportStoreTests {
         file.container("pin1", children: ["f1"])
         file.container("pin2", children: [])
         file.container("pin3", children: [])
-        file.space("s1", "Home", pinned: "pin1", theme: ["c": ["red": 0.3, "green": 0.7, "blue": 0.3]])
+        file.space("s1", "Home", pinned: "pin1")
         file.space("s2", "Work", profile: workProfile, pinned: "pin2")
         file.space("s3", "Home Two", pinned: "pin3")
         let plan = try ArcImportPlan(file.data)
 
         let store = BrowserStore(spaces: [personal], makePage: { FakePage(dataStoreID: $0) })
         store.openTab(URL(string: "https://already.example/")!)
-        let added = store.importFromArc(plan, icon: "leaf")
+        let colors = ["glacier", "sand", "sage", "heather"]
+        let added = store.importFromArc(plan) { existing in
+            ("icon\(existing.count)", colors.first { c in !existing.contains { $0.color == c } }!)
+        }
 
         #expect(store.spaces.map(\.name) == ["Personal", "Home", "Work", "Home Two"])
         #expect(store.spaces.map(\.order) == [0, 1, 2, 3])
@@ -227,8 +213,9 @@ struct ArcImportStoreTests {
         #expect(added[0].dataStoreID == added[2].dataStoreID)
         #expect(added[0].dataStoreID != added[1].dataStoreID)
         #expect(!added.contains { $0.dataStoreID == personal.dataStoreID })
-        #expect(added[0].color == "sage")
-        #expect(added.allSatisfy { $0.icon == "leaf" })
+        // Each picks the next free style, counting the spaces added before it.
+        #expect(added.map(\.color) == ["sand", "sage", "heather"])
+        #expect(added.map(\.icon) == ["icon1", "icon2", "icon3"])
 
         store.selectSpace(added[0])
         let tile = try #require(store.basecampTabs.first)
@@ -250,7 +237,7 @@ struct ArcImportStoreTests {
         file.container("pin", children: ["t1"])
         file.space("s1", "Home", pinned: "pin")
         let store = BrowserStore(spaces: [personal], makePage: { FakePage(dataStoreID: $0) })
-        store.importFromArc(try ArcImportPlan(file.data), icon: "leaf")
+        store.importFromArc(try ArcImportPlan(file.data)) { _ in ("leaf", "sand") }
 
         let restored = BrowserStore(
             restoring: store.session(sidebarWidth: 260, sidebarCollapsed: false),

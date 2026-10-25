@@ -149,15 +149,20 @@ public final class BrowserStore {
     /// them. Spaces from the same Arc profile share a new data store; the
     /// rest are each separate. All start signed out, and every tab rests
     /// until clicked.
+    /// - Parameter style: A new space's icon and color, given the spaces
+    ///   there already are; the app picks the next free ones, as for any new space.
     @discardableResult
-    public func importFromArc(_ plan: ArcImportPlan, icon: String) -> [Space] {
+    public func importFromArc(
+        _ plan: ArcImportPlan, style: (_ existing: [Space]) -> (icon: String, color: String)
+    ) -> [Space] {
         var dataStores: [String: UUID] = [:]
         var added: [Space] = []
         for imported in plan.spaces {
             let dataStoreID = dataStores[imported.profile] ?? UUID()
             dataStores[imported.profile] = dataStoreID
+            let (icon, color) = style(spaces)
             let space = Space(
-                name: imported.name, icon: icon, color: imported.color,
+                name: imported.name, icon: icon, color: color,
                 order: spaces.count, dataStoreID: dataStoreID, lastChangedAt: now()
             )
             spaces.append(space)

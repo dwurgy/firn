@@ -9,6 +9,9 @@
 	<!-- Never send the Mac's model, macOS version, or other details with an update check. -->
 	<key>SUEnableSystemProfiling</key>
 	<false/>
+	<!-- Sparkle installs only updates signed with Firn's private key (kept in David's Keychain); this is its public half. -->
+	<key>SUPublicEDKey</key>
+	<string>LJCmsPkV6VS9VNPiiJa1jkhrgt0EXugn2fkeozXmAPM=</string>
 	<!-- Firn opens web links (http and https) and web page files, so it can
 	     be the default browser (System Settings lists only apps that open both). -->
 	<key>CFBundleDocumentTypes</key>

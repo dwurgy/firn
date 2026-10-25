@@ -86,6 +86,13 @@ private struct Welcome: View {
     /// Whether "Open links in Firn?" is one of the steps: decided once, on
     /// leaving Hello, so the steps don't shift under the person afterwards.
     @State private var offersDefault = false
+    /// Arc's spaces, read while Hello is up; nil if Arc isn't on this Mac or has none.
+    @State private var arcPlan: ArcImportPlan?
+    /// Whether "Coming from Arc?" is one of the steps: decided once, on
+    /// leaving Hello, like `offersDefault`.
+    @State private var offersArc = false
+    /// Arc's spaces came over, so the space and Basecamp steps go.
+    @State private var importedArc = false
     /// The suggested sites' icons, fetched while the welcome is open.
     @State private var siteIcons: [URL: Data] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -93,11 +100,24 @@ private struct Welcome: View {
     private var store: BrowserStore { window.store }
     private var space: Space { store.activeSpace }
     private var finish: WindowModel.WelcomeFinish? { window.welcomeFinish }
-    private var steps: [WelcomeStep] { WelcomeStep.allCases.filter { $0 != .defaultBrowser || offersDefault } }
+    private var steps: [WelcomeStep] {
+        WelcomeStep.allCases.filter { step in
+            switch step {
+            case .defaultBrowser: offersDefault
+            case .arc: offersArc
+            case .space, .basecamp: !importedArc
+            default: true
+            }
+        }
+    }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var isLast: Bool { index == steps.count - 1 }
-    /// Glacier until the space step, then the space's own.
-    private var colorName: String { index >= steps.firstIndex(of: .space)! ? space.color : "glacier" }
+    /// Glacier until the space step (or until Arc's spaces come over), then the space's own.
+    private var colorName: String {
+        if importedArc { return space.color }
+        guard let start = steps.firstIndex(of: .space), index >= start else { return "glacier" }
+        return space.color
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -155,6 +175,13 @@ private struct Welcome: View {
                 }
             }
         }
+        // Arc's sidebar file, read on this Mac only (nothing is sent), while
+        // Hello is up. Only when there's nothing in Firn yet to bring it beside.
+        .task {
+            guard store.hasOnlyUntouchedSpace,
+                  case .ready(let plan) = await ArcImport.readArc(), !plan.spaces.isEmpty else { return }
+            arcPlan = plan
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Welcome to Firn")
         .accessibilityAddTraits(.isModal)
@@ -169,6 +196,7 @@ private struct Welcome: View {
                 case .hello: EmptyView()
                 case .address: AddressStep(colorName: colorName)
                 case .search: SearchStep(accent: Theme.spaceColor(colorName))
+                case .arc: if let arcPlan { ArcStep(plan: arcPlan, store: store, imported: importedArc) }
                 case .space: SpaceStep(store: store, name: $name)
                 case .basecamp: BasecampStep(store: store, icons: siteIcons, colorName: colorName)
                 case .defaultBrowser: DefaultBrowserStep()
@@ -182,9 +210,17 @@ private struct Welcome: View {
                 Button("Back", action: back)
                     .modifier(WelcomeButton(prominent: false))
                 Spacer()
-                Button(isLast ? "Start Browsing" : "Continue", action: next)
-                    .modifier(WelcomeButton(prominent: true))
-                    .keyboardShortcut(.defaultAction)
+                if step == .arc && !importedArc {
+                    Button("Start Fresh", action: next)
+                        .modifier(WelcomeButton(prominent: false))
+                    Button("Bring Them Over", action: bringArcOver)
+                        .modifier(WelcomeButton(prominent: true))
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button(isLast ? "Start Browsing" : "Continue", action: next)
+                        .modifier(WelcomeButton(prominent: true))
+                        .keyboardShortcut(.defaultAction)
+                }
             }
             .controlSize(.large)
             .padding(.top, 28)
@@ -206,9 +242,26 @@ private struct Welcome: View {
     }
 
     private func next() {
-        if step == .hello { offersDefault = !DefaultBrowser.isFirn }
+        if step == .hello {
+            offersDefault = !DefaultBrowser.isFirn
+            offersArc = arcPlan != nil && store.hasOnlyUntouchedSpace
+        }
         if step == .space { saveName() }
         if isLast { finishWelcome() } else { step = steps[index + 1] }
+    }
+
+    /// Arc's spaces take the untouched first space's place, and the step
+    /// says so where it stands; Continue then skips the space and Basecamp
+    /// steps. The snow and card turn to the first Arc space's color.
+    private func bringArcOver() {
+        guard let arcPlan, !importedArc else { return }
+        store.importFromArc(arcPlan) { existing in
+            let style = WindowModel.freeStyle(among: existing)
+            return (style.icon.rawValue, style.color)
+        }
+        importedArc = true
+        // The space on screen is Arc's first now; finishing saves this name.
+        name = space.name
     }
 
     private func back() {
@@ -235,13 +288,14 @@ private struct FinishFade: ViewModifier {
 }
 
 /// The welcome's steps, in order. The default browser step shows only
-/// while Firn isn't the default yet (see `offersDefault`).
+/// while Firn isn't the default yet (see `offersDefault`), and the Arc step
+/// only when Arc is on this Mac (see `offersArc`).
 private enum WelcomeStep: CaseIterable {
-    case hello, address, search, space, basecamp, defaultBrowser, tips
+    case hello, address, search, arc, space, basecamp, defaultBrowser, tips
 
     /// The address step waits for the "At the top" look (David, 2026-10-23):
     /// until then the choice would change nothing. Its view is kept, ready.
-    static var allCases: [WelcomeStep] { [.hello, .search, .space, .basecamp, .defaultBrowser, .tips] }
+    static var allCases: [WelcomeStep] { [.hello, .search, .arc, .space, .basecamp, .defaultBrowser, .tips] }
 }
 
 // MARK: - Steps
@@ -347,6 +401,70 @@ private struct SearchStep: View {
                 .accessibilityHint("Your search engine sees what you type.")
         }
         .padding(.top, 18)
+    }
+}
+
+/// Coming from Arc: Arc's spaces as they'll look in Firn (each with the
+/// color and icon it will get), what each brings, and whose sign-ins it
+/// shares. Once they've come over, the same list says they're here.
+private struct ArcStep: View {
+    let plan: ArcImportPlan
+    let store: BrowserStore
+    let imported: Bool
+
+    /// More than this, and the rest are "and 4 more spaces", so the card stays calm.
+    private static let listedSpaces = 4
+
+    /// Picked as the import picks them: the next free color and icon, in order.
+    private var styles: [(icon: String, color: String)] {
+        var existing = imported || store.hasOnlyUntouchedSpace ? [] : store.spaces
+        return plan.spaces.map { space in
+            let style = WindowModel.freeStyle(among: existing)
+            existing.append(Space(name: space.name, icon: style.icon.rawValue, color: style.color,
+                                  order: existing.count, dataStoreID: UUID()))
+            return (style.icon.rawValue, style.color)
+        }
+    }
+
+    var body: some View {
+        if imported {
+            StepHeading(title: "Your Arc spaces are here",
+                        words: "\(plan.spaces.count == 1 ? "It’s" : "They’re") at the bottom of the sidebar. Each tab loads when you first click it.")
+        } else {
+            StepHeading(title: "Coming from Arc?",
+                        words: "Firn can bring over your spaces: favorites become Basecamp, and pinned tabs become groups.")
+        }
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(zip(plan.spaces, styles).prefix(Self.listedSpaces).enumerated()), id: \.offset) { _, row in
+                let (space, style) = row
+                HStack(spacing: 10) {
+                    SpaceIconView(icon: SpaceIcon(stored: style.icon), size: 16, color: Theme.spaceColor(style.color))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(space.name)
+                            .font(Theme.tabFont)
+                        Text(ArcImportSheet.contents(of: space))
+                            .font(Theme.hintFont)
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+            let more = plan.spaces.count - Self.listedSpaces
+            if more > 0 {
+                Text(more == 1 ? "and 1 more space" : "and \(more) more spaces")
+                    .font(Theme.hintFont)
+                    .foregroundStyle(Theme.muted)
+                    .padding(.leading, 26)
+            }
+        }
+        if !imported {
+            Text("\(ArcImportSheet.signInsLine(plan)) Unpinned tabs and history stay in Arc.")
+                .font(Theme.labelFont)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 18)
+        }
     }
 }
 

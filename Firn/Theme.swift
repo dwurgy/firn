@@ -73,6 +73,8 @@ enum Theme {
     /// the space's color: a touch stronger than first tried (22%), so it shows.
     static let loadingTint = 0.32
     static let loadingTintDark = 0.28
+    /// How far the glow at the loading frost's front edge reaches.
+    static let glowRadius: CGFloat = 34
 
     /// A chosen Basecamp tile's colors: a main color for its wash and glow,
     /// and a ring of eight for its edge, clockwise from the right.

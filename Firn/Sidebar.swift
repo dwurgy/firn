@@ -140,11 +140,23 @@ private struct LoadingFrost: View {
         GeometryReader { geo in
             let tint = colorScheme == .dark ? Theme.loadingTintDark : Theme.loadingTint
             let color = Theme.spaceColor(space).opacity(tint)
+            // A little past the end, so the soft edge leaves the field when it's done.
+            let width = geo.size.width * (reduceMotion ? 1.25 : formed * 1.25)
             LinearGradient(stops: [.init(color: color, location: 0), .init(color: color, location: 0.8),
                                    .init(color: color.opacity(0), location: 1)],
                            startPoint: .leading, endPoint: .trailing)
-                // A little past the end, so the soft edge leaves the field when it's done.
-                .frame(width: geo.size.width * (reduceMotion ? 1.25 : formed * 1.25))
+                .frame(width: width)
+            // A soft glow rides the front edge, brighter where the frost is
+            // forming (David, 2026-10-24). A gradient, not a blur, and it goes
+            // with the frost; Reduce Motion has no moving edge, so no glow.
+            if !reduceMotion {
+                let glow = Theme.spaceColor(space).opacity(min(tint * 2, 0.6))
+                Ellipse()
+                    .fill(RadialGradient(colors: [glow, glow.opacity(0)], center: .center,
+                                         startRadius: 0, endRadius: Theme.glowRadius))
+                    .frame(width: Theme.glowRadius * 2, height: geo.size.height * 1.6)
+                    .position(x: width * 0.84, y: geo.size.height / 2)
+            }
         }
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(false)

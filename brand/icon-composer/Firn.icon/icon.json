@@ -12,7 +12,14 @@
         {
           "blend-mode" : "normal",
           "image-name" : "firn-icon-layer-2-mark.svg",
-          "name" : "firn-icon-layer-2-mark"
+          "name" : "firn-icon-layer-2-mark",
+          "position" : {
+            "scale" : 1.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "lighting" : "individual",

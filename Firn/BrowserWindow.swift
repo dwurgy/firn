@@ -235,13 +235,13 @@ final class WindowModel {
         return (SpaceIcon.next(after: spaces.map(\.icon)), color)
     }
 
-    /// File › Import from Arc…: the Open panel, then the sheet (`ArcImportFlow`).
-    var choosingArcFile = false
+    /// File › Import from Arc…: reads Arc's file and shows the sheet (`ArcImportFlow`).
+    var startingArcImport = false
 
     func importFromArc() {
         guard !showsWelcome else { return }
         closeCommandBar(focusingPage: false)
-        choosingArcFile = true
+        startingArcImport = true
     }
 
     // MARK: Tab actions (the tab's right-click menu and the menu bar)
@@ -756,7 +756,7 @@ struct BrowserWindow: View {
         }
         .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
         .onOpenURL { window.openFromOtherApp($0) }
-        .modifier(ArcImportFlow(choosing: Bindable(window).choosingArcFile, window: window))
+        .modifier(ArcImportFlow(starting: Bindable(window).startingArcImport, window: window))
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }

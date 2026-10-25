@@ -45,7 +45,7 @@ struct SettingsView: View {
 /// Settings › General: a few plain choices, no more.
 private struct GeneralSettings: View {
     let window: WindowModel
-    @State private var choosingArcFile = false
+    @State private var startingArcImport = false
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(Preference.blocksContent) private var blocksContent = true
@@ -114,7 +114,7 @@ private struct GeneralSettings: View {
                     }
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 12)
-                    Button("Import…") { choosingArcFile = true }
+                    Button("Import…") { startingArcImport = true }
                         .accessibilityLabel("Import from Arc")
                 }
                 .padding(.vertical, 2)
@@ -122,6 +122,6 @@ private struct GeneralSettings: View {
         }
         .formStyle(.grouped)
         .frame(width: SettingsView.size.width, height: SettingsView.size.height)
-        .modifier(ArcImportFlow(choosing: $choosingArcFile, window: window))
+        .modifier(ArcImportFlow(starting: $startingArcImport, window: window))
     }
 }

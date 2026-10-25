@@ -2,7 +2,7 @@ import AppKit
 import FirnCore
 import SwiftUI
 
-/// One import from Arc, from the file the person picked to the spaces it added.
+/// One import from Arc, from Arc's sidebar file to the spaces it added.
 @Observable @MainActor
 final class ArcImport: Identifiable {
     let id = UUID()
@@ -11,9 +11,19 @@ final class ArcImport: Identifiable {
     init(stage: Stage) { self.stage = stage }
 
     enum Stage: Sendable {
+        /// Arc's sidebar file isn't where Arc keeps it.
+        case notFound
         case problem(String)
         case ready(ArcImportPlan)
         case done([Space])
+    }
+
+    /// Reads Arc's own sidebar file, where Arc keeps it. The entitlement lets
+    /// Firn read only this one file.
+    nonisolated static func readArc() async -> Stage {
+        guard let url = arcFolder?.appending(path: "StorableSidebar.json", directoryHint: .notDirectory),
+              FileManager.default.isReadableFile(atPath: url.path) else { return .notFound }
+        return await read(url)
     }
 
     /// Reads and checks the file, off the main thread. Nothing is added.
@@ -43,33 +53,49 @@ final class ArcImport: Identifiable {
         }
     }
 
-    /// Arc's folder, where the Open panel starts. The sandbox's home is
-    /// Firn's container, so this asks for the real one.
-    static var arcFolder: URL? {
+    /// Arc's folder. The sandbox's home is Firn's container, so this asks
+    /// for the real one.
+    nonisolated static var arcFolder: URL? {
         guard let home = getpwuid(getuid())?.pointee.pw_dir else { return nil }
         return URL(fileURLWithPath: String(cString: home), isDirectory: true)
             .appending(path: "Library/Application Support/Arc", directoryHint: .isDirectory)
     }
 }
 
-/// The Open panel and the sheet, for File › Import from Arc… and the button
-/// in Settings.
+/// The sheet for File › Import from Arc… and the button in Settings: reads
+/// Arc's file straight away, with an Open panel only if Arc isn't found.
 struct ArcImportFlow: ViewModifier {
-    @Binding var choosing: Bool
+    /// Set to true to start an import; the flow sets it back.
+    @Binding var starting: Bool
     let window: WindowModel
     @State private var session: ArcImport?
+    @State private var choosingFile = false
+    /// Choose File… closes the sheet first; the Open panel waits for that.
+    @State private var chooseAfterSheet = false
 
     func body(content: Content) -> some View {
         content
-            .fileImporter(isPresented: $choosing, allowedContentTypes: [.json]) { result in
+            .onChange(of: starting) { _, now in
+                guard now else { return }
+                starting = false
+                Task { session = ArcImport(stage: await ArcImport.readArc()) }
+            }
+            .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.json]) { result in
                 guard case .success(let url) = result else { return }
                 Task { session = ArcImport(stage: await ArcImport.read(url)) }
             }
             .fileDialogDefaultDirectory(ArcImport.arcFolder)
             .fileDialogMessage("Choose StorableSidebar.json in Arc's folder.")
             .fileDialogConfirmationLabel("Choose")
-            .sheet(item: $session) { session in
-                ArcImportSheet(session: session, window: window)
+            .sheet(item: $session, onDismiss: {
+                guard chooseAfterSheet else { return }
+                chooseAfterSheet = false
+                choosingFile = true
+            }) { session in
+                ArcImportSheet(session: session, window: window) {
+                    chooseAfterSheet = true
+                    self.session = nil
+                }
             }
     }
 }
@@ -78,6 +104,8 @@ struct ArcImportFlow: ViewModifier {
 struct ArcImportSheet: View {
     let session: ArcImport
     let window: WindowModel
+    /// Closes the sheet and opens the Open panel, when Arc isn't found.
+    let chooseFile: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -88,6 +116,14 @@ struct ArcImportSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             switch session.stage {
+            case .notFound:
+                title("Firn can't find Arc on this Mac")
+                line("If you've kept Arc's sidebar file somewhere else, you can choose it.")
+                buttons {
+                    Button("Choose File…", action: chooseFile)
+                        .buttonStyle(SheetButtonStyle(prominent: false))
+                    primary("OK") { dismiss() }
+                }
             case .problem(let text):
                 title("Can't import this file")
                 line(text)

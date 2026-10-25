@@ -34,5 +34,12 @@
 	<array>
 		<string>com.apple.Safari.SafeBrowsing.Service</string>
 	</array>
+	<!-- Import from Arc: lets Firn read (never change) exactly one file, Arc's sidebar (its spaces, favorites, and
+	     pinned tabs), so no one has to find it in an Open panel. Not Arc's folder: none of Arc's sign-ins, cookies,
+	     or history. -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/Library/Application Support/Arc/StorableSidebar.json</string>
+	</array>
 </dict>
 </plist>

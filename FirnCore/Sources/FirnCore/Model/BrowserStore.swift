@@ -145,22 +145,35 @@ public final class BrowserStore {
         return space
     }
 
+    /// Whether Firn has only one space and nothing in it yet (no tiles,
+    /// tabs, or groups), as on first launch. Arc's spaces take its place.
+    public var hasOnlyUntouchedSpace: Bool {
+        guard spaces.count == 1, let only = spaces.first else { return false }
+        return !tabs.contains { $0.spaceID == only.id }
+            && !groups.contains { $0.spaceID == only.id }
+            && !splits.contains { $0.spaceID == only.id }
+    }
+
     /// Adds the spaces read from Arc after the existing ones, without showing
     /// them. Spaces from the same Arc profile share a new data store; the
     /// rest are each separate. All start signed out, and every tab rests
-    /// until clicked.
+    /// until clicked. If Firn has only its untouched first space, Arc's
+    /// spaces replace it and the first of them is shown.
     /// - Parameter style: A new space's icon and color, given the spaces
     ///   there already are; the app picks the next free ones, as for any new space.
     @discardableResult
     public func importFromArc(
         _ plan: ArcImportPlan, style: (_ existing: [Space]) -> (icon: String, color: String)
     ) -> [Space] {
+        let replacing = hasOnlyUntouchedSpace && !plan.spaces.isEmpty ? spaces.first : nil
         var dataStores: [String: UUID] = [:]
         var added: [Space] = []
         for imported in plan.spaces {
             let dataStoreID = dataStores[imported.profile] ?? UUID()
             dataStores[imported.profile] = dataStoreID
-            let (icon, color) = style(spaces)
+            // The space being replaced doesn't count, so Arc's first space
+            // gets the first style, as a first space would.
+            let (icon, color) = style(spaces.filter { $0.id != replacing?.id })
             let space = Space(
                 name: imported.name, icon: icon, color: color,
                 order: spaces.count, dataStoreID: dataStoreID, lastChangedAt: now()
@@ -180,6 +193,11 @@ public final class BrowserStore {
                 }
             }
             added.append(space)
+        }
+        // Import first, then delete, so there's always a space.
+        if let replacing, let first = added.first {
+            selectSpace(first)
+            deleteSpace(replacing)
         }
         return added
     }

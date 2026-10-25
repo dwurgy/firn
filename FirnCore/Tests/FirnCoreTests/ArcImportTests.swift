@@ -244,9 +244,62 @@ struct ArcImportStoreTests {
             restoring: store.session(sidebarWidth: 260, sidebarCollapsed: false),
             defaultSpaces: [personal], makePage: { FakePage(dataStoreID: $0) }
         )
-        #expect(restored.spaces.map(\.name) == ["Personal", "Home"])
-        restored.selectSpace(restored.spaces[1])
+        // The untouched first space was replaced, and stays replaced.
+        #expect(restored.spaces.map(\.name) == ["Home"])
         #expect(restored.tabGroups.map(\.name) == ["Pinned"])
         #expect(restored.tabs(in: restored.tabGroups[0]).map(\.url?.host) == ["docs.example"])
+    }
+
+    @Test func importReplacesTheUntouchedFirstSpace() throws {
+        var file = ArcFile()
+        file.tab("t1", "https://docs.example/", parent: "pin1")
+        file.container("pin1", children: ["t1"])
+        file.container("pin2", children: [])
+        file.space("s1", "Home", pinned: "pin1")
+        file.space("s2", "Work", profile: workProfile, pinned: "pin2")
+        let plan = try ArcImportPlan(file.data)
+
+        var removed: [UUID] = []
+        let store = BrowserStore(
+            spaces: [personal], makePage: { FakePage(dataStoreID: $0) }, removeData: { removed.append($0) }
+        )
+        #expect(store.hasOnlyUntouchedSpace)
+        var seen: [[String]] = []
+        let added = store.importFromArc(plan) { existing in
+            seen.append(existing.map(\.name))
+            return ("leaf", "sand")
+        }
+
+        #expect(store.spaces.map(\.name) == ["Home", "Work"])
+        #expect(store.spaces.map(\.order) == [0, 1])
+        #expect(store.activeSpaceID == added[0].id)
+        #expect(store.tabGroups.map(\.name) == ["Pinned"])
+        // Styles are picked as if the old space were never there.
+        #expect(seen == [[], ["Home"]])
+        #expect(removed == [personal.dataStoreID])
+        #expect(!store.hasOnlyUntouchedSpace)
+    }
+
+    @Test func importLeavesAnUsedOrSecondSpaceAlone() throws {
+        var file = ArcFile()
+        file.container("pin", children: [])
+        file.space("s1", "Home", pinned: "pin")
+        let plan = try ArcImportPlan(file.data)
+
+        // A tab in a group: the space was used.
+        let grouped = BrowserStore(spaces: [personal], makePage: { FakePage(dataStoreID: $0) })
+        grouped.openTab(URL(string: "https://already.example/")!)
+        _ = grouped.newGroup(with: grouped.openTabs[0])
+        #expect(!grouped.hasOnlyUntouchedSpace)
+        grouped.importFromArc(plan) { _ in ("leaf", "sand") }
+        #expect(grouped.spaces.map(\.name) == ["Personal", "Home"])
+
+        // Two empty spaces: someone made the second, so nothing is replaced.
+        let work = Space(name: "Work", icon: "leaf", color: "sand", order: 1, dataStoreID: UUID())
+        let two = BrowserStore(spaces: [personal, work], makePage: { FakePage(dataStoreID: $0) })
+        #expect(!two.hasOnlyUntouchedSpace)
+        two.importFromArc(plan) { _ in ("leaf", "sage") }
+        #expect(two.spaces.map(\.name) == ["Personal", "Work", "Home"])
+        #expect(two.activeSpaceID == personal.id)
     }
 }

@@ -174,7 +174,7 @@ struct ArcImportSheet: View {
 
     @ViewBuilder private func done(_ spaces: [Space]) -> some View {
         title(Self.doneTitle(spaces))
-        line(Self.doneLine(spaces))
+        line(Self.doneLine(spaces, alone: window.store.spaces.count == spaces.count))
         buttons {
             secondary("Done") { dismiss() }
             if let first = spaces.first {
@@ -227,7 +227,8 @@ struct ArcImportSheet: View {
     // MARK: - Doing
 
     /// The spaces glide into the row at the bottom of the sidebar; the one
-    /// on screen stays.
+    /// on screen stays, unless it was Firn's untouched first space, which
+    /// Arc's replace.
     private func add(_ plan: ArcImportPlan) {
         let store = window.store
         let added = withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
@@ -238,7 +239,7 @@ struct ArcImportSheet: View {
         }
         session.stage = .done(added)
         // The sheet changes under VoiceOver's focus, so say how it went.
-        AccessibilityNotification.Announcement("\(Self.doneTitle(added)) \(Self.doneLine(added))").post()
+        AccessibilityNotification.Announcement("\(Self.doneTitle(added)) \(Self.doneLine(added, alone: store.spaces.count == added.count))").post()
     }
 
     // MARK: - Words
@@ -276,9 +277,10 @@ struct ArcImportSheet: View {
         "Added \(spaces.map(\.name).formatted(.list(type: .and)))."
     }
 
-    static func doneLine(_ spaces: [Space]) -> String {
+    /// `alone`: Arc's spaces took the place of Firn's empty first space.
+    static func doneLine(_ spaces: [Space], alone: Bool) -> String {
         (spaces.count == 1 ? "It's" : "They're")
-            + " at the bottom of the sidebar, with your other spaces. Each tab loads when you first click it."
+            + " at the bottom of the sidebar\(alone ? "" : ", with your other spaces"). Each tab loads when you first click it."
     }
 
     private static func count(_ count: Int, one: String, many: String) -> String? {

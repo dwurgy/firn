@@ -103,23 +103,30 @@ struct PasswordImportSheet: View {
         } else {
             title("Import \(Self.passwords(count)) into \(session.spaceName)?")
         }
-        if let skipped = Self.skippedLine(file) { line(skipped) }
+        let skipped = Self.skippedLine(file)
+        if let skipped { line(skipped) }
         if count > 0 {
             line(sharingLine + "A password already saved in Firn stays as it is.")
-        }
-        buttons {
-            if count == 0 {
-                primary("OK") { dismiss() }
-            } else {
+            buttons {
                 secondary("Cancel") { dismiss() }
                 primary("Import") { startImport(file.logins) }
             }
+        } else if skipped != nil {
+            // Nothing came over, but it's still a real export full of
+            // passwords in plain text.
+            trashOffer
+        } else {
+            buttons { primary("OK") { dismiss() } }
         }
     }
 
     @ViewBuilder private func done(_ result: PasswordImportResult) -> some View {
-        title(result.imported == 0 ? "No new passwords" : "Imported \(Self.passwords(result.imported)).")
+        title(Self.doneTitle(result))
         ForEach(Self.resultLines(result), id: \.self) { line($0) }
+        trashOffer
+    }
+
+    @ViewBuilder private var trashOffer: some View {
         Divider().padding(.vertical, 4)
         Text("“\(session.file.lastPathComponent)” has every password in plain text.")
             .font(.system(size: 13, weight: .semibold))
@@ -143,6 +150,7 @@ struct PasswordImportSheet: View {
             .foregroundStyle(Theme.ink)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func line(_ text: String) -> some View {
@@ -198,8 +206,13 @@ struct PasswordImportSheet: View {
             }.value
             if let result {
                 session.stage = .done(result)
+                // The sheet changes under VoiceOver's focus, so say how it went.
+                let spoken = [Self.doneTitle(result)] + Self.resultLines(result)
+                AccessibilityNotification.Announcement(spoken.joined(separator: " ")).post()
             } else {
-                session.stage = .problem("Firn can't read the Keychain right now, so nothing was imported. Try again in a moment.")
+                let text = "Firn can't read the Keychain right now, so nothing was imported. Try again in a moment."
+                session.stage = .problem(text)
+                AccessibilityNotification.Announcement(text).post()
             }
             finished()
         }
@@ -218,6 +231,10 @@ struct PasswordImportSheet: View {
     }
 
     // MARK: - Words
+
+    static func doneTitle(_ result: PasswordImportResult) -> String {
+        result.imported == 0 ? "No new passwords" : "Imported \(passwords(result.imported))."
+    }
 
     static func passwords(_ count: Int) -> String {
         count == 1 ? "1 password" : "\(count.formatted()) passwords"

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- How release.sh exports Firn from its archive: signed with the Developer ID, for downloading outside the App Store. -->
+<dict>
+	<key>method</key>
+	<string>developer-id</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>teamID</key>
+	<string>72LHR8K4P5</string>
+	<key>signingCertificate</key>
+	<string>Developer ID Application</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.firnbrowser.firn</key>
+		<string>Firn Developer ID</string>
+	</dict>
+</dict>
+</plist>

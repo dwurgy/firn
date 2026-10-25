@@ -278,3 +278,9 @@ Still an open question in CLAUDE.md: David hasn't decided, and nothing is built.
 - A tab renamed in Arc keeps its new name (the item's `title`), otherwise `savedTitle`. Folders with no web tabs are left out; a folder with no name becomes "New Group". "Pinned" sits where the first loose pinned tab was.
 - Limits: 50 MB, 100,000 items, 50 spaces, 2,048-character addresses, 500-character titles, folders 32 deep; each item walked once (loops and missing ids are harmless).
 - Checked on David's real file (counts only): 1 space, 4 tiles, 1 group, nothing skipped.
+
+### Arc import step 2: the UI (2026-10-24)
+
+- `Firn/ArcImportSheet.swift`: `ArcImportFlow` (the Open panel and the sheet) is shared by File › Import from Arc… (under New Space…) and an "Import from Arc" row at the bottom of Settings › General (David chose General; the pane now scrolls). The panel starts in `~/Library/Application Support/Arc` (the real home, from `getpwuid`, since the sandbox's home is the container), JSON only; the file is read off the main thread, mapped.
+- The sheet lists up to six spaces with what each brings ("4 Basecamp sites and 2 groups with 9 tabs"), then "and 4 more spaces"; one line for sign-ins (shared as in Arc, using `ArcImportPlan.sharingSignIns`; every space starts signed out), and one for what stays behind (unpinned tabs, sign-ins, history, skipped non-websites, and a pointer to the CSV password import). Import adds the spaces at once (a short glide), then "Added Work and School." with Done or "Show Work". The result is spoken for VoiceOver.
+- Each added space takes the next free color and icon, counting the ones added just before it (`WindowModel.freeStyle(among:)`). Imported tiles show their letter mark until first opened, like any resting tile: no new fetching.

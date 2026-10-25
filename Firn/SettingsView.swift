@@ -27,16 +27,16 @@ enum Preference {
 /// The Settings window (⌘, or Firn › Settings…): a few plain choices, and
 /// the saved passwords.
 struct SettingsView: View {
-    let store: BrowserStore
+    let window: WindowModel
 
     /// Every tab is the same size, so the window never jumps between them.
     static let size = CGSize(width: 540, height: 500)
 
     var body: some View {
         TabView {
-            GeneralSettings()
+            GeneralSettings(window: window)
                 .tabItem { Label("General", systemImage: "gearshape") }
-            PasswordsSettings(store: store)
+            PasswordsSettings(store: window.store)
                 .tabItem { Label("Passwords", systemImage: "key") }
         }
     }
@@ -44,6 +44,8 @@ struct SettingsView: View {
 
 /// Settings › General: a few plain choices, no more.
 private struct GeneralSettings: View {
+    let window: WindowModel
+    @State private var choosingArcFile = false
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(Preference.blocksContent) private var blocksContent = true
@@ -99,9 +101,27 @@ private struct GeneralSettings: View {
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            Section {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Import from Arc")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.ink)
+                        Text("Brings over Arc's spaces, favorites, and pinned tabs, as new spaces.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 12)
+                    Button("Import…") { choosingArcFile = true }
+                        .accessibilityLabel("Import from Arc")
+                }
+                .padding(.vertical, 2)
+            }
         }
         .formStyle(.grouped)
-        .scrollDisabled(true)
         .frame(width: SettingsView.size.width, height: SettingsView.size.height)
+        .modifier(ArcImportFlow(choosing: $choosingArcFile, window: window))
     }
 }

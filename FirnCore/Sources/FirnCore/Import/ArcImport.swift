@@ -59,6 +59,17 @@ public struct ArcImportPlan: Sendable {
 
     /// How many different sign-ins the spaces will have: one per Arc profile.
     public var profileCount: Int { Set(spaces.map(\.profile)).count }
+    /// The names of spaces that will share sign-ins (same Arc profile), in
+    /// Arc's order; spaces on a profile of their own aren't listed.
+    public var sharingSignIns: [[String]] {
+        var order: [String] = []
+        var names: [String: [String]] = [:]
+        for space in spaces {
+            if names[space.profile] == nil { order.append(space.profile) }
+            names[space.profile, default: []].append(space.name)
+        }
+        return order.compactMap { names[$0] }.filter { $0.count > 1 }
+    }
     public var tabCount: Int { spaces.reduce(0) { $0 + $1.basecamp.count + $1.groups.reduce(0) { $0 + $1.sites.count } } }
 
     public init(_ data: Data) throws {

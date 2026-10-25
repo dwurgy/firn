@@ -221,15 +221,27 @@ final class WindowModel {
     }
 
     /// The icon a new space starts on, picked the same way as its color.
-    var freeSpaceIcon: SpaceIcon {
-        SpaceIcon.next(after: store.spaces.map(\.icon))
-    }
+    var freeSpaceIcon: SpaceIcon { Self.freeStyle(among: store.spaces).icon }
 
     /// The first space color no space has yet (or, with all taken, the next in turn).
-    var freeSpaceColor: String {
-        let taken = Set(store.spaces.map(\.color))
+    var freeSpaceColor: String { Self.freeStyle(among: store.spaces).color }
+
+    /// A new space's icon and color, given `spaces`; an import asks once
+    /// per space, so each one it adds takes the next.
+    static func freeStyle(among spaces: [Space]) -> (icon: SpaceIcon, color: String) {
+        let taken = Set(spaces.map(\.color))
         let names = Theme.spaceColorNames
-        return names.first { !taken.contains($0) } ?? names[store.spaces.count % names.count]
+        let color = names.first { !taken.contains($0) } ?? names[spaces.count % names.count]
+        return (SpaceIcon.next(after: spaces.map(\.icon)), color)
+    }
+
+    /// File › Import from Arc…: the Open panel, then the sheet (`ArcImportFlow`).
+    var choosingArcFile = false
+
+    func importFromArc() {
+        guard !showsWelcome else { return }
+        closeCommandBar(focusingPage: false)
+        choosingArcFile = true
     }
 
     // MARK: Tab actions (the tab's right-click menu and the menu bar)
@@ -744,6 +756,7 @@ struct BrowserWindow: View {
         }
         .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
         .onOpenURL { window.openFromOtherApp($0) }
+        .modifier(ArcImportFlow(choosing: Bindable(window).choosingArcFile, window: window))
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }
@@ -1501,6 +1514,8 @@ struct BrowserCommands: Commands {
             .disabled(everydayTab == nil || everydayTab?.groupID != nil)
             Divider()
             Button("New Space…") { window.newSpace() }
+            Button("Import from Arc…") { window.importFromArc() }
+                .disabled(window.showsWelcome)
         }
         CommandGroup(replacing: .printItem) {
             // The page in front: a Lookout's while one is open.

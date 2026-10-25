@@ -112,6 +112,7 @@ struct ArcImportPlanTests {
         let plan = try ArcImportPlan(file.data)
         #expect(plan.spaces.map(\.name) == ["Personal", "Work", "Also Personal"])
         #expect(plan.profileCount == 2)
+        #expect(plan.sharingSignIns == [["Personal", "Also Personal"]])
         let personal = plan.spaces[0]
         #expect(personal.basecamp.count == 12)
         #expect(personal.groups.map(\.name) == ["Favorites", "Pinned"])

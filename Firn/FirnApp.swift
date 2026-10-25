@@ -60,7 +60,7 @@ struct FirnApp: App {
         .handlesExternalEvents(matching: ["*"])
 
         Settings {
-            SettingsView(store: window.store)
+            SettingsView(window: window)
         }
     }
 }

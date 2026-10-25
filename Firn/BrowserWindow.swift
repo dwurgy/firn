@@ -1496,6 +1496,10 @@ struct BrowserCommands: Commands {
     private var everydayTab: FirnCore.Tab? { window.everydayTab }
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { Updater.shared.checkNow() }
+                .disabled(!Updater.shared.canCheck)
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Tab") { window.openCommandBar() }
                 .keyboardShortcut("t")

@@ -46,6 +46,7 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     let window: WindowModel
     @State private var startingArcImport = false
+    @Bindable private var updater = Updater.shared
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(Preference.blocksContent) private var blocksContent = true
@@ -97,6 +98,14 @@ private struct GeneralSettings: View {
                 Toggle("Block ads and trackers", isOn: $blocksContent)
             } footer: {
                 Text("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the View menu; each space keeps its own choices.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
+                Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+            } footer: {
+                Text("Once a day, Firn asks firnbrowser.com whether a new version is out. Only Firn's version number goes along, nothing about your browsing.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)

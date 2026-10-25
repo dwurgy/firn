@@ -41,6 +41,8 @@ struct FirnApp: App {
         saver.start()
         sleeper = TabSleeper(store: store)
         sleeper.start()
+        // Starts Sparkle, so its scheduled checks (once allowed) run.
+        _ = Updater.shared
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [saver] _ in

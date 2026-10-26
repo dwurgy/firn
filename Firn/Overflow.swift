@@ -5,8 +5,8 @@ import SwiftUI
 /// with the space's tidied-away tabs. Only the space on screen, so nothing
 /// crosses between spaces. It's there only while it holds something: it
 /// fades in as the first tabs are tidied away, just before their icons fall
-/// in, and fades out once the last has gone (its spot stays, so where icons
-/// land doesn't move). A dot in the space's color says tabs were tidied away
+/// in, and fades out once the last has gone (its spot stays, so the spaces
+/// don't shift). A dot in the space's color says tabs were tidied away
 /// since it was last opened. (Recently closed lives in File › Reopen Closed
 /// Tab and the command bar; David, 2026-10-23.)
 struct OverflowButton: View {
@@ -317,22 +317,21 @@ struct TidyPill: View {
 
     var body: some View {
         Button(action: action) {
-            // The button sits at the row's right, so the pill widens leftward.
             HStack(spacing: 2) {
+                ArchiveBoxIcon()
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 28, height: 28)
                 if open {
                     Text(text)
                         .font(Theme.labelFont)
                         .foregroundStyle(Theme.ink)
                         .lineLimit(1)
                         .fixedSize()
-                        .padding(.leading, 12)
+                        .padding(.trailing, 12)
                         .transition(.opacity)
                 }
-                ArchiveBoxIcon()
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 28, height: 28)
             }
-            .frame(width: open ? nil : 28, height: 28, alignment: .trailing)
+            .frame(width: open ? nil : 28, height: 28, alignment: .leading)
             .background { FrostGlass(shape: shape, color: color) }
             .clipShape(shape)
             .contentShape(shape)

@@ -2,11 +2,12 @@ import AppKit
 import FirnCore
 import SwiftUI
 
-/// The row at the bottom of the sidebar: the space on screen's name (its
-/// color as a dot) on the left, which opens the list of spaces, and the
-/// overflow and, while there are any, the space's downloads on the right.
-/// No space icons: a name says where you are, and stays calm however many
-/// spaces there are (David, 2026-10-25).
+/// The row at the bottom of the sidebar: the space on screen's name,
+/// centered, in its color, with a dot for each space under it; the
+/// overflow on the left and, while there are any, the space's downloads on
+/// the right. The name opens the list of spaces. No space icons: a name
+/// says where you are, and stays calm however many spaces there are
+/// (David, 2026-10-25).
 struct SpaceRow: View {
     let store: BrowserStore
     let window: WindowModel
@@ -20,23 +21,31 @@ struct SpaceRow: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            SpaceNameButton(store: store, window: window) { deleting = $0 }
-                // The name steps back while the pill speaks.
-                .opacity(pill == .open ? 0 : 1)
-            Spacer(minLength: 8)
+            // As wide as the downloads button's spot, so the name sits truly
+            // centered between the two.
             OverflowButton(store: store, window: window)
-                // Grows leftward from the button, over the name.
-                .overlay(alignment: .trailing) {
-                    if pill != .hidden, let announcement = window.tidyAnnouncement {
-                        TidyPill(text: announcement.text, open: pill == .open,
-                                 color: Theme.spaceColor(store.activeSpace.color)) {
-                            window.showsOverflow = true
-                        }
-                        .fixedSize()
-                        .transition(.opacity)
+            Group {
+                VStack(spacing: 2) {
+                    SpaceNameButton(store: store, window: window) { deleting = $0 }
+                    if store.spaces.count > 1 {
+                        SpaceDots(store: store, window: window)
                     }
                 }
-            DownloadsButton(store: store, window: window)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
+                DownloadsButton(store: store, window: window)
+            }
+            // The name steps back while the pill speaks.
+            .opacity(pill == .open ? 0 : 1)
+        }
+        .overlay(alignment: .leading) {
+            if pill != .hidden, let announcement = window.tidyAnnouncement {
+                TidyPill(text: announcement.text, open: pill == .open,
+                         color: Theme.spaceColor(store.activeSpace.color)) {
+                    window.showsOverflow = true
+                }
+                .transition(.opacity)
+            }
         }
         .frame(minHeight: Theme.rowHeight)
         .task(id: window.tidyAnnouncement?.id) { await announce() }
@@ -89,8 +98,8 @@ struct SpaceRow: View {
     }
 }
 
-/// The space on screen: its color as a dot, its name, and a small
-/// chevron. A click opens the list of spaces; so does a right-click.
+/// The space on screen's name, in its color. A click opens the list of
+/// spaces; so does a right-click.
 private struct SpaceNameButton: View {
     let store: BrowserStore
     let window: WindowModel
@@ -101,21 +110,12 @@ private struct SpaceNameButton: View {
     var body: some View {
         let space = store.activeSpace
         Button { showMenu() } label: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(Theme.spaceColor(space.color))
-                    .frame(width: 8, height: 8)
-                    // In the tabs' icon column, so it lines up with them.
-                    .frame(width: 16)
-                Text(space.name)
-                    .font(Theme.labelFont.weight(.medium))
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(Theme.faint)
-            }
+            Text(space.name)
+                .font(.system(size: 13, weight: .semibold))
+                // The space's color, deepened toward ink so it reads on the tint.
+                .foregroundStyle(Theme.spaceIconInk(space.color))
+                .lineLimit(1)
+                .truncationMode(.tail)
             // Cross-fades with the frame's tint when the space changes.
             .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: space.id)
         }
@@ -178,6 +178,38 @@ private struct SpaceNameButton: View {
     }
 }
 
+/// One small dot per space, the space on screen's in its color, the rest
+/// faint. Clicking one goes to that space. (The menu and ⌃1–9 do the same,
+/// so VoiceOver hears the name, not the dots.)
+private struct SpaceDots: View {
+    let store: BrowserStore
+    let window: WindowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let ink = Theme.spaceIconInk(store.activeSpace.color)
+        HStack(spacing: 0) {
+            ForEach(Array(store.spaces.enumerated()), id: \.element.id) { index, space in
+                let isActive = space.id == store.activeSpaceID
+                Button {
+                    window.showSpace { store.selectSpace(space) }
+                } label: {
+                    Circle()
+                        .fill(isActive ? ink : Theme.faint.opacity(0.6))
+                        .frame(width: 5, height: 5)
+                        // A comfortable spot to click, wider than the dot.
+                        .frame(width: 11, height: 9)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(index < 9 ? "\(space.name) (⌃\(index + 1))" : space.name)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: store.activeSpaceID)
+        .accessibilityHidden(true)
+    }
+}
+
 /// Runs the spaces menu's items. AppKit, because SwiftUI's menus can't show
 /// the spaces' colors or open over the name like a pop-up button.
 @MainActor
@@ -233,9 +265,8 @@ private struct SpaceNameStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.leading, 6)
-            .padding(.trailing, 10)
-            .frame(height: 28)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
             .background {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
                     .fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear)

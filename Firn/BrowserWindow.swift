@@ -14,6 +14,13 @@ final class WindowModel {
     private(set) var showsCommandBar = false
     /// ⌃Tab is held: the recent tabs, one picked (see `pressTabSwitch`).
     private(set) var tabSwitcher: TabSwitcher?
+    /// ⌃ has been held a moment, so the panel of recent tabs shows.
+    private(set) var showsTabSwitcher = false
+    @ObservationIgnored private var tabSwitcherDelay: Task<Void, Never>?
+    /// Pictures of pages, taken as their tabs are left, for the ⌃Tab
+    /// panel. In memory only, never on disk; the newest few, by tab.
+    private(set) var tabPictures: [UUID: CGImage] = [:]
+    @ObservationIgnored private var pictureOrder: [UUID] = []
     /// The tab a split view is being made beside (Open as Split on the
     /// tab on screen, or a tile): it moves to the left half, and the command
     /// bar sits over an empty right half until something is picked.
@@ -665,14 +672,25 @@ final class WindowModel {
         guard !showsWelcome else { return }
         if tabSwitcher != nil { return moveTabSwitch(by: backward ? -1 : 1) }
         tabSwitcher = TabSwitcher(tabIDs: store.recentRows.map(\.id), backward: backward)
+        guard tabSwitcher != nil else { return }
+        takePicture(of: store.activeTabID)
+        // A quick tap never flashes the panel; held a moment, it shows.
+        tabSwitcherDelay = Task {
+            try? await Task.sleep(for: .seconds(0.12))
+            guard !Task.isCancelled, tabSwitcher != nil else { return }
+            showsTabSwitcher = true
+        }
     }
 
     func moveTabSwitch(by offset: Int) { tabSwitcher?.move(by: offset) }
 
+    /// The pointer over a card in the panel.
+    func pickTabSwitch(_ id: UUID) { tabSwitcher?.pick(id) }
+
     /// ⌃ let go: the picked tab shows, if it's still in this space.
     func finishTabSwitch() {
         guard let switcher = tabSwitcher else { return }
-        tabSwitcher = nil
+        endTabSwitch()
         guard let tab = store.tabs.first(where: { $0.id == switcher.pickedID }),
               tab.spaceID == store.activeSpaceID else { return }
         store.select(tab)
@@ -680,7 +698,39 @@ final class WindowModel {
     }
 
     /// Esc, or Firn left mid-switch: the tab on screen stays.
-    func cancelTabSwitch() { tabSwitcher = nil }
+    func cancelTabSwitch() { endTabSwitch() }
+
+    private func endTabSwitch() {
+        tabSwitcherDelay?.cancel()
+        tabSwitcherDelay = nil
+        tabSwitcher = nil
+        showsTabSwitcher = false
+    }
+
+    /// Takes a picture of a tab's page for the ⌃Tab panel, as it's left
+    /// (and of the tab on screen as ⌃Tab is pressed). A sleeping page is
+    /// never woken for it; its card shows the site's icon instead.
+    func takePicture(of tabID: UUID?) {
+        guard let tabID, let page = store.tabs.first(where: { $0.id == tabID })?.page else { return }
+        Task {
+            // Twice the card's width, so it's sharp on a Retina screen.
+            guard let picture = await page.snapshot(width: Theme.liftedCard.width * 2) else { return }
+            keepPicture(picture, for: tabID)
+        }
+    }
+
+    private func keepPicture(_ picture: CGImage, for tabID: UUID) {
+        let open = Set(store.tabs.map(\.id))
+        pictureOrder.removeAll { $0 == tabID || !open.contains($0) }
+        guard open.contains(tabID) else { return }
+        pictureOrder.append(tabID)
+        // Only the newest few: the panel never shows more than five a space.
+        while pictureOrder.count > Self.pictureLimit { tabPictures[pictureOrder.removeFirst()] = nil }
+        tabPictures = tabPictures.filter { open.contains($0.key) }
+        tabPictures[tabID] = picture
+    }
+
+    private static let pictureLimit = 24
 }
 
 /// One browser window: the sidebar and the page, on the space-tinted frame.
@@ -706,6 +756,7 @@ struct BrowserWindow: View {
                 .overlay { LookoutLayer(store: store, window: window) }
                 .overlay { FindBarLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
+                .overlay { TabSwitcherLayer(store: store, window: window) }
                 .overlay { SpaceSheetLayer(window: window) }
                 .overlay { GlassSheetLayer(cornerRadius: Theme.pageCornerRadius) }
                 .modifier(PageBesideSidebar(
@@ -786,7 +837,10 @@ struct BrowserWindow: View {
         .onChange(of: store.activeTab == nil) {
             if store.activeTab == nil { window.openCommandBar() }
         }
-        .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
+        .onChange(of: store.activeTabID) { old, _ in
+            window.takePicture(of: old)
+            window.tabOnScreenChanged()
+        }
         .onOpenURL { window.openFromOtherApp($0) }
         .modifier(ArcImportFlow(starting: Bindable(window).startingArcImport, window: window))
         .glassSheetHost(color: Theme.spaceColor(store.activeSpace.color))
@@ -1212,8 +1266,8 @@ private struct TabLiftGhost: View {
     }
 }
 
-/// The page's picture, from the top, filling the card.
-private struct LiftPicture: View {
+/// The page's picture, from the top, filling the card. The ⌃Tab panel's cards too.
+struct LiftPicture: View {
     let image: CGImage
 
     var body: some View {

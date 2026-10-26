@@ -19,6 +19,8 @@ struct SpacesSettings: View {
     @State private var dragging: UUID?
     @State private var dragOffset: CGFloat = 0
     @FocusState private var nameFocused: Bool
+    /// The list has keyboard focus: ↑ and ↓ pick a space, ⌥↑ and ⌥↓ move it.
+    @FocusState private var listFocused: Bool
 
     private static let rowHeight: CGFloat = 44
     private static let rowSpacing: CGFloat = 2
@@ -76,7 +78,10 @@ struct SpacesSettings: View {
                                 Text("Delete “\(space.name)”")
                                     .font(Theme.tabFont)
                                     .foregroundStyle(Theme.ink)
-                                Text("Its tabs, groups, and Basecamp go with it.")
+                                // A separate space's sign-ins go too; shared ones stay.
+                                Text(store.spacesSharingData(with: space).isEmpty
+                                     ? "Its tabs, groups, Basecamp, and sign-ins go with it."
+                                     : "Its tabs, groups, and Basecamp go with it.")
                                     .font(Theme.hintFont)
                                     .foregroundStyle(Theme.muted)
                             }
@@ -139,14 +144,18 @@ struct SpacesSettings: View {
                     space: space,
                     sharing: sharingLine(for: space),
                     isSelected: space.id == selected.id,
-                    isDragged: space.id == dragging
+                    isDragged: space.id == dragging,
+                    showsFocus: listFocused
                 )
                 .frame(height: Self.rowHeight)
                 .offset(y: offset(of: space, at: index))
                 // The others glide aside; the dragged row stays under the pointer.
                 .animation(space.id == dragging || reduceMotion ? nil : .smooth(duration: 0.2), value: dragOffset)
                 .zIndex(space.id == dragging ? 1 : 0)
-                .onTapGesture { select(space) }
+                .onTapGesture {
+                    select(space)
+                    listFocused = true
+                }
                 .gesture(reorder(space, from: index))
                 .contextMenu {
                     Button("Move Up") { move(space, by: -1) }
@@ -160,6 +169,22 @@ struct SpacesSettings: View {
             }
         }
         .padding(6)
+        // Keyboard: the list takes focus as one control, like a list in a
+        // Mac settings pane; the picked row shows the frost ring instead of
+        // a ring around the whole card.
+        .focusable()
+        .focused($listFocused)
+        .focusEffectDisabled()
+        .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+            let step = press.key == .upArrow ? -1 : 1
+            if press.modifiers.contains(.option) {
+                move(selected, by: step)
+            } else if let index = store.spaces.firstIndex(where: { $0.id == selected.id }) {
+                let next = min(max(index + step, 0), store.spaces.count - 1)
+                select(store.spaces[next])
+            }
+            return .handled
+        }
     }
 
     @ViewBuilder private func signIns(of space: Space) -> some View {
@@ -271,6 +296,8 @@ private struct SpaceSettingsRow: View {
     let sharing: String
     let isSelected: Bool
     let isDragged: Bool
+    /// The list has keyboard focus; the picked row wears the frost ring.
+    let showsFocus: Bool
     @State private var hovering = false
 
     var body: some View {
@@ -304,6 +331,11 @@ private struct SpaceSettingsRow: View {
         }
         .overlay {
             shape.strokeBorder(isSelected || isDragged ? Theme.activeTabHairline : .clear, lineWidth: 0.5)
+        }
+        .overlay {
+            if isSelected && showsFocus {
+                shape.strokeBorder(Theme.frost, lineWidth: 2)
+            }
         }
         .contentShape(shape)
         .onHover { hovering = $0 }

@@ -72,9 +72,6 @@ struct SpaceRow: View {
         guard !Task.isCancelled else { return }
         window.tidyAnnouncement = nil
     }
-
-    /// Says plainly what goes: with a separate space, its sign-ins too; with
-    /// a shared one, which space keeps them.
 }
 
 /// The space on screen's name, in its color. A click opens the list of
@@ -102,7 +99,16 @@ private struct SpaceNameButton: View {
         .background { MenuAnchorView(anchor: anchor) { showMenu() } }
         .help("Spaces")
         .accessibilityLabel("Space: \(space.name)")
+        // The dots are silent, so VoiceOver hears where this space sits instead.
+        .accessibilityValue(position)
         .accessibilityHint("Shows your spaces")
+    }
+
+    /// "2 of 3", with more than one space.
+    private var position: String {
+        let count = store.spaces.count
+        guard count > 1, let index = store.spaces.firstIndex(where: { $0.id == store.activeSpaceID }) else { return "" }
+        return "\(index + 1) of \(count)"
     }
 
     private func select(_ space: Space) {

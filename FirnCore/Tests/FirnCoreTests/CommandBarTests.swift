@@ -115,6 +115,22 @@ struct CommandBarTests {
         #expect(suggested.count == 3)
     }
 
+    @Test func historyComesAfterTabsAndSkipsOpenPages() async {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "FirnCommandHistory-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let history = HistoryStore(directory: folder)
+        let store = BrowserStore(spaces: [space, work], makePage: { FakePage(dataStoreID: $0) }, history: history)
+        await history.record(URL(string: "https://open.example/")!, title: "Tea open", in: space.dataStoreID)
+        await history.record(URL(string: "https://past.example/")!, title: "Tea past", in: space.dataStoreID)
+        await history.record(URL(string: "https://work.example/")!, title: "Tea at work", in: work.dataStoreID)
+        let tab = open(store, "open.example", title: "Tea open")
+        open(store, "other.example", title: "Other")
+        let pages = await store.historyPages(for: "tea")
+        #expect(pages.map(\.title).sorted() == ["Tea open", "Tea past"])
+        let ids = store.commandRows(for: "tea", searchEngine: .google, history: pages).map(\.id)
+        #expect(ids == ["search tea", "tab \(tab.id)", "history https://past.example/"])
+    }
+
     // MARK: Suggestions
 
     @Test func onlyWordsAreSentForSuggestions() {

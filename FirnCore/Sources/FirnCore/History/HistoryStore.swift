@@ -13,6 +13,18 @@ public struct HistoryVisit: Identifiable, Hashable, Sendable {
     public let site: String
 }
 
+/// One page in history with all its visits taken together, for the command
+/// bar: the latest title, and a score for how often and how recently.
+public struct HistoryPage: Hashable, Sendable {
+    public let url: URL
+    /// The title at the latest visit; empty if that visit has none yet.
+    public let title: String
+    public let site: String
+    public let lastVisitedAt: Date
+    /// Higher is visited more, and more lately.
+    public let score: Double
+}
+
 /// Firn's own record of the pages visited, kept per data store like saved
 /// passwords: a separate space never sees another's visits, and shared
 /// spaces share them. One SQLite file per data store (SQLite is part of
@@ -96,6 +108,41 @@ public actor HistoryStore {
             return HistoryVisit(
                 id: row.integer(0), url: url, title: row.text(2),
                 visitedAt: Date(timeIntervalSince1970: row.real(3)), site: row.text(4)
+            )
+        }) ?? []
+    }
+
+    /// Pages whose title or address contains every word of `search`
+    /// (ignoring case), best first: each visit counts, recent ones far more
+    /// than old ones. The command bar narrows these further.
+    public func pages(
+        matching search: String, limit: Int = 30, now: Date = .now, in dataStoreID: UUID
+    ) -> [HistoryPage] {
+        let words = search.split { $0.isWhitespace }.prefix(8)
+        guard !words.isEmpty, let db = try? existingDatabase(for: dataStoreID) else { return [] }
+        let day = 24 * 60 * 60.0
+        let now = now.timeIntervalSince1970
+        var values: [Database.Value] = [4.0, 14, 31, 90].map { .real(now - $0 * day) }
+        var conditions: [String] = []
+        for word in words {
+            values.append(.text("%" + Self.escapedForLike(String(word)) + "%"))
+            conditions.append("(title LIKE ?\(values.count) ESCAPE '\\' OR url LIKE ?\(values.count) ESCAPE '\\')")
+        }
+        values.append(.integer(Int64(max(limit, 0))))
+        // With MAX(), SQLite takes the other bare columns (the title) from
+        // the latest visit. The weights are Firefox's, roughly.
+        let sql = """
+            SELECT url, title, site, MAX(visited_at),
+                SUM(CASE WHEN visited_at >= ?1 THEN 100 WHEN visited_at >= ?2 THEN 70
+                    WHEN visited_at >= ?3 THEN 50 WHEN visited_at >= ?4 THEN 30 ELSE 10 END) AS score
+            FROM visits WHERE \(conditions.joined(separator: " AND "))
+            GROUP BY url ORDER BY score DESC, MAX(visited_at) DESC LIMIT ?\(values.count)
+            """
+        return (try? db.select(sql, values) { row in
+            guard let url = URL(string: row.text(0)) else { return nil }
+            return HistoryPage(
+                url: url, title: row.text(1), site: row.text(2),
+                lastVisitedAt: Date(timeIntervalSince1970: row.real(3)), score: row.real(4)
             )
         }) ?? []
     }

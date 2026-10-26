@@ -57,6 +57,8 @@ private struct CommandBar: View {
     /// The engine's latest suggestions. Kept until new ones come, so the
     /// rows don't flicker on every key.
     @State private var suggestions: [String] = []
+    /// This space's history pages for what's typed, kept the same way.
+    @State private var history: [HistoryPage] = []
     @FocusState private var focused: Bool
     /// Set once the field has had focus, so losing it can close the bar.
     @State private var hadFocus = false
@@ -71,7 +73,9 @@ private struct CommandBar: View {
     private func rows(actions: [BarAction]) -> [CommandRow] {
         // Picking a page for a split, it's pages only, not actions.
         let actions = window.splitPickAnchor == nil ? actions.map(\.action) : []
-        return store.commandRows(for: text, searchEngine: engine, suggestions: suggestions, actions: actions)
+        return store.commandRows(
+            for: text, searchEngine: engine, suggestions: suggestions, history: history, actions: actions
+        )
     }
 
     var body: some View {
@@ -102,6 +106,7 @@ private struct CommandBar: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Command bar")
         .task(id: text) { await fetchSuggestions() }
+        .task(id: text) { await fetchHistory() }
         .onAppear {
             Task { @MainActor in
                 await Task.yield()
@@ -173,6 +178,14 @@ private struct CommandBar: View {
         suggestions = found
     }
 
+    /// History is on this Mac, so it's read at once, with no pause. Each key
+    /// cancels the last lookup.
+    private func fetchHistory() async {
+        let found = await store.historyPages(for: text)
+        guard !Task.isCancelled else { return }
+        history = found
+    }
+
     private func pick(_ row: CommandRow, actions: [BarAction]) {
         if let anchor = window.splitPickAnchor { return pickSplit(row, beside: anchor) }
         // The bar goes first, so an action that opens a sheet or names a
@@ -186,6 +199,8 @@ private struct CommandBar: View {
             switch row {
             case let .go(url), let .search(_, url, _):
                 store.openTab(url)
+            case let .history(page):
+                store.openTab(page.url)
             case let .tab(tab):
                 store.select(tab)
             case let .tidied(tab):
@@ -208,6 +223,8 @@ private struct CommandBar: View {
             switch row {
             case let .go(url), let .search(_, url, _):
                 incoming = store.openTab(url, inBackground: true)
+            case let .history(page):
+                incoming = store.openTab(page.url, inBackground: true)
             case let .tab(tab), let .tidied(tab):
                 incoming = tab
             case let .closed(entry):
@@ -378,6 +395,8 @@ private struct CommandRowView: View {
             } else {
                 SiteIconView(icon: entry.icon, size: 16) { Image(systemName: "globe") }
             }
+        case .history:
+            Image(systemName: "clock")
         case .action:
             Image(systemName: "command")
         }
@@ -390,6 +409,8 @@ private struct CommandRowView: View {
         case let .search(text, _, _): text
         case let .tab(tab), let .tidied(tab): tab.title
         case let .closed(entry): entry.title
+        // A page that never had a title shows where it was.
+        case let .history(page): page.title.isEmpty ? page.url.absoluteString : page.title
         case let .action(action): action.name
         }
     }
@@ -402,6 +423,7 @@ private struct CommandRowView: View {
         case .tab: "Switch to tab"
         case .tidied: "Tidied away"
         case .closed: "Recently closed"
+        case .history: "History"
         case let .action(action): action.shortcut
         }
     }

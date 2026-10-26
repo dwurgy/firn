@@ -5,7 +5,7 @@ import Foundation
 /// known. Reloading, or a jump to a #section, isn't a new visit.
 @MainActor
 final class HistoryRecorder {
-    private let store: HistoryStore
+    let store: HistoryStore
     /// Each tab's latest visit, to fill in its title or tell a reload. A few
     /// bytes a tab, kept until quit.
     private var current: [UUID: Visit] = [:]

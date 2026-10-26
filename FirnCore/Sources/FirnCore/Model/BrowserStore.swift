@@ -64,7 +64,7 @@ public final class BrowserStore {
 
     @ObservationIgnored private let makePage: @MainActor (_ dataStoreID: UUID) -> any PageController
     @ObservationIgnored private let removeData: @MainActor (_ dataStoreID: UUID) -> Void
-    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored let now: () -> Date
     @ObservationIgnored private let passwords: PasswordStore?
     @ObservationIgnored let history: HistoryRecorder?
     @ObservationIgnored private var windowID = UUID()

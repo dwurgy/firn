@@ -143,4 +143,24 @@ struct HistoryStoreTests {
         await store.record(url("https://example.com"), title: "Fresh", in: work)
         #expect(await store.visits(in: work).map(\.title) == ["Fresh"])
     }
+
+    @Test func pagesRankByHowOftenAndHowRecently() async {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let now = start + 400 * 24 * 60 * 60
+        // Old but often, recent once, and recent twice.
+        for n in 0..<5 { await store.record(url("https://old.example/"), title: "Tea old", at: now - Double(200 + n) * 86_400, in: work) }
+        await store.record(url("https://once.example/"), title: "Tea once", at: now - 3_600, in: work)
+        await store.record(url("https://twice.example/"), title: "", at: now - 7_200, in: work)
+        await store.record(url("https://twice.example/"), title: "Tea twice", at: now - 60, in: work)
+        await store.record(url("https://other.example/"), title: "Coffee", at: now, in: work)
+        let pages = await store.pages(matching: "tea", now: now, in: work)
+        #expect(pages.map(\.title) == ["Tea twice", "Tea once", "Tea old"])
+        #expect(pages.first?.lastVisitedAt == now - 60)
+        // Every word must be there, in the title or the address.
+        #expect(await store.pages(matching: "tea twice.example", now: now, in: work).map(\.title) == ["Tea twice"])
+        #expect(await store.pages(matching: "tea coffee", now: now, in: work).isEmpty)
+        #expect(await store.pages(matching: "%", now: now, in: work).isEmpty)
+        #expect(await store.pages(matching: "tea", now: now, in: personal).isEmpty)
+    }
 }

@@ -30,6 +30,8 @@ public enum CommandRow: Identifiable {
     case tidied(Tab)
     /// Bring back something from Recently closed.
     case closed(ClosedEntry)
+    /// Go back to a page from this space's history.
+    case history(HistoryPage)
     case action(CommandAction)
 
     public var id: String {
@@ -39,6 +41,7 @@ public enum CommandRow: Identifiable {
         case let .tab(tab): "tab \(tab.id)"
         case let .tidied(tab): "tidied \(tab.id)"
         case let .closed(entry): "closed \(entry.id)"
+        case let .history(page): "history \(page.url.absoluteString)"
         case let .action(action): "action \(action.id)"
         }
     }
@@ -85,15 +88,24 @@ extension BrowserStore {
     /// The most rows the bar shows.
     public static let commandRowLimit = 7
 
+    /// This space's history pages that might match `text`, for
+    /// `commandRows`. Only the space on screen's data store is read.
+    public func historyPages(for text: String) async -> [HistoryPage] {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let store = history?.store else { return [] }
+        return await store.pages(matching: text, now: now(), in: activeSpace.dataStoreID)
+    }
+
     /// The command bar's rows for what's typed, from the space on screen
-    /// only: first the address or search, then this space's tabs, actions,
-    /// its tidied-away and recently closed tabs, and the engine's
-    /// suggestions (which keep up to three rows when there are some).
-    /// Nothing typed, no rows.
+    /// only: first the address or search, then this space's tabs, its
+    /// history (from `historyPages`), actions, its tidied-away and recently
+    /// closed tabs, and the engine's suggestions (which keep up to three
+    /// rows when there are some). Nothing typed, no rows.
     public func commandRows(
         for text: String,
         searchEngine: SearchEngine,
         suggestions: [String] = [],
+        history: [HistoryPage] = [],
         actions: [CommandAction] = []
     ) -> [CommandRow] {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,6 +125,16 @@ extension BrowserStore {
 
         let shown = (basecampTabs + openTabs).filter { $0.id != activeTabID }
         let tabRows = best(shown, 3, fields: tabFields, recency: \.lastActiveAt).map(CommandRow.tab)
+        // History keeps the store's order (how often and how recently); a
+        // page already open, or the address typed, isn't offered again.
+        var offered = Set((basecampTabs + openTabs).compactMap { $0.url?.absoluteString })
+        if case let .go(url) = top.first { offered.insert(url.absoluteString) }
+        let historyRows = history
+            .filter { page in
+                offered.insert(page.url.absoluteString).inserted
+                    && CommandMatch.score(text, in: [page.title, page.site, page.url.absoluteString]) != nil
+            }
+            .prefix(3).map(CommandRow.history)
         let actionRows = best(actions, 2, fields: { [$0.name] + $0.keywords }).map(CommandRow.action)
         let tidiedRows = best(driftedTabs, 2, fields: tabFields, recency: \.lastActiveAt).map(CommandRow.tidied)
         let closedRows = best(recentlyClosed, 2, fields: { [$0.title] }).map(CommandRow.closed)
@@ -122,7 +144,7 @@ extension BrowserStore {
             searchEngine.searchURL(for: line).map { CommandRow.search(line, $0, isSuggestion: true) }
         }
         let room = Self.commandRowLimit - top.count
-        let local = Array((tabRows + actionRows + pastRows).prefix(room - min(3, suggestionRows.count)))
+        let local = Array((tabRows + historyRows + actionRows + pastRows).prefix(room - min(3, suggestionRows.count)))
         return top + local + suggestionRows.prefix(room - local.count)
     }
 }

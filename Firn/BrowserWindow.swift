@@ -12,6 +12,8 @@ final class WindowModel {
     var asksToClearHistory = false
     /// Whether the command bar (⌘T) is open over the page.
     private(set) var showsCommandBar = false
+    /// ⌃Tab is held: the recent tabs, one picked (see `pressTabSwitch`).
+    private(set) var tabSwitcher: TabSwitcher?
     /// The tab a split view is being made beside (Open as Split on the
     /// tab on screen, or a tile): it moves to the left half, and the command
     /// bar sits over an empty right half until something is picked.
@@ -654,6 +656,31 @@ final class WindowModel {
             (store.lookout?.page ?? store.activeTab?.page)?.focus()
         }
     }
+
+    // MARK: ⌃Tab
+
+    /// ⌃Tab (or ⇧⌃Tab) pressed: starts a switch, or moves its pick while ⌃
+    /// is still held. See `TabSwitcher` and `TabSwitchKeys`.
+    func pressTabSwitch(backward: Bool) {
+        guard !showsWelcome else { return }
+        if tabSwitcher != nil { return moveTabSwitch(by: backward ? -1 : 1) }
+        tabSwitcher = TabSwitcher(tabIDs: store.recentRows.map(\.id), backward: backward)
+    }
+
+    func moveTabSwitch(by offset: Int) { tabSwitcher?.move(by: offset) }
+
+    /// ⌃ let go: the picked tab shows, if it's still in this space.
+    func finishTabSwitch() {
+        guard let switcher = tabSwitcher else { return }
+        tabSwitcher = nil
+        guard let tab = store.tabs.first(where: { $0.id == switcher.pickedID }),
+              tab.spaceID == store.activeSpaceID else { return }
+        store.select(tab)
+        focusPage()
+    }
+
+    /// Esc, or Firn left mid-switch: the tab on screen stays.
+    func cancelTabSwitch() { tabSwitcher = nil }
 }
 
 /// One browser window: the sidebar and the page, on the space-tinted frame.
@@ -739,6 +766,7 @@ struct BrowserWindow: View {
         .environment(\.spaceColorName, store.activeSpace.color)
         .navigationTitle(store.activeTab?.title ?? "Firn")
         .background(TabShortcuts(store: store, window: window))
+        .background(TabSwitchKeys(window: window))
         .onAppear {
             if store.activeTab == nil { window.openCommandBar() }
             // Launching may bring Firn to the front before this window listens.
@@ -1457,8 +1485,8 @@ extension PagePane {
     }
 }
 
-/// ⌘1–9 and ⇧⌘[ / ⇧⌘], which don't need their own menu items.
-/// ⌃Tab and ⌃⇧Tab are in the Window menu, where they can be found.
+/// ⌘1–9, which don't need their own menu items. ⌃Tab and ⇧⌘[ / ⇧⌘] are
+/// in the Window menu, where they can be found.
 private struct TabShortcuts: View {
     let store: BrowserStore
     let window: WindowModel
@@ -1469,10 +1497,6 @@ private struct TabShortcuts: View {
                 Button("Tab \(number)") { select { store.selectTab(at: number - 1) } }
                     .keyboardShortcut(KeyEquivalent(Character("\(number)")))
             }
-            Button("Next Tab") { select { store.selectTab(by: 1) } }
-                .keyboardShortcut("]", modifiers: [.command, .shift])
-            Button("Previous Tab") { select { store.selectTab(by: -1) } }
-                .keyboardShortcut("[", modifiers: [.command, .shift])
             // ⌘+ needs Shift on most keyboards; ⌘= is the same key without it.
             Button("Zoom In") { window.zoomFront(.larger) }
                 .keyboardShortcut("=")
@@ -1634,11 +1658,17 @@ struct BrowserCommands: Commands {
                 .disabled(window.showsWelcome)
         }
         CommandGroup(before: .windowArrangement) {
-            Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }
+            // Held, ⌃Tab shows the recent tabs to pick from (`TabSwitchKeys`);
+            // chosen here, it's a tap.
+            Button("Show Last Used Tab") { window.pressTabSwitch(backward: false); window.finishTabSwitch() }
                 .keyboardShortcut(.tab, modifiers: .control)
+                .disabled(store.recentRows.count < 2)
+            // Down and up the sidebar, as in Arc and Dia.
+            Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
                 .disabled(store.sidebarRows.count < 2)
             Button("Show Previous Tab") { store.selectTab(by: -1); window.focusPage() }
-                .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                .keyboardShortcut("[", modifiers: [.command, .shift])
                 .disabled(store.sidebarRows.count < 2)
             Divider()
             // As in Arc: ⌃1–9 for a space, ⌥⌘ and the arrows for the next one.

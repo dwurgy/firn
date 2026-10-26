@@ -213,7 +213,7 @@ public final class BrowserStore {
     public func selectSpace(_ space: Space) {
         guard space.id != activeSpaceID, spaces.contains(where: { $0.id == space.id }) else { return }
         closeLookout()
-        for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
+        markOnScreenSeen()
         lastTabBySpace[activeSpaceID] = activeTabID
         activeSpaceID = space.id
         activeTabID = nil
@@ -370,6 +370,23 @@ public final class BrowserStore {
     /// The sidebar's rows, top to bottom, as ⌘1–9 and ⌃Tab count them: like
     /// `sidebarTabs`, but each split once, as its left half.
     public var sidebarRows: [Tab] { Self.rows(sidebarTabs) }
+
+    /// The current space's tabs, most recently used first, as ⌃Tab shows
+    /// them (`TabSwitcher`): the tab on screen, then the rest by when they
+    /// were last left (ties in sidebar order). Basecamp tiles, grouped tabs
+    /// (folded ones too), and loose tabs count; tidied ones don't. A split
+    /// counts once, as its half used last.
+    public var recentRows: [Tab] {
+        let ranked = (basecampTabs + openTabs).enumerated().sorted { a, b in
+            let aOnScreen = a.element.id == activeTabID, bOnScreen = b.element.id == activeTabID
+            if aOnScreen != bOnScreen { return aOnScreen }
+            if a.element.lastActiveAt != b.element.lastActiveAt {
+                return a.element.lastActiveAt > b.element.lastActiveAt
+            }
+            return a.offset < b.offset
+        }
+        return Self.rows(ranked.map(\.element))
+    }
 
     public var canAddToBasecamp: Bool { basecampTabs.count < Self.basecampLimit }
 
@@ -966,7 +983,7 @@ public final class BrowserStore {
         guard let first = tabs.first(where: { $0.splitID == split.id }) else { return }
         // Both were on screen, so neither should drift straight away.
         if onScreenTabIDs.contains(first.id) {
-            for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
+            markOnScreenSeen()
         }
         _ = endSplit(of: first)
     }
@@ -1530,7 +1547,7 @@ public final class BrowserStore {
         guard tabs.contains(where: { $0.id == tab.id }) else { return }
         closeLookout()
         bringBack(tab)
-        for id in onScreenTabIDs { tabs.first { $0.id == id }?.lastActiveAt = now() }
+        markOnScreenSeen()
         wake(tab)
         if let partner = splitPartner(of: tab) { wake(partner) }
         tab.lastActiveAt = now()
@@ -1563,6 +1580,14 @@ public final class BrowserStore {
     private var onScreenTabIDs: Set<UUID> {
         guard let activeTab else { return [] }
         return Set([activeTab.id] + (splitPartner(of: activeTab).map { [$0.id] } ?? []))
+    }
+
+    /// Marks the tab on screen, and its other half, as seen now: the half in
+    /// use last, so ⌃Tab (`recentRows`) comes back to it.
+    private func markOnScreenSeen() {
+        guard let activeTab else { return }
+        splitPartner(of: activeTab)?.lastActiveAt = now()
+        activeTab.lastActiveAt = now()
     }
 
     /// Makes the tab's page, in its own space's data store, if it has none.

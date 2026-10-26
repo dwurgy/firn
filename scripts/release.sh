@@ -5,15 +5,30 @@
 # Needs, once: xcrun notarytool store-credentials firn-notary --apple-id <you> --team-id 72LHR8K4P5
 # Run from anywhere: scripts/release.sh   (another saved name: NOTARY_PROFILE=name scripts/release.sh)
 # scripts/release.sh --check builds and checks the signature only; nothing is sent to Apple.
+# scripts/release.sh --test <version> <build> makes a test copy for scripts/test-update.sh: notarized like a real
+# release, but its feed is on this Mac, and it goes into a test feed there, never into appcast.xml.
 set -euo pipefail
 
 CHECK_ONLY=false
 [[ "${1:-}" == --check ]] && CHECK_ONLY=true
+TEST=false
+REAL_FEED="https://firnbrowser.com/appcast.xml"
+OVERRIDES=()
+if [[ "${1:-}" == --test ]]; then
+	TEST=true
+	TEST_VERSION=${2:?usage: scripts/release.sh --test <version> <build>}
+	TEST_BUILD=${3:?usage: scripts/release.sh --test <version> <build>}
+	# Shared with scripts/test-update.sh, which serves this folder.
+	TEST_FEED_DIR="$HOME/Library/Caches/Firn-test-update/feed"
+	TEST_FEED="http://127.0.0.1:8123"
+	OVERRIDES=(MARKETING_VERSION="$TEST_VERSION" CURRENT_PROJECT_VERSION="$TEST_BUILD" FIRN_FEED_URL="$TEST_FEED/appcast.xml")
+fi
 NOTARY_PROFILE="${NOTARY_PROFILE:-firn-notary}"
 TEAM_ID=72LHR8K4P5
 REPO="${0:A:h:h}"
 # Outside ~/Documents: Finder metadata there breaks code signing.
 WORK="$HOME/Library/Caches/Firn-release"
+$TEST && WORK="$HOME/Library/Caches/Firn-test-update/build-$TEST_VERSION"
 
 step() { print -P "%B==> $1%b" }
 fail() { print -u2 "Stopped: $1"; exit 1 }
@@ -45,7 +60,7 @@ notarize() {
 }
 
 cd "$REPO"
-$CHECK_ONLY || [[ -z "$(git status --porcelain)" ]] || fail "uncommitted changes; a release is built from committed code only."
+$CHECK_ONLY || $TEST || [[ -z "$(git status --porcelain)" ]] || fail "uncommitted changes; a release is built from committed code only."
 $CHECK_ONLY || xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 ||
 	fail "no saved notary password named \"$NOTARY_PROFILE\" (see the top of this script)."
 
@@ -53,7 +68,7 @@ rm -rf "$WORK"; mkdir -p "$WORK"
 
 step "Building the Release archive"
 quiet archive xcodebuild archive -scheme Firn -configuration Release -destination 'generic/platform=macOS' \
-	-archivePath "$WORK/Firn.xcarchive" -derivedDataPath "$WORK/DerivedData"
+	-archivePath "$WORK/Firn.xcarchive" -derivedDataPath "$WORK/DerivedData" "${OVERRIDES[@]}"
 quiet export xcodebuild -exportArchive -archivePath "$WORK/Firn.xcarchive" -exportPath "$WORK/export" \
 	-exportOptionsPlist "$REPO/scripts/ExportOptions.plist"
 APP="$WORK/export/Firn.app"
@@ -74,12 +89,26 @@ codesign -d --entitlements - --xml "$APP" >"$WORK/entitlements.plist" 2>/dev/nul
 ent() { /usr/libexec/PlistBuddy -c "Print :$1" "$WORK/entitlements.plist" 2>/dev/null || echo missing }
 [[ "$(ent com.apple.security.app-sandbox)" == true ]] || fail "App Sandbox is off"
 [[ "$(ent com.apple.security.get-task-allow)" != true ]] || fail "a debugging entitlement is still on"
+FEED=$(plutil -extract SUFeedURL raw "$INFO")
+if $TEST; then
+	[[ "$FEED" == "$TEST_FEED/appcast.xml" ]] || fail "the test copy's feed is $FEED, not this Mac's"
+else
+	# A copy pointed anywhere else would never hear about updates.
+	[[ "$FEED" == "$REAL_FEED" ]] || fail "the update feed is $FEED, not $REAL_FEED"
+fi
 
 # Sparkle compares build numbers, not versions, so each release needs a higher one (CURRENT_PROJECT_VERSION).
 step "Checking the release notes, build number, and update key"
-NOTES=$("$REPO/scripts/release-notes.sh" "$VERSION") || fail "write Firn $VERSION's notes in CHANGELOG.md first"
+if $TEST; then
+	NOTES="<p><b>A test update.</b> If you can read this, Firn found it on this Mac. Nothing here is public.</p>"
+	APPCAST="$TEST_FEED_DIR/appcast.xml"
+	mkdir -p "$TEST_FEED_DIR"
+	[[ -f "$APPCAST" ]] || sed 's|<link>.*</link>|<link>'"$TEST_FEED"'/appcast.xml</link>|' "$REPO/appcast.xml" >"$APPCAST"
+else
+	NOTES=$("$REPO/scripts/release-notes.sh" "$VERSION") || fail "write Firn $VERSION's notes in CHANGELOG.md first"
+	APPCAST="$REPO/appcast.xml"
+fi
 [[ "$NOTES" != *']]>'* ]] || fail "the notes can't contain ]]>"
-APPCAST="$REPO/appcast.xml"
 [[ "$BUILD" == <-> ]] || fail "build number \"$BUILD\" isn't a whole number"
 LATEST=$(sed -n 's|.*<sparkle:version>\([0-9]*\)</sparkle:version>.*|\1|p' "$APPCAST" | sort -n | tail -1)
 (( BUILD > ${LATEST:-0} )) || fail "build $BUILD isn't higher than build $LATEST, already in appcast.xml"
@@ -117,6 +146,7 @@ step "Signing the DMG for updates and adding it to appcast.xml"
 SPARKLE_SIG=$("$SPARKLE_BIN/sign_update" "$DMG") || fail "Sparkle couldn't sign the DMG"
 [[ "$SPARKLE_SIG" == sparkle:edSignature=\"*\"\ length=\"<->\" ]] || fail "unexpected answer from sign_update: $SPARKLE_SIG"
 DOWNLOAD="https://github.com/dwurgy/firn/releases/download/v$VERSION/Firn-$VERSION.dmg"
+$TEST && DOWNLOAD="$TEST_FEED/Firn-$VERSION.dmg"
 cat >"$WORK/item.xml" <<EOF
 		<item>
 			<title>Firn $VERSION</title>
@@ -134,6 +164,12 @@ awk 'FNR == NR { item = item $0 "\n"; next } { print } /New releases go below th
 	"$WORK/item.xml" "$APPCAST" >"$WORK/appcast.xml"
 xmllint --noout "$WORK/appcast.xml" 2>/dev/null || fail "the new appcast.xml isn't valid XML ($WORK/appcast.xml)"
 mv "$WORK/appcast.xml" "$APPCAST"
+
+if $TEST; then
+	cp "$DMG" "$TEST_FEED_DIR/"
+	step "Done: test copy Firn $VERSION is in $TEST_FEED_DIR"
+	exit 0
+fi
 
 step "Done: $DMG"
 print "Nothing is published yet. To release Firn $VERSION:"

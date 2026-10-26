@@ -9,9 +9,10 @@
 	<!-- Never send the Mac's model, macOS version, or other details with an update check. -->
 	<key>SUEnableSystemProfiling</key>
 	<false/>
-	<!-- Where Sparkle looks for new versions (the website's own session publishes it). -->
+	<!-- Where Sparkle looks for new versions (the website's own session publishes it). It's the FIRN_FEED_URL build
+	     setting, the real address unless scripts/test-update.sh points a test build at this Mac. -->
 	<key>SUFeedURL</key>
-	<string>https://firnbrowser.com/appcast.xml</string>
+	<string>$(FIRN_FEED_URL)</string>
 	<!-- Sparkle installs only updates signed with Firn's private key (kept in David's Keychain); this is its public half. -->
 	<key>SUPublicEDKey</key>
 	<string>LJCmsPkV6VS9VNPiiJa1jkhrgt0EXugn2fkeozXmAPM=</string>

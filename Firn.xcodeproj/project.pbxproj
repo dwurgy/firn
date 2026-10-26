@@ -203,10 +203,11 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FIRN_FEED_URL = "https://firnbrowser.com/appcast.xml";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Firn/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Firn;
@@ -235,9 +236,10 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FIRN_FEED_URL = "https://firnbrowser.com/appcast.xml";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Firn/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Firn;

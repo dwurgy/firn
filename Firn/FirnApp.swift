@@ -69,7 +69,7 @@ struct FirnApp: App {
 
         // History › Show History (⌘Y).
         Window("History", id: "history") {
-            HistoryWindow(store: window.store)
+            HistoryWindow(window: window)
         }
         .defaultSize(width: 680, height: 620)
 

@@ -52,6 +52,18 @@ final class HistoryRecorder {
         current[tab] = Visit(url: url, dataStoreID: dataStoreID, title: title, id: id)
     }
 
+    /// Hands `work` (a delete) to the store after everything before it, so a
+    /// visit still being saved can't land after the history was cleared.
+    func perform(_ work: @escaping @Sendable (HistoryStore) async -> Void) async {
+        let (store, previous) = (store, queue)
+        let task = Task {
+            await previous?.value
+            await work(store)
+        }
+        queue = task
+        await task.value
+    }
+
     /// Waits for everything handed to the store so far (for tests).
     func settled() async {
         await queue?.value

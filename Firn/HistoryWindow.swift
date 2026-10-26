@@ -3,13 +3,14 @@ import SwiftUI
 
 /// History › Show History (⌘Y): the space on screen's visits, newest first,
 /// grouped by day, with a search field. Double-click or Return opens a visit
-/// as a new tab in the browser window. Spaces sharing sign-ins share this
-/// history; a separate space only ever shows its own.
+/// as a new tab in the browser window; Delete (or the right-click menu)
+/// removes visits, and Clear History… a stretch of time. Spaces sharing
+/// sign-ins share this history; a separate space only ever shows its own.
 ///
 /// Visits are read a page at a time as the list scrolls, and again whenever
 /// the window comes to the front, so pages visited meanwhile appear.
 struct HistoryWindow: View {
-    let store: BrowserStore
+    let window: WindowModel
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.controlActiveState) private var activeState
@@ -23,6 +24,8 @@ struct HistoryWindow: View {
     @State private var loadingMore = false
     @State private var icons: [String: Data] = [:]
     @State private var selection: Set<Int64> = []
+    /// The space whose history Clear History… is asking about.
+    @State private var clearing: Space?
 
     /// One day's visits, under its heading.
     private struct Day: Identifiable {
@@ -31,6 +34,7 @@ struct HistoryWindow: View {
         var id: Date { start }
     }
 
+    private var store: BrowserStore { window.store }
     private var space: Space { store.activeSpace }
 
     /// What's read: a new space (with other history) or new words start over.
@@ -43,11 +47,34 @@ struct HistoryWindow: View {
             .navigationTitle("History")
             .navigationSubtitle(space.name)
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Clear History…") { clearing = space }
+                        .disabled(loaded && visits.isEmpty && search.isEmpty)
+                }
+            }
+            .sheet(item: $clearing) { space in
+                ClearHistorySheet(space: space, sharing: store.spacesSharingHistory(with: space)) { range in
+                    Task {
+                        await store.clearHistory(range, in: space)
+                        await readFirstPage(replacing: true)
+                    }
+                }
+            }
             .task(id: readKey) { await readFirstPage(replacing: true) }
             .onChange(of: activeState) { _, state in
                 guard state == .key, loaded else { return }
                 Task { await readFirstPage(replacing: false) }
             }
+            // History › Clear History… opens this window and asks here.
+            .onAppear(perform: answerClearRequest)
+            .onChange(of: window.asksToClearHistory) { answerClearRequest() }
+    }
+
+    private func answerClearRequest() {
+        guard window.asksToClearHistory else { return }
+        window.asksToClearHistory = false
+        clearing = space
     }
 
     @ViewBuilder private var content: some View {
@@ -92,10 +119,22 @@ struct HistoryWindow: View {
         .contextMenu(forSelectionType: Int64.self) { ids in
             if !ids.isEmpty {
                 Button(ids.count == 1 ? "Open in New Tab" : "Open \(ids.count) Pages in New Tabs") { open(ids) }
+                Divider()
+                Button("Delete") { delete(ids) }
+                if let site = onlySite(of: ids) {
+                    Button("Delete All from \(site)") { deleteAll(from: site) }
+                }
             }
         } primaryAction: { ids in
             open(ids)
         }
+        .onDeleteCommand { delete(selection) }
+    }
+
+    /// The one site all these visits are from, if there's just one.
+    private func onlySite(of ids: Set<Int64>) -> String? {
+        let sites = Set(visits.filter { ids.contains($0.id) }.map(\.site))
+        return sites.count == 1 ? sites.first : nil
     }
 
     private func row(_ visit: HistoryVisit) -> some View {
@@ -121,7 +160,7 @@ struct HistoryWindow: View {
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Double-click or press Return to open it in a new tab")
+        .accessibilityHint("Double-click or press Return to open it in a new tab; press Delete to remove it")
     }
 
     /// "Today", "Yesterday", or the date ("Thursday, October 22"; the year
@@ -202,6 +241,31 @@ struct HistoryWindow: View {
         icons = found
     }
 
+    // MARK: Deleting
+
+    /// Deletes the visits at once (no asking: it's only history, and
+    /// Safari doesn't ask either); their rows leave the list.
+    private func delete(_ ids: Set<Int64>) {
+        guard !ids.isEmpty else { return }
+        let space = space
+        removeRows { ids.contains($0.id) }
+        Task { await store.deleteHistory(visits: Array(ids), in: space) }
+    }
+
+    /// Deletes every visit to `site`, including those not read yet.
+    private func deleteAll(from site: String) {
+        let space = space
+        removeRows { $0.site == site }
+        Task { await store.deleteHistory(fromSite: site, in: space) }
+    }
+
+    private func removeRows(where gone: (HistoryVisit) -> Bool) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+            show(visits.filter { !gone($0) })
+        }
+        selection = selection.filter { id in visits.contains { $0.id == id } }
+    }
+
     // MARK: Opening
 
     /// Opens the visits as new tabs, where new tabs go, and brings the
@@ -213,5 +277,58 @@ struct HistoryWindow: View {
             for url in urls { store.openTab(url) }
         }
         openWindow(id: "browser")
+    }
+}
+
+/// Clear History…: how far back to clear, and whose history it is. Spaces
+/// sharing sign-ins share history, so the sheet names each of them.
+private struct ClearHistorySheet: View {
+    let space: Space
+    let sharing: [Space]
+    let clear: (HistoryClearRange) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var range = HistoryClearRange.lastHour
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+            Text("Clear history")
+                .font(Theme.panelTitleFont)
+                .foregroundStyle(Theme.ink)
+            Picker("Clear", selection: $range) {
+                ForEach(HistoryClearRange.allCases) { range in
+                    Text(range.title).tag(range)
+                }
+            }
+            .fixedSize()
+            Text(explanation)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SheetButtonStyle(prominent: false))
+                    .keyboardShortcut(.cancelAction)
+                Button("Clear History") {
+                    clear(range)
+                    dismiss()
+                }
+                .buttonStyle(SheetButtonStyle(prominent: true))
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 380)
+    }
+
+    private var explanation: String {
+        let stays = "Sign-ins and open tabs stay."
+        guard sharing.count > 1 else {
+            return "This clears the pages visited in \(space.name). \(stays)"
+        }
+        let names = sharing.map(\.name).formatted(.list(type: .and))
+        let all = sharing.count == 2 ? "both" : "all of them"
+        return "\(names) share sign-ins, so this clears history in \(all). \(stays)"
     }
 }

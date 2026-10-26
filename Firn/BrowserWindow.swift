@@ -7,6 +7,9 @@ import SwiftUI
 @Observable
 final class WindowModel {
     let store: BrowserStore
+    /// History › Clear History… was chosen: the History window opens and
+    /// asks (see `HistoryWindow`).
+    var asksToClearHistory = false
     /// Whether the command bar (⌘T) is open over the page.
     private(set) var showsCommandBar = false
     /// The tab a split view is being made beside (Open as Split on the
@@ -1596,6 +1599,10 @@ struct BrowserCommands: Commands {
         CommandMenu("History") {
             Button("Show History") { openWindow(id: "history") }
                 .keyboardShortcut("y")
+            Button("Clear History…") {
+                window.asksToClearHistory = true
+                openWindow(id: "history")
+            }
         }
         CommandGroup(replacing: .sidebar) {
             Button(window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") { window.toggleSidebar() }

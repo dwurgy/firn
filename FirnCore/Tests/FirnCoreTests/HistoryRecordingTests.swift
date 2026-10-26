@@ -99,4 +99,63 @@ struct HistoryRecordingTests {
         #expect(await store.historyVisits(in: work, matching: "home").isEmpty)
         #expect(await store.historyVisits(in: personal).map(\.title) == ["Home"])
     }
+
+    @Test func deletingVisitsAndSitesTouchesOnlyThatHistory() async {
+        let (store, history) = makeStores()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let a = await history.record(url("https://a.example/1"), title: "A1", in: work.dataStoreID)!
+        await history.record(url("https://a.example/2"), title: "A2", in: work.dataStoreID)
+        await history.record(url("https://b.example/"), title: "B", in: work.dataStoreID)
+        await history.record(url("https://c.example/"), title: "C", in: work.dataStoreID)
+        await history.record(url("https://b.example/"), title: "Home B", in: personal.dataStoreID)
+        await store.deleteHistory(visits: [a], in: work)
+        await store.deleteHistory(fromSite: "b.example", in: work)
+        #expect(await store.historyVisits(in: work).map(\.title) == ["C", "A2"])
+        #expect(await store.historyVisits(in: personal).map(\.title) == ["Home B"])
+    }
+
+    @Test func clearingARangeKeepsOlderVisits() async {
+        let (store, history) = makeStores()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let now = Date.now
+        await history.record(url("https://old.example/"), title: "Old", at: now - 3 * 60 * 60, in: work.dataStoreID)
+        await history.record(url("https://new.example/"), title: "New", at: now - 10 * 60, in: work.dataStoreID)
+        await store.clearHistory(.lastHour, in: work, now: now)
+        #expect(await store.historyVisits(in: work).map(\.title) == ["Old"])
+    }
+
+    @Test func clearingAllWaitsForVisitsBeingSavedAndSparesOtherSpaces() async {
+        let (store, history) = makeStores()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await history.record(url("https://home.example/"), title: "Home", in: personal.dataStoreID)
+        let tab = store.openTab(url("https://a.example/"))
+        page(tab).commit(url("https://a.example/"), title: "A") // not yet saved
+        await store.clearHistory(.all, in: work)
+        #expect(await store.historyVisits(in: work).isEmpty)
+        #expect(await store.historyVisits(in: personal).map(\.title) == ["Home"])
+    }
+
+    @Test func sharedSpacesShareOneHistory() async {
+        let shared = Space(name: "Side", icon: "leaf", color: "sand", order: 2, dataStoreID: work.dataStoreID)
+        let history = HistoryStore(directory: folder)
+        let store = BrowserStore(spaces: [work, personal, shared], makePage: { FakePage(dataStoreID: $0) }, history: history)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(store.spacesSharingHistory(with: shared).map(\.name) == ["Work", "Side"])
+        #expect(store.spacesSharingHistory(with: personal).map(\.name) == ["Personal"])
+        await history.record(url("https://a.example/"), title: "A", in: work.dataStoreID)
+        await store.clearHistory(.today, in: shared)
+        #expect(await store.historyVisits(in: work).isEmpty)
+    }
+
+    @Test func clearRangesStartWhereTheyShould() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 25, hour: 9, minute: 30))!
+        let midnight = calendar.date(from: DateComponents(year: 2026, month: 10, day: 25))!
+        #expect(HistoryClearRange.lastHour.start(now: now, calendar: calendar) == now - 60 * 60)
+        #expect(HistoryClearRange.today.start(now: now, calendar: calendar) == midnight)
+        #expect(HistoryClearRange.todayAndYesterday.start(now: now, calendar: calendar)
+            == calendar.date(from: DateComponents(year: 2026, month: 10, day: 24)))
+        #expect(HistoryClearRange.all.start(now: now, calendar: calendar) == nil)
+    }
 }

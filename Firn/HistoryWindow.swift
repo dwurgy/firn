@@ -41,18 +41,15 @@ struct HistoryWindow: View {
     private var readKey: String { "\(space.dataStoreID)\n\(search)" }
 
     var body: some View {
+        // The window's own background, as in Settings: no fill of our own,
+        // so nothing shows a seam around the list or the empty state.
         content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .frame(minWidth: 460, minHeight: 360)
-            .background(Theme.page)
+            .safeAreaInset(edge: .bottom, spacing: 0) { footer }
             .navigationTitle("History")
             .navigationSubtitle(space.name)
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Clear History…") { clearing = space }
-                        .disabled(loaded && visits.isEmpty && search.isEmpty)
-                }
-            }
             .sheet(item: $clearing) { space in
                 ClearHistorySheet(space: space, sharing: store.spacesSharingHistory(with: space)) { range in
                     Task {
@@ -79,19 +76,36 @@ struct HistoryWindow: View {
 
     @ViewBuilder private var content: some View {
         if loaded && visits.isEmpty {
-            if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ContentUnavailableView(
-                    "No History Yet", systemImage: "clock",
-                    description: Text("Pages you visit in \(space.name) appear here.")
-                )
-                .foregroundStyle(Theme.muted)
+            if isSearching {
+                EmptyHistory(symbol: "magnifyingglass", title: "No results",
+                             line: "Nothing in \(space.name)'s history matches \u{201C}\(search.trimmingCharacters(in: .whitespacesAndNewlines))\u{201D}.")
             } else {
-                ContentUnavailableView.search(text: search)
-                    .foregroundStyle(Theme.muted)
+                EmptyHistory(symbol: "clock", title: "No history yet",
+                             line: "Pages you visit in \(space.name) appear here.")
             }
         } else {
             list
         }
+    }
+
+    private var isSearching: Bool {
+        !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// A quiet line along the bottom, like the footnotes in Settings, and
+    /// Clear History… beside it as a native button (as Import… is there).
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Text("History stays on this Mac for a year.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+            Spacer(minLength: 12)
+            Button("Clear History…") { clearing = space }
+                .disabled(loaded && visits.isEmpty && !isSearching)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
     }
 
     private var list: some View {
@@ -101,6 +115,7 @@ struct HistoryWindow: View {
                     ForEach(day.visits) { visit in
                         row(visit)
                             .tag(visit.id)
+                            .listRowSeparator(.hidden)
                             .onAppear { if visit.id == visits.last?.id { readMore() } }
                     }
                 } header: {
@@ -111,6 +126,7 @@ struct HistoryWindow: View {
                         .padding(.bottom, 2)
                         .accessibilityAddTraits(.isHeader)
                 }
+                .listSectionSeparator(.hidden)
             }
         }
         .listStyle(.inset)
@@ -280,8 +296,39 @@ struct HistoryWindow: View {
     }
 }
 
-/// Clear History…: how far back to clear, and whose history it is. Spaces
-/// sharing sign-ins share history, so the sheet names each of them.
+/// Shown in place of the list when there's nothing in it: a faint symbol,
+/// a short title, and one plain line, centered in the window.
+private struct EmptyHistory: View {
+    let symbol: String
+    let title: String
+    let line: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(Theme.faint)
+                .padding(.bottom, 8)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+            Text(line)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+        }
+        .padding(.bottom, 40) // sits a little above the middle, where the eye rests
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Clear History…: how far back to clear, and whose history it is. Laid
+/// out like Firn's other sheets (Edit password): title, one plain line, the
+/// choice, then Cancel and the ink button. All four choices show at once,
+/// as radio buttons, like the choices in Settings.
 private struct ClearHistorySheet: View {
     let space: Space
     let sharing: [Space]
@@ -292,19 +339,24 @@ private struct ClearHistorySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-            Text("Clear history")
-                .font(Theme.panelTitleFont)
-                .foregroundStyle(Theme.ink)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Clear history")
+                    .font(Theme.panelTitleFont)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Text(explanation)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Clear", selection: $range) {
                 ForEach(HistoryClearRange.allCases) { range in
                     Text(range.title).tag(range)
                 }
             }
-            .fixedSize()
-            Text(explanation)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            .accessibilityLabel("Clear")
             HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel") { dismiss() }
@@ -325,7 +377,7 @@ private struct ClearHistorySheet: View {
     private var explanation: String {
         let stays = "Sign-ins and open tabs stay."
         guard sharing.count > 1 else {
-            return "This clears the pages visited in \(space.name). \(stays)"
+            return "Removes pages you visited in \(space.name). \(stays)"
         }
         let names = sharing.map(\.name).formatted(.list(type: .and))
         let all = sharing.count == 2 ? "both" : "all of them"

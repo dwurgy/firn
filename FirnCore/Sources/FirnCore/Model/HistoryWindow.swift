@@ -26,10 +26,10 @@ public enum HistoryClearRange: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .lastHour: "the last hour"
-        case .today: "today"
-        case .todayAndYesterday: "today and yesterday"
-        case .all: "all history"
+        case .lastHour: "The last hour"
+        case .today: "Today"
+        case .todayAndYesterday: "Today and yesterday"
+        case .all: "All history"
         }
     }
 

@@ -67,6 +67,12 @@ struct FirnApp: App {
         // Links from other apps come to this one window (see `openFromOtherApp`).
         .handlesExternalEvents(matching: ["*"])
 
+        // History › Show History (⌘Y).
+        Window("History", id: "history") {
+            HistoryWindow(store: window.store)
+        }
+        .defaultSize(width: 680, height: 620)
+
         Settings {
             SettingsView(window: window)
         }

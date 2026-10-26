@@ -81,4 +81,22 @@ struct HistoryRecordingTests {
         await store.history?.settled()
         #expect(await history.visits(in: work.dataStoreID).map(\.title) == ["Next", "Glance"])
     }
+
+    @Test func theHistoryWindowReadsOnlyItsSpacePageByPage() async {
+        let (store, history) = makeStores()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let count = BrowserStore.historyPageSize + 5
+        for n in 0..<count {
+            await history.record(url("https://w\(n).example/"), title: "Work \(n)", at: start + Double(n), in: work.dataStoreID)
+        }
+        await history.record(url("https://home.example/"), title: "Home", at: start, in: personal.dataStoreID)
+        let first = await store.historyVisits(in: work)
+        #expect(first.count == BrowserStore.historyPageSize)
+        #expect(first.first?.title == "Work \(count - 1)")
+        let rest = await store.historyVisits(in: work, before: first.last?.visitedAt)
+        #expect(rest.map(\.title) == (0..<5).reversed().map { "Work \($0)" })
+        #expect(await store.historyVisits(in: work, matching: "home").isEmpty)
+        #expect(await store.historyVisits(in: personal).map(\.title) == ["Home"])
+    }
 }

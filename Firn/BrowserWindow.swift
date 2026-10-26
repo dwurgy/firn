@@ -1490,6 +1490,7 @@ private struct TabShortcuts: View {
 struct BrowserCommands: Commands {
     let window: WindowModel
     @AppStorage(Preference.blocksContent) private var blocksContent = true
+    @Environment(\.openWindow) private var openWindow
 
     private var store: BrowserStore { window.store }
     private var page: (any PageController)? { window.frontPage }
@@ -1552,7 +1553,16 @@ struct BrowserCommands: Commands {
         // As in Arc and Dia: ⌘W closes the tab, ⇧⌘W the window.
         CommandGroup(replacing: .saveItem) {
             // With a Lookout open, ⌘W closes the Lookout, not the tab under it (as in Arc).
-            Button(store.lookout == nil ? "Close Tab" : "Close Lookout") { window.closeFront() }
+            Button(store.lookout == nil ? "Close Tab" : "Close Lookout") {
+                // In the History or Settings window, ⌘W closes that window,
+                // never a tab behind it.
+                if let key = NSApp.keyWindow, let id = key.identifier?.rawValue,
+                   id.hasPrefix("history") || id.hasPrefix("com_apple_SwiftUI_Settings") {
+                    key.performClose(nil)
+                } else {
+                    window.closeFront()
+                }
+            }
                 .keyboardShortcut("w")
                 .disabled(store.activeTab == nil && store.lookout == nil)
             Button(store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab") { window.reopenClosed() }
@@ -1581,6 +1591,11 @@ struct BrowserCommands: Commands {
                 }
             }
             #endif
+        }
+        // As in Safari.
+        CommandMenu("History") {
+            Button("Show History") { openWindow(id: "history") }
+                .keyboardShortcut("y")
         }
         CommandGroup(replacing: .sidebar) {
             Button(window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") { window.toggleSidebar() }

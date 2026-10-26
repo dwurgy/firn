@@ -65,7 +65,7 @@ struct TabSwitchKeys: NSViewRepresentable {
 }
 
 /// The panel ⌃Tab shows while ⌃ is held: the space's recent tabs as cards,
-/// newest first, the pick wearing a frost ring, centered over the page on
+/// newest first, the pick wearing a ring in the space's color, centered over the page on
 /// the command bar's glass. Pointing at a card picks it; a click shows it.
 /// It leaves at once when ⌃ is let go, so the page never waits on it.
 struct TabSwitcherLayer: View {
@@ -151,9 +151,12 @@ private struct TabSwitcherPanel: View {
             .clipShape(picture)
             .overlay { picture.strokeBorder(Theme.activeTabHairline, lineWidth: 0.5) }
             .overlay {
-                // The pick: the frost ring Firn uses for focus, just outside the picture.
-                picture.inset(by: -3)
-                    .strokeBorder(Theme.frost, lineWidth: 3)
+                // The pick: a ring in the space's color just outside the
+                // picture, with a soft glow of it, so it reads at a glance.
+                let color = Theme.spaceColor(store.activeSpace.color)
+                picture.inset(by: -3.5)
+                    .strokeBorder(color, lineWidth: 3)
+                    .shadow(color: color.opacity(0.55), radius: 6)
                     .opacity(isPicked ? 1 : 0)
             }
             HStack(spacing: 6) {

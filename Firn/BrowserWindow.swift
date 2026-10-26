@@ -671,7 +671,7 @@ final class WindowModel {
     func pressTabSwitch(backward: Bool) {
         guard !showsWelcome else { return }
         if tabSwitcher != nil { return moveTabSwitch(by: backward ? -1 : 1) }
-        tabSwitcher = TabSwitcher(tabIDs: store.recentRows.map(\.id), backward: backward)
+        tabSwitcher = TabSwitcher(tabIDs: switchableTabs.map(\.id), backward: backward)
         guard tabSwitcher != nil else { return }
         takePicture(of: store.activeTabID)
         // A quick tap never flashes the panel; held a moment, it shows.
@@ -680,6 +680,13 @@ final class WindowModel {
             guard !Task.isCancelled, tabSwitcher != nil else { return }
             showsTabSwitcher = true
         }
+    }
+
+    /// The recent tabs ⌃Tab offers: only those opened since launch (a page
+    /// loaded, or a picture kept from one that's since slept), so the panel
+    /// holds as many cards as there are, two to five.
+    var switchableTabs: [FirnCore.Tab] {
+        store.recentRows.filter { $0.page != nil || tabPictures[$0.id] != nil || $0.id == store.activeTabID }
     }
 
     func moveTabSwitch(by offset: Int) { tabSwitcher?.move(by: offset) }
@@ -1716,7 +1723,7 @@ struct BrowserCommands: Commands {
             // chosen here, it's a tap.
             Button("Show Last Used Tab") { window.pressTabSwitch(backward: false); window.finishTabSwitch() }
                 .keyboardShortcut(.tab, modifiers: .control)
-                .disabled(store.recentRows.count < 2)
+                .disabled(window.switchableTabs.count < 2)
             // Down and up the sidebar, as in Arc and Dia.
             Button("Show Next Tab") { store.selectTab(by: 1); window.focusPage() }
                 .keyboardShortcut("]", modifiers: [.command, .shift])

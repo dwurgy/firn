@@ -68,7 +68,7 @@ struct PasswordImportSheet: View {
     let passwords: PasswordStore
     let finished: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissGlassSheet) private var dismiss
     @State private var cantTrash = false
 
     var body: some View {
@@ -91,7 +91,6 @@ struct PasswordImportSheet: View {
         }
         .padding(24)
         .frame(width: 400, alignment: .leading)
-        .interactiveDismissDisabled(isImporting)
     }
 
     // MARK: - Stages
@@ -187,10 +186,6 @@ struct PasswordImportSheet: View {
         return others.count == 1
             ? "\(names) shares sign-ins with \(session.spaceName), so it gets them too. "
             : "\(names) share sign-ins with \(session.spaceName), so they get them too. "
-    }
-
-    private var isImporting: Bool {
-        if case .importing = session.stage { true } else { false }
     }
 
     // MARK: - Doing

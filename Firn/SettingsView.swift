@@ -86,8 +86,10 @@ struct SettingsView: View {
             }
         }
         .frame(width: Self.size.width, height: Self.size.height)
+        .overlay { GlassSheetLayer() }
         // The History window's look: Firn's page color, under the toolbar too.
         .modifier(PageBackground())
+        .glassSheetHost(color: Theme.spaceColor(window.store.activeSpace.color))
     }
 }
 

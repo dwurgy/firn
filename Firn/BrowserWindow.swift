@@ -680,6 +680,7 @@ struct BrowserWindow: View {
                 .overlay { FindBarLayer(store: store, window: window) }
                 .overlay { CommandBarLayer(store: store, window: window) }
                 .overlay { SpaceSheetLayer(window: window) }
+                .overlay { GlassSheetLayer(cornerRadius: Theme.pageCornerRadius) }
                 .modifier(PageBesideSidebar(
                     reveal: window.sidebarCollapsed ? 0 : 1,
                     sidebarWidth: window.sidebarWidth
@@ -760,6 +761,7 @@ struct BrowserWindow: View {
         .onChange(of: store.activeTabID) { window.tabOnScreenChanged() }
         .onOpenURL { window.openFromOtherApp($0) }
         .modifier(ArcImportFlow(starting: Bindable(window).startingArcImport, window: window))
+        .glassSheetHost(color: Theme.spaceColor(store.activeSpace.color))
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }

@@ -87,7 +87,7 @@ struct ArcImportFlow: ViewModifier {
             .fileDialogDefaultDirectory(ArcImport.arcFolder)
             .fileDialogMessage("Choose StorableSidebar.json in Arc's folder.")
             .fileDialogConfirmationLabel("Choose")
-            .sheet(item: $session, onDismiss: {
+            .glassSheet(item: $session, onDismiss: {
                 guard chooseAfterSheet else { return }
                 chooseAfterSheet = false
                 choosingFile = true
@@ -107,7 +107,7 @@ struct ArcImportSheet: View {
     /// Closes the sheet and opens the Open panel, when Arc isn't found.
     let chooseFile: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissGlassSheet) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// More than this, and the rest are "and 4 more spaces", so the sheet stays small.

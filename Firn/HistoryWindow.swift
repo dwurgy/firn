@@ -51,14 +51,13 @@ struct HistoryWindow: View {
             .modifier(PageBackground())
             .modifier(FrauncesWindowTitle(title: "History", subtitle: space.name))
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
-            .sheet(item: $clearing) { space in
+            .glassSheet(item: $clearing) { space in
                 ClearHistorySheet(space: space, sharing: store.spacesSharingHistory(with: space)) { range in
                     Task {
                         await store.clearHistory(range, in: space)
                         await readFirstPage(replacing: true)
                     }
                 }
-                .presentationBackground(Theme.page)
             }
             .task(id: readKey) { await readFirstPage(replacing: true) }
             .onChange(of: activeState) { _, state in
@@ -68,6 +67,8 @@ struct HistoryWindow: View {
             // History › Clear History… opens this window and asks here.
             .onAppear(perform: answerClearRequest)
             .onChange(of: window.asksToClearHistory) { answerClearRequest() }
+            .overlay { GlassSheetLayer() }
+            .glassSheetHost(color: Theme.spaceColor(space.color))
     }
 
     private func answerClearRequest() {
@@ -357,7 +358,7 @@ private struct ClearHistorySheet: View {
     let sharing: [Space]
     let clear: (HistoryClearRange) -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissGlassSheet) private var dismiss
     @State private var range = HistoryClearRange.lastHour
 
     var body: some View {

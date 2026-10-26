@@ -71,7 +71,7 @@ struct PasswordsSettings: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in lock() }
         // A password saved in the browser while Settings is open shows up on coming back.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in reload() }
-        .sheet(item: $editing) { login in
+        .glassSheet(item: $editing) { login in
             PasswordEditSheet(login: login) { username, password in
                 try passwords.change(
                     username: login.username, on: login.site, in: login.dataStoreID,
@@ -92,7 +92,7 @@ struct PasswordsSettings: View {
         }
         .fileDialogMessage("Choose a passwords file exported from another browser or password manager.")
         .fileDialogConfirmationLabel("Choose")
-        .sheet(item: $importing) { session in
+        .glassSheet(item: $importing) { session in
             PasswordImportSheet(session: session, passwords: passwords) {
                 reload()
             }
@@ -350,7 +350,7 @@ private struct PasswordEditSheet: View {
     let login: EditedLogin
     let save: (String, String) throws -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissGlassSheet) private var dismiss
     @State private var username = ""
     @State private var password = ""
     @State private var problem: String?

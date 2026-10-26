@@ -20,17 +20,22 @@ struct FirnApp: App {
             removeData: { id in
                 BrowserEngine.removeData(for: id)
                 Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
+                Task.detached(priority: .utility) { await HistoryStore.standard.removeAll(in: id) }
             },
             passwords: .keychain
         )
         // Erase what's left of deleted spaces: data their open pages still
-        // held, and passwords the Keychain couldn't be reached for. Only after a session really loaded: a fresh start after a damaged
+        // held, passwords the Keychain couldn't be reached for, and history.
+        // Only after a session really loaded: a fresh start after a damaged
         // file doesn't know which spaces exist, so it erases nothing.
         if let session, !session.spaces.isEmpty {
             let inUse = Set(store.spaces.map(\.dataStoreID))
             BrowserEngine.removeUnusedData(keeping: inUse)
             Task.detached(priority: .utility) { try? PasswordStore.keychain.removeUnused(keeping: inUse) }
+            Task.detached(priority: .utility) { await HistoryStore.standard.removeUnused(keeping: inUse) }
         }
+        // History is kept a year.
+        Task.detached(priority: .utility) { await HistoryStore.standard.removeExpired() }
         let window = WindowModel(store: store, restoring: session?.window)
         // The welcome, the very first time (no session yet).
         if session == nil, !UserDefaults.standard.bool(forKey: Preference.welcomed) { window.showWelcome() }

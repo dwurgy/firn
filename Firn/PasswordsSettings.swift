@@ -68,7 +68,6 @@ struct PasswordsSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: SettingsView.size.width, height: SettingsView.size.height)
         .onAppear(perform: reload)
         .onDisappear(perform: lock)
         .onChange(of: space.dataStoreID) { lock(); reload() }

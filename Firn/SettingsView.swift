@@ -25,31 +25,83 @@ enum Preference {
 }
 
 /// The Settings window (⌘, or Firn › Settings…): a few plain choices, and
-/// the saved passwords.
+/// the saved passwords, in panes picked from a sidebar on the left, as in
+/// Dia (David, 2026-10-25), rather than Safari's row of tabs.
 struct SettingsView: View {
     let window: WindowModel
 
-    /// Every tab is the same size, so the window never jumps between them.
-    static let size = CGSize(width: 540, height: 500)
+    /// Every pane is the same size, so the window never jumps between them.
+    static let size = CGSize(width: 720, height: 520)
+
+    /// The pane open last time.
+    @AppStorage("settingsPane") private var pane = SettingsPane.general
 
     var body: some View {
-        TabView {
-            GeneralSettings(window: window)
-                .tabItem { Label("General", systemImage: "gearshape") }
-            PasswordsSettings(store: window.store)
-                .tabItem { Label("Passwords", systemImage: "key") }
+        NavigationSplitView {
+            // A list selection can be empty; Settings always shows a pane.
+            List(SettingsPane.allCases, selection: Binding { pane } set: { pane = $0 ?? pane }) { pane in
+                Label(pane.title, systemImage: pane.symbol)
+            }
+            .navigationSplitViewColumnWidth(190)
+            // Settings always shows its sidebar: there's nothing to hide it for.
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            Group {
+                switch pane {
+                case .general: GeneralSettings(window: window)
+                case .tabs: TabsSettings()
+                case .privacy: PrivacySettings()
+                case .passwords: PasswordsSettings(store: window.store)
+                }
+            }
+            .navigationTitle(pane.title)
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+    }
+}
+
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general, tabs, privacy, passwords
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .tabs: "Tabs"
+        case .privacy: "Privacy"
+        case .passwords: "Passwords"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .tabs: "square.on.square"
+        case .privacy: "hand.raised"
+        case .passwords: "key"
         }
     }
 }
 
-/// Settings › General: a few plain choices, no more.
+/// The small muted line under a setting that says what it does.
+private struct SettingsFootnote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Settings › General: search, updates, and bringing things over from Arc.
 private struct GeneralSettings: View {
     let window: WindowModel
     @State private var startingArcImport = false
     @Bindable private var updater = Updater.shared
-    @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
-    @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
-    @AppStorage(Preference.blocksContent) private var blocksContent = true
     @AppStorage(Preference.searchEngine) private var searchEngine = SearchEngine.default
     @AppStorage(Preference.searchSuggestions) private var searchSuggestions = false
 
@@ -64,51 +116,12 @@ private struct GeneralSettings: View {
                 }
                 Toggle("Show suggestions as you type", isOn: $searchSuggestions)
             } footer: {
-                Text("With suggestions on, your search engine sees what you type.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Section {
-                Picker("New tabs open", selection: $newTabPlacement) {
-                    Text("At the top").tag(NewTabPlacement.top)
-                    Text("At the bottom").tag(NewTabPlacement.bottom)
-                }
-                .pickerStyle(.radioGroup)
-            } footer: {
-                Text("The New tab button sits there too. Tabs taken out of a group arrive there as well.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Section {
-                Picker("Tidy away tabs after", selection: $driftAfter) {
-                    Text("1 day").tag(DriftAfter.oneDay)
-                    Text("7 days").tag(DriftAfter.sevenDays)
-                    Text("30 days").tag(DriftAfter.thirtyDays)
-                    Text("Never").tag(DriftAfter.never)
-                }
-            } footer: {
-                Text("Tabs you haven't looked at in a while are tidied away into a box that appears by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Section {
-                Toggle("Block ads and trackers", isOn: $blocksContent)
-            } footer: {
-                Text("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the View menu; each space keeps its own choices.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SettingsFootnote("With suggestions on, your search engine sees what you type.")
             }
             Section {
                 Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
             } footer: {
-                Text("Once a day, Firn asks firnbrowser.com whether a new version is out. Only Firn's version number goes along, nothing about your browsing.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SettingsFootnote("Once a day, Firn asks firnbrowser.com whether a new version is out. Only Firn's version number goes along, nothing about your browsing.")
             }
             Section {
                 HStack(spacing: 10) {
@@ -130,7 +143,53 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: SettingsView.size.width, height: SettingsView.size.height)
         .modifier(ArcImportFlow(starting: $startingArcImport, window: window))
+    }
+}
+
+/// Settings › Tabs: where new tabs go, and when idle ones are tidied away.
+private struct TabsSettings: View {
+    @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
+    @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("New tabs open", selection: $newTabPlacement) {
+                    Text("At the top").tag(NewTabPlacement.top)
+                    Text("At the bottom").tag(NewTabPlacement.bottom)
+                }
+                .pickerStyle(.radioGroup)
+            } footer: {
+                SettingsFootnote("The New tab button sits there too. Tabs taken out of a group arrive there as well.")
+            }
+            Section {
+                Picker("Tidy away tabs after", selection: $driftAfter) {
+                    Text("1 day").tag(DriftAfter.oneDay)
+                    Text("7 days").tag(DriftAfter.sevenDays)
+                    Text("30 days").tag(DriftAfter.thirtyDays)
+                    Text("Never").tag(DriftAfter.never)
+                }
+            } footer: {
+                SettingsFootnote("Tabs you haven't looked at in a while are tidied away into a box that appears by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Settings › Privacy: blocking ads and trackers.
+private struct PrivacySettings: View {
+    @AppStorage(Preference.blocksContent) private var blocksContent = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Block ads and trackers", isOn: $blocksContent)
+            } footer: {
+                SettingsFootnote("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the View menu; each space keeps its own choices.")
+            }
+        }
+        .formStyle(.grouped)
     }
 }

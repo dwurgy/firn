@@ -228,3 +228,68 @@ private struct PrivacySettings: View {
         .formStyle(.grouped)
     }
 }
+
+/// A card in Settings: Firn's frost, as the Basecamp tiles and group cards
+/// have it (a soft fill, a light rim along the top, a warm hairline), on
+/// the page color, in place of the system's grey grouped box.
+struct SettingsCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { shape.fill(Theme.tileFill) }
+            .overlay {
+                shape.strokeBorder(
+                    LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
+            }
+            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+    }
+}
+
+/// One line in a settings card: a label on the left, its control after it.
+struct SettingsCardRow<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label)
+                .font(Theme.tabFont)
+                .foregroundStyle(Theme.ink)
+                .frame(width: 80, alignment: .leading)
+                .accessibilityHidden(true)
+            content
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+/// A text field drawn as the New space card's: a warm wash, the frost ring
+/// while typing in it.
+struct FirnTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(Theme.tabFont)
+            .foregroundStyle(Theme.ink)
+            .focused(focused)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous).fill(Theme.hover)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                    .strokeBorder(focused.wrappedValue ? Theme.frost : .clear, lineWidth: 2)
+            }
+    }
+}

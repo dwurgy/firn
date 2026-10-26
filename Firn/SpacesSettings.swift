@@ -9,12 +9,20 @@ struct SpacesSettings: View {
     let window: WindowModel
 
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedID: UUID?
     /// The name as typed; the store keeps the last name that wasn't blank.
     @State private var name = ""
     @State private var confirmingStopSharing = false
     @State private var deleting: Space?
+    /// The row being dragged, and how far it has moved.
+    @State private var dragging: UUID?
+    @State private var dragOffset: CGFloat = 0
     @FocusState private var nameFocused: Bool
+
+    private static let rowHeight: CGFloat = 44
+    private static let rowSpacing: CGFloat = 2
+    private static var rowPitch: CGFloat { rowHeight + rowSpacing }
 
     private var store: BrowserStore { window.store }
     /// The space picked, or the one on screen when none is (or it's gone).
@@ -24,77 +32,67 @@ struct SpacesSettings: View {
 
     var body: some View {
         let space = selected
-        Form {
-            Section {
-                ForEach(store.spaces) { space in
-                    SpaceSettingsRow(
-                        space: space,
-                        sharing: sharingLine(for: space),
-                        isSelected: space.id == selected.id
-                    ) { select(space) }
-                    .contextMenu {
-                        Button("Move Up") { store.moveSpace(space, to: index(of: space) - 1) }
-                            .disabled(index(of: space) == 0)
-                        Button("Move Down") { store.moveSpace(space, to: index(of: space) + 1) }
-                            .disabled(index(of: space) == store.spaces.count - 1)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+                VStack(alignment: .leading, spacing: 10) {
+                    SettingsCard { list }
+                    HStack(alignment: .center) {
+                        SettingsFootnote("Drag to change the order. The first nine switch with ⌃1 to ⌃9.")
+                        Button("New Space…") {
+                            window.newSpace()
+                            openWindow(id: "browser")
+                        }
+                        .buttonStyle(SheetButtonStyle(prominent: false))
+                        .fixedSize()
                     }
+                    .padding(.horizontal, 4)
                 }
-                .onMove { from, to in
-                    guard let first = from.first else { return }
-                    let space = store.spaces[first]
-                    // `to` counts the row being moved; the store's position doesn't.
-                    store.moveSpace(space, to: to > first ? to - 1 : to)
-                }
-            } footer: {
-                HStack(alignment: .firstTextBaseline) {
-                    SettingsFootnote("Drag to change the order. The first nine switch with ⌃1 to ⌃9.")
-                    Button("New Space…") {
-                        window.newSpace()
-                        openWindow(id: "browser")
+                SettingsCard {
+                    SettingsCardRow(label: "Name") {
+                        FirnTextField(placeholder: Space.defaultName, text: $name, focused: $nameFocused)
+                            .frame(maxWidth: 260)
+                            .accessibilityLabel("Name")
+                            .onChange(of: name) { store.updateSpace(selected, name: name, color: selected.color) }
+                            // A blank name isn't kept: the field shows the saved one again.
+                            .onSubmit { name = selected.name }
+                            .onChange(of: nameFocused) { if !nameFocused { name = selected.name } }
                     }
-                    .fixedSize()
-                }
-            }
-            Section {
-                TextField("Name", text: $name, prompt: Text(Space.defaultName))
-                    .focused($nameFocused)
-                    .onChange(of: name) { store.updateSpace(selected, name: name, color: selected.color) }
-                    // A blank name isn't kept: the field shows the saved one again.
-                    .onSubmit { name = selected.name }
-                    .onChange(of: nameFocused) { if !nameFocused { name = selected.name } }
-                LabeledContent("Color") {
-                    HStack(spacing: 4) {
-                        ForEach(Theme.spaceColorNames, id: \.self) { color in
-                            ColorSwatch(name: color, isSelected: color == space.color) {
-                                store.updateSpace(space, name: space.name, color: color)
+                    SettingsCardRow(label: "Color") {
+                        HStack(spacing: 2) {
+                            ForEach(Theme.spaceColorNames, id: \.self) { color in
+                                ColorSwatch(name: color, isSelected: color == space.color) {
+                                    store.updateSpace(space, name: space.name, color: color)
+                                }
                             }
                         }
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                     }
+                    signIns(of: space)
                 }
-                signIns(of: space)
-            } header: {
-                Text(space.name)
-            }
-            if store.spaces.count > 1 {
-                Section {
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Delete this space")
-                                .foregroundStyle(Theme.ink)
-                            Text("Its tabs, groups, and Basecamp go with it.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Theme.muted)
+                if store.spaces.count > 1 {
+                    SettingsCard {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Delete “\(space.name)”")
+                                    .font(Theme.tabFont)
+                                    .foregroundStyle(Theme.ink)
+                                Text("Its tabs, groups, and Basecamp go with it.")
+                                    .font(Theme.hintFont)
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            .accessibilityElement(children: .combine)
+                            Spacer(minLength: 12)
+                            Button("Delete Space…") { deleting = space }
+                                .buttonStyle(SheetButtonStyle(prominent: false))
+                                .accessibilityLabel("Delete \(space.name)")
                         }
-                        .accessibilityElement(children: .combine)
-                        Spacer(minLength: 12)
-                        Button("Delete Space…") { deleting = space }
-                            .accessibilityLabel("Delete \(space.name)")
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                     }
-                    .padding(.vertical, 2)
                 }
             }
+            .padding(24)
         }
-        .formStyle(.grouped)
         .onAppear {
             selectedID = window.settingsSpaceID ?? store.activeSpaceID
             window.settingsSpaceID = nil
@@ -132,20 +130,96 @@ struct SpacesSettings: View {
 
     // MARK: Parts
 
+    /// The spaces, in order. A row follows the pointer while dragged; the
+    /// others glide aside to make room, and it settles where it's let go.
+    private var list: some View {
+        VStack(spacing: Self.rowSpacing) {
+            ForEach(Array(store.spaces.enumerated()), id: \.element.id) { index, space in
+                SpaceSettingsRow(
+                    space: space,
+                    sharing: sharingLine(for: space),
+                    isSelected: space.id == selected.id,
+                    isDragged: space.id == dragging
+                )
+                .frame(height: Self.rowHeight)
+                .offset(y: offset(of: space, at: index))
+                // The others glide aside; the dragged row stays under the pointer.
+                .animation(space.id == dragging || reduceMotion ? nil : .smooth(duration: 0.2), value: dragOffset)
+                .zIndex(space.id == dragging ? 1 : 0)
+                .onTapGesture { select(space) }
+                .gesture(reorder(space, from: index))
+                .contextMenu {
+                    Button("Move Up") { move(space, by: -1) }
+                        .disabled(index == 0)
+                    Button("Move Down") { move(space, by: 1) }
+                        .disabled(index == store.spaces.count - 1)
+                }
+                .accessibilityAction { select(space) }
+                .accessibilityAction(named: "Move Up") { move(space, by: -1) }
+                .accessibilityAction(named: "Move Down") { move(space, by: 1) }
+            }
+        }
+        .padding(6)
+    }
+
     @ViewBuilder private func signIns(of space: Space) -> some View {
         let others = store.spacesSharingData(with: space)
-        LabeledContent("Sign-ins") {
-            HStack(spacing: 10) {
+        SettingsCardRow(label: "Sign-ins") {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(others.isEmpty
                      ? "Separate: its own sign-ins, cookies, and history."
                      : "Shared with \(names(others)).")
+                    .font(Theme.tabFont)
                     .foregroundStyle(Theme.muted)
-                    .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                 if !others.isEmpty {
                     Button("Stop Sharing…") { confirmingStopSharing = true }
+                        .buttonStyle(SheetButtonStyle(prominent: false))
                 }
             }
+        }
+    }
+
+    // MARK: Dragging
+
+    /// Where the dragged row would land, counted among the spaces.
+    private func target(from index: Int) -> Int {
+        let steps = Int((dragOffset / Self.rowPitch).rounded())
+        return min(max(index + steps, 0), store.spaces.count - 1)
+    }
+
+    private func offset(of space: Space, at index: Int) -> CGFloat {
+        guard let dragging, let from = store.spaces.firstIndex(where: { $0.id == dragging }) else { return 0 }
+        if space.id == dragging { return dragOffset }
+        let to = target(from: from)
+        if from < to, index > from, index <= to { return -Self.rowPitch }
+        if to < from, index >= to, index < from { return Self.rowPitch }
+        return 0
+    }
+
+    private func reorder(_ space: Space, from index: Int) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                if dragging == nil { dragging = space.id }
+                dragOffset = value.translation.height
+            }
+            .onEnded { _ in
+                let to = target(from: index)
+                // Settled in place: the new order and no offsets, at once.
+                var settle = Transaction()
+                settle.disablesAnimations = true
+                withTransaction(settle) {
+                    store.moveSpace(space, to: to)
+                    dragging = nil
+                    dragOffset = 0
+                }
+            }
+    }
+
+    private func move(_ space: Space, by step: Int) {
+        guard let index = store.spaces.firstIndex(where: { $0.id == space.id }) else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+            store.moveSpace(space, to: index + step)
         }
     }
 
@@ -160,12 +234,7 @@ struct SpacesSettings: View {
         name = selected.name
     }
 
-    private func index(of space: Space) -> Int {
-        store.spaces.firstIndex { $0.id == space.id } ?? 0
-    }
-
     private func delete(_ space: Space) {
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { store.deleteSpace(space) }
         if selectedID == space.id { selectedID = store.activeSpaceID }
     }
@@ -195,42 +264,48 @@ struct SpacesSettings: View {
 }
 
 /// One space in the list: its color, name, and whose sign-ins it uses. The
-/// picked one sits on a soft wash, as a selected row does in the sidebar.
+/// picked one sits on a soft wash, as the tab on screen does in the sidebar;
+/// a grip shows on hover, to say rows can be dragged.
 private struct SpaceSettingsRow: View {
     let space: Space
     let sharing: String
     let isSelected: Bool
-    let action: () -> Void
+    let isDragged: Bool
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(Theme.spaceColor(space.color))
-                    .frame(width: 10, height: 10)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(space.name)
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                    Text(sharing)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
+        let shape = RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Theme.spaceColor(space.color))
+                .frame(width: 10, height: 10)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(space.name)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Text(sharing)
+                    .font(Theme.hintFont)
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
             }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 8)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
-                    .fill(isSelected ? Theme.press : hovering ? Theme.hover : .clear)
-            }
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.faint)
+                .opacity(hovering || isDragged ? 1 : 0)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, -8)
+        .padding(.horizontal, 12)
+        .frame(maxHeight: .infinity)
+        .background {
+            shape.fill(isSelected || isDragged ? Theme.activeTab : hovering ? Theme.hover : .clear)
+                .shadow(color: isSelected || isDragged ? Theme.shadowSoft : .clear, radius: isDragged ? 8 : 2, y: 1)
+        }
+        .overlay {
+            shape.strokeBorder(isSelected || isDragged ? Theme.activeTabHairline : .clear, lineWidth: 0.5)
+        }
+        .contentShape(shape)
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

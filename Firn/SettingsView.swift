@@ -139,43 +139,35 @@ private struct GeneralSettings: View {
     @AppStorage(Preference.searchSuggestions) private var searchSuggestions = false
 
     var body: some View {
-        Form {
+        SettingsPage {
             // The address bar's place ("In the sidebar" or "At the top") comes
             // back here, and in the welcome, once the "At the top" look exists
             // (David, 2026-10-23); until then the choice would change nothing.
-            Section {
-                Picker("Search with", selection: $searchEngine) {
-                    ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
-                }
-                Toggle("Show suggestions as you type", isOn: $searchSuggestions)
-            } footer: {
-                SettingsFootnote("With suggestions on, your search engine sees what you type.")
-            }
-            Section {
-                Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
-            } footer: {
-                SettingsFootnote("Once a day, Firn asks firnbrowser.com whether a new version is out. Only Firn's version number goes along, nothing about your browsing.")
-            }
-            Section {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Import from Arc")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Theme.ink)
-                        Text("Brings over Arc's spaces, favorites, and pinned tabs, as new spaces.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+            SettingsGroup(footer: "With suggestions on, your search engine sees what you type.") {
+                SettingsLine("Search with") {
+                    Picker("Search with", selection: $searchEngine) {
+                        ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
                     }
-                    .accessibilityElement(children: .combine)
-                    Spacer(minLength: 12)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                SettingsLine("Show suggestions as you type") {
+                    SettingsSwitch("Show suggestions as you type", isOn: $searchSuggestions)
+                }
+            }
+            SettingsGroup(footer: "Once a day, Firn asks firnbrowser.com whether a new version is out. Only Firn's version number goes along, nothing about your browsing.") {
+                SettingsLine("Check for updates automatically") {
+                    SettingsSwitch("Check for updates automatically", isOn: $updater.checksAutomatically)
+                }
+            }
+            SettingsGroup {
+                SettingsLine("Import from Arc", caption: "Brings over Arc's spaces, favorites, and pinned tabs, as new spaces.") {
                     Button("Import…") { startingArcImport = true }
+                        .buttonStyle(SheetButtonStyle(prominent: false))
                         .accessibilityLabel("Import from Arc")
                 }
-                .padding(.vertical, 2)
             }
         }
-        .formStyle(.grouped)
         .modifier(ArcImportFlow(starting: $startingArcImport, window: window))
     }
 }
@@ -186,30 +178,33 @@ private struct TabsSettings: View {
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
 
     var body: some View {
-        Form {
-            Section {
-                Picker("New tabs open", selection: $newTabPlacement) {
-                    Text("At the top").tag(NewTabPlacement.top)
-                    Text("At the bottom").tag(NewTabPlacement.bottom)
+        SettingsPage {
+            SettingsGroup(footer: "The New tab button sits there too. Tabs taken out of a group arrive there as well.") {
+                SettingsLine("New tabs open") {
+                    Picker("New tabs open", selection: $newTabPlacement) {
+                        Text("At the top").tag(NewTabPlacement.top)
+                        Text("At the bottom").tag(NewTabPlacement.bottom)
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    // Radio buttons draw in the system's blue unless tinted.
+                    .tint(Theme.accent)
+                    .fixedSize()
                 }
-                .pickerStyle(.radioGroup)
-                // Radio buttons draw in the system's blue unless tinted.
-                .tint(Theme.accent)
-            } footer: {
-                SettingsFootnote("The New tab button sits there too. Tabs taken out of a group arrive there as well.")
             }
-            Section {
-                Picker("Tidy away tabs after", selection: $driftAfter) {
-                    Text("1 day").tag(DriftAfter.oneDay)
-                    Text("7 days").tag(DriftAfter.sevenDays)
-                    Text("30 days").tag(DriftAfter.thirtyDays)
-                    Text("Never").tag(DriftAfter.never)
+            SettingsGroup(footer: "Tabs you haven't looked at in a while are tidied away into a box that appears by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.") {
+                SettingsLine("Tidy away tabs after") {
+                    Picker("Tidy away tabs after", selection: $driftAfter) {
+                        Text("1 day").tag(DriftAfter.oneDay)
+                        Text("7 days").tag(DriftAfter.sevenDays)
+                        Text("30 days").tag(DriftAfter.thirtyDays)
+                        Text("Never").tag(DriftAfter.never)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
                 }
-            } footer: {
-                SettingsFootnote("Tabs you haven't looked at in a while are tidied away into a box that appears by your spaces, and deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -218,14 +213,110 @@ private struct PrivacySettings: View {
     @AppStorage(Preference.blocksContent) private var blocksContent = true
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Block ads and trackers", isOn: $blocksContent)
-            } footer: {
-                SettingsFootnote("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the View menu; each space keeps its own choices.")
+        SettingsPage {
+            SettingsGroup(footer: "Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the View menu; each space keeps its own choices.") {
+                SettingsLine("Block ads and trackers") {
+                    SettingsSwitch("Block ads and trackers", isOn: $blocksContent)
+                }
             }
         }
-        .formStyle(.grouped)
+    }
+}
+
+/// A Settings pane's body: its cards, one under another, scrolling when
+/// they don't fit.
+struct SettingsPage<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) { content }
+                .padding(24)
+        }
+    }
+}
+
+/// A card of settings, with an optional heading over it and a quiet line
+/// under it saying what they do.
+struct SettingsGroup<Content: View>: View {
+    var header: String?
+    var footer: String?
+    @ViewBuilder let content: Content
+
+    init(header: String? = nil, footer: String? = nil, @ViewBuilder content: () -> Content) {
+        self.header = header
+        self.footer = footer
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let header {
+                Text(header)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 4)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            SettingsCard { content }
+            if let footer {
+                SettingsFootnote(footer).padding(.horizontal, 4)
+            }
+        }
+    }
+}
+
+/// One setting in a card: its name (and a line under it, if it needs one)
+/// on the left, its control on the right.
+struct SettingsLine<Control: View>: View {
+    let title: String
+    var caption: String?
+    @ViewBuilder let control: Control
+
+    init(_ title: String, caption: String? = nil, @ViewBuilder control: () -> Control) {
+        self.title = title
+        self.caption = caption
+        self.control = control()
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.tabFont)
+                    .foregroundStyle(Theme.ink)
+                if let caption {
+                    Text(caption)
+                        .font(Theme.hintFont)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityHidden(true)
+            Spacer(minLength: 12)
+            control.accessibilityHint(caption ?? "")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+/// An on and off switch in Firn's accent.
+struct SettingsSwitch: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    init(_ label: String, isOn: Binding<Bool>) {
+        self.label = label
+        _isOn = isOn
+    }
+
+    var body: some View {
+        Toggle(label, isOn: $isOn)
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .tint(Theme.accent)
+            .controlSize(.small)
     }
 }
 

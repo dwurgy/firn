@@ -32,42 +32,38 @@ struct PasswordsSettings: View {
     @State private var deleting: Row?
     @State private var choosingFile = false
     @State private var importing: PasswordImport?
+    @FocusState private var searchFocused: Bool
 
     private var space: Space { store.activeSpace }
     private var passwords: PasswordStore { .keychain }
 
     var body: some View {
-        Form {
-            Section {
-                header
+        SettingsPage {
+            header
+            SettingsGroup(footer: "Passwords stay on this Mac, in its Keychain. Only spaces that share sign-ins see them.") {
+                VStack(alignment: .leading, spacing: 0) { list }
+                    .padding(.vertical, 6)
             }
-            Section {
-                list
-            } footer: {
-                footnote("Passwords stay on this Mac, in its Keychain. Only spaces that share sign-ins see them.")
-            }
-            Section {
-                importRow
+            SettingsGroup {
+                SettingsLine("Import passwords", caption: "Export your passwords from Chrome, Arc, Safari, Firefox, 1Password, or Bitwarden, then choose the file here.") {
+                    Button("Import…") { choosingFile = true }
+                        .buttonStyle(SheetButtonStyle(prominent: false))
+                        .accessibilityLabel("Import passwords into \(space.name)")
+                }
             }
             let never = store.neverSavePasswordSites(in: space.dataStoreID)
             if !never.isEmpty {
-                Section {
+                SettingsGroup(header: "Never saved for", footer: "Firn doesn't offer to save passwords on these sites. Remove one to be asked again.") {
                     ForEach(never, id: \.self) { site in
-                        HStack {
-                            Text(site).foregroundStyle(Theme.ink)
-                            Spacer()
+                        SettingsLine(site) {
                             Button("Remove") { store.allowSavingPasswords(on: site, in: space.dataStoreID) }
+                                .buttonStyle(SheetButtonStyle(prominent: false))
                                 .accessibilityLabel("Remove \(site)")
                         }
                     }
-                } header: {
-                    Text("Never saved for")
-                } footer: {
-                    footnote("Firn doesn't offer to save passwords on these sites. Remove one to be asked again.")
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear(perform: reload)
         .onDisappear(perform: lock)
         .onChange(of: space.dataStoreID) { lock(); reload() }
@@ -129,33 +125,14 @@ struct PasswordsSettings: View {
             Spacer(minLength: 12)
             if unlocked {
                 Button("Lock", action: lock)
+                    .buttonStyle(SheetButtonStyle(prominent: false))
                     .help("Hide passwords until you unlock again")
             }
-            TextField("Search", text: $search, prompt: Text("Search"))
-                .textFieldStyle(.roundedBorder)
-                .labelsHidden()
+            FirnTextField(placeholder: "Search", text: $search, focused: $searchFocused)
                 .frame(width: 170)
                 .accessibilityLabel("Search passwords")
         }
-    }
-
-    private var importRow: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Import passwords")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.ink)
-                Text("Export your passwords from Chrome, Arc, Safari, Firefox, 1Password, or Bitwarden, then choose the file here.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: 12)
-            Button("Import…") { choosingFile = true }
-                .accessibilityLabel("Import passwords into \(space.name)")
-        }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
     }
 
     @ViewBuilder private var list: some View {
@@ -216,7 +193,8 @@ struct PasswordsSettings: View {
             .fixedSize()
             .accessibilityLabel("Actions for \(row.site.name)")
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .contextMenu { actions(for: row) }
     }
@@ -242,13 +220,7 @@ struct PasswordsSettings: View {
             .foregroundStyle(Theme.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)
-    }
-
-    private func footnote(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11))
-            .foregroundStyle(Theme.muted)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
     }
 
     private var sharingLine: String {

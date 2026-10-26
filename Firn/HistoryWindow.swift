@@ -129,6 +129,11 @@ struct HistoryWindow: View {
                     row(visit)
                         .tag(visit.id)
                         .listRowSeparator(.hidden)
+                        // The day's visits sit on one frost card, as in Settings.
+                        .listRowBackground(DayCardSegment(
+                            isFirst: visit.id == day.visits.first?.id,
+                            isLast: visit.id == day.visits.last?.id
+                        ))
                         .onAppear { if visit.id == visits.last?.id { readMore() } }
                 }
             }
@@ -401,5 +406,26 @@ private struct ClearHistorySheet: View {
         let names = sharing.map(\.name).formatted(.list(type: .and))
         let all = sharing.count == 2 ? "both" : "all of them"
         return "\(names) share sign-ins, so this clears history in \(all). \(stays)"
+    }
+}
+
+/// One row's slice of its day's card: Settings' frost fill, the corners
+/// rounded only at the day's first and last visits, so the slices join into
+/// one card. (A list row can't share one background with its neighbors.)
+private struct DayCardSegment: View {
+    let isFirst: Bool
+    let isLast: Bool
+
+    var body: some View {
+        let radius = Theme.panelRadius
+        UnevenRoundedRectangle(
+            topLeadingRadius: isFirst ? radius : 0,
+            bottomLeadingRadius: isLast ? radius : 0,
+            bottomTrailingRadius: isLast ? radius : 0,
+            topTrailingRadius: isFirst ? radius : 0,
+            style: .continuous
+        )
+        .fill(Theme.tileFill)
+        .padding(.horizontal, 10)
     }
 }

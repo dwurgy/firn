@@ -37,8 +37,9 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
 - **Site icons**, fetched from the site you're on, without its cookies or your sign-ins. The welcome fetches the suggested sites' icons the same way.
 - **Search suggestions**, only if you turn them on (they're off by default). Then your search engine sees what you type as you type it.
 - **Scam checks**, by macOS's own Safe Browsing service (the same one Safari uses). It keeps a list of known scam sites on your Mac, and when a page might be on it, asks Apple using a short code calculated from the address, never the address itself. If the site is a known scam, you'll see a warning instead of the page.
+- **Update checks**, once a day, if you say yes when Firn asks on its second launch (change it any time in Settings › General, or check now with Firn › Check for Updates…). Firn asks firnbrowser.com whether a new version is out, and only Firn's version number goes along, nothing about your Mac or your browsing. A new version downloads from Firn's GitHub releases, and Firn installs it only if it's signed with Firn's own key.
 
-Nothing else: no analytics, no update checks yet, and no Firn server.
+Nothing else, and no analytics.
 
 ## Requirements
 

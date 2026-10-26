@@ -11,8 +11,6 @@ import SwiftUI
 struct SpaceRow: View {
     let store: BrowserStore
     let window: WindowModel
-    /// The space waiting on "Delete Space…"'s confirmation.
-    @State private var deleting: Space?
     /// How far along the "Tidied away" pill is.
     @State private var pill = PillPhase.hidden
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,7 +24,7 @@ struct SpaceRow: View {
             OverflowButton(store: store, window: window)
             Group {
                 VStack(spacing: 2) {
-                    SpaceNameButton(store: store, window: window) { deleting = $0 }
+                    SpaceNameButton(store: store, window: window)
                     if store.spaces.count > 1 {
                         SpaceDots(store: store, window: window)
                     }
@@ -49,18 +47,6 @@ struct SpaceRow: View {
         }
         .frame(minHeight: Theme.rowHeight)
         .task(id: window.tidyAnnouncement?.id) { await announce() }
-        .confirmationDialog(
-            deleting.map { "Delete “\($0.name)”?" } ?? "",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            presenting: deleting
-        ) { space in
-            Button("Delete Space", role: .destructive) {
-                window.showSpace { store.deleteSpace(space) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { space in
-            Text(deleteMessage(for: space))
-        }
     }
 
     /// Frost forms over the overflow button, it widens to say how many tabs
@@ -89,13 +75,6 @@ struct SpaceRow: View {
 
     /// Says plainly what goes: with a separate space, its sign-ins too; with
     /// a shared one, which space keeps them.
-    private func deleteMessage(for space: Space) -> String {
-        let goes = "Its tabs, groups, and Basecamp will be deleted."
-        if let other = store.spacesSharingData(with: space).first {
-            return "\(goes) Its sign-ins stay, because “\(other.name)” still uses them."
-        }
-        return "\(goes) So will its sign-ins, cookies, and site data. This can’t be undone."
-    }
 }
 
 /// The space on screen's name, in its color. A click opens the list of
@@ -103,9 +82,9 @@ struct SpaceRow: View {
 private struct SpaceNameButton: View {
     let store: BrowserStore
     let window: WindowModel
-    let delete: (Space) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var anchor = MenuAnchor()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let space = store.activeSpace
@@ -153,13 +132,11 @@ private struct SpaceNameButton: View {
         }
         menu.addItem(.separator())
         menu.addItem(target.item("New Space…") { window.newSpace() })
-        // Until Settings › Spaces exists: editing and deleting the space on screen.
         let space = store.activeSpace
-        menu.addItem(.separator())
-        menu.addItem(target.item("Edit Space…") { window.editSpace(space) })
-        if store.spaces.count > 1 {
-            menu.addItem(target.item("Delete Space…") { delete(space) })
-        }
+        menu.addItem(target.item("Space Settings…") {
+            window.showSpaceSettings(for: space)
+            openWindow(id: "settings")
+        })
         // The space on screen lands over the name, as a pop-up button's does.
         menu.popUp(positioning: current, at: NSPoint(x: 0, y: view.bounds.maxY - 2), in: view)
         withExtendedLifetime(target) {}

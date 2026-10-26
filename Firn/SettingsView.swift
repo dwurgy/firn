@@ -64,6 +64,7 @@ struct SettingsView: View {
                 switch pane {
                 case .general: GeneralSettings(window: window)
                 case .tabs: TabsSettings()
+                case .spaces: SpacesSettings(window: window)
                 case .privacy: PrivacySettings()
                 case .passwords: PasswordsSettings(store: window.store)
                 }
@@ -91,7 +92,7 @@ struct SettingsView: View {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, privacy, passwords
+    case general, tabs, spaces, privacy, passwords
 
     var id: Self { self }
 
@@ -99,6 +100,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .tabs: "Tabs"
+        case .spaces: "Spaces"
         case .privacy: "Privacy"
         case .passwords: "Passwords"
         }
@@ -108,6 +110,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .tabs: "square.on.square"
+        case .spaces: "square.stack"
         case .privacy: "hand.raised"
         case .passwords: "key"
         }
@@ -115,7 +118,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 }
 
 /// The small muted line under a setting that says what it does.
-private struct SettingsFootnote: View {
+struct SettingsFootnote: View {
     let text: String
     init(_ text: String) { self.text = text }
 

@@ -1,15 +1,7 @@
 import FirnCore
 import SwiftUI
 
-/// Which space sheet is open: making a new space, or editing one.
-enum SpaceSheetMode: Hashable, Identifiable {
-    case new
-    case edit(UUID)
-
-    var id: Self { self }
-}
-
-/// The New space and Edit space card over the page, drawn like the command
+/// The New space card over the page, drawn like the command
 /// bar: Firn's glass over a dimmed page. Not a system sheet: a sheet is its
 /// own window, so its glass can't see the page behind it. Esc, Cancel, or a
 /// click on the dim closes it; it rises a hair as it fades in (Reduce Motion: fades).
@@ -19,66 +11,57 @@ struct SpaceSheetLayer: View {
 
     var body: some View {
         ZStack {
-            if let mode = window.spaceSheet {
+            if window.showsSpaceSheet {
                 RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
                     .fill(Theme.commandDim)
                     .contentShape(Rectangle())
                     .onTapGesture { window.closeSpaceSheet() }
                     .accessibilityHidden(true)
                     .transition(.opacity)
-                SpaceSheet(window: window, mode: mode)
-                    .id(mode)
+                SpaceSheet(window: window)
                     .padding(24)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeOut(duration: 0.2), value: window.spaceSheet)
+        .animation(.easeOut(duration: 0.2), value: window.showsSpaceSheet)
     }
 }
 
-/// The card itself: a name, a color, and (for a new space) the one
-/// sharing choice (CLAUDE.md, How spaces work). Nothing changes until Create
-/// or Save; Stop Sharing is the exception, after its own confirmation. Its
-/// glass takes the color being chosen, so it previews the space as it's made.
+/// The card itself: a name, a color, and the one sharing choice (CLAUDE.md,
+/// How spaces work). Nothing changes until Create Space. Its glass takes the
+/// color being chosen, so it previews the space as it's made. Changing a
+/// space later is Settings › Spaces.
 struct SpaceSheet: View {
     let window: WindowModel
-    let mode: SpaceSheetMode
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var name = ""
     @State private var color = Theme.spaceColorNames[0]
-    /// New space only: keep it separate (the default), or share sign-ins.
+    /// Keep it separate (the default), or share sign-ins.
     @State private var shares = false
     @State private var shareWith: UUID?
-    @State private var confirmingStopSharing = false
     /// Return can reach both the name field and the default button; act once.
     @State private var finished = false
     @FocusState private var nameFocused: Bool
 
     private var store: BrowserStore { window.store }
-    private var editing: Space? {
-        guard case let .edit(id) = mode else { return nil }
-        return store.spaces.first { $0.id == id }
-    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
         VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-            Text(editing == nil ? "New space" : "Edit space")
+            Text("New space")
                 .font(Theme.panelTitleFont)
                 .foregroundStyle(Theme.ink)
             section("Name") { nameField }
             section("Color") { swatches }
-            section("Sign-ins") {
-                if let editing { signInsStatus(of: editing) } else { sharingChoice }
-            }
+            section("Sign-ins") { sharingChoice }
             HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel") { window.closeSpaceSheet() }
                     .buttonStyle(SheetButtonStyle(prominent: false))
                     .keyboardShortcut(.cancelAction)
-                Button(editing == nil ? "Create Space" : "Save", action: finish)
+                Button("Create Space", action: finish)
                     .buttonStyle(SheetButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
             }
@@ -95,23 +78,9 @@ struct SpaceSheet: View {
         .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)
         .onExitCommand { window.closeSpaceSheet() }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(editing == nil ? "New space" : "Edit space")
+        .accessibilityLabel("New space")
         .accessibilityAddTraits(.isModal)
         .onAppear(perform: start)
-        // The space being edited was deleted meanwhile: nothing left to edit.
-        .onChange(of: editing == nil) {
-            if case .edit = mode, editing == nil { window.closeSpaceSheet() }
-        }
-        .confirmationDialog(
-            "Stop sharing sign-ins?",
-            isPresented: $confirmingStopSharing,
-            presenting: editing
-        ) { space in
-            Button("Stop Sharing", role: .destructive) { store.stopSharing(space) }
-            Button("Cancel", role: .cancel) {}
-        } message: { space in
-            Text(stopSharingMessage(for: space))
-        }
     }
 
     // MARK: Parts
@@ -185,26 +154,6 @@ struct SpaceSheet: View {
         }
     }
 
-    /// Edit space: says whose sign-ins it uses, and offers Stop Sharing.
-    @ViewBuilder private func signInsStatus(of space: Space) -> some View {
-        let others = store.spacesSharingData(with: space).map { "“\($0.name)”" }
-        if others.isEmpty {
-            Text("Separate: its own sign-ins, cookies, and history.")
-                .font(Theme.labelFont)
-                .foregroundStyle(Theme.ink)
-        } else {
-            HStack(spacing: 12) {
-                Text("Shares sign-ins with \(others.formatted(.list(type: .and))).")
-                    .font(Theme.labelFont)
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Button("Stop Sharing…") { confirmingStopSharing = true }
-                    .buttonStyle(SheetButtonStyle(prominent: false))
-            }
-        }
-    }
-
     // MARK: Actions
 
     /// The space a new one would share with: the one picked, or the one on screen.
@@ -213,13 +162,8 @@ struct SpaceSheet: View {
     }
 
     private func start() {
-        if let editing {
-            name = editing.name
-            color = editing.color
-        } else {
-            color = window.freeSpaceColor
-            shareWith = store.activeSpaceID
-        }
+        color = window.freeSpaceColor
+        shareWith = store.activeSpaceID
         // Once the card is in the window, as the command bar does.
         Task { @MainActor in
             await Task.yield()
@@ -230,19 +174,9 @@ struct SpaceSheet: View {
     private func finish() {
         guard !finished else { return }
         finished = true
-        if let editing {
-            store.updateSpace(editing, name: name, color: color)
-            window.closeSpaceSheet()
-        } else {
-            let sharing = shares ? shareTarget : nil
-            window.closeSpaceSheet()
-            window.showSpace { store.addSpace(name: name, color: color, sharingWith: sharing) }
-        }
-    }
-
-    private func stopSharingMessage(for space: Space) -> String {
-        let others = store.spacesSharingData(with: space).map { "“\($0.name)”" }.formatted(.list(type: .and))
-        return "“\(space.name)” will start fresh, signed out of everything. \(others) will stay signed in."
+        let sharing = shares ? shareTarget : nil
+        window.closeSpaceSheet()
+        window.showSpace { store.addSpace(name: name, color: color, sharingWith: sharing) }
     }
 }
 

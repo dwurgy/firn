@@ -81,9 +81,11 @@ final class WindowModel {
     /// A group just made: its card starts thawed (looking like a loose tab)
     /// and frost forms around its tab (see `TabList`).
     var formingGroupID: UUID?
-    /// The New space or Edit space card, while it's open. Here so the menu
-    /// bar's New Space… can open it too.
-    private(set) var spaceSheet: SpaceSheetMode?
+    /// The New space card, while it's open. Here so the menu bar's New
+    /// Space… can open it too.
+    private(set) var showsSpaceSheet = false
+    /// The space Settings › Spaces should pick, set by Space Settings….
+    var settingsSpaceID: UUID?
     /// Idle tabs waiting to be tidied away, one by one, so each is seen
     /// going (see `TabList`).
     var tidyQueue: [FirnCore.Tab] = []
@@ -136,7 +138,11 @@ final class WindowModel {
     }
 
     /// Opens the New space card, in place of the command bar if it's open.
-    func newSpace() { openSpaceSheet(.new) }
+    func newSpace() {
+        guard !showsWelcome else { return }
+        closeCommandBar(focusingPage: false)
+        showsSpaceSheet = true
+    }
 
     /// The welcome, over the whole window (see `WelcomeLayer`).
     private(set) var showsWelcome = false
@@ -158,7 +164,7 @@ final class WindowModel {
     /// Opens the welcome: the first time Firn opens, or Help › Show Welcome Again.
     func showWelcome() {
         closeCommandBar(focusingPage: false)
-        spaceSheet = nil
+        showsSpaceSheet = false
         welcomeFinishTask?.cancel()
         welcomeFinish = nil
         showsWelcome = true
@@ -207,19 +213,17 @@ final class WindowModel {
         store.openTab(url)
     }
 
-    /// Opens the Edit space card for `space`.
-    func editSpace(_ space: Space) { openSpaceSheet(.edit(space.id)) }
-
-    private func openSpaceSheet(_ mode: SpaceSheetMode) {
-        guard !showsWelcome else { return }
-        closeCommandBar(focusingPage: false)
-        spaceSheet = mode
+    /// Space Settings…: Settings › Spaces, with `space` picked. The caller
+    /// opens the Settings window.
+    func showSpaceSettings(for space: Space) {
+        settingsSpaceID = space.id
+        UserDefaults.standard.set(SettingsPane.spaces.rawValue, forKey: "settingsPane")
     }
 
     /// Closes the space card; the page in front gets the keys back.
     func closeSpaceSheet() {
-        guard spaceSheet != nil else { return }
-        spaceSheet = nil
+        guard showsSpaceSheet else { return }
+        showsSpaceSheet = false
         focusPage()
     }
 
@@ -529,7 +533,7 @@ final class WindowModel {
         guard !showsWelcome else { return }
         // A pick whose page has gone (closed, say) is over: the bar opens whole.
         if !isPickingSplit { splitPickAnchor = nil }
-        spaceSheet = nil
+        showsSpaceSheet = false
         commandBarHalf = isPickingSplit ? splitPickSide.other : nil
         showsCommandBar = true
     }

@@ -41,12 +41,14 @@ struct HistoryWindow: View {
     private var readKey: String { "\(space.dataStoreID)\n\(search)" }
 
     var body: some View {
-        // The window's own background, as in Settings: no fill of our own,
-        // so nothing shows a seam around the list or the empty state.
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The list is always there, even empty (the message lies over it):
+        // the toolbar's glass then looks the same with or without results,
+        // instead of turning into a solid bar when there's nothing to scroll.
+        list
+            .overlay { emptyMessage }
             .frame(minWidth: 460, minHeight: 360)
             .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+            .modifier(PageBackground())
             .navigationTitle("History")
             .navigationSubtitle(space.name)
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
@@ -57,6 +59,7 @@ struct HistoryWindow: View {
                         await readFirstPage(replacing: true)
                     }
                 }
+                .presentationBackground(Theme.page)
             }
             .task(id: readKey) { await readFirstPage(replacing: true) }
             .onChange(of: activeState) { _, state in
@@ -74,7 +77,7 @@ struct HistoryWindow: View {
         clearing = space
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private var emptyMessage: some View {
         if loaded && visits.isEmpty {
             if isSearching {
                 EmptyHistory(symbol: "magnifyingglass", title: "No results",
@@ -83,8 +86,6 @@ struct HistoryWindow: View {
                 EmptyHistory(symbol: "clock", title: "No history yet",
                              line: "Pages you visit in \(space.name) appear here.")
             }
-        } else {
-            list
         }
     }
 
@@ -93,7 +94,9 @@ struct HistoryWindow: View {
     }
 
     /// A quiet line along the bottom, like the footnotes in Settings, and
-    /// Clear History… beside it as a native button (as Import… is there).
+    /// Clear History… beside it in Firn's quiet wash, the same button as the
+    /// sheet's Cancel. The page color under it, so rows slip out of sight
+    /// at its edge with no line.
     private var footer: some View {
         HStack(spacing: 12) {
             Text("History stays on this Mac for a year.")
@@ -101,32 +104,34 @@ struct HistoryWindow: View {
                 .foregroundStyle(Theme.muted)
             Spacer(minLength: 12)
             Button("Clear History…") { clearing = space }
+                .buttonStyle(SheetButtonStyle(prominent: false))
                 .disabled(loaded && visits.isEmpty && !isSearching)
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, 14)
         .padding(.vertical, 12)
-        .background(.bar)
+        .background(Theme.page)
     }
 
     private var list: some View {
         List(selection: $selection) {
+            // Day headings are ordinary rows that scroll away, not section
+            // headers: macOS pins those to the top with a line under them.
             ForEach(days) { day in
-                Section {
-                    ForEach(day.visits) { visit in
-                        row(visit)
-                            .tag(visit.id)
-                            .listRowSeparator(.hidden)
-                            .onAppear { if visit.id == visits.last?.id { readMore() } }
-                    }
-                } header: {
-                    Text(heading(for: day.start))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.muted)
-                        .padding(.top, 12)
-                        .padding(.bottom, 2)
-                        .accessibilityAddTraits(.isHeader)
+                Text(heading(for: day.start))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.top, day.id == days.first?.id ? 4 : Theme.sectionSpacing)
+                    .padding(.leading, 4)
+                    .accessibilityAddTraits(.isHeader)
+                    .selectionDisabled()
+                    .listRowSeparator(.hidden)
+                ForEach(day.visits) { visit in
+                    row(visit)
+                        .tag(visit.id)
+                        .listRowSeparator(.hidden)
+                        .onAppear { if visit.id == visits.last?.id { readMore() } }
                 }
-                .listSectionSeparator(.hidden)
             }
         }
         .listStyle(.inset)
@@ -296,7 +301,19 @@ struct HistoryWindow: View {
     }
 }
 
-/// Shown in place of the list when there's nothing in it: a faint symbol,
+/// Firn's page color across the whole window, under the toolbar too, as
+/// the page sits in the browser; the toolbar's glass lies over it.
+private struct PageBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.containerBackground(Theme.page, for: .window)
+        } else {
+            content.background(Theme.page.ignoresSafeArea())
+        }
+    }
+}
+
+/// Shown over the list when there's nothing in it: a faint symbol,
 /// a short title, and one plain line, centered in the window.
 private struct EmptyHistory: View {
     let symbol: String
@@ -356,6 +373,7 @@ private struct ClearHistorySheet: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
+            .tint(Theme.accent)
             .accessibilityLabel("Clear")
             HStack(spacing: 8) {
                 Spacer()

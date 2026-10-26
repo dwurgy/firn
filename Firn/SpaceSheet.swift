@@ -371,9 +371,11 @@ struct ChoiceRow: View {
 struct SheetButtonStyle: ButtonStyle {
     let prominent: Bool
     @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .opacity(isEnabled ? 1 : 0.45)
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(prominent ? Theme.page : Theme.ink)
             .padding(.horizontal, 14)
@@ -383,10 +385,11 @@ struct SheetButtonStyle: ButtonStyle {
                     .fill(fill(pressed: configuration.isPressed))
             }
             .contentShape(Rectangle())
-            .onHover { hovering = $0 }
+            .onHover { hovering = isEnabled && $0 }
     }
 
     private func fill(pressed: Bool) -> Color {
+        if prominent && !isEnabled { return Theme.ink.opacity(0.35) }
         if prominent { return Theme.ink.opacity(pressed ? 0.8 : hovering ? 0.9 : 1) }
         return pressed ? Theme.press : hovering ? Theme.press : Theme.hover
     }

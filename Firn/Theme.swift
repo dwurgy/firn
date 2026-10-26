@@ -13,6 +13,10 @@ enum Theme {
     static let muted = Color(light: 0x5E564E, dark: 0xD4CDC5)
     static let faint = Color(light: 0x9D9389, dark: 0x958D85)
     static let frost = Color(light: 0x82A8BE, dark: 0xA0C4D6, opacity: 0.45)
+    /// The system accent (radio buttons, switches, focus): a slightly more
+    /// saturated Glacier, from the asset catalog. Set on controls in sheets
+    /// by hand, where macOS otherwise draws them in its own blue.
+    static let accent = Color("AccentColor")
 
     /// Hover and press: a warm brown wash in light, warm white in dark.
     static let hover = Color(light: 0x463728, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.07)

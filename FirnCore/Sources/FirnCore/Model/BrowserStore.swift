@@ -66,6 +66,7 @@ public final class BrowserStore {
     @ObservationIgnored private let removeData: @MainActor (_ dataStoreID: UUID) -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let passwords: PasswordStore?
+    @ObservationIgnored let history: HistoryRecorder?
     @ObservationIgnored private var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.
@@ -79,12 +80,15 @@ public final class BrowserStore {
     ///     `BrowserEngine.removeData` in the app.
     ///   - passwords: Where saved passwords are kept; `PasswordStore.keychain`
     ///     in the app. Without one, Firn never offers to save a password.
+    ///   - history: Where visits are recorded; `HistoryStore.standard` in the
+    ///     app. Without one, nothing is.
     ///   - now: The clock, replaceable in tests.
     public init(
         spaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
         passwords: PasswordStore? = nil,
+        history: HistoryStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         precondition(!spaces.isEmpty, "Firn always has at least one space")
@@ -93,6 +97,7 @@ public final class BrowserStore {
         self.makePage = makePage
         self.removeData = removeData
         self.passwords = passwords
+        self.history = history.map(HistoryRecorder.init)
         self.now = now
         renumberSpaces()
     }
@@ -106,6 +111,7 @@ public final class BrowserStore {
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
         passwords: PasswordStore? = nil,
+        history: HistoryStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         var seen = Set<UUID>()
@@ -119,7 +125,7 @@ public final class BrowserStore {
             }
         self.init(
             spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData,
-            passwords: passwords, now: now
+            passwords: passwords, history: history, now: now
         )
         if let session { restore(session) }
     }
@@ -1153,6 +1159,22 @@ public final class BrowserStore {
             self.handle(request, from: tab)
         }
         followBlocking(of: page, in: tab.spaceID)
+        recordVisits(of: page, in: tab)
+    }
+
+    // MARK: - History
+
+    /// Records the tab's visits in its space's history. Only tabs: a Lookout
+    /// is a glance until it's kept, and then this records the page it's on.
+    private func recordVisits(of page: any PageController, in tab: Tab) {
+        guard history != nil else { return }
+        let (tabID, spaceID) = (tab.id, tab.spaceID)
+        page.onVisit = { [weak self] url, title in
+            guard let self, let space = self.spaces.first(where: { $0.id == spaceID }) else { return }
+            self.history?.visited(url, title: title, tab: tabID, in: space.dataStoreID)
+        }
+        // A kept Lookout, or a popup already on its page.
+        if let url = page.url { page.onVisit?(url, page.title) }
     }
 
     // MARK: - Blocking

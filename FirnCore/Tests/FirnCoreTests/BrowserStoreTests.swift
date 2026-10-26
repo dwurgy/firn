@@ -19,12 +19,19 @@ final class FakePage: PageController {
     var loadError: LoadError?
     var stopped = false
     var onRequest: (@MainActor (PageRequest) -> Void)?
+    var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     var sendsOtherSitesToLookout = false
     var blocksContent: (@MainActor (URL) -> Bool)?
 
     init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }
 
     func load(_ url: URL) { self.url = url }
+    /// As WebKit would: an address commits, then its title arrives.
+    func commit(_ url: URL, title: String = "") {
+        self.url = url
+        onVisit?(url, "")
+        if !title.isEmpty { self.title = title; onVisit?(url, title) }
+    }
     func goBack() {}
     func goForward() {}
     func reload() {}

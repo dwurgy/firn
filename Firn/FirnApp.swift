@@ -22,7 +22,8 @@ struct FirnApp: App {
                 Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
                 Task.detached(priority: .utility) { await HistoryStore.standard.removeAll(in: id) }
             },
-            passwords: .keychain
+            passwords: .keychain,
+            history: .standard
         )
         // Erase what's left of deleted spaces: data their open pages still
         // held, passwords the Keychain couldn't be reached for, and history.

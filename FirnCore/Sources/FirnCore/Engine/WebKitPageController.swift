@@ -23,6 +23,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var isPausedByFirn = false
     private(set) var isResuming = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
+    @ObservationIgnored var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
     @ObservationIgnored var blocksContent: (@MainActor (URL) -> Bool)?
 
@@ -273,7 +274,10 @@ final class WebKitPageController: NSObject, PageController {
     }
 
     private func syncState() {
-        title = webView.title ?? ""
+        let newTitle = webView.title ?? ""
+        let titleChanged = newTitle != title
+        title = newTitle
+        if titleChanged { reportTitle() }
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
         isLoading = webView.isLoading
@@ -285,8 +289,15 @@ final class WebKitPageController: NSObject, PageController {
     /// origin, which is all a page can do without navigating (pushState, #links).
     private func sameDocumentURLChanged() {
         guard !isProvisional, let newURL = webView.url, let current = url,
-              Self.sameOrigin(newURL, current) else { return }
+              Self.sameOrigin(newURL, current), newURL != current else { return }
         url = newURL
+        onVisit?(newURL, title)
+    }
+
+    /// Tells history the page's title, once it has one.
+    private func reportTitle() {
+        guard !isProvisional, let url, !title.isEmpty else { return }
+        onVisit?(url, title)
     }
 
     private static func sameOrigin(_ a: URL, _ b: URL) -> Bool {
@@ -416,6 +427,8 @@ extension WebKitPageController: WKNavigationDelegate {
         dialogsBlocked = false
         let previous = url
         url = webView.url
+        // The title may still be the old page's until the new one says.
+        if let url { onVisit?(url, "") }
         // The old page's frames are gone, and their sound with them.
         soundFrames = [:]
         forgetPause()
@@ -432,6 +445,8 @@ extension WebKitPageController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         syncState()
+        // A new page with the same title as the last never changes it.
+        reportTitle()
         findIcon()
     }
 

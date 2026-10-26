@@ -93,6 +93,13 @@ public protocol PageController: AnyObject, Observable {
     /// Where the page sends what it asks of the browser (new tabs, closing).
     /// Set by whoever owns the page; nil means nobody is listening.
     var onRequest: (@MainActor (PageRequest) -> Void)? { get set }
+
+    /// For Firn's history: told the address each time the main frame commits
+    /// one (or the page changes it itself, as with pushState), and again with
+    /// the title once the page has one. The address is always the committed
+    /// one, never a pending one; the title is "" until known. Set by whoever
+    /// owns the page; nil means nothing is recorded.
+    var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)? { get set }
 }
 
 /// A sleeping page's place (see `PageController.memory()`), opaque to all

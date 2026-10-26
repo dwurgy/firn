@@ -1504,6 +1504,10 @@ struct BrowserCommands: Commands {
             Button("Check for Updates…") { Updater.shared.checkNow() }
                 .disabled(!Updater.shared.canCheck)
         }
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") { openWindow(id: "settings") }
+                .keyboardShortcut(",")
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Tab") { window.openCommandBar() }
                 .keyboardShortcut("t")
@@ -1560,7 +1564,7 @@ struct BrowserCommands: Commands {
                 // In the History or Settings window, ⌘W closes that window,
                 // never a tab behind it.
                 if let key = NSApp.keyWindow, let id = key.identifier?.rawValue,
-                   id.hasPrefix("history") || id.hasPrefix("com_apple_SwiftUI_Settings") {
+                   id.hasPrefix("history") || id.hasPrefix("settings") {
                     key.performClose(nil)
                 } else {
                     window.closeFront()

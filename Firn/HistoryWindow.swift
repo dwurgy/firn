@@ -303,7 +303,7 @@ struct HistoryWindow: View {
 
 /// Firn's page color across the whole window, under the toolbar too, as
 /// the page sits in the browser; the toolbar's glass lies over it.
-private struct PageBackground: ViewModifier {
+struct PageBackground: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 15, *) {
             content.containerBackground(Theme.page, for: .window)

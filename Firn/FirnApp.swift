@@ -73,9 +73,15 @@ struct FirnApp: App {
         }
         .defaultSize(width: 680, height: 620)
 
-        Settings {
+        // Firn › Settings… (⌘,). An ordinary window rather than SwiftUI's
+        // Settings scene, whose fixed preferences title bar can't take the
+        // sidebar's full-height toolbar: this way the traffic lights, the
+        // title, and the page color match the History window.
+        Window("Settings", id: "settings") {
             SettingsView(window: window)
         }
+        .windowResizability(.contentSize)
+        .windowToolbarStyle(.unified)
     }
 }
 

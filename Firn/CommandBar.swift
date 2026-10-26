@@ -67,7 +67,7 @@ private struct CommandBar: View {
     @AppStorage(Preference.searchSuggestions) private var asksForSuggestions = false
     private static let fieldHeight: CGFloat = 48
 
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @AppStorage(Preference.blocksContent) private var blocksContent = true
 
     private func rows(actions: [BarAction]) -> [CommandRow] {
@@ -320,7 +320,7 @@ private struct CommandBar: View {
             }
         }
         add("new-space", "New Space…", ["add", "create", "space"]) { window.newSpace() }
-        add("settings", "Settings", ["preferences", "options"], "⌘,") { openSettings() }
+        add("settings", "Settings", ["preferences", "options"], "⌘,") { openWindow(id: "settings") }
         return list
     }
 }

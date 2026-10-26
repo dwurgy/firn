@@ -33,6 +33,10 @@ struct SettingsView: View {
     /// Every pane is the same size, so the window never jumps between them.
     static let size = CGSize(width: 720, height: 520)
 
+    private static var keepsToolbarTall: some View {
+        Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+    }
+
     /// The pane open last time.
     @AppStorage("settingsPane") private var pane = SettingsPane.general
 
@@ -40,9 +44,19 @@ struct SettingsView: View {
         NavigationSplitView {
             // A list selection can be empty; Settings always shows a pane.
             List(SettingsPane.allCases, selection: Binding { pane } set: { pane = $0 ?? pane }) { pane in
-                Label(pane.title, systemImage: pane.symbol)
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    // Glacier, not the system's blue (the selected row's
+                    // highlight is already Firn's accent).
+                    Image(systemName: pane.symbol)
+                        .foregroundStyle(pane == self.pane ? Color.white : Theme.accent)
+                }
             }
             .navigationSplitViewColumnWidth(190)
+            // Warmed by the frame's color, as the browser's sidebar is.
+            .scrollContentBackground(.hidden)
+            .background(Theme.frameWash.ignoresSafeArea())
             // Settings always shows its sidebar: there's nothing to hide it for.
             .toolbar(removing: .sidebarToggle)
         } detail: {
@@ -54,9 +68,25 @@ struct SettingsView: View {
                 case .passwords: PasswordsSettings(store: window.store)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.page.ignoresSafeArea())
             .navigationTitle(pane.title)
+            // An empty toolbar shrinks to a thin title bar, with the traffic
+            // lights in the corner; one invisible item keeps it full height,
+            // as the History window's search field does there.
+            .toolbar {
+                if #available(macOS 26, *) {
+                    // No glass capsule around it, which would show as a sliver.
+                    ToolbarItem(placement: .primaryAction) { Self.keepsToolbarTall }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .primaryAction) { Self.keepsToolbarTall }
+                }
+            }
         }
         .frame(width: Self.size.width, height: Self.size.height)
+        // The History window's look: Firn's page color, under the toolbar too.
+        .modifier(PageBackground())
     }
 }
 

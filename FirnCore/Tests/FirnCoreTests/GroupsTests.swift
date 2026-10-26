@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct GroupsTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore(restoring session: Session? = nil, now: @escaping () -> Date = Date.init) -> BrowserStore {
         BrowserStore(restoring: session, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) }, now: now)

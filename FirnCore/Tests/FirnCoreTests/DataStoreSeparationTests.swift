@@ -14,7 +14,7 @@ struct DataStoreSeparationTests {
     }
 
     @Test func aSignInStaysInItsOwnSpace() async throws {
-        let personal = Space(name: "Personal", icon: "nature", color: "glacier", order: 0, dataStoreID: UUID())
+        let personal = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
         let store = BrowserStore(spaces: [personal], makePage: BrowserEngine.makePage)
         let signIn = try #require(HTTPCookie(properties: [
             .domain: "separation.test", .path: "/", .name: "signedIn", .value: "yes",
@@ -25,9 +25,9 @@ struct DataStoreSeparationTests {
         let personalTab = store.openTab(URL(string: "about:blank")!)
         try await cookieStore(of: personalTab).setCookie(signIn)
 
-        let work = store.addSpace(name: "Work", icon: "work", color: "sand")
+        let work = store.addSpace(name: "Work", color: "sand")
         let workTab = store.openTab(URL(string: "about:blank")!)
-        let shared = store.addSpace(name: "Side", icon: "star", color: "sage", sharingWith: personal)
+        let shared = store.addSpace(name: "Side", color: "sage", sharingWith: personal)
         let sharedTab = store.openTab(URL(string: "about:blank")!)
 
         #expect(signedIn(try await cookieStore(of: personalTab).allCookies()))

@@ -20,7 +20,7 @@ struct OpenedFilesTests {
     }
 
     @Test func fileTabsArentSaved() {
-        let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+        let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
         let store = BrowserStore(restoring: nil, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) })
         store.openTab(URL(string: "https://a.example")!)
         store.openTab(URL(fileURLWithPath: "/tmp/firn-test/Recipe.html"))

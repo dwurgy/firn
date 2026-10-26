@@ -345,8 +345,8 @@ struct TidyPill: View {
 
 /// The overflow button's icon: a plain archive box, its lid a band a
 /// little wider than the box. Where tidied tabs are kept. Drawn in the
-/// space icons' style and size (24pt grid, 1.6 stroke, round caps and
-/// joins; as tall as the house, as wide as the briefcase); also
+/// style and size of the space icons Firn once had (24pt grid, 1.6 stroke,
+/// round caps and joins; docs/space-icons.svg); also
 /// kept as docs/overflow-icon.svg. Change it only with David's OK, and
 /// update that file to match. (The snow-drift lid it replaces read as a
 /// toupee; David, 2026-10-21.)

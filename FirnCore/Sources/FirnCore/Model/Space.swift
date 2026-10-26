@@ -8,8 +8,6 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
 
     public let id: UUID
     public var name: String
-    /// Firn's own line icon, by name.
-    public var icon: String
     /// One of Firn's space colors, by name ("glacier", "sand", …).
     public var color: String
     public var order: Int
@@ -27,12 +25,11 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     public var lastChangedAt: Date
 
     public init(
-        id: UUID = UUID(), name: String, icon: String, color: String,
+        id: UUID = UUID(), name: String, color: String,
         order: Int, dataStoreID: UUID, lastChangedAt: Date = .now
     ) {
         self.id = id
         self.name = name
-        self.icon = icon
         self.color = color
         self.order = order
         self.dataStoreID = dataStoreID
@@ -40,16 +37,16 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, icon, color, order, dataStoreID, blockingOffSites, neverSavePasswordSites, lastChangedAt
+        case id, name, color, order, dataStoreID, blockingOffSites, neverSavePasswordSites, lastChangedAt
     }
 
     /// Spaces saved before blocking could be turned off for a site, or
-    /// before passwords, have no lists.
+    /// before passwords, have no lists. Spaces saved while they had icons
+    /// still carry one; it's ignored, and gone at the next save.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        icon = try container.decode(String.self, forKey: .icon)
         color = try container.decode(String.self, forKey: .color)
         order = try container.decode(Int.self, forKey: .order)
         dataStoreID = try container.decode(UUID.self, forKey: .dataStoreID)

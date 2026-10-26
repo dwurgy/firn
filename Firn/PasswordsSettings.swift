@@ -117,7 +117,6 @@ struct PasswordsSettings: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 18, color: Theme.spaceIconInk(space.color))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Passwords in \(space.name)")
                     .font(.system(size: 13, weight: .semibold))

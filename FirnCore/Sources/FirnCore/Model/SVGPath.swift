@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 
 /// Reads the path data of an SVG `<path d="…">` into a CGPath, so Firn's
-/// space icons can be kept exactly as they were drawn and approved (as SVG),
-/// rather than retyped by hand. Covers M, L, H, V, C, S, Q, A, and Z, in
+/// own drawings (the overflow box, First light's flakes) can be kept exactly
+/// as they were drawn and approved (as SVG), rather than retyped by hand. Covers M, L, H, V, C, S, Q, A, and Z, in
 /// absolute and relative forms. Only ever fed Firn's own icon strings.
 public enum SVGPath {
     public static func cgPath(_ data: String) -> CGPath {

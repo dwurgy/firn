@@ -115,7 +115,7 @@ struct SiteIconTests {
 
 @MainActor
 struct TabIconTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
     private let iconPNG = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3])
 
     @Test func iconIsSavedAndComesBack() throws {

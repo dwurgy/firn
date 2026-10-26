@@ -232,10 +232,7 @@ struct ArcImportSheet: View {
     private func add(_ plan: ArcImportPlan) {
         let store = window.store
         let added = withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-            store.importFromArc(plan) { existing in
-                let style = WindowModel.freeStyle(among: existing)
-                return (style.icon.rawValue, style.color)
-            }
+            store.importFromArc(plan) { WindowModel.freeColor(among: $0) }
         }
         session.stage = .done(added)
         // The sheet changes under VoiceOver's focus, so say how it went.

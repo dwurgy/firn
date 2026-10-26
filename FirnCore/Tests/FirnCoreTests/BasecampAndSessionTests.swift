@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct BasecampAndSessionTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore(restoring session: Session? = nil, now: @escaping () -> Date = Date.init) -> BrowserStore {
         BrowserStore(restoring: session, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) }, now: now)
@@ -312,7 +312,7 @@ struct BasecampAndSessionTests {
         // The file keeps dates to the second.
         let file = temporaryFile()
         let second = Date(timeIntervalSince1970: 1_800_000_000)
-        let space = Space(name: "Work", icon: "leaf", color: "sage", order: 0, dataStoreID: UUID(), lastChangedAt: second)
+        let space = Space(name: "Work", color: "sage", order: 0, dataStoreID: UUID(), lastChangedAt: second)
         let store = BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) }, now: { second })
         store.openTab(url("a"))
         let session = save(store)
@@ -351,7 +351,7 @@ struct BasecampAndSessionTests {
 
 @MainActor
 struct WelcomeBasecampTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore() -> BrowserStore {
         BrowserStore(restoring: nil, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) })

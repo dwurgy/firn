@@ -113,7 +113,7 @@ private struct SpaceNameButton: View {
             Text(space.name)
                 .font(.system(size: 13, weight: .semibold))
                 // The space's color, deepened toward ink so it reads on the tint.
-                .foregroundStyle(Theme.spaceIconInk(space.color))
+                .foregroundStyle(Theme.spaceInk(space.color))
                 .lineLimit(1)
                 .truncationMode(.tail)
             // Cross-fades with the frame's tint when the space changes.
@@ -187,7 +187,7 @@ private struct SpaceDots: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let ink = Theme.spaceIconInk(store.activeSpace.color)
+        let ink = Theme.spaceInk(store.activeSpace.color)
         HStack(spacing: 0) {
             ForEach(Array(store.spaces.enumerated()), id: \.element.id) { index, space in
                 let isActive = space.id == store.activeSpaceID

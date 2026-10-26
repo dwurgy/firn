@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct HistoryRecordingTests {
     let folder = FileManager.default.temporaryDirectory.appending(path: "FirnHistoryRecordingTests-\(UUID().uuidString)")
-    let work = Space(name: "Work", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
-    let personal = Space(name: "Personal", icon: "leaf", color: "sage", order: 1, dataStoreID: UUID())
+    let work = Space(name: "Work", color: "glacier", order: 0, dataStoreID: UUID())
+    let personal = Space(name: "Personal", color: "sage", order: 1, dataStoreID: UUID())
 
     func makeStores() -> (BrowserStore, HistoryStore) {
         let history = HistoryStore(directory: folder)
@@ -147,7 +147,7 @@ struct HistoryRecordingTests {
     }
 
     @Test func sharedSpacesShareOneHistory() async {
-        let shared = Space(name: "Side", icon: "leaf", color: "sand", order: 2, dataStoreID: work.dataStoreID)
+        let shared = Space(name: "Side", color: "sand", order: 2, dataStoreID: work.dataStoreID)
         let history = HistoryStore(directory: folder)
         let store = BrowserStore(spaces: [work, personal, shared], makePage: { FakePage(dataStoreID: $0) }, history: history)
         defer { try? FileManager.default.removeItem(at: folder) }

@@ -43,8 +43,8 @@ struct SignInScriptTests {
 
 @MainActor
 struct PasswordOfferTests {
-    private let personal = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
-    private let work = Space(name: "Work", icon: "work", color: "sand", order: 1, dataStoreID: UUID())
+    private let personal = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
+    private let work = Space(name: "Work", color: "sand", order: 1, dataStoreID: UUID())
     private let passwords = PasswordStore(vault: MemoryVault())
     private let site = PasswordSite(URL(string: "https://example.com/login")!)!
 
@@ -143,7 +143,7 @@ struct PasswordOfferTests {
         let tab = store.openTab(URL(string: "https://example.com")!)
         signIn(on: tab, login())
         store.neverSavePasswordsForOffer()
-        store.addSpace(name: "Family", icon: "leaf", color: "sage", sharingWith: store.spaces[0])
+        store.addSpace(name: "Family", color: "sage", sharingWith: store.spaces[0])
         let shared = store.openTab(URL(string: "https://example.com")!)
         signIn(on: shared, login())
         #expect(store.passwordOffer == nil)
@@ -154,7 +154,7 @@ struct PasswordOfferTests {
         let tab = store.openTab(URL(string: "https://example.com")!)
         signIn(on: tab, login())
         store.neverSavePasswordsForOffer()
-        let family = store.addSpace(name: "Family", icon: "leaf", color: "sage", sharingWith: store.spaces[0])
+        let family = store.addSpace(name: "Family", color: "sage", sharingWith: store.spaces[0])
         #expect(store.neverSavePasswordSites(in: family.dataStoreID) == ["example.com"])
         store.allowSavingPasswords(on: "example.com", in: family.dataStoreID)
         #expect(store.neverSavePasswordSites(in: personal.dataStoreID).isEmpty)
@@ -224,8 +224,8 @@ struct PasswordNeedsUpdateTests {
 
 @MainActor
 struct PasswordFillTests {
-    private let personal = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
-    private let work = Space(name: "Work", icon: "work", color: "sand", order: 1, dataStoreID: UUID())
+    private let personal = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
+    private let work = Space(name: "Work", color: "sand", order: 1, dataStoreID: UUID())
     private let passwords = PasswordStore(vault: MemoryVault())
     private let site = PasswordSite(URL(string: "https://example.com/login")!)!
     private let field = CGRect(x: 40, y: 120, width: 240, height: 32)

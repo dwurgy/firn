@@ -5,7 +5,7 @@ import Testing
 /// The mini player: a tab out of sight in this space, playing or paused from it.
 @MainActor
 struct MiniPlayerTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore() -> BrowserStore {
         BrowserStore(restoring: nil, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) })
@@ -59,7 +59,7 @@ struct MiniPlayerTests {
         let store = makeStore()
         let music = store.openTab(url("music"))
         try #require(music.page as? FakePage).sound = .playing
-        store.addSpace(name: "Work", icon: "leaf", color: "sage")
+        store.addSpace(name: "Work", color: "sage")
         #expect(store.miniPlayerTab == nil)
     }
 }

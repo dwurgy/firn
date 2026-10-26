@@ -130,9 +130,9 @@ struct PasswordStoreTests {
 
     @MainActor @Test func aSharedSpaceSeesTheSamePasswords() throws {
         // Spaces that share sign-ins share a data store id, so they ask for the same one.
-        let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: personal)
+        let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: personal)
         let shared = BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) })
-            .addSpace(name: "Family", icon: "home", color: "sand", sharingWith: space)
+            .addSpace(name: "Family", color: "sand", sharingWith: space)
         try store.save(username: "dana", password: "snow", for: site("https://example.com"), in: personal)
         #expect(try store.allLogins(in: shared.dataStoreID).map(\.username) == ["dana"])
     }

@@ -130,10 +130,11 @@ enum Theme {
         Color(light: spaceHex(name), lightOpacity: 0.16, dark: spaceHex(name), darkOpacity: 0.14)
     }
 
-    /// The space row's one icon color: the active space's color, deepened
-    /// toward ink so it reads clearly on the tinted frame (half ink in light,
-    /// a third in dark). Every icon uses it, so the row never turns rainbow.
-    static func spaceIconInk(_ name: String) -> Color {
+    /// The space row's one color: the active space's color, deepened toward
+    /// ink so it reads clearly on the tinted frame (half ink in light, a
+    /// third in dark). The name and every dot use it, so the row never
+    /// turns rainbow.
+    static func spaceInk(_ name: String) -> Color {
         let hex = spaceHex(name)
         return Color(light: mix(hex, 0x241F1B, 0.5), dark: mix(hex, 0xF5F1EC, 0.35))
     }

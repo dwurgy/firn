@@ -182,7 +182,7 @@ struct ArcImportPlanTests {
 
 @MainActor
 struct ArcImportStoreTests {
-    private let personal = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let personal = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     @Test func importAddsSpacesWithTheirOwnTilesGroupsAndSignIns() throws {
         var file = ArcFile()
@@ -203,7 +203,7 @@ struct ArcImportStoreTests {
         store.openTab(URL(string: "https://already.example/")!)
         let colors = ["glacier", "sand", "sage", "heather"]
         let added = store.importFromArc(plan) { existing in
-            ("icon\(existing.count)", colors.first { c in !existing.contains { $0.color == c } }!)
+            colors.first { c in !existing.contains { $0.color == c } }!
         }
 
         #expect(store.spaces.map(\.name) == ["Personal", "Home", "Work", "Home Two"])
@@ -214,9 +214,8 @@ struct ArcImportStoreTests {
         #expect(added[0].dataStoreID == added[2].dataStoreID)
         #expect(added[0].dataStoreID != added[1].dataStoreID)
         #expect(!added.contains { $0.dataStoreID == personal.dataStoreID })
-        // Each picks the next free style, counting the spaces added before it.
+        // Each picks the next free color, counting the spaces added before it.
         #expect(added.map(\.color) == ["sand", "sage", "heather"])
-        #expect(added.map(\.icon) == ["icon1", "icon2", "icon3"])
 
         store.selectSpace(added[0])
         let tile = try #require(store.basecampTabs.first)
@@ -238,7 +237,7 @@ struct ArcImportStoreTests {
         file.container("pin", children: ["t1"])
         file.space("s1", "Home", pinned: "pin")
         let store = BrowserStore(spaces: [personal], makePage: { FakePage(dataStoreID: $0) })
-        store.importFromArc(try ArcImportPlan(file.data)) { _ in ("leaf", "sand") }
+        store.importFromArc(try ArcImportPlan(file.data)) { _ in "sand" }
 
         let restored = BrowserStore(
             restoring: store.session(sidebarWidth: 260, sidebarCollapsed: false),
@@ -267,7 +266,7 @@ struct ArcImportStoreTests {
         var seen: [[String]] = []
         let added = store.importFromArc(plan) { existing in
             seen.append(existing.map(\.name))
-            return ("leaf", "sand")
+            return "sand"
         }
 
         #expect(store.spaces.map(\.name) == ["Home", "Work"])
@@ -291,14 +290,14 @@ struct ArcImportStoreTests {
         grouped.openTab(URL(string: "https://already.example/")!)
         _ = grouped.newGroup(with: grouped.openTabs[0])
         #expect(!grouped.hasOnlyUntouchedSpace)
-        grouped.importFromArc(plan) { _ in ("leaf", "sand") }
+        grouped.importFromArc(plan) { _ in "sand" }
         #expect(grouped.spaces.map(\.name) == ["Personal", "Home"])
 
         // Two empty spaces: someone made the second, so nothing is replaced.
-        let work = Space(name: "Work", icon: "leaf", color: "sand", order: 1, dataStoreID: UUID())
+        let work = Space(name: "Work", color: "sand", order: 1, dataStoreID: UUID())
         let two = BrowserStore(spaces: [personal, work], makePage: { FakePage(dataStoreID: $0) })
         #expect(!two.hasOnlyUntouchedSpace)
-        two.importFromArc(plan) { _ in ("leaf", "sage") }
+        two.importFromArc(plan) { _ in "sage" }
         #expect(two.spaces.map(\.name) == ["Personal", "Work", "Home"])
         #expect(two.activeSpaceID == personal.id)
     }

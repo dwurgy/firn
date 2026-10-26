@@ -238,7 +238,7 @@ private struct Welcome: View {
     }
 
     private func saveName() {
-        store.updateSpace(space, name: name, icon: space.icon, color: space.color)
+        store.updateSpace(space, name: name, color: space.color)
     }
 
     private func next() {
@@ -255,10 +255,7 @@ private struct Welcome: View {
     /// steps. The snow and card turn to the first Arc space's color.
     private func bringArcOver() {
         guard let arcPlan, !importedArc else { return }
-        store.importFromArc(arcPlan) { existing in
-            let style = WindowModel.freeStyle(among: existing)
-            return (style.icon.rawValue, style.color)
-        }
+        store.importFromArc(arcPlan) { WindowModel.freeColor(among: $0) }
         importedArc = true
         // The space on screen is Arc's first now; finishing saves this name.
         name = space.name
@@ -415,14 +412,13 @@ private struct ArcStep: View {
     /// More than this, and the rest are "and 4 more spaces", so the card stays calm.
     private static let listedSpaces = 4
 
-    /// Picked as the import picks them: the next free color and icon, in order.
-    private var styles: [(icon: String, color: String)] {
+    /// Picked as the import picks them: the next free color, in order.
+    private var colors: [String] {
         var existing = imported || store.hasOnlyUntouchedSpace ? [] : store.spaces
         return plan.spaces.map { space in
-            let style = WindowModel.freeStyle(among: existing)
-            existing.append(Space(name: space.name, icon: style.icon.rawValue, color: style.color,
-                                  order: existing.count, dataStoreID: UUID()))
-            return (style.icon.rawValue, style.color)
+            let color = WindowModel.freeColor(among: existing)
+            existing.append(Space(name: space.name, color: color, order: existing.count, dataStoreID: UUID()))
+            return color
         }
     }
 
@@ -435,10 +431,14 @@ private struct ArcStep: View {
                         words: "Firn can bring over your spaces: favorites become Basecamp, and pinned tabs become groups.")
         }
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(zip(plan.spaces, styles).prefix(Self.listedSpaces).enumerated()), id: \.offset) { _, row in
-                let (space, style) = row
+            ForEach(Array(zip(plan.spaces, colors).prefix(Self.listedSpaces).enumerated()), id: \.offset) { _, row in
+                let (space, color) = row
                 HStack(spacing: 10) {
-                    SpaceIconView(icon: SpaceIcon(stored: style.icon), size: 16, color: Theme.spaceColor(style.color))
+                    // The space's color, as a dot like the bottom row's.
+                    Circle()
+                        .fill(Theme.spaceColor(color))
+                        .frame(width: 7, height: 7)
+                        .frame(width: 16)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(space.name)
@@ -468,8 +468,8 @@ private struct ArcStep: View {
     }
 }
 
-/// The first space: each space is its own browser. Its name, color, and
-/// icon change as they're picked, with the space sheet's own pickers; the
+/// The first space: each space is its own browser. Its name and color
+/// change as they're picked, with the space sheet's own pickers; the
 /// card and the snow behind follow the color.
 private struct SpaceStep: View {
     let store: BrowserStore
@@ -477,7 +477,6 @@ private struct SpaceStep: View {
     @FocusState private var nameFocused: Bool
 
     private var space: Space { store.activeSpace }
-    private var color: Color { Theme.spaceColor(space.color) }
 
     var body: some View {
         StepHeading(title: "Each space is its own browser",
@@ -485,15 +484,13 @@ private struct SpaceStep: View {
         VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
             section("Name") {
                 HStack(spacing: 8) {
-                    SpaceIconView(icon: SpaceIcon(stored: space.icon), size: 16, color: color)
-                        .accessibilityHidden(true)
                     TextField(Space.defaultName, text: $name)
                         .textFieldStyle(.plain)
                         .font(Theme.tabFont)
                         .focused($nameFocused)
                         .accessibilityLabel("Space name")
                         .onChange(of: name) { if name.count > 40 { name = String(name.prefix(40)) } }
-                        .onSubmit { store.updateSpace(space, name: name, icon: space.icon, color: space.color) }
+                        .onSubmit { store.updateSpace(space, name: name, color: space.color) }
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 30)
@@ -509,23 +506,11 @@ private struct SpaceStep: View {
                 HStack(spacing: 6) {
                     ForEach(Theme.spaceColorNames, id: \.self) { choice in
                         ColorSwatch(name: choice, isSelected: space.color == choice) {
-                            store.updateSpace(space, name: space.name, icon: space.icon, color: choice)
+                            store.updateSpace(space, name: space.name, color: choice)
                         }
                     }
                 }
                 .padding(.leading, -4)
-            }
-            section("Icon") {
-                // Two even rows of eight.
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
-                    ForEach(SpaceIcon.allCases, id: \.self) { icon in
-                        IconChoice(icon: icon, color: color, isSelected: SpaceIcon(stored: space.icon) == icon) {
-                            store.updateSpace(space, name: space.name, icon: icon.rawValue, color: space.color)
-                        }
-                    }
-                }
-                .fixedSize()
-                .padding(.leading, -6)
             }
         }
     }

@@ -140,10 +140,10 @@ public final class BrowserStore {
     /// shares another space's sign-ins, its own empty data store: signed
     /// out of everything.
     @discardableResult
-    public func addSpace(name: String, icon: String, color: String, sharingWith other: Space? = nil) -> Space {
+    public func addSpace(name: String, color: String, sharingWith other: Space? = nil) -> Space {
         let shared = other.flatMap { other in spaces.first { $0.id == other.id } }
         let space = Space(
-            name: Space.cleanName(name) ?? Space.defaultName, icon: icon, color: color,
+            name: Space.cleanName(name) ?? Space.defaultName, color: color,
             order: spaces.count, dataStoreID: shared?.dataStoreID ?? UUID(), lastChangedAt: now()
         )
         spaces.append(space)
@@ -165,11 +165,11 @@ public final class BrowserStore {
     /// rest are each separate. All start signed out, and every tab rests
     /// until clicked. If Firn has only its untouched first space, Arc's
     /// spaces replace it and the first of them is shown.
-    /// - Parameter style: A new space's icon and color, given the spaces
-    ///   there already are; the app picks the next free ones, as for any new space.
+    /// - Parameter color: A new space's color, given the spaces there
+    ///   already are; the app picks the next free one, as for any new space.
     @discardableResult
     public func importFromArc(
-        _ plan: ArcImportPlan, style: (_ existing: [Space]) -> (icon: String, color: String)
+        _ plan: ArcImportPlan, color: (_ existing: [Space]) -> String
     ) -> [Space] {
         let replacing = hasOnlyUntouchedSpace && !plan.spaces.isEmpty ? spaces.first : nil
         var dataStores: [String: UUID] = [:]
@@ -178,10 +178,10 @@ public final class BrowserStore {
             let dataStoreID = dataStores[imported.profile] ?? UUID()
             dataStores[imported.profile] = dataStoreID
             // The space being replaced doesn't count, so Arc's first space
-            // gets the first style, as a first space would.
-            let (icon, color) = style(spaces.filter { $0.id != replacing?.id })
+            // gets the first color, as a first space would.
+            let spaceColor = color(spaces.filter { $0.id != replacing?.id })
             let space = Space(
-                name: imported.name, icon: icon, color: color,
+                name: imported.name, color: spaceColor,
                 order: spaces.count, dataStoreID: dataStoreID, lastChangedAt: now()
             )
             spaces.append(space)
@@ -237,12 +237,11 @@ public final class BrowserStore {
         selectSpace(spaces[((current + offset) % count + count) % count])
     }
 
-    /// Changes a space's name, icon, and color. An empty name keeps the old one.
-    public func updateSpace(_ space: Space, name: String, icon: String, color: String) {
+    /// Changes a space's name and color. An empty name keeps the old one.
+    public func updateSpace(_ space: Space, name: String, color: String) {
         guard let index = spaces.firstIndex(where: { $0.id == space.id }) else { return }
         var updated = spaces[index]
         updated.name = Space.cleanName(name) ?? updated.name
-        updated.icon = icon
         updated.color = color
         guard updated != spaces[index] else { return }
         updated.lastChangedAt = now()

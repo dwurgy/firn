@@ -5,7 +5,7 @@ import Testing
 /// Turning blocking off for one site, per space (CLAUDE.md, ad and tracker blocking step 3).
 @MainActor
 struct BlockingSiteTests {
-    private let work = Space(name: "Work", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let work = Space(name: "Work", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func url(_ string: String) -> URL { URL(string: string)! }
 
@@ -38,7 +38,7 @@ struct BlockingSiteTests {
     @Test func eachSpaceKeepsItsOwnEvenWhenSharing() {
         let store = BrowserStore(spaces: [work], makePage: { FakePage(dataStoreID: $0) })
         store.setBlocksContent(false, on: url("https://example.com/"))
-        let shared = store.addSpace(name: "Shared", icon: "leaf", color: "sage", sharingWith: work)
+        let shared = store.addSpace(name: "Shared", color: "sage", sharingWith: work)
         #expect(store.activeSpaceID == shared.id)
         #expect(store.blocksContent(on: url("https://example.com/")))
     }
@@ -46,7 +46,7 @@ struct BlockingSiteTests {
     @Test func pagesAskTheirOwnSpace() throws {
         let store = BrowserStore(spaces: [work], makePage: { FakePage(dataStoreID: $0) })
         let tab = store.openTab(url("https://example.com/"))
-        let other = store.addSpace(name: "Personal", icon: "leaf", color: "sage")
+        let other = store.addSpace(name: "Personal", color: "sage")
         store.openLookout(url("https://example.com/"))
         let tabAsks = try #require(tab.page?.blocksContent)
         let lookoutAsks = try #require(store.lookout?.page.blocksContent)

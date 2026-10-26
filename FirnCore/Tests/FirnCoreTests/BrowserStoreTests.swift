@@ -69,7 +69,7 @@ final class FakePage: PageController {
 
 @MainActor
 struct BrowserStoreTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private func makeStore() -> BrowserStore {
         BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) })

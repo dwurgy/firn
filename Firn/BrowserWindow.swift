@@ -223,19 +223,15 @@ final class WindowModel {
         focusPage()
     }
 
-    /// The icon a new space starts on, picked the same way as its color.
-    var freeSpaceIcon: SpaceIcon { Self.freeStyle(among: store.spaces).icon }
-
     /// The first space color no space has yet (or, with all taken, the next in turn).
-    var freeSpaceColor: String { Self.freeStyle(among: store.spaces).color }
+    var freeSpaceColor: String { Self.freeColor(among: store.spaces) }
 
-    /// A new space's icon and color, given `spaces`; an import asks once
-    /// per space, so each one it adds takes the next.
-    static func freeStyle(among spaces: [Space]) -> (icon: SpaceIcon, color: String) {
+    /// A new space's color, given `spaces`; an import asks once per space,
+    /// so each one it adds takes the next.
+    static func freeColor(among spaces: [Space]) -> String {
         let taken = Set(spaces.map(\.color))
         let names = Theme.spaceColorNames
-        let color = names.first { !taken.contains($0) } ?? names[spaces.count % names.count]
-        return (SpaceIcon.next(after: spaces.map(\.icon)), color)
+        return names.first { !taken.contains($0) } ?? names[spaces.count % names.count]
     }
 
     /// File › Import from Arc…: reads Arc's file and shows the sheet (`ArcImportFlow`).

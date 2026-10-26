@@ -90,7 +90,6 @@ enum FirstSpace {
     static let space = Space(
         id: UUID(uuidString: "0B8E5D2C-7A41-4F6E-9D3B-5C2A1E8F7B64")!,
         name: "Personal",
-        icon: SpaceIcon.default.rawValue,
         color: "glacier",
         order: 0,
         dataStoreID: UUID(uuidString: "6F1C2A4E-3B7D-4E8A-9C5F-2D1E0B7A9F31")!

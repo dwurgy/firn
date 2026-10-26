@@ -6,7 +6,7 @@ import Testing
 /// move out of the way, and come back with a click.
 @MainActor
 struct DriftTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     /// A clock the test moves by whole days, starting at noon so no day is
     /// ever skipped or repeated.
@@ -170,7 +170,7 @@ struct DriftTests {
         let store = makeStore(clock)
         store.driftAfter = .oneDay
         store.openTab(url("a"))
-        let work = store.addSpace(name: "Work", icon: "leaf", color: "sage")
+        let work = store.addSpace(name: "Work", color: "sage")
         store.openTab(url("w"))
         use(store, clock, days: 1)
         #expect(store.activeSpaceID == work.id)
@@ -234,7 +234,7 @@ struct DriftTests {
         let restored = try quitAndReopen(store, clock)
         #expect(restored.hasUnseenTidied)
         // Only in its own space.
-        let work = restored.addSpace(name: "Work", icon: "leaf", color: "sage")
+        let work = restored.addSpace(name: "Work", color: "sage")
         #expect(!restored.hasUnseenTidied)
         restored.selectSpace(at: 0)
         restored.markTidiedSeen()
@@ -293,7 +293,7 @@ struct DriftTests {
         store.reopen(store.recentlyClosed[1])
         #expect(store.activeTabID == a.id)
         #expect(store.recentlyClosed.map(\.title) == ["b.example"])
-        store.addSpace(name: "Work", icon: "leaf", color: "sage")
+        store.addSpace(name: "Work", color: "sage")
         #expect(store.recentlyClosed.isEmpty)
     }
 

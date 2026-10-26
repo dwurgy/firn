@@ -6,7 +6,7 @@ import Testing
 /// list, never drifting, and Basecamp tiles never leaving Basecamp.
 @MainActor
 struct SplitViewTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private final class Clock {
         var date = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 2, hour: 12))!
@@ -63,7 +63,7 @@ struct SplitViewTests {
         let store = makeStore()
         let a = store.openTab(url("a"))
         #expect(store.openSplit(a, beside: a) == nil)
-        let other = store.addSpace(name: "Work", icon: "work", color: "sand")
+        let other = store.addSpace(name: "Work", color: "sand")
         store.selectSpace(other)
         let b = store.openTab(url("b"))
         #expect(store.openSplit(b, beside: a) == nil)

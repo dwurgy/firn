@@ -6,7 +6,7 @@ import Testing
 /// and picks up where it was when shown again.
 @MainActor
 struct SleepTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
 
     private final class Clock {
         var date = Date(timeIntervalSinceReferenceDate: 0)
@@ -93,7 +93,7 @@ struct SleepTests {
     @Test func stoppingSharingForgetsASleepingTabsPlace() async {
         let clock = Clock()
         let store = makeStore(clock)
-        let shared = store.addSpace(name: "Work", icon: "leaf", color: "sand", sharingWith: space)
+        let shared = store.addSpace(name: "Work", color: "sand", sharingWith: space)
         let a = store.openTab(url("a"))
         (a.page as? FakePage)?.url = url("a/page-two")
         store.openTab(url("b"))

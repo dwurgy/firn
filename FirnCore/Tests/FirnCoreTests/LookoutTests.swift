@@ -4,8 +4,8 @@ import Testing
 
 @MainActor
 struct LookoutTests {
-    private let space = Space(name: "Personal", icon: "leaf", color: "glacier", order: 0, dataStoreID: UUID())
-    private let work = Space(name: "Work", icon: "work", color: "sand", order: 1, dataStoreID: UUID())
+    private let space = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID())
+    private let work = Space(name: "Work", color: "sand", order: 1, dataStoreID: UUID())
 
     private func makeStore() -> BrowserStore {
         BrowserStore(spaces: [space, work], makePage: { FakePage(dataStoreID: $0) })
@@ -86,7 +86,7 @@ struct LookoutTests {
 
     @Test func stoppingSharingClosesIt() {
         let store = makeStore()
-        let shared = store.addSpace(name: "Shared", icon: "home", color: "sage", sharingWith: space)
+        let shared = store.addSpace(name: "Shared", color: "sage", sharingWith: space)
         store.openLookout(url("a"))
         store.stopSharing(shared)
         #expect(store.lookout == nil)

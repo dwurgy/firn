@@ -4,8 +4,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The space's downloads, at the right of the space row. Shown only while
-/// the space has some; otherwise its spot stays empty, so the space icons
-/// don't shift. While files arrive, a thin ring around the arrow fills.
+/// the space has some; otherwise its spot stays empty, so the overflow
+/// doesn't shift. While files arrive, a thin ring around the arrow fills.
 /// The popover opens on its own as a download starts in the space on screen.
 /// As a file arrives, the arrow dips and settles, and frost forms over the
 /// button in the space's color, holds, and thaws, like the tidy pill.

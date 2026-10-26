@@ -70,7 +70,7 @@ struct SettingsView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Theme.page.ignoresSafeArea())
-            .navigationTitle(pane.title)
+            .modifier(FrauncesWindowTitle(title: pane.title))
             // An empty toolbar shrinks to a thin title bar, with the traffic
             // lights in the corner; one invisible item keeps it full height,
             // as the History window's search field does there.

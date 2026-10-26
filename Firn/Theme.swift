@@ -256,9 +256,9 @@ enum Theme {
     static let labelFont = Font.system(size: 12)
     static let groupNameFont = Font.system(size: 12, weight: .medium)
     static let hintFont = Font.system(size: 11)
-    /// Panel titles. Fraunces at 22pt once it's bundled (Phase 6); the
-    /// system font until then.
-    static let panelTitleFont = Font.system(size: 20, weight: .semibold)
+    /// Panel titles (sheets, and the Settings and History windows' titles):
+    /// Fraunces at 22pt.
+    @MainActor static let panelTitleFont = fraunces(22, weight: 360)
 
     /// Fraunces, for Firn's few brand moments: soft corners on, wonky letters
     /// off, optical size following the size, as in the brand. `weight` is

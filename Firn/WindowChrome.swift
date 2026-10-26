@@ -371,3 +371,70 @@ struct PointerTracker: NSViewRepresentable {
         }
     }
 }
+
+/// A window's title in Fraunces, as the Electron app's Settings and History
+/// had it. macOS draws window titles in the system font and can't be told
+/// otherwise, so the system title is hidden from the toolbar and Firn draws
+/// its own in the same spot. The window keeps its real title (from
+/// `.navigationTitle`) for the Window menu, Mission Control, and VoiceOver.
+struct FrauncesWindowTitle: ViewModifier {
+    let title: String
+    var subtitle: String?
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(title)
+            .navigationSubtitle(subtitle ?? "")
+            .modifier(HidesSystemTitle())
+            .toolbar {
+                if #available(macOS 26, *) {
+                    // No glass capsule around words.
+                    ToolbarItem(placement: .navigation) { label }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .navigation) { label }
+                }
+            }
+    }
+
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(Theme.panelTitleFont)
+                .foregroundStyle(Theme.ink)
+            if let subtitle {
+                Text(subtitle)
+                    .font(Theme.hintFont)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .padding(.leading, 4)
+        .fixedSize()
+        // The window's title already says it; this is the same words drawn.
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HidesSystemTitle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.toolbar(removing: .title)
+        } else {
+            content.background(TitleHider())
+        }
+    }
+}
+
+/// macOS 14 has no SwiftUI way to hide a window's title, so AppKit does it.
+private struct TitleHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { HiderView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class HiderView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
+        }
+    }
+}

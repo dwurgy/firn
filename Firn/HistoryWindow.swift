@@ -49,8 +49,7 @@ struct HistoryWindow: View {
             .frame(minWidth: 460, minHeight: 360)
             .safeAreaInset(edge: .bottom, spacing: 0) { footer }
             .modifier(PageBackground())
-            .navigationTitle("History")
-            .navigationSubtitle(space.name)
+            .modifier(FrauncesWindowTitle(title: "History", subtitle: space.name))
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
             .sheet(item: $clearing) { space in
                 ClearHistorySheet(space: space, sharing: store.spacesSharingHistory(with: space)) { range in

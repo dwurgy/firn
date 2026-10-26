@@ -2057,8 +2057,8 @@ private struct GroupCard<Rows: View>: View {
                 nameField
             } else {
                 Text(group.name)
-                    .font(Theme.groupNameFont)
-                    .foregroundStyle(Theme.muted)
+                    .font(Theme.groupHeaderFont)
+                    .foregroundStyle(Theme.groupName)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
@@ -2095,7 +2095,7 @@ private struct GroupCard<Rows: View>: View {
     private var nameField: some View {
         TextField("Group name", text: $draft)
             .textFieldStyle(.plain)
-            .font(Theme.groupNameFont)
+            .font(Theme.groupHeaderFont)
             .foregroundStyle(Theme.ink)
             .focused($nameFocused)
             .onSubmit(finishRenaming)

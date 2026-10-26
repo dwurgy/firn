@@ -11,6 +11,9 @@ enum Theme {
     static let page = Color(light: 0xFBFAF8, dark: 0x2B2826)
     static let ink = Color(light: 0x241F1B, dark: 0xF5F1EC)
     static let muted = Color(light: 0x5E564E, dark: 0xD4CDC5)
+    /// A group card's name: ink in dark; in light, a step softer than ink,
+    /// since dark semibold on a pale card reads heavier (David, 2026-10-26).
+    static let groupName = Color(light: 0x3B342E, dark: 0xF5F1EC)
     static let faint = Color(light: 0x9D9389, dark: 0x958D85)
     static let frost = Color(light: 0x82A8BE, dark: 0xA0C4D6, opacity: 0.45)
     /// The system accent (radio buttons, switches, focus): a slightly more
@@ -256,6 +259,9 @@ enum Theme {
     static let tabFont = Font.system(size: 13)
     static let labelFont = Font.system(size: 12)
     static let groupNameFont = Font.system(size: 12, weight: .medium)
+    /// A group card's name: the tabs' size, a step heavier, in ink, so it
+    /// reads as the card's title (as Dia's does).
+    static let groupHeaderFont = Font.system(size: 13, weight: .semibold)
     static let hintFont = Font.system(size: 11)
     /// Panel titles (sheets, and the Settings and History windows' titles):
     /// Fraunces at 22pt.

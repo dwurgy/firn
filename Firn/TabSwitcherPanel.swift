@@ -8,13 +8,19 @@ import SwiftUI
 /// only a modifier change, which SwiftUI's shortcuts never report.
 struct TabSwitchKeys: NSViewRepresentable {
     let window: WindowModel
+    @Environment(GlassSheetPresenter.self) private var presenter: GlassSheetPresenter?
 
     func makeNSView(context: Context) -> KeyView { KeyView() }
 
-    func updateNSView(_ view: KeyView, context: Context) { view.model = window }
+    func updateNSView(_ view: KeyView, context: Context) {
+        view.model = window
+        view.sheetShown = presenter?.shown != nil || window.showsSpaceSheet
+    }
 
     final class KeyView: NSView {
         var model: WindowModel?
+        /// A sheet is over the page: ⌃Tab waits, so no tab changes behind it.
+        var sheetShown = false
         private var monitor: Any?
         private var resignObserver: (any NSObjectProtocol)?
 
@@ -51,7 +57,7 @@ struct TabSwitchKeys: NSViewRepresentable {
             }
             switch event.keyCode {
             case 48 where flags.subtracting(.shift) == .control: // Tab
-                model.pressTabSwitch(backward: flags.contains(.shift))
+                if !sheetShown { model.pressTabSwitch(backward: flags.contains(.shift)) }
                 return true
             case 53 where switching: model.cancelTabSwitch() // Esc
             case 36, 76: if switching { model.finishTabSwitch() } // Return, Enter
@@ -184,7 +190,7 @@ private struct TabSwitcherPanel: View {
         }
         .animation(.easeOut(duration: 0.12), value: isPicked)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(tab.title)
+        .accessibilityLabel(tab.title.isEmpty ? "New Tab" : tab.title)
         .accessibilityAddTraits(isPicked ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { window.pickTabSwitch(tab.id); window.finishTabSwitch() }
     }

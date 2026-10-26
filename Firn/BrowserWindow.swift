@@ -679,6 +679,7 @@ final class WindowModel {
             try? await Task.sleep(for: .seconds(0.12))
             guard !Task.isCancelled, tabSwitcher != nil else { return }
             showsTabSwitcher = true
+            announceTabSwitchPick()
         }
     }
 
@@ -689,7 +690,21 @@ final class WindowModel {
         store.recentRows.filter { $0.page != nil || tabPictures[$0.id] != nil || $0.id == store.activeTabID }
     }
 
-    func moveTabSwitch(by offset: Int) { tabSwitcher?.move(by: offset) }
+    func moveTabSwitch(by offset: Int) {
+        tabSwitcher?.move(by: offset)
+        announceTabSwitchPick()
+    }
+
+    /// VoiceOver hears the pick, "Title, 2 of 4", since keys stay with the
+    /// page while ⌃ is held and the panel never takes focus.
+    private func announceTabSwitchPick() {
+        guard showsTabSwitcher, let switcher = tabSwitcher,
+              let tab = store.tabs.first(where: { $0.id == switcher.pickedID }) else { return }
+        let title = tab.title.isEmpty ? "New Tab" : tab.title
+        AccessibilityNotification.Announcement(
+            "\(title), \(switcher.picked + 1) of \(switcher.tabIDs.count)"
+        ).post()
+    }
 
     /// The pointer over a card in the panel.
     func pickTabSwitch(_ id: UUID) { tabSwitcher?.pick(id) }
@@ -700,6 +715,8 @@ final class WindowModel {
         endTabSwitch()
         guard let tab = store.tabs.first(where: { $0.id == switcher.pickedID }),
               tab.spaceID == store.activeSpaceID else { return }
+        // The command bar belonged to the tab left behind.
+        closeCommandBar(focusingPage: false)
         store.select(tab)
         focusPage()
     }

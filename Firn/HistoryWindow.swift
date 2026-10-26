@@ -181,7 +181,9 @@ struct HistoryWindow: View {
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Double-click or press Return to open it in a new tab; press Delete to remove it")
+        // VoiceOver's Actions menu: the same two things a click reaches.
+        .accessibilityAction(named: "Open in New Tab") { open([visit.id]) }
+        .accessibilityAction(named: "Delete") { delete([visit.id]) }
     }
 
     /// "Today", "Yesterday", or the date ("Thursday, October 22"; the year

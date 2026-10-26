@@ -135,6 +135,17 @@ struct HistoryRecordingTests {
         #expect(await store.historyVisits(in: personal).map(\.title) == ["Home"])
     }
 
+    @Test func deletingASpaceErasesItsHistoryAfterVisitsBeingSaved() async {
+        let (store, history) = makeStores()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await history.record(url("https://home.example/"), title: "Home", in: personal.dataStoreID)
+        let tab = store.openTab(url("https://a.example/"))
+        page(tab).commit(url("https://a.example/"), title: "A") // not yet saved
+        store.deleteSpace(work)
+        await store.history?.settled()
+        #expect(await history.storedIDs() == [personal.dataStoreID])
+    }
+
     @Test func sharedSpacesShareOneHistory() async {
         let shared = Space(name: "Side", icon: "leaf", color: "sand", order: 2, dataStoreID: work.dataStoreID)
         let history = HistoryStore(directory: folder)

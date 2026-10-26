@@ -300,6 +300,9 @@ public final class BrowserStore {
         renumberSpaces()
         if !spaces.contains(where: { $0.dataStoreID == deleted.dataStoreID }) {
             removeData(deleted.dataStoreID)
+            // After any visit still being saved, so none lands once it's erased.
+            let dataStoreID = deleted.dataStoreID
+            history?.enqueue { await $0.removeAll(in: dataStoreID) }
         }
     }
 

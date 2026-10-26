@@ -20,7 +20,6 @@ struct FirnApp: App {
             removeData: { id in
                 BrowserEngine.removeData(for: id)
                 Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
-                Task.detached(priority: .utility) { await HistoryStore.standard.removeAll(in: id) }
             },
             passwords: .keychain,
             history: .standard

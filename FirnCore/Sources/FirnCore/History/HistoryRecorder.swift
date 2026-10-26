@@ -55,13 +55,19 @@ final class HistoryRecorder {
     /// Hands `work` (a delete) to the store after everything before it, so a
     /// visit still being saved can't land after the history was cleared.
     func perform(_ work: @escaping @Sendable (HistoryStore) async -> Void) async {
+        await enqueue(work).value
+    }
+
+    /// Like `perform`, without waiting for it.
+    @discardableResult
+    func enqueue(_ work: @escaping @Sendable (HistoryStore) async -> Void) -> Task<Void, Never> {
         let (store, previous) = (store, queue)
         let task = Task {
             await previous?.value
             await work(store)
         }
         queue = task
-        await task.value
+        return task
     }
 
     /// Waits for everything handed to the store so far (for tests).

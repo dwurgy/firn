@@ -190,6 +190,8 @@ private struct TabsSettings: View {
                     Text("At the bottom").tag(NewTabPlacement.bottom)
                 }
                 .pickerStyle(.radioGroup)
+                // Radio buttons draw in the system's blue unless tinted.
+                .tint(Theme.accent)
             } footer: {
                 SettingsFootnote("The New tab button sits there too. Tabs taken out of a group arrive there as well.")
             }

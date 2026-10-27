@@ -222,6 +222,31 @@ final class WindowModel {
         store.openTab(url)
     }
 
+    /// Help › Report a Problem…: GitHub's new-issue form as a new tab, with
+    /// only Firn's and macOS's versions filled in (nothing from the person's
+    /// tabs or spaces). Nothing is sent until they submit it themselves.
+    func reportProblem() {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        var form = URLComponents(string: "https://github.com/dwurgy/firn/issues/new")!
+        form.queryItems = [URLQueryItem(name: "body", value: """
+            **What happened?**
+
+
+            **What did you expect?**
+
+
+            ---
+            Firn \(version) (\(build)), macOS \(os)
+            """)]
+        guard let url = form.url else { return }
+        closeCommandBar(focusingPage: false)
+        store.closeLookout()
+        store.openTab(url)
+    }
+
     /// Space Settings…: Settings › Spaces, with `space` picked. The caller
     /// opens the Settings window.
     func showSpaceSettings(for space: Space) {
@@ -1753,6 +1778,7 @@ struct BrowserCommands: Commands {
         CommandGroup(replacing: .help) {
             Button("Show Welcome Again") { window.showWelcome() }
                 .disabled(window.showsWelcome)
+            Button("Report a Problem…") { window.reportProblem() }
         }
         CommandGroup(before: .windowArrangement) {
             // Held, ⌃Tab shows the recent tabs to pick from (`TabSwitchKeys`);

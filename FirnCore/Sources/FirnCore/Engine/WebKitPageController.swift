@@ -3,6 +3,7 @@ import Observation
 import WebKit
 #if os(macOS)
 import AppKit
+import UniformTypeIdentifiers
 #endif
 
 /// A page backed by WKWebView. Everything WebKit-specific stays in this file
@@ -39,9 +40,9 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var iconCandidates: [URL] = []
     @ObservationIgnored private var iconTask: Task<Void, Never>?
     @ObservationIgnored private var iconRecheckPending = false
-    /// When "Open in Lookout" was chosen from a link's menu, so the new
-    /// window WebKit then asks for becomes a Lookout instead.
-    @ObservationIgnored private var lookoutChosenAt: TimeInterval?
+    /// A choice from the page's right-click menu, and when, so the new
+    /// window WebKit then asks for does that instead (see `FirnWebView`).
+    @ObservationIgnored private var menuChoice: (choice: PageMenuChoice, at: TimeInterval)?
     /// Alerts, confirms, and prompts shown since this page last changed, so
     /// one that keeps asking can be told to stop.
     @ObservationIgnored private var dialogsShown = 0
@@ -598,6 +599,24 @@ extension WebKitPageController {
     }
 }
 
+/// What a Firn item in the page's right-click menu does with the address
+/// WebKit hands to the new window it asks for.
+private enum PageMenuChoice {
+    case lookout
+    case saveAs
+}
+
+/// A Firn menu item's choice, and WebKit's item it runs to learn the address.
+private final class PageMenuItem: NSObject {
+    let choice: PageMenuChoice
+    let original: NSMenuItem
+
+    init(choice: PageMenuChoice, original: NSMenuItem) {
+        self.choice = choice
+        self.original = original
+    }
+}
+
 /// WKWebView sends keys to the page first, and when the page doesn't use
 /// ⌃Tab, AppKit takes it as "next field" and focuses the address bar, so the
 /// menu's Show Next Tab only worked every other press. Tab switching goes
@@ -616,24 +635,46 @@ private final class FirnWebView: WKWebView {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// Adds "Open in Lookout" above WebKit's "Open Link in New Window". WebKit
-    /// doesn't say which link the menu is for, so the item runs WebKit's own
-    /// and marks the new window it asks for as a Lookout (see `lookoutChosen`).
+    /// Firn's items in the page's menu. WebKit doesn't say which link or
+    /// image the menu is for, so each runs WebKit's own "Open … in New
+    /// Window" and marks the new window it asks for as Firn's choice (see
+    /// `chose`): "Open in Lookout" goes above Open Link in New Window, and
+    /// "Save Link As…" and "Save Image As…" take the place of WebKit's
+    /// download items, so Firn asks where to save, as Dia does.
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
-        guard page?.onRequest != nil, let index = menu.items.firstIndex(where: {
-            $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow"
-        }) else { return }
-        let item = NSMenuItem(title: "Open in Lookout", action: #selector(openInLookout(_:)), keyEquivalent: "")
-        item.target = self
-        item.representedObject = menu.items[index]
-        menu.insertItem(item, at: index)
+        guard page?.onRequest != nil else { return }
+        func item(_ name: String) -> NSMenuItem? {
+            menu.items.first { $0.identifier?.rawValue == "WKMenuItemIdentifier" + name }
+        }
+        if let openLink = item("OpenLinkInNewWindow") {
+            menu.insertItem(choice("Open in Lookout", .lookout, runs: openLink), at: menu.index(of: openLink))
+            if let download = item("DownloadLinkedFile") {
+                replace(download, with: choice("Save Link As…", .saveAs, runs: openLink), in: menu)
+            }
+        }
+        if let openImage = item("OpenImageInNewWindow"), let download = item("DownloadImage") {
+            replace(download, with: choice("Save Image As…", .saveAs, runs: openImage), in: menu)
+        }
     }
 
-    @objc private func openInLookout(_ sender: NSMenuItem) {
-        guard let original = sender.representedObject as? NSMenuItem, let action = original.action else { return }
-        page?.lookoutChosen()
-        NSApp.sendAction(action, to: original.target, from: original)
+    private func choice(_ title: String, _ choice: PageMenuChoice, runs original: NSMenuItem) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(runChoice(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = PageMenuItem(choice: choice, original: original)
+        return item
+    }
+
+    private func replace(_ old: NSMenuItem, with new: NSMenuItem, in menu: NSMenu) {
+        let index = menu.index(of: old)
+        menu.removeItem(at: index)
+        menu.insertItem(new, at: index)
+    }
+
+    @objc private func runChoice(_ sender: NSMenuItem) {
+        guard let item = sender.representedObject as? PageMenuItem, let action = item.original.action else { return }
+        page?.chose(item.choice)
+        NSApp.sendAction(action, to: item.original.target, from: item.original)
     }
     #endif
 }
@@ -767,13 +808,22 @@ extension WebKitPageController: WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         // Taken on every new window, so a stale choice can't be used later.
-        if let chosen = lookoutChosenAt {
-            lookoutChosenAt = nil
-            if ProcessInfo.processInfo.systemUptime - chosen < 1, let onRequest,
-               let url = navigationAction.request.url, WebAddress.isWebURL(url) {
-                // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.
-                onRequest(.openInLookout(url))
-                return nil
+        if let chosen = menuChoice {
+            menuChoice = nil
+            if ProcessInfo.processInfo.systemUptime - chosen.at < 1, let url = navigationAction.request.url {
+                switch chosen.choice {
+                case .lookout:
+                    if let onRequest, WebAddress.isWebURL(url) {
+                        // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.
+                        onRequest(.openInLookout(url))
+                        return nil
+                    }
+                case .saveAs:
+                    #if os(macOS)
+                    saveAs(url)
+                    #endif
+                    return nil
+                }
             }
         }
         guard let onRequest, Self.mayOpenInNewTab(navigationAction.request.url) else { return nil }
@@ -793,10 +843,48 @@ extension WebKitPageController: WKUIDelegate {
         return page.webView
     }
 
-    /// "Open in Lookout" was chosen; WebKit asks for the new window next.
-    fileprivate func lookoutChosen() {
-        lookoutChosenAt = ProcessInfo.processInfo.systemUptime
+    /// A Firn item in the page's menu was chosen; WebKit asks for the new window next.
+    fileprivate func chose(_ choice: PageMenuChoice) {
+        menuChoice = (choice, ProcessInfo.processInfo.systemUptime)
     }
+
+    #if os(macOS)
+    /// "Save Image As…" or "Save Link As…": asks where first, under a name
+    /// taken from the address, then downloads it with this space's sign-ins.
+    /// It joins the space's downloads like any other.
+    private func saveAs(_ url: URL) {
+        guard ["http", "https", "data", "blob"].contains(url.scheme?.lowercased() ?? ""),
+              let store = webView.configuration.websiteDataStore.identifier,
+              let window = webView.window, !isShowingPanel else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = DownloadName.clean(Self.saveName(for: url))
+        isShowingPanel = true
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            self.isShowingPanel = false
+            guard response == .OK, let destination = panel.url else { return }
+            self.webView.startDownload(using: URLRequest(url: url)) { download in
+                WebKitDownload.follow(download, dataStoreID: store, to: destination)
+            }
+        }
+    }
+
+    /// The address's last part, or for a data: address "Download" with the
+    /// extension its type names. The page chose it, so it's cleaned after.
+    private static func saveName(for url: URL) -> String {
+        switch url.scheme?.lowercased() {
+        case "data":
+            let type = url.absoluteString.dropFirst("data:".count).prefix { $0 != ";" && $0 != "," }
+            let ext = UTType(mimeType: String(type))?.preferredFilenameExtension
+            return ext.map { "Download.\($0)" } ?? "Download"
+        case "blob":
+            return "Download"
+        default:
+            let last = url.lastPathComponent
+            return last.isEmpty || last == "/" ? (url.host() ?? "Download") : last
+        }
+    }
+    #endif
 
     /// `window.close()`. Honored only for popups, so an ordinary tab can't
     /// close itself out from under someone.

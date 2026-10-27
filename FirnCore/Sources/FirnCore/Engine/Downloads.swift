@@ -96,6 +96,18 @@ public final class Downloads {
         return url
     }
 
+    /// A place picked in a save panel, which already asked before replacing
+    /// a file there. Nil if a download in progress is headed there too.
+    func destination(for download: Download, chosen url: URL) -> URL? {
+        guard !reserved.contains(url) else { return nil }
+        // WebKit won't write over a file; the person chose to replace it.
+        try? FileManager.default.removeItem(at: url)
+        reserved.insert(url)
+        download.fileName = url.lastPathComponent
+        download.fileURL = url
+        return url
+    }
+
     fileprivate func release(_ download: Download) {
         if let url = download.fileURL { reserved.remove(url) }
     }

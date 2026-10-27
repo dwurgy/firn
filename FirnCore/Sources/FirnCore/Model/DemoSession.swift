@@ -65,7 +65,8 @@ public enum DemoSession {
         add(pumpkinBread, to: personal, group: cooking, lastActiveAt: minutesAgo(40))
         add(galette, to: personal, group: cooking, lastActiveAt: minutesAgo(35))
         add(firnArticle, to: personal, lastActiveAt: minutesAgo(20))
-        let personalTab = add(craterLake, to: personal, lastActiveAt: now)
+        add(craterLake, to: personal, lastActiveAt: minutesAgo(10))
+        let personalTab = add(snowPeak, to: personal, lastActiveAt: now)
         for (index, page) in [glacierArticle, mountHood, ciderCaramels].enumerated() {
             add(page, to: personal, place: .drifted, lastActiveAt: daysAgo(12 + index), driftedAt: daysAgo(2 + index))
         }
@@ -104,7 +105,7 @@ public enum DemoSession {
         // History: the space's pages, visited on a believable rhythm over
         // the last 14 days (everyday sites most days, the rest now and then).
         let pages: [(Space, [Page], [Page])] = [
-            (personal, [gmail, youtube, github, appleMusic], [pumpkinBread, galette, firnArticle, craterLake, glacierArticle, mountHood, ciderCaramels]),
+            (personal, [gmail, youtube, github, appleMusic], [pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood, ciderCaramels]),
             (work, [calendar, slack, notion], [guidelines, reviewGuidelines, materials, firnSite]),
             (trip, [], [sisters, smithRock, sistersCoffee, map, weather]),
         ]
@@ -181,6 +182,10 @@ public enum DemoSession {
     static let craterLake = Page(
         "Crater Lake National Park (U.S. National Park Service)", "https://www.nps.gov/crla/index.htm",
         icons: ["https://www.nps.gov/favicon.ico"])
+    // The hero shot (David's pick). Its only icon is a versioned theme file,
+    // so none here: it's the tab on screen and gets its icon as it loads.
+    static let snowPeak = Page(
+        "Snow Peak USA - Japanese-Designed Camping Gear & Apparel | Snow Peak", "https://www.snowpeak.com/", icons: [])
     static let glacierArticle = Page("Glacier - Wikipedia", "https://en.wikipedia.org/wiki/Glacier", icons: firnArticle.icons.map(\.absoluteString))
     static let mountHood = Page("Mount Hood - Wikipedia", "https://en.wikipedia.org/wiki/Mount_Hood", icons: firnArticle.icons.map(\.absoluteString))
     static let ciderCaramels = Page(
@@ -223,7 +228,7 @@ public enum DemoSession {
         icons: ["https://forecast.weather.gov/favicon.ico"])
 
     static let allPages = [
-        gmail, github, youtube, appleMusic, pumpkinBread, galette, firnArticle, craterLake, glacierArticle, mountHood,
+        gmail, github, youtube, appleMusic, pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood,
         ciderCaramels, calendar, slack, notion, guidelines, reviewGuidelines, materials, firnSite,
         sisters, smithRock, sistersCoffee, map, weather,
     ]

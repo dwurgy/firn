@@ -35,7 +35,7 @@ struct DemoSessionTests {
         #expect(store.tabs.filter { $0.place == .drifted }.allSatisfy { $0.spaceID == personal })
         #expect(store.tabs.count { $0.place == .drifted } == 3)
         #expect(store.activeSpaceID == personal)
-        #expect(store.activeTab?.url?.host() == "www.nps.gov")
+        #expect(store.activeTab?.url?.host() == "www.snowpeak.com")
     }
 
     @Test func nothingDriftsOrExpiresAtLaunch() {
@@ -45,10 +45,16 @@ struct DemoSessionTests {
     }
 
     @Test func everyPageIsHttpsWithAnIcon() {
+        // A tab on screen at launch loads, so it gets its icon from the page.
+        let session = DemoSession.make(now: Date()).session
+        let window = session.window
+        let onScreen = Set(([window.activeTabID] + Array(window.spaceTabIDs.values)).compactMap { id in
+            session.tabs.first { $0.id == id }?.url?.host()
+        })
         for page in DemoSession.allPages {
             #expect(page.url.scheme == "https", "\(page.url)")
             let host = page.url.host() ?? ""
-            #expect(!DemoSession.iconAddresses(for: host).isEmpty, "\(host)")
+            #expect(onScreen.contains(host) || !DemoSession.iconAddresses(for: host).isEmpty, "\(host)")
             #expect(DemoSession.iconAddresses(for: host).allSatisfy { $0.scheme == "https" })
         }
     }

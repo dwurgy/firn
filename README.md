@@ -11,6 +11,11 @@ Privacy, simplicity, calm, and beauty.<br>
 
 ---
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/01-hero-dark.png">
+  <img src="docs/screenshots/01-hero-light.png" alt="Firn's window: the sidebar with Basecamp, groups, and tabs beside a web page">
+</picture>
+
 Firn is a quiet, minimalist web browser built natively for the Mac in Swift, SwiftUI, and WebKit. It takes the best ideas from browsers like Arc, Dia, and Zen and brings them to everyone, not just power users, without the clutter.
 
 The name comes from firn: the settled, compacted snow high on alpine glaciers. Quiet, clean, and still.
@@ -25,6 +30,43 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
 - **Split view.** Two pages side by side. Drag a tab onto the page to make one.
 - **Command bar.** Press ⌘T to type an address, search, jump to a tab, or run an action by name.
 - **Ad and tracker blocking.** Built in and on by default, and you can turn it off for a single site.
+
+## A look around
+
+**Spaces.** Each with its own color, tabs, and sign-ins.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/02-work-dark.png">
+  <img src="docs/screenshots/02-work-light.png" alt="A Work space in Firn">
+</picture>
+
+**Command bar.** ⌘T to go anywhere.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/04-command-dark.png">
+  <img src="docs/screenshots/04-command-light.png" alt="The command bar over a page">
+</picture>
+
+**Lookout.** A glance at a link before you keep it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/05-lookout-dark.png">
+  <img src="docs/screenshots/05-lookout-light.png" alt="A link previewed in a Lookout panel">
+</picture>
+
+**Split view.** Two pages side by side.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/06-split-dark.png">
+  <img src="docs/screenshots/06-split-light.png" alt="Two pages side by side in split view">
+</picture>
+
+**Tidied away.** Old tabs drift into one small button.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/07-tidied-dark.png">
+  <img src="docs/screenshots/07-tidied-light.png" alt="The Tidied away popover in the sidebar's bottom row">
+</picture>
 
 ## Privacy
 
@@ -69,6 +111,7 @@ cd FirnCore && swift test --scratch-path ~/Library/Caches/FirnCore-build
 - `FirnCore/Tests/`: the tests.
 - `brand/`: Firn's logo, wordmark, and app icons.
 - `docs/`: design drafts and `HISTORY.md`, the story of how each part was built and why.
+- `docs/screenshots/`: the pictures in this README, taken in demo mode by `scripts/demo-shots.sh` (light and dark).
 
 Your data lives in Firn's sandbox container, `~/Library/Containers/` on your Mac.
 

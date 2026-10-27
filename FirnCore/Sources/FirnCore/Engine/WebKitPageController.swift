@@ -55,6 +55,9 @@ final class WebKitPageController: NSObject, PageController {
     /// Each frame that has reported its sound (`PageSoundScript`): the
     /// frame, to mute it, and whether it's sounding. Cleared on each new page.
     @ObservationIgnored private var soundFrames: [String: (info: WKFrameInfo, sounding: Bool)] = [:]
+    /// The frames holding text typed and not yet sent (`PageDraftScript`),
+    /// so the page doesn't sleep and lose it. Cleared on each new page.
+    @ObservationIgnored private var draftFrames: Set<String> = []
     @ObservationIgnored private var isMuted = false
     /// The frames Firn paused, to play them again.
     @ObservationIgnored private var pausedFrames: [WKFrameInfo] = []
@@ -97,6 +100,7 @@ final class WebKitPageController: NSObject, PageController {
         observeWebView()
         IconChangeWatcher.shared.watch(webView, for: self)
         SoundWatcher.shared.watch(webView, for: self)
+        DraftWatcher.shared.watch(webView, for: self)
         SignInWatcher.shared.watch(webView, for: self)
         #if os(macOS)
         ClickRecorder.start() // Before the first click, or it would be missed.
@@ -141,7 +145,7 @@ final class WebKitPageController: NSObject, PageController {
 
     func isInUse() async -> Bool {
         if webView.cameraCaptureState != .none || webView.microphoneCaptureState != .none { return true }
-        if sound != .silent { return true }
+        if sound != .silent || !draftFrames.isEmpty { return true }
         return await webView.requestMediaPlaybackState() == .playing
     }
 
@@ -457,6 +461,8 @@ extension WebKitPageController: WKNavigationDelegate {
         // The old page's frames are gone, and their sound with them.
         soundFrames = [:]
         forgetPause()
+        // And any text typed into it.
+        draftFrames = []
         updateSound()
         // A different site: its old icon must not linger beside the new title.
         if previous?.host()?.lowercased() != url?.host()?.lowercased() {
@@ -564,6 +570,19 @@ extension WebKitPageController {
         if new != sound { sound = new }
         // Playing again on its own: the pause is over.
         if sounding && isPausedByFirn { forgetPause() }
+    }
+}
+
+// MARK: - Drafts
+
+extension WebKitPageController {
+    /// A frame's report from `PageDraftScript`.
+    fileprivate func noticed(_ report: PageDraftScript.Report) {
+        if !report.draft {
+            draftFrames.remove(report.frame)
+        } else if draftFrames.count < PageDraftScript.frameLimit {
+            draftFrames.insert(report.frame)
+        }
     }
 }
 
@@ -899,6 +918,37 @@ private final class SoundWatcher: NSObject, WKScriptMessageHandler {
               let report = PageSoundScript.parse(message.body),
               let webView = message.webView, let page = pages.object(forKey: webView) else { return }
         page.heard(report, in: message.frameInfo)
+    }
+}
+
+/// Notices text typed into pages and not yet sent (see `PageDraftScript`).
+/// Like `SoundWatcher`, its script and handler live only in Firn's content
+/// world, so a page can't post to it; a message counts only in its exact
+/// shape. It runs in every frame, since editors often live in an embedded one.
+@MainActor
+private final class DraftWatcher: NSObject, WKScriptMessageHandler {
+    static let shared = DraftWatcher()
+
+    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
+
+    func watch(_ webView: WKWebView, for page: WebKitPageController) {
+        pages.setObject(page, forKey: webView)
+        let controller = webView.configuration.userContentController
+        guard !controllers.contains(controller) else { return }
+        controllers.add(controller)
+        let world = WebKitPageController.firnWorld
+        controller.add(self, contentWorld: world, name: PageDraftScript.handlerName)
+        controller.addUserScript(WKUserScript(
+            source: PageDraftScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world
+        ))
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.world.name == WebKitPageController.firnWorld.name,
+              let report = PageDraftScript.parse(message.body),
+              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
+        page.noticed(report)
     }
 }
 

@@ -59,7 +59,8 @@ public protocol PageController: AnyObject, Observable {
     /// Picks up from `memory` instead of loading an address.
     func resume(from memory: PageMemory)
     /// Whether sleeping would stop something the page is doing: playing
-    /// sound or video, or using the camera or microphone.
+    /// sound or video, using the camera or microphone, or holding text
+    /// typed into it and not yet sent.
     func isInUse() async -> Bool
 
     /// Whether the page is making sound, or would be if Firn hadn't muted it.

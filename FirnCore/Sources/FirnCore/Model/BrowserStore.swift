@@ -1544,8 +1544,8 @@ public final class BrowserStore {
     /// one's place (history and scroll position) for when it's shown again;
     /// with `memoryIsShort` (the Mac says so), any tab out of sight. Never
     /// asleep: the tab on screen and its split partner, Basecamp tiles,
-    /// and pages playing sound or video or using the camera or microphone.
-    /// The app calls this after the tab on screen changes and when memory
+    /// pages playing sound or video or using the camera or microphone, and
+    /// pages holding text typed and not yet sent. The app calls this after the tab on screen changes and when memory
     /// runs short; nothing runs on a timer.
     public func sleepIdleTabs(memoryIsShort: Bool = false) async {
         for tab in tabs where mayLetSleep(tab, memoryIsShort: memoryIsShort) {

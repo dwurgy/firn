@@ -7,5 +7,41 @@
 		<link>https://firnbrowser.com/appcast.xml</link>
 		<language>en</language>
 		<!-- New releases go below this line. -->
+		<item>
+			<title>Firn 1.0.0</title>
+			<pubDate>Tue, 27 Oct 2026 07:17:15 +0000</pubDate>
+			<sparkle:version>3</sparkle:version>
+			<sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+			<sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+			<description><![CDATA[
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.5 -apple-system, system-ui, sans-serif; color: #241F1B; margin: 4px 2px; }
+h3 { font-size: 12px; font-weight: 600; color: #5E564E; margin: 16px 0 4px; }
+p { margin: 0 0 10px; }
+ul { margin: 0; padding-left: 18px; }
+li { margin: 0 0 6px; }
+@media (prefers-color-scheme: dark) {
+  body { color: #F5F1EC; }
+  h3 { color: #D4CDC5; }
+}
+</style>
+<p><strong>Firn, made for the Mac.</strong></p>
+<p>Firn is now a native Mac app, built from scratch. It's quicker and lighter, and it feels at home on your Mac. Each space is now its own browser, with its own sign-ins, so Work and Personal never mix.</p>
+<p><strong>A fresh start.</strong> Your tabs, spaces, and passwords from the earlier Firn don't come over to this one. They stay on your Mac, untouched.</p>
+<h3>New</h3>
+<ul>
+<li><strong>Every space is truly separate.</strong> Each space has its own Basecamp, tabs, sign-ins, cookies, and history. Signing in to Gmail in Work doesn't sign you in to Personal. When you make a space, you can choose to share sign-ins with another one instead.</li>
+<li><strong>Groups</strong> keep the tabs you want to hold on to. Drag one tab onto another to start a group.</li>
+<li><strong>Tidied away.</strong> Tabs you haven't looked at for a while drift into a small box at the bottom of the sidebar, so you can see where they went and bring them back.</li>
+<li><strong>Lookout, split view, and the command bar.</strong> Glance at a link before you keep it, put two pages side by side, and press ⌘T to type an address, search, or jump to a tab.</li>
+<li><strong>Saved passwords</strong>, kept in your Mac's Keychain. Bring yours over from another browser or password manager.</li>
+<li><strong>Coming from Arc?</strong> Firn can bring over your spaces, favorites, and pinned tabs.</li>
+<li><strong>Ads and trackers are blocked</strong> on every page, and you can turn it off for a site that doesn't work.</li>
+<li><strong>Firn keeps itself up to date.</strong> It checks for new versions, and you can turn that off in Settings.</li>
+</ul>
+			]]></description>
+			<enclosure url="https://github.com/dwurgy/firn/releases/download/v1.0.0/Firn-1.0.0.dmg" type="application/octet-stream" sparkle:edSignature="xMQjlaK8mkFkrqGGV7DdKRvKfaBmDfO97ouHEIAVR5ue0OVkpoe0vtdKotxxl+cofZbODdkZcvCMwr1qnyBLCw==" length="9569251"/>
+		</item>
 	</channel>
 </rss>

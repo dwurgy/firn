@@ -15,8 +15,8 @@ How a new version of Firn gets from this repo to people's Macs. The reasoning be
   and adds the release to `appcast.xml`. It publishes nothing.
 - **A GitHub release** in `dwurgy/firn`, named `v<version>`, with the DMG attached. Updates and the website's
   download both point there.
-- **`appcast.xml`**, the update feed. The repo keeps the master copy; installed copies of Firn read the one at
-  `https://firnbrowser.com/appcast.xml`, which the website's own session puts in place.
+- **`appcast.xml`**, the update feed. The repo keeps the master copy; installed copies of Firn read it through
+  `https://firnbrowser.com/appcast.xml`, which redirects to the copy on `main`.
 
 ## Once per Mac
 
@@ -86,29 +86,34 @@ are in the same folder.
 
 ## Publishing
 
-The order matters: the download has to exist before the feed points to it, or people would be offered an update
-that can't download.
+`https://firnbrowser.com/appcast.xml` redirects to this repo's `appcast.xml` on `main`, so pushing the feed is
+what offers the update to everyone. The order matters: the download has to exist first, or people would be offered
+an update that can't download.
 
-1. **Tag the code that was built**, before committing anything else, then commit the feed:
+1. **Tag the code that was built**, before committing anything else (an annotated tag, so GitHub Desktop pushes it
+   too), and push it:
 
    ```bash
-   git tag v1.0.1
+   git tag -a v1.0.1 -m "Firn 1.0.1"
    ```
 
    ```bash
-   git commit -am "Firn 1.0.1: appcast"
+   git push origin v1.0.1
    ```
+
+2. **Make the GitHub release** from that tag (github.com/dwurgy/firn › Releases › Draft a new release), titled
+   `Firn 1.0.1`, with the version's notes from `CHANGELOG.md` pasted in, and the DMG attached twice: as
+   `Firn-<version>.dmg` (the update feed's download) and as `Firn.dmg` (the website's). GitHub sends
+   `https://github.com/dwurgy/firn/releases/latest/download/Firn.dmg` to the newest release's `Firn.dmg`, so the
+   website's button never changes. Make the copy with:
 
    ```bash
-   git push origin main v1.0.1
+   cp ~/Library/Caches/Firn-release/Firn-1.0.1.dmg ~/Library/Caches/Firn-release/Firn.dmg
    ```
 
-2. **Make the GitHub release** from that tag, with the DMG attached and the version's notes from `CHANGELOG.md`
-   (the GitHub release page, or `gh release create v1.0.1 <the DMG> --title "Firn 1.0.1" --notes-file <notes>`).
-   Download the DMG from the release page once to be sure it works.
-3. **Publish the feed.** In the website's session (`dwurgy/firn-site`), ask for the repo's new `appcast.xml` to
-   go to `https://firnbrowser.com/appcast.xml`, and for the website's download link to point to the new DMG if
-   it names a version.
+   Download both from the release page once to be sure they work.
+3. **Push the feed.** Commit `appcast.xml` and push `main`. Installed copies see the update within a few minutes.
+   The website needs nothing, unless its release notes page doesn't pick up the GitHub release on its own.
 
 ## After
 

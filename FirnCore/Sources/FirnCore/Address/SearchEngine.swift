@@ -11,6 +11,15 @@ public enum SearchEngine: String, CaseIterable, Codable, Sendable, Identifiable 
 
     public static let `default`: SearchEngine = .google
 
+    /// Where the choice is saved (Settings and the welcome use it too).
+    public static let preferenceKey = "searchEngine"
+
+    /// The engine people chose, for places outside the app's views (the
+    /// page's right-click menu).
+    public static var chosen: SearchEngine {
+        UserDefaults.standard.string(forKey: preferenceKey).flatMap(SearchEngine.init(rawValue:)) ?? .default
+    }
+
     public var id: String { rawValue }
 
     /// The name people see.

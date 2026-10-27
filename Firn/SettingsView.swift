@@ -8,7 +8,7 @@ enum Preference {
     static let newTabPlacement = "newTabPlacement"
     static let driftAfter = "driftAfter"
     static let blocksContent = "blocksContent"
-    static let searchEngine = "searchEngine"
+    static let searchEngine = SearchEngine.preferenceKey
     /// Whether typing in the command bar asks the search engine for
     /// suggestions. Off until someone says yes: it's the one place typing
     /// goes over the network.

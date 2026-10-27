@@ -639,46 +639,78 @@ private final class FirnWebView: WKWebView {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// A link's and an image's menu, in Firn's words and order (as in Dia):
-    /// the link's items, then the image's, then whatever else WebKit offers
-    /// (selected text, for now), and Share last. WebKit doesn't say which
-    /// link or image the menu is for, so Firn's items run WebKit's own
-    /// "Open … in New Window" and mark the new window it asks for as Firn's
-    /// choice (see `chose`). WebKit's items they stand in for are hidden,
-    /// not removed, so they can still be run.
+    /// The page's menu, in Firn's words and order (as in Dia), by what was
+    /// clicked: a link, an image, selected text, or the page itself, with
+    /// Share last. A text field keeps macOS's own menu, except that Search
+    /// goes to Firn's engine. WebKit doesn't say which link or image the
+    /// menu is for, so Firn's items for those run WebKit's own "Open … in
+    /// New Window" and mark the new window it asks for as Firn's choice
+    /// (see `chose`). WebKit's items they stand in for are hidden, not
+    /// removed, so they can still be run.
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
         guard let page, page.onRequest != nil else { return }
         func item(_ name: String) -> NSMenuItem? {
             menu.items.first { $0.identifier?.rawValue == "WKMenuItemIdentifier" + name }
         }
-        var firn: [NSMenuItem] = []
-        if let openLink = item("OpenLinkInNewWindow") {
-            firn.append(choice("Open in New Tab", "plus.square.on.square", .newTab, runs: openLink))
-            firn.append(choice("Open in Lookout", "eye", .lookout, runs: openLink))
-            if page.offersSplitView {
-                firn.append(choice("Open in Split View", "rectangle.split.2x1", .split, runs: openLink))
+        // Firn's engine, not WebKit's (it asks the system, which picks Google
+        // and opens the default browser).
+        let search = item("SearchWeb").map { _ in
+            action("Search with \(SearchEngine.chosen.name)", "magnifyingglass", #selector(searchSelection))
+        }
+        // No Inspect Element: the Web Inspector is reached from Safari's Develop menu.
+        for name in ["SearchWeb", "InspectElement"] { item(name)?.isHidden = true }
+        if item("Paste") != nil {
+            if let search, let original = item("SearchWeb") {
+                menu.insertItem(search, at: menu.index(of: original))
             }
-            firn.append(choice("Save Link As…", "square.and.arrow.down", .saveAs, runs: openLink))
-            if let copy = item("CopyLink") { firn.append(copy) }
+            Self.tidySeparators(in: menu)
+            return
+        }
+        var sections: [[NSMenuItem]] = []
+        if let openLink = item("OpenLinkInNewWindow") {
+            var link = [
+                choice("Open in New Tab", "plus.square.on.square", .newTab, runs: openLink),
+                choice("Open in Lookout", "eye", .lookout, runs: openLink),
+            ]
+            if page.offersSplitView {
+                link.append(choice("Open in Split View", "rectangle.split.2x1", .split, runs: openLink))
+            }
+            link.append(choice("Save Link As…", "square.and.arrow.down", .saveAs, runs: openLink))
+            link += [item("CopyLink")].compactMap { $0 }
+            sections.append(link)
         }
         if let openImage = item("OpenImageInNewWindow") {
-            if !firn.isEmpty { firn.append(.separator()) }
-            firn.append(choice("Open Image in New Tab", "plus.square.on.square", .newTab, runs: openImage))
-            firn.append(choice("Save Image As…", "square.and.arrow.down", .saveAs, runs: openImage))
-            if let copy = item("CopyImage") { firn.append(copy) }
-            firn.append(choice("Copy Image Address", "link", .copyAddress, runs: openImage))
+            sections.append([
+                choice("Open Image in New Tab", "plus.square.on.square", .newTab, runs: openImage),
+                choice("Save Image As…", "square.and.arrow.down", .saveAs, runs: openImage),
+            ] + [item("CopyImage")].compactMap { $0 } + [
+                choice("Copy Image Address", "link", .copyAddress, runs: openImage),
+            ])
         }
-        guard !firn.isEmpty else { return }
+        if let copy = item("Copy") {
+            sections.append([copy] + [search, item("LookUp"), item("Translate")].compactMap { $0 })
+            // Speaking a selection is in System Settings' Spoken Content (⌥Esc).
+            item("SpeechMenu")?.isHidden = true
+        }
+        var pageAddress: URL?
+        if sections.isEmpty, let address = page.url, WebAddress.isWebURL(address) || address.isFileURL {
+            pageAddress = address
+            sections.append([item("GoBack"), item("GoForward"), item("Reload")].compactMap { $0 }
+                + [action("Copy Page Link", "link", #selector(copyPageLink))])
+        }
+        guard !sections.isEmpty else { return }
         for name in ["OpenLink", "OpenLinkInNewWindow", "DownloadLinkedFile", "OpenImageInNewWindow", "DownloadImage"] {
             item(name)?.isHidden = true
         }
+        // A link's, an image's, or a selection's Share is WebKit's; the
+        // page's is Firn's, for its committed address.
+        let share = item("ShareMenu") ?? pageAddress.map { NSSharingServicePicker(items: [$0]).standardShareMenuItem }
         // WebKit's own items Firn keeps move into place.
-        let share = item("ShareMenu")
+        let firn = sections.flatMap { $0 + [.separator()] }
         for kept in firn + [share].compactMap({ $0 }) where kept.menu === menu {
             menu.removeItem(kept)
         }
-        firn.append(.separator())
         for (index, new) in firn.enumerated() { menu.insertItem(new, at: index) }
         if let share {
             menu.addItem(.separator())
@@ -694,6 +726,15 @@ private final class FirnWebView: WKWebView {
         item.target = self
         item.representedObject = PageMenuItem(choice: choice, original: original)
         // Menus show symbols from macOS 26 on; earlier ones are words only.
+        if #available(macOS 26, *) {
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        }
+        return item
+    }
+
+    private func action(_ title: String, _ symbol: String, _ selector: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        item.target = self
         if #available(macOS 26, *) {
             item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         }
@@ -719,8 +760,41 @@ private final class FirnWebView: WKWebView {
         page?.chose(item.choice)
         NSApp.sendAction(action, to: item.original.target, from: item.original)
     }
+
+    /// Searches for the selected words in a new tab, in this space.
+    @objc private func searchSelection() {
+        guard let words = selectedText, let url = SearchEngine.chosen.searchURL(for: words) else { return }
+        page?.onRequest?(.openURL(url, inBackground: false))
+    }
+
+    /// The committed address, never one still loading.
+    @objc private func copyPageLink() {
+        guard let url = page?.url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    /// The selection, in whichever frame or field it's in, as plain text on
+    /// one line (at most 500 characters). WebKit hands it over the way it
+    /// does for the Services menu, onto a private pasteboard of Firn's that's
+    /// let go at once, so no page script runs and the clipboard is untouched.
+    private var selectedText: String? {
+        let pasteboard = NSPasteboard(name: .init("com.firnbrowser.firn.selection." + UUID().uuidString))
+        defer { pasteboard.releaseGlobally() }
+        // WebKit answers only for plain text's old name.
+        let type = NSPasteboard.PasteboardType("NSStringPboardType")
+        guard (self as NSServicesMenuRequestor).writeSelection?(to: pasteboard, types: [type]) == true,
+              let text = pasteboard.string(forType: type) else { return nil }
+        let words = String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(500))
+        return words.isEmpty ? nil : words
+    }
     #endif
 }
+
+#if os(macOS)
+/// Lets Firn ask WebKit for the selection, as the Services menu does.
+extension FirnWebView: NSServicesMenuRequestor {}
+#endif
 
 /// Tells pages when their icon links change. Its script and message channel
 /// live only in Firn's content world, so the page can't post to it; even so,

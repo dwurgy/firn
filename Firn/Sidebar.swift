@@ -419,7 +419,7 @@ private struct TabList: View {
                     // the scroll view would otherwise clip; taken back below.
                     .padding(.horizontal, Theme.pageInset)
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                    .background { WindowDragArea { window.newSpace() } }
+                    .background { WindowDragArea { blankSpaceMenu } }
                 }
                 .scrollIndicators(.never)
                 .padding(.horizontal, -Theme.pageInset)
@@ -983,6 +983,28 @@ private struct TabList: View {
         }
         Button("Close Tab", systemImage: "xmark") { window.close(tab) }
             .keyboardShortcut("w")
+        if tab.place == .open, tab.groupID == nil {
+            Button("Close Other Tabs") { window.closeOtherTabs(than: tab) }
+                .disabled(store.otherLooseTabs(than: tab).isEmpty)
+        }
+    }
+
+    /// The blank space's right-click menu (AppKit; see `WindowDragArea`).
+    private var blankSpaceMenu: [BlankSpaceMenuItem] {
+        let reopen = store.nextToReopen
+        return [
+            BlankSpaceMenuItem(title: "New Tab", symbol: "plus.square", key: "t") { window.openCommandBar() },
+            BlankSpaceMenuItem(title: reopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
+                               key: "t", modifiers: [.command, .shift], enabled: reopen != nil) { window.reopenClosed() },
+            .divider,
+            BlankSpaceMenuItem(title: "New Space…", symbol: "square.stack") { window.newSpace() },
+            .divider,
+            BlankSpaceMenuItem(title: window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", symbol: "sidebar.left", key: "s") { window.toggleSidebar() },
+            .divider,
+            BlankSpaceMenuItem(title: "Close All Tabs", symbol: "xmark", enabled: !store.looseTabs.isEmpty) {
+                window.closeAllTabs()
+            },
+        ]
     }
 
     /// The dragged tab, lifted a little above the list; it follows the
@@ -1636,7 +1658,8 @@ struct TabRow<MenuItems: View>: View {
             .padding(.trailing, 8)
         }
         .onHover { hovering = $0 }
-        .contextMenu { menu }
+        // Icons beside the words: SwiftUI's Mac menus leave them out otherwise.
+        .contextMenu { menu.labelStyle(.titleAndIcon) }
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityAction(named: "Close tab", close)
     }
@@ -1785,9 +1808,12 @@ struct SplitRow<MenuItems: View>: View {
         }
         .opacity(faded == tab.id ? 0 : 1)
         .contextMenu {
-            Button("Separate Tabs", systemImage: "rectangle.split.2x1.slash") { part() }
-            Divider()
-            menu(tab)
+            Group {
+                Button("Separate Tabs", systemImage: "rectangle.split.2x1.slash") { part() }
+                Divider()
+                menu(tab)
+            }
+            .labelStyle(.titleAndIcon)
         }
         .accessibilityAddTraits(tab.id == inUseID ? .isSelected : [])
         .accessibilityAction(named: "Close tab") { closeHalf(tab) }
@@ -2043,10 +2069,13 @@ private struct GroupCard<Rows: View>: View {
         .allowsHitTesting(!thawed && !closing && !preview)
         .accessibilityHidden(preview)
         .contextMenu {
-            Button("Rename", action: startRenaming)
-            Button("Ungroup", action: ungroup)
-            Divider()
-            Button("Close Group", action: close)
+            Group {
+                Button("Rename", systemImage: "pencil", action: startRenaming)
+                Button("Ungroup", systemImage: "folder.badge.minus", action: ungroup)
+                Divider()
+                Button("Close Group", systemImage: "xmark", action: close)
+            }
+            .labelStyle(.titleAndIcon)
         }
     }
 

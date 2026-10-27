@@ -98,6 +98,8 @@ struct BasecampGrid: View {
             window.focusPage()
         } split: {
             window.pickSplit(beside: tab)
+        } copyLink: {
+            window.copyLink(of: tab)
         } remove: {
             store.removeFromBasecamp(tab)
         } close: {
@@ -415,7 +417,7 @@ struct BasecampGrid: View {
 
     private func liftedTile(_ tab: FirnCore.Tab) -> some View {
         BasecampTile(tab: tab, isActive: tab.id == store.activeTabID, lifted: true,
-                     select: {}, goHome: {}, split: {}, remove: {}, close: {})
+                     select: {}, goHome: {}, split: {}, copyLink: {}, remove: {}, close: {})
     }
 
     /// The lifted copy settles into its slot, then the tile really moves
@@ -527,6 +529,7 @@ private struct BasecampTile: View {
     let select: () -> Void
     let goHome: () -> Void
     let split: () -> Void
+    let copyLink: () -> Void
     let remove: () -> Void
     let close: () -> Void
 
@@ -546,18 +549,26 @@ private struct BasecampTile: View {
             SoundButton(tab: tab).padding(2)
         }
         .contextMenu {
-            if tab.sound != .silent {
-                MuteMenuItem(tab: tab)
+            Group {
+                if tab.sound != .silent {
+                    MuteMenuItem(tab: tab)
+                    Divider()
+                }
+                if tab.isAwayFromHome {
+                    Button("Go Back to Home", systemImage: "house", action: goHome)
+                }
+                Button("Open as Split", systemImage: "rectangle.split.2x1", action: split)
+                if tab.url != nil {
+                    Button("Copy Link", systemImage: "link", action: copyLink)
+                }
                 Divider()
+                // Not "Remove": it stays, as an everyday tab (only Close removes a tile).
+                Button("Move to Tabs", systemImage: "arrow.down.to.line", action: remove)
+                Divider()
+                Button("Close", systemImage: "xmark", action: close)
             }
-            if tab.isAwayFromHome {
-                Button("Go Back to Home", action: goHome)
-            }
-            Button("Open as Split", action: split)
-            Divider()
-            Button("Remove from Basecamp", action: remove)
-            Divider()
-            Button("Close", action: close)
+            // Icons beside the words: SwiftUI's Mac menus leave them out otherwise.
+            .labelStyle(.titleAndIcon)
         }
         .accessibilityLabel(site.isEmpty ? tab.title : site)
         .accessibilityAddTraits(isActive ? .isSelected : [])
@@ -652,7 +663,7 @@ private struct ArrivalFlight: View, Animatable {
                 .position(icon)
             // Over the second half of the trip, it becomes the lifted tile a drag shows.
             BasecampTile(tab: arrival.tab, isActive: arrival.isActive, lifted: true,
-                         select: {}, goHome: {}, split: {}, remove: {}, close: {})
+                         select: {}, goHome: {}, split: {}, copyLink: {}, remove: {}, close: {})
                 .frame(width: frame.width, height: frame.height)
                 .opacity(min(1, max(0, progress * 2 - 1)))
         }

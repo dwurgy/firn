@@ -293,6 +293,22 @@ final class WindowModel {
         if wasShowing { focusPage() }
     }
 
+    /// Close Other Tabs, on a loose tab's menu: the rest of the loose tabs go.
+    func closeOtherTabs(than tab: FirnCore.Tab) {
+        let wasShowing = store.activeTabID != tab.id
+            && store.otherLooseTabs(than: tab).contains { $0.id == store.activeTabID }
+        store.closeOtherLooseTabs(than: tab)
+        if wasShowing { focusPage() }
+    }
+
+    /// Close All Tabs, on the sidebar's blank space: every loose tab goes;
+    /// tiles and groups stay.
+    func closeAllTabs() {
+        let wasShowing = store.looseTabs.contains { $0.id == store.activeTabID }
+        store.closeAllLooseTabs()
+        if wasShowing { focusPage() }
+    }
+
     /// Close on a tile's menu: it leaves Basecamp (⇧⌘T brings it back).
     func closeTile(_ tab: FirnCore.Tab) {
         let wasShowing = tab.id == store.activeTabID

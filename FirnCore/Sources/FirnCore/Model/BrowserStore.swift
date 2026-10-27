@@ -562,6 +562,34 @@ public final class BrowserStore {
         close(tab, showing: nil, remembering: true, leavingBasecamp: true)
     }
 
+    /// The loose tabs Close Other Tabs would close: the rest of `tab`'s
+    /// space's loose tabs. Tiles, groups, and tidied tabs are kept.
+    public func otherLooseTabs(than tab: Tab) -> [Tab] {
+        list(.open, in: tab.spaceID).filter { $0.groupID == nil && $0.id != tab.id }
+    }
+
+    /// Close Other Tabs, on a loose tab's menu: closes the rest of its
+    /// space's loose tabs, one by one, so ⇧⌘T brings them back one by one.
+    /// If one of them was on screen, `tab` is shown.
+    public func closeOtherLooseTabs(than tab: Tab) {
+        guard tab.place == .open, tab.groupID == nil else { return }
+        for other in otherLooseTabs(than: tab) {
+            close(other, showing: tab, remembering: true)
+        }
+    }
+
+    /// Close All Tabs, on the sidebar's blank space: closes the current
+    /// space's loose tabs, one by one (⇧⌘T brings them back one by one).
+    /// Tiles, groups, and tidied tabs are kept. The tab on screen goes
+    /// last, so no other loose tab is shown on the way.
+    public func closeAllLooseTabs() {
+        let loose = looseTabs
+        let onScreen = loose.filter { $0.id == activeTabID }
+        for tab in loose.filter({ $0.id != activeTabID }) + onScreen {
+            close(tab, showing: nil, remembering: true)
+        }
+    }
+
     /// `remembering`: whether ⇧⌘T can bring it back (not a popup that
     /// closed itself). `leavingBasecamp`: a tile goes, rather than resting.
     private func close(_ tab: Tab, showing next: Tab?, remembering: Bool, leavingBasecamp: Bool = false) {

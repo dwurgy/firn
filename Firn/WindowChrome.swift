@@ -6,31 +6,50 @@ import SwiftUI
 /// minimizes it on double-click (following the system setting), like a title bar.
 /// AppKit because SwiftUI's WindowDragGesture needs macOS 15.
 struct WindowDragArea: NSViewRepresentable {
-    /// What a right-click on the blank space offers (New Space…); nothing when nil.
-    var newSpace: (@MainActor () -> Void)?
+    /// What a right-click on the blank space offers, built when it opens;
+    /// nothing when nil.
+    var menu: (@MainActor () -> [BlankSpaceMenuItem])?
 
     func makeNSView(context: Context) -> NSView { DragView() }
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? DragView)?.newSpace = newSpace
+        (nsView as? DragView)?.items = menu
     }
 
     private final class DragView: NSView {
-        var newSpace: (@MainActor () -> Void)?
+        var items: (@MainActor () -> [BlankSpaceMenuItem])?
+        private var actions: [@MainActor () -> Void] = []
 
         override var mouseDownCanMoveWindow: Bool { true }
 
         // AppKit, since this blank space is an AppKit view and SwiftUI's
         // context menu doesn't reach it.
         override func menu(for event: NSEvent) -> NSMenu? {
-            guard newSpace != nil else { return nil }
+            guard let items = items?(), !items.isEmpty else { return nil }
             let menu = NSMenu()
-            let item = NSMenuItem(title: "New Space…", action: #selector(makeNewSpace), keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
+            actions = []
+            for item in items {
+                guard let title = item.title else {
+                    menu.addItem(.separator())
+                    continue
+                }
+                let menuItem = NSMenuItem(title: title, action: #selector(run(_:)), keyEquivalent: item.key)
+                menuItem.keyEquivalentModifierMask = item.modifiers
+                menuItem.image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)
+                menuItem.target = self
+                menuItem.tag = actions.count
+                menuItem.isEnabled = item.enabled
+                actions.append(item.action)
+                menu.addItem(menuItem)
+            }
+            // Items turn themselves on and off from `isEnabled`, not validation.
+            menu.autoenablesItems = false
             return menu
         }
 
-        @objc private func makeNewSpace() { newSpace?() }
+        @objc private func run(_ sender: NSMenuItem) {
+            guard actions.indices.contains(sender.tag) else { return }
+            actions[sender.tag]()
+        }
 
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }
@@ -51,6 +70,19 @@ struct WindowDragArea: NSViewRepresentable {
             }
         }
     }
+}
+
+/// One line of the blank space's right-click menu, or a divider (`.divider`).
+struct BlankSpaceMenuItem {
+    var title: String?
+    var symbol = ""
+    /// The shortcut it shows (the app menu's own; this only displays it).
+    var key = ""
+    var modifiers: NSEvent.ModifierFlags = .command
+    var enabled = true
+    var action: @MainActor () -> Void = {}
+
+    static let divider = BlankSpaceMenuItem(title: nil)
 }
 
 /// Where the traffic lights sit, measured from the window's top-left corner.

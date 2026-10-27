@@ -108,6 +108,7 @@ private struct CommandBar: View {
         .task(id: text) { await fetchSuggestions() }
         .task(id: text) { await fetchHistory() }
         .onAppear {
+            if let typed = DemoShot.typed { text = typed }
             Task { @MainActor in
                 await Task.yield()
                 focused = true

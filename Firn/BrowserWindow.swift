@@ -785,6 +785,7 @@ struct BrowserWindow: View {
     @AppStorage(Preference.blocksContent) private var blocksContent = true
     /// Waiting out the beat before idle tabs drift.
     @State private var driftTask: Task<Void, Never>?
+    @Environment(\.openWindow) private var openWindow
 
     private var store: BrowserStore { window.store }
     private var showsSidebar: Bool { !window.sidebarCollapsed || window.isPeeking }
@@ -863,6 +864,8 @@ struct BrowserWindow: View {
             // Launching may bring Firn to the front before this window listens.
             driftIdleTabs(afterABeat: true)
         }
+        // A demo's screenshot (`--shot`); nothing otherwise.
+        .task { await DemoShot.stage(window, openWindow: openWindow) }
         .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }
         .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
         .onChange(of: driftAfter, initial: true) { old, new in

@@ -28,6 +28,14 @@ enum DemoMode {
         isOn ? SessionFile(url: folder.appending(path: "session.json")) : .standard
     }
 
+    /// Where a screenshot's window number goes (`DemoShot`): the real
+    /// Downloads folder, the one place outside Firn's sandbox it may write
+    /// and the script may read. Hidden, and removed after each shot.
+    static var shotReadyFile: URL {
+        let home = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
+        return URL(filePath: home).appending(path: "Downloads/.firn-demo-shot")
+    }
+
     static let history = isOn ? HistoryStore(directory: folder.appending(path: "History")) : .standard
 
     static let passwords = isOn ? PasswordStore(vault: MemoryVault()) : .keychain

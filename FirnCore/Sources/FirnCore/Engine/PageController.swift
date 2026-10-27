@@ -47,6 +47,10 @@ public protocol PageController: AnyObject, Observable {
     /// The text selected on the page, at most `FindOnPage.maxLength`
     /// characters; "" if none.
     func selectedText() async -> String
+    /// Demo shots only (`DemoShot`): turns down a site's cookie banner, so
+    /// the website's screenshots show the page, not the banner. Waits up to
+    /// `seconds` for one to appear; does nothing if none does.
+    func declineCookieBanner(waiting seconds: Double) async
 
     /// What the page needs to pick up where it left off after sleeping: its
     /// back and forward history and scroll position. Nil if there's nothing
@@ -163,4 +167,8 @@ public enum BrowserEngine {
     public static func setBlocking(enabled: Bool) {
         ContentBlocker.shared.setEnabled(enabled)
     }
+}
+
+public extension PageController {
+    func declineCookieBanner(waiting seconds: Double) async {}
 }

@@ -248,6 +248,29 @@ final class WebKitPageController: NSObject, PageController {
         return FindOnPage.query((selected as? String) ?? "")
     }
 
+    func declineCookieBanner(waiting seconds: Double) async {
+        guard url != nil, loadError == nil else { return }
+        // Firn's world; a fixed script, nothing from the page passed in.
+        _ = try? await webView.callAsyncJavaScript(
+            Self.declineCookieBannerScript, arguments: ["seconds": seconds], in: nil, contentWorld: Self.firnWorld)
+    }
+
+    /// Clicks the banner's own "Deny" (Osano's, as on snowpeak.com), then
+    /// hides it in case it lingers.
+    private static let declineCookieBannerScript = """
+        const deadline = Date.now() + seconds * 1000;
+        let banner = document.querySelector('.osano-cm-window');
+        while (!banner && Date.now() < deadline) {
+            await new Promise(done => setTimeout(done, 200));
+            banner = document.querySelector('.osano-cm-window');
+        }
+        if (!banner) return false;
+        banner.querySelector('.osano-cm-deny')?.click();
+        await new Promise(done => setTimeout(done, 600));
+        banner.style.setProperty('display', 'none', 'important');
+        return true;
+        """
+
     @objc private func printOperationDidRun(
         _ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?
     ) {

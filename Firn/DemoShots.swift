@@ -96,6 +96,8 @@ enum DemoShot: String, CaseIterable {
         }
 
         await waitForPages(of: store)
+        // Snow Peak's cookie banner would cover the hero's page.
+        await store.activeTab?.page?.declineCookieBanner(waiting: 5)
         // Icons, fonts, and the motion settle.
         try? await Task.sleep(for: .seconds(2.5))
         NSApp.activate(ignoringOtherApps: true)

@@ -17,7 +17,7 @@ struct DemoSessionTests {
     @Test func threeSeparateSpacesWithNewDataStoresEachTime() {
         let first = DemoSession.make(now: now).session
         let second = DemoSession.make(now: now).session
-        #expect(first.spaces.map(\.name) == ["Personal", "Work", "Trip to Oregon"])
+        #expect(first.spaces.map(\.name) == ["Personal", "Work", "Trip"])
         #expect(first.spaces.map(\.color) == ["sage", "glacier", "ochre"])
         #expect(Set(first.spaces.map(\.dataStoreID)).count == 3)
         #expect(Set(first.spaces.map(\.dataStoreID)).isDisjoint(with: second.spaces.map(\.dataStoreID)))

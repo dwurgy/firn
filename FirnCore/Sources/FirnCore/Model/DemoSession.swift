@@ -33,7 +33,7 @@ public enum DemoSession {
     public static func make(now: Date = .now) -> (session: Session, visits: [Visit]) {
         let personal = Space(name: "Personal", color: "sage", order: 0, dataStoreID: UUID(), lastChangedAt: now)
         let work = Space(name: "Work", color: "glacier", order: 1, dataStoreID: UUID(), lastChangedAt: now)
-        let trip = Space(name: "Trip to Oregon", color: "ochre", order: 2, dataStoreID: UUID(), lastChangedAt: now)
+        let trip = Space(name: "Trip", color: "ochre", order: 2, dataStoreID: UUID(), lastChangedAt: now)
 
         var tabs: [TabRecord] = []
         var groups: [GroupRecord] = []
@@ -81,11 +81,10 @@ public enum DemoSession {
         add(materials, to: work, lastActiveAt: minutesAgo(60))
         let workTab = add(firnSite, to: work, lastActiveAt: minutesAgo(55))
 
-        // Trip to Oregon: a nod to First light.
+        // Trip: a nod to First light.
         let sistersGroup = group("Sisters", in: trip)
-        let tripTab = add(sisters, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(50))
         add(smithRock, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(48))
-        add(sistersCoffee, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(46))
+        let tripTab = add(sistersCoffee, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(46))
         add(map, to: trip, lastActiveAt: minutesAgo(45))
         add(weather, to: trip, lastActiveAt: minutesAgo(44))
 
@@ -107,7 +106,7 @@ public enum DemoSession {
         let pages: [(Space, [Page], [Page])] = [
             (personal, [gmail, youtube, github, appleMusic], [pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood, ciderCaramels]),
             (work, [calendar, slack, notion], [guidelines, reviewGuidelines, materials, firnSite]),
-            (trip, [], [sisters, smithRock, sistersCoffee, map, weather]),
+            (trip, [], [smithRock, sistersCoffee, map, weather]),
         ]
         var visits: [Visit] = []
         for (space, everyday, others) in pages {
@@ -212,8 +211,6 @@ public enum DemoSession {
         "Firn | A calm browser, made for Mac", "https://firnbrowser.com/",
         icons: ["https://firnbrowser.com/assets/favicon/firn-favicon-180.png", "https://firnbrowser.com/assets/favicon/favicon.ico"])
 
-    static let sisters = Page(
-        "Visit Sisters Oregon", "https://www.sisterscountry.com/", icons: ["https://www.sisterscountry.com/favicon.ico"])
     static let smithRock = Page(
         "Smith Rock State Park - Oregon State Parks", "https://stateparks.oregon.gov/index.cfm?do=park.profile&parkId=36",
         icons: ["https://stateparks.oregon.gov/favicon.ico"])
@@ -230,6 +227,6 @@ public enum DemoSession {
     static let allPages = [
         gmail, github, youtube, appleMusic, pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood,
         ciderCaramels, calendar, slack, notion, guidelines, reviewGuidelines, materials, firnSite,
-        sisters, smithRock, sistersCoffee, map, weather,
+        smithRock, sistersCoffee, map, weather,
     ]
 }

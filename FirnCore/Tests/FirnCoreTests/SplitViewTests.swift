@@ -433,4 +433,27 @@ struct SplitViewTests {
         #expect(hosts(store.tabs(in: split)) == ["a.example", "b.example"])
         #expect(store.tabs(in: split).allSatisfy { $0.place == .open })
     }
+
+    // MARK: - From a link's menu
+
+    @Test func aLinkOpensBesideThePageItWasOn() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        store.select(tabs[0])
+        tabs[0].page?.onRequest?(.openInSplit(url("c")))
+        let split = try #require(store.split(of: tabs[0]))
+        #expect(hosts(store.tabs(in: split)) == ["a.example", "c.example"])
+        #expect(hosts(store.openTabs) == ["a.example", "c.example", "b.example"])
+        #expect(store.activeTab?.url?.host() == "c.example")
+    }
+
+    @Test func onlyAPageOnScreenOpensASplit() {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        tabs[0].page?.onRequest?(.openInSplit(url("c")))
+        store.openLookout(url("d"))
+        tabs[1].page?.onRequest?(.openInSplit(url("e")))
+        #expect(store.splits.isEmpty)
+        #expect(hosts(store.openTabs) == ["a.example", "b.example"])
+    }
 }

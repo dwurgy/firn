@@ -1239,6 +1239,10 @@ public final class BrowserStore {
             // Only over the tab on screen: a page out of sight can't be clicked.
             guard tab.id == activeTabID else { return }
             openLookout(url)
+        case let .openInSplit(url):
+            // Only from a page on screen, and not under a Lookout.
+            guard WebAddress.isWebURL(url), onScreenTabIDs.contains(tab.id), lookout == nil else { return }
+            openSplit(openTab(url, opener: tab, inBackground: true), beside: tab)
         case .close:
             // A popup that's done (a sign-in, say) hands back to its opener,
             // and so does its offer to save the password.
@@ -1304,6 +1308,9 @@ public final class BrowserStore {
             closeLookout()
         case .offerToSave, .offerToFill:
             // A Lookout is a glance; sign in from a tab to save or fill a password.
+            break
+        case .openInSplit:
+            // Not offered in a Lookout (see `offersSplitView`).
             break
         }
     }

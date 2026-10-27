@@ -80,6 +80,10 @@ public protocol PageController: AnyObject, Observable {
     /// for a new window, goes to a Lookout instead, so the tile stays itself.
     var sendsOtherSitesToLookout: Bool { get set }
 
+    /// Whether a link's menu offers Open in Split View: a tab's page does,
+    /// a Lookout's doesn't (it's a glance over the page, not beside it).
+    var offersSplitView: Bool { get set }
+
     /// Whether ads and trackers are blocked on an address, asked as the page
     /// starts loading it (its space may have turned blocking off for that
     /// site). Set by whoever owns the page; nil means blocked everywhere.
@@ -122,6 +126,9 @@ public enum PageRequest {
     /// link to another site: this
     /// address, in a Lookout over the page.
     case openInLookout(URL)
+    /// "Open in Split View" from a link's menu: this address, beside the
+    /// page it was on.
+    case openInSplit(URL)
     /// A page opened as a popup closed itself (`window.close`).
     case close
     /// Someone signed in on the page, over https, and it seems to have

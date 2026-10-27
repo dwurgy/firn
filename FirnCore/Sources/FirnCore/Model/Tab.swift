@@ -69,8 +69,10 @@ public final class Tab: Identifiable {
     }
 
     /// A tile's links to other sites open in a Lookout; other tabs' don't.
+    /// Any tab's links can open in split view.
     private func applyLinkRule() {
         page?.sendsOtherSitesToLookout = place == .basecamp
+        page?.offersSplitView = true
     }
 
     /// The committed address, or where the tab rests if it has no page yet.

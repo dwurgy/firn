@@ -21,6 +21,7 @@ final class FakePage: PageController {
     var onRequest: (@MainActor (PageRequest) -> Void)?
     var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     var sendsOtherSitesToLookout = false
+    var offersSplitView = false
     var blocksContent: (@MainActor (URL) -> Bool)?
 
     init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }

@@ -26,6 +26,7 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
+    @ObservationIgnored var offersSplitView = false
     @ObservationIgnored var blocksContent: (@MainActor (URL) -> Bool)?
 
     @ObservationIgnored let webView: WKWebView
@@ -602,8 +603,11 @@ extension WebKitPageController {
 /// What a Firn item in the page's right-click menu does with the address
 /// WebKit hands to the new window it asks for.
 private enum PageMenuChoice {
+    case newTab
     case lookout
+    case split
     case saveAs
+    case copyAddress
 }
 
 /// A Firn menu item's choice, and WebKit's item it runs to learn the address.
@@ -635,40 +639,79 @@ private final class FirnWebView: WKWebView {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// Firn's items in the page's menu. WebKit doesn't say which link or
-    /// image the menu is for, so each runs WebKit's own "Open … in New
-    /// Window" and marks the new window it asks for as Firn's choice (see
-    /// `chose`): "Open in Lookout" goes above Open Link in New Window, and
-    /// "Save Link As…" and "Save Image As…" take the place of WebKit's
-    /// download items, so Firn asks where to save, as Dia does.
+    /// A link's and an image's menu, in Firn's words and order (as in Dia):
+    /// the link's items, then the image's, then whatever else WebKit offers
+    /// (selected text, for now), and Share last. WebKit doesn't say which
+    /// link or image the menu is for, so Firn's items run WebKit's own
+    /// "Open … in New Window" and mark the new window it asks for as Firn's
+    /// choice (see `chose`). WebKit's items they stand in for are hidden,
+    /// not removed, so they can still be run.
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
-        guard page?.onRequest != nil else { return }
+        guard let page, page.onRequest != nil else { return }
         func item(_ name: String) -> NSMenuItem? {
             menu.items.first { $0.identifier?.rawValue == "WKMenuItemIdentifier" + name }
         }
+        var firn: [NSMenuItem] = []
         if let openLink = item("OpenLinkInNewWindow") {
-            menu.insertItem(choice("Open in Lookout", .lookout, runs: openLink), at: menu.index(of: openLink))
-            if let download = item("DownloadLinkedFile") {
-                replace(download, with: choice("Save Link As…", .saveAs, runs: openLink), in: menu)
+            firn.append(choice("Open in New Tab", "plus.square.on.square", .newTab, runs: openLink))
+            firn.append(choice("Open in Lookout", "eye", .lookout, runs: openLink))
+            if page.offersSplitView {
+                firn.append(choice("Open in Split View", "rectangle.split.2x1", .split, runs: openLink))
             }
+            firn.append(choice("Save Link As…", "square.and.arrow.down", .saveAs, runs: openLink))
+            if let copy = item("CopyLink") { firn.append(copy) }
         }
-        if let openImage = item("OpenImageInNewWindow"), let download = item("DownloadImage") {
-            replace(download, with: choice("Save Image As…", .saveAs, runs: openImage), in: menu)
+        if let openImage = item("OpenImageInNewWindow") {
+            if !firn.isEmpty { firn.append(.separator()) }
+            firn.append(choice("Open Image in New Tab", "plus.square.on.square", .newTab, runs: openImage))
+            firn.append(choice("Save Image As…", "square.and.arrow.down", .saveAs, runs: openImage))
+            if let copy = item("CopyImage") { firn.append(copy) }
+            firn.append(choice("Copy Image Address", "link", .copyAddress, runs: openImage))
         }
+        guard !firn.isEmpty else { return }
+        for name in ["OpenLink", "OpenLinkInNewWindow", "DownloadLinkedFile", "OpenImageInNewWindow", "DownloadImage"] {
+            item(name)?.isHidden = true
+        }
+        // WebKit's own items Firn keeps move into place.
+        let share = item("ShareMenu")
+        for kept in firn + [share].compactMap({ $0 }) where kept.menu === menu {
+            menu.removeItem(kept)
+        }
+        firn.append(.separator())
+        for (index, new) in firn.enumerated() { menu.insertItem(new, at: index) }
+        if let share {
+            menu.addItem(.separator())
+            menu.addItem(share)
+        }
+        Self.tidySeparators(in: menu)
     }
 
-    private func choice(_ title: String, _ choice: PageMenuChoice, runs original: NSMenuItem) -> NSMenuItem {
+    private func choice(
+        _ title: String, _ symbol: String, _ choice: PageMenuChoice, runs original: NSMenuItem
+    ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(runChoice(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = PageMenuItem(choice: choice, original: original)
+        // Menus show symbols from macOS 26 on; earlier ones are words only.
+        if #available(macOS 26, *) {
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        }
         return item
     }
 
-    private func replace(_ old: NSMenuItem, with new: NSMenuItem, in menu: NSMenu) {
-        let index = menu.index(of: old)
-        menu.removeItem(at: index)
-        menu.insertItem(new, at: index)
+    /// Hides separators with nothing visible on one side, or next to another.
+    private static func tidySeparators(in menu: NSMenu) {
+        var lastVisible: NSMenuItem?
+        for item in menu.items where !item.isHidden || item.isSeparatorItem {
+            if item.isSeparatorItem {
+                item.isHidden = lastVisible == nil || lastVisible?.isSeparatorItem == true
+                if !item.isHidden { lastVisible = item }
+            } else {
+                lastVisible = item
+            }
+        }
+        if let last = lastVisible, last.isSeparatorItem { last.isHidden = true }
     }
 
     @objc private func runChoice(_ sender: NSMenuItem) {
@@ -812,6 +855,21 @@ extension WebKitPageController: WKUIDelegate {
             menuChoice = nil
             if ProcessInfo.processInfo.systemUptime - chosen.at < 1, let url = navigationAction.request.url {
                 switch chosen.choice {
+                case .newTab:
+                    // In the background, as a ⌘-click does; a fresh page, not tied to this one.
+                    if let onRequest, WebAddress.isWebURL(url) { onRequest(.openURL(url, inBackground: true)) }
+                    return nil
+                case .split:
+                    if let onRequest, WebAddress.isWebURL(url) { onRequest(.openInSplit(url)) }
+                    return nil
+                case .copyAddress:
+                    #if os(macOS)
+                    if WebAddress.isWebURL(url) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    }
+                    #endif
+                    return nil
                 case .lookout:
                     if let onRequest, WebAddress.isWebURL(url) {
                         // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.

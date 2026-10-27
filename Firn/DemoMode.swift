@@ -6,7 +6,9 @@ import Foundation
 /// browsing shows up and nothing in it is changed.
 ///
 /// - The session and history live in `Application Support/Firn/Demo`,
-///   wiped at every demo launch, so each demo starts the same.
+///   wiped at every demo launch, then seeded with `DemoSession`'s three
+///   spaces and two weeks of history, so each demo starts the same. Its
+///   sites' icons are fetched at launch, and the welcome is skipped.
 /// - Its spaces get new data stores (sign-ins, cookies); the real ones are
 ///   never erased or read. The last demo's stores are erased as the next
 ///   demo starts, and any left over at the next real launch.
@@ -32,7 +34,12 @@ enum DemoMode {
 
     /// Call first thing at launch, before anything reads a setting.
     @MainActor static func prepare() {
-        if isOn { startDemo() } else { putBackRealSettings() }
+        if isOn {
+            startDemo()
+            seed()
+        } else {
+            putBackRealSettings()
+        }
     }
 
     @MainActor private static func startDemo() {
@@ -57,6 +64,26 @@ enum DemoMode {
             }
         }
         defaults.removePersistentDomain(forName: domain)
+        // The welcome is skipped: the demo starts as someone's own Firn.
+        defaults.set(true, forKey: Preference.welcomed)
+    }
+
+    /// Writes the demo's ready-made session, before the store loads it, and
+    /// its history (in the background; it's there well before ⌘Y).
+    @MainActor private static func seed() {
+        let (session, visits) = DemoSession.make()
+        try? SessionFile(url: folder.appending(path: "session.json")).save(session)
+        Task.detached(priority: .utility) {
+            for visit in visits {
+                await history.record(visit.url, title: visit.title, at: visit.time, in: visit.dataStoreID)
+            }
+        }
+    }
+
+    /// Fetches the demo sites' icons, so tiles and resting tabs show them.
+    @MainActor static func fetchIcons(for store: BrowserStore) {
+        guard isOn else { return }
+        Task { await DemoSession.fetchIcons(for: store) }
     }
 
     private static func putBackRealSettings() {

@@ -38,6 +38,7 @@ struct FirnApp: App {
         }
         // History is kept a year.
         Task.detached(priority: .utility) { await DemoMode.history.removeExpired() }
+        DemoMode.fetchIcons(for: store)
         let window = WindowModel(store: store, restoring: session?.window)
         // The welcome, the very first time (no session yet).
         if session == nil, !UserDefaults.standard.bool(forKey: Preference.welcomed) { window.showWelcome() }

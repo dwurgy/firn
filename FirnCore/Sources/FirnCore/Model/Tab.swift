@@ -182,6 +182,12 @@ public final class Tab: Identifiable {
         restingMemory = nil
     }
 
+    /// Gives a resting tab with no icon one (the demo's, fetched at launch).
+    func setIconIfMissing(_ icon: Data) {
+        guard page == nil, restingIcon == nil, SiteIcon.isValidStored(icon) else { return }
+        restingIcon = icon
+    }
+
     /// Lets the page go, remembering where it was. `keepingPlace` also
     /// keeps its history and scroll position, for a page that only slept.
     func sleep(keepingPlace: Bool = false) {

@@ -35,7 +35,7 @@ struct PasswordsSettings: View {
     @FocusState private var searchFocused: Bool
 
     private var space: Space { store.activeSpace }
-    private var passwords: PasswordStore { .keychain }
+    private var passwords: PasswordStore { DemoMode.passwords }
 
     var body: some View {
         SettingsPage {

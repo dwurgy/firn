@@ -11,31 +11,33 @@ struct FirnApp: App {
     /// Picks up where the last session left off, then saves as things change
     /// and once more at quit.
     init() {
+        DemoMode.prepare()
         BrowserEngine.startBlocking(enabled: Preference.blocksContentAtLaunch)
-        let file = SessionFile.standard
+        let file = DemoMode.sessionFile
         let session = file.load()
         let store = BrowserStore(
             restoring: session, defaultSpaces: [FirstSpace.space],
             makePage: BrowserEngine.makePage,
             removeData: { id in
                 BrowserEngine.removeData(for: id)
-                Task.detached(priority: .utility) { try? PasswordStore.keychain.removeAll(in: id) }
+                Task.detached(priority: .utility) { try? DemoMode.passwords.removeAll(in: id) }
             },
-            passwords: .keychain,
-            history: .standard
+            passwords: DemoMode.passwords,
+            history: DemoMode.history
         )
         // Erase what's left of deleted spaces: data their open pages still
         // held, passwords the Keychain couldn't be reached for, and history.
         // Only after a session really loaded: a fresh start after a damaged
-        // file doesn't know which spaces exist, so it erases nothing.
-        if let session, !session.spaces.isEmpty {
+        // file doesn't know which spaces exist, so it erases nothing. Never
+        // in a demo, whose spaces aren't the real ones.
+        if let session, !session.spaces.isEmpty, !DemoMode.isOn {
             let inUse = Set(store.spaces.map(\.dataStoreID))
             BrowserEngine.removeUnusedData(keeping: inUse)
             Task.detached(priority: .utility) { try? PasswordStore.keychain.removeUnused(keeping: inUse) }
             Task.detached(priority: .utility) { await HistoryStore.standard.removeUnused(keeping: inUse) }
         }
         // History is kept a year.
-        Task.detached(priority: .utility) { await HistoryStore.standard.removeExpired() }
+        Task.detached(priority: .utility) { await DemoMode.history.removeExpired() }
         let window = WindowModel(store: store, restoring: session?.window)
         // The welcome, the very first time (no session yet).
         if session == nil, !UserDefaults.standard.bool(forKey: Preference.welcomed) { window.showWelcome() }
@@ -47,7 +49,7 @@ struct FirnApp: App {
         sleeper = TabSleeper(store: store)
         sleeper.start()
         // Starts Sparkle, so its scheduled checks (once allowed) run.
-        _ = Updater.shared
+        if !DemoMode.isOn { _ = Updater.shared }
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [saver] _ in

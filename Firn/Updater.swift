@@ -22,8 +22,9 @@ final class Updater {
 
     private var automatic = false
     // Sparkle's standard controller: its own window for a found update.
+    // Never started in demo mode, so a demo never checks.
     @ObservationIgnored private let controller = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
+        startingUpdater: !DemoMode.isOn, updaterDelegate: nil, userDriverDelegate: nil
     )
     @ObservationIgnored private var watching: [NSKeyValueObservation] = []
 

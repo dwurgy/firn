@@ -65,7 +65,8 @@ Section spacing:      20pt
 Corner radius:        10pt tabs and rows; 9pt Basecamp tiles (crisper, so the glass reads as ice); 14pt panels (Lookout,
                       command bar, cards); 8pt small buttons and fields
 Page inset:           the page floats 8pt inside the frame, 12pt corners
-                      (8pt on macOS 26+, matching Liquid Glass window corners)
+                      (18pt on macOS 26+: the window's 26pt less the inset,
+                      so the two corners nest; `Theme.pageCornerRadius`)
 Traffic lights:       placed by macOS (empty toolbar); the top row lines up with them
 Font:                 system font (SF): 13pt tabs, 12pt labels, 11pt hints;
                       Fraunces (soft) only for brand moments: the welcome

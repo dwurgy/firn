@@ -212,9 +212,20 @@ enum Theme {
     /// The page floats this far inside the window frame.
     static let pageInset: CGFloat = 8
 
-    /// 8pt on macOS 26 and later, matching Liquid Glass window corners; 12pt before.
+    /// The window's own corners, as macOS draws them for a window with a
+    /// toolbar (Firn's is empty, but it still counts): about 26pt on macOS 26
+    /// and later (measured from a screenshot at 2x), 10pt before. AppKit has
+    /// no public way to ask a window for its radius.
+    static var windowCornerRadius: CGFloat {
+        if #available(macOS 26, *) { 26 } else { 10 }
+    }
+
+    /// The page's corners run parallel to the window's: the window's radius
+    /// less the inset, so both curves share one center and nest instead of
+    /// fighting (18pt on macOS 26). Before 26 that would leave 2pt, too sharp
+    /// to read as rounded, so the page keeps 12pt there.
     static var pageCornerRadius: CGFloat {
-        if #available(macOS 26, *) { 8 } else { 12 }
+        if #available(macOS 26, *) { windowCornerRadius - pageInset } else { 12 }
     }
 
     static let rowHeight: CGFloat = 36

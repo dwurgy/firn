@@ -111,8 +111,25 @@ an update that can't download.
    cp ~/Library/Caches/Firn-release/Firn-1.0.1.dmg ~/Library/Caches/Firn-release/Firn.dmg
    ```
 
-   Download both from the release page once to be sure they work.
-3. **Push the feed.** Commit `appcast.xml` and push `main`. Installed copies see the update within a few minutes.
+   Download both from the release page once to be sure they work. The Homebrew cask uses the versioned
+   `Firn-<version>.dmg` asset, so it must be available before updating the cask.
+3. **Update the Homebrew cask.** From the final stapled DMG, get its SHA-256 and update `version` and `sha256` in
+   `Casks/firn.rb`:
+
+   ```bash
+   shasum -a 256 ~/Library/Caches/Firn-release/Firn-1.0.1.dmg
+   ```
+
+   Confirm the versioned DMG is downloadable from the published release and that its checksum matches, then
+   validate the edited cask from the repo root:
+
+   ```bash
+   brew style Casks/firn.rb
+   HOMEBREW_DEVELOPER=1 brew info --cask ./Casks/firn.rb
+   ```
+
+   Commit and push the cask update to `main`; users can install it once that change is available.
+4. **Push the feed.** Commit `appcast.xml` and push `main`. Installed copies see the update within a few minutes.
    The website needs nothing, unless its release notes page doesn't pick up the GitHub release on its own.
 
 ## After

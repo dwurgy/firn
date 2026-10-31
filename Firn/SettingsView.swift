@@ -67,6 +67,7 @@ struct SettingsView: View {
                 case .spaces: SpacesSettings(window: window)
                 case .privacy: PrivacySettings()
                 case .passwords: PasswordsSettings(store: window.store)
+                case .extensions: ExtensionsSettings(window: window)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -94,7 +95,7 @@ struct SettingsView: View {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, spaces, privacy, passwords
+    case general, tabs, spaces, privacy, passwords, extensions
 
     var id: Self { self }
 
@@ -105,6 +106,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .spaces: "Spaces"
         case .privacy: "Privacy"
         case .passwords: "Passwords"
+        case .extensions: "Extensions"
         }
     }
 
@@ -115,6 +117,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .spaces: "square.stack"
         case .privacy: "hand.raised"
         case .passwords: "key"
+        case .extensions: "puzzlepiece.extension"
         }
     }
 }

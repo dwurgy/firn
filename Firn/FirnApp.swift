@@ -11,6 +11,9 @@ struct FirnApp: App {
     /// Picks up where the last session left off, then saves as things change
     /// and once more at quit.
     init() {
+        if #available(macOS 15.4, *) {
+            BrowserEngine.setExtensionsEnabled(!DemoMode.isOn)
+        }
         DemoMode.prepare()
         BrowserEngine.startBlocking(enabled: Preference.blocksContentAtLaunch)
         let file = DemoMode.sessionFile
@@ -25,6 +28,9 @@ struct FirnApp: App {
             passwords: DemoMode.passwords,
             history: DemoMode.history
         )
+        if #available(macOS 15.4, *), !DemoMode.isOn {
+            WebExtensionManager.shared.connect(to: store)
+        }
         // Erase what's left of deleted spaces: data their open pages still
         // held, passwords the Keychain couldn't be reached for, and history.
         // Only after a session really loaded: a fresh start after a damaged

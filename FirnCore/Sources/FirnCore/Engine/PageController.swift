@@ -149,6 +149,19 @@ public enum PageRequest {
 /// Makes pages. The only place that knows which engine Firn uses.
 @MainActor
 public enum BrowserEngine {
+    /// Set before constructing the first page (demo sessions disable extensions).
+    private static var extensionsEnabled = true
+    private static var extensionManagerWasUsed = false
+
+    public static func setExtensionsEnabled(_ enabled: Bool) {
+        extensionsEnabled = enabled
+        #if os(macOS)
+        if #available(macOS 15.4, *), !enabled, extensionManagerWasUsed { WebExtensionManager.shared.disable() }
+        #endif
+    }
+
+    static var mayUseExtensions: Bool { extensionsEnabled }
+    static func didUseExtensionManager() { extensionManagerWasUsed = true }
     /// A page whose cookies, sign-ins, and site data live in the store named
     /// `dataStoreID` (one per space, or shared between spaces that share).
     public static func makePage(dataStoreID: UUID) -> any PageController {

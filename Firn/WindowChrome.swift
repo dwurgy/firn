@@ -109,6 +109,9 @@ struct WindowSetup: NSViewRepresentable {
 
     private final class SetupView: NSView {
         let report: (TrafficLights) -> Void
+        private var observers: [NSObjectProtocol] = []
+        /// Firn hid the toolbar for full screen, so it brings it back after.
+        private var hidToolbar = false
 
         init(report: @escaping (TrafficLights) -> Void) {
             self.report = report
@@ -116,6 +119,10 @@ struct WindowSetup: NSViewRepresentable {
         }
 
         required init?(coder: NSCoder) { fatalError("not used") }
+
+        deinit {
+            MainActor.assumeIsolated { observers.forEach(NotificationCenter.default.removeObserver) }
+        }
 
         // Invisible; clicks go through to the frame underneath.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -135,8 +142,46 @@ struct WindowSetup: NSViewRepresentable {
             // See-through, so the frame's glass shows the desktop behind it.
             window.isOpaque = false
             window.backgroundColor = .clear
+            watchFullScreen(window)
             // The title bar lays its buttons out after this, so measure on the next turn.
             DispatchQueue.main.async { [weak self] in self?.measure() }
+        }
+
+        /// In full screen macOS keeps a toolbar showing across the top, and
+        /// this empty one would be a solid bar over the sidebar's top row and
+        /// the page. It has nothing to show there (the traffic lights move
+        /// into the menu bar's drop-down), so it's hidden for full screen and
+        /// back just before leaving, so the lights land in their usual spot.
+        private func watchFullScreen(_ window: NSWindow) {
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            let changes: [(Notification.Name, Bool)] = [
+                (NSWindow.willEnterFullScreenNotification, true),
+                (NSWindow.willExitFullScreenNotification, false),
+                // Entering can fail; the toolbar comes back then too.
+                (NSWindow.didFailToEnterFullScreenNotification, false),
+            ]
+            for (name, entering) in changes {
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.fullScreenChanging(entering: entering) }
+                })
+            }
+            // A window restored straight into full screen.
+            if window.styleMask.contains(.fullScreen) { fullScreenChanging(entering: true) }
+        }
+
+        private func fullScreenChanging(entering: Bool) {
+            guard let toolbar = window?.toolbar else { return }
+            if entering {
+                guard toolbar.isVisible else { return }
+                toolbar.isVisible = false
+                hidToolbar = true
+            } else if hidToolbar {
+                toolbar.isVisible = true
+                hidToolbar = false
+            }
         }
 
         private func measure() {

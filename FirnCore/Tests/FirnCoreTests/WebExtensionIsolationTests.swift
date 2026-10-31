@@ -291,7 +291,7 @@ struct WebExtensionIsolationTests {
         #expect(manager.webExtensionController(controller, openWindowsFor: context).isEmpty)
     }
 
-    @Test func uninstallAcknowledgesOnlySuccessfulCleanupAndPreservesWebsite() async throws {
+    @Test func uninstallFinishesOrReportsFailureAndPreservesWebsites() async throws {
         guard #available(macOS 15.4, *) else { return }
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
@@ -337,9 +337,16 @@ struct WebExtensionIsolationTests {
         unrelatedView.loadHTMLString("<html><body>Unrelated website</body></html>", baseURL: URL(string: "http://example.test/")!)
         for _ in 0..<100 where unrelatedView.isLoading || unrelatedView.url == nil { try await Task.sleep(for: .milliseconds(25)) }
         _ = try await unrelatedView.evaluateJavaScript("localStorage.setItem('unrelatedToken', '\(token)')")
-        var before = await websiteStore.dataRecords(ofTypes: types)
         let ownHost = installed.id.uuidString.lowercased()
-        for _ in 0..<100 where !before.contains(where: { $0.displayName.lowercased().contains(ownHost) }) {
+        #expect(!WebExtensionManager.isOwnedWebsiteRecordName(ownHost, hosts: [ownHost]))
+        #expect(!WebExtensionManager.isOwnedWebsiteRecordName("http://\(ownHost)", hosts: [ownHost]))
+        #expect(WebExtensionManager.isOwnedWebsiteRecordName("webkit-extension://\(ownHost)", hosts: [ownHost]))
+        let uuidHostView = WKWebView(frame: .zero, configuration: unrelatedConfiguration)
+        uuidHostView.loadHTMLString("<html><body>UUID website</body></html>", baseURL: URL(string: "http://\(ownHost)/")!)
+        for _ in 0..<100 where uuidHostView.isLoading || uuidHostView.url == nil { try await Task.sleep(for: .milliseconds(25)) }
+        _ = try await uuidHostView.evaluateJavaScript("localStorage.setItem('uuidWebsiteToken', '\(token)')")
+        var before = await websiteStore.dataRecords(ofTypes: types)
+        for _ in 0..<100 where !before.contains(where: { $0.displayName == "example.test" }) {
             try await Task.sleep(for: .milliseconds(25))
             before = await websiteStore.dataRecords(ofTypes: types)
         }
@@ -347,6 +354,7 @@ struct WebExtensionIsolationTests {
         // Cleanup below must preserve unrelated data whether it is exposed or not;
         // this test cannot prove DOM erasure when WebKit omits those records.
         #expect(before.contains { $0.displayName == "example.test" })
+        #expect(manager.errors[installed.id] == nil)
 
         ownView.load(URLRequest(url: URL(string: "about:blank")!))
         try library.remove(id: installed.id)
@@ -354,17 +362,17 @@ struct WebExtensionIsolationTests {
         for _ in 0..<200 where manager.errors[installed.id] == nil && library.pendingRemovals[installed.id] != nil {
             try await Task.sleep(for: .milliseconds(25))
         }
-        let sdkRecords = await controller.dataRecords(ofTypes: WKWebExtensionController.allExtensionDataTypes)
-        if sdkRecords.contains(where: { $0.uniqueIdentifier == installed.id.uuidString && !$0.errors.isEmpty }) {
-            #expect(manager.errors[installed.id] != nil)
+        // SDK errors belong to the exact records passed to deletion, not a fresh
+        // fetch. Observe the host's reported result and durable journal together.
+        if manager.errors[installed.id] != nil {
             #expect(library.pendingRemovals[installed.id] != nil)
         } else {
             #expect(library.pendingRemovals[installed.id] == nil)
         }
         let after = await websiteStore.dataRecords(ofTypes: types)
-        #expect(!after.contains { $0.displayName.lowercased().contains(ownHost) })
         #expect(after.contains { $0.displayName == "example.test" })
         #expect(try await unrelatedView.evaluateJavaScript("localStorage.getItem('unrelatedToken')") as? String == token)
+        #expect(try await uuidHostView.evaluateJavaScript("localStorage.getItem('uuidWebsiteToken')") as? String == token)
     }
 }
 #endif

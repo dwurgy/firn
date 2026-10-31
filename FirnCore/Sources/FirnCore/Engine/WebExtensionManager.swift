@@ -238,9 +238,10 @@ public final class WebExtensionManager: NSObject, WKWebExtensionControllerDelega
         return removed
     }
 
-    private static func isOwnedWebsiteRecord(_ record: WKWebsiteDataRecord, hosts: Set<String>) -> Bool {
-        let name = record.displayName.lowercased()
-        if let id = UUID(uuidString: name) { return hosts.contains(id.uuidString.lowercased()) }
+    static func isOwnedWebsiteRecordName(_ displayName: String, hosts: Set<String>) -> Bool {
+        let name = displayName.lowercased()
+        // A bare UUID can also be an ordinary website hostname. Without an
+        // explicit extension scheme, the public record has no origin provenance.
         guard let url = URLComponents(string: name), url.scheme == "webkit-extension",
               let host = url.host, let id = UUID(uuidString: host) else { return false }
         return hosts.contains(id.uuidString.lowercased())
@@ -261,7 +262,7 @@ public final class WebExtensionManager: NSObject, WKWebExtensionControllerDelega
         let apiDataRemoved = records.allSatisfy { $0.errors.isEmpty }
         guard let dataStore = controller.configuration.defaultWebsiteDataStore else { return false }
         let websiteRecords = await dataStore.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes())
-        let ownedRecords = websiteRecords.filter { Self.isOwnedWebsiteRecord($0, hosts: ownedHosts) }
+        let ownedRecords = websiteRecords.filter { Self.isOwnedWebsiteRecordName($0.displayName, hosts: ownedHosts) }
         if !ownedRecords.isEmpty {
             await withCheckedContinuation { continuation in
                 dataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), for: ownedRecords) {
@@ -270,7 +271,7 @@ public final class WebExtensionManager: NSObject, WKWebExtensionControllerDelega
             }
         }
         let remaining = await dataStore.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes())
-        return apiDataRemoved && !remaining.contains { Self.isOwnedWebsiteRecord($0, hosts: ownedHosts) }
+        return apiDataRemoved && !remaining.contains { Self.isOwnedWebsiteRecordName($0.displayName, hosts: ownedHosts) }
     }
 
     private func watchStore() {

@@ -45,10 +45,19 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let row = NSView(frame: NSRect(x: 100, y: 8, width: 300, height: 36))
         row.wantsLayer = true
         row.layer?.backgroundColor = NSColor(white: 1, alpha: 0.6).cgColor
-        content.addSubview(row)
+        if mode == "S" {
+            let c = FlippedView(frame: content.bounds)
+            c.autoresizingMask = [.width, .height]
+            content.addSubview(c)
+            c.addSubview(row)
+            chrome = c
+        } else {
+            content.addSubview(row)
+        }
         window.contentView = content
 
-        if mode == "K" { makeCopies() } else if mode != "A" { moveButtonsIntoContent() }
+        if mode == "S" { _ = menuBarHeight; print("  menu bar height: \(menuBarHeight)") }
+        if mode == "K" || mode == "S" { makeCopies() } else if mode != "A" { moveButtonsIntoContent() }
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -108,6 +117,17 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             MainActor.assumeIsolated {
                 guard let self, let strip else { return }
                 let top = self.window.frame.maxY - strip.frame.maxY
+                if mode == "S" {
+                    // Glide once per direction instead of following AppKit's uneven steps.
+                    if top > self.lastStripTop && !self.slidDown {
+                        self.slidDown = true
+                        self.slide(to: self.menuBarHeight, animated: true)
+                    } else if top < self.lastStripTop && self.slidDown {
+                        self.slidDown = false
+                        self.slide(to: 0, animated: true)
+                    }
+                    self.lastStripTop = top
+                }
                 let c = self.copies.first.map { "copy0=\($0.frame.origin)" } ?? ""
                 let r = self.window.standardWindowButton(.closeButton).map { "realHidden=\($0.isHidden) realWin=\(String(describing: type(of: $0.window!)))" } ?? ""
                 print("  strip moved: top=\(top) alpha=\(strip.alphaValue) \(c) \(r)")
@@ -116,21 +136,46 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowDidEnterFullScreen(_ note: Notification) {
-        if mode == "P" || mode == "K" { DispatchQueue.main.async { self.quietStrip(); self.hideRealButtons() } }
+        if mode == "P" || mode == "K" || mode == "S" { DispatchQueue.main.async { self.quietStrip(); self.hideRealButtons() } }
         describe("didEnterFullScreen", window)
         if mode == "C" || mode == "H" || mode == "P" { DispatchQueue.main.async { self.moveButtonsIntoContent(); describe("C: moved back in", self.window) } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             describe("fullScreen +1.5s", self.window)
         }
         shoot("fullscreen", after: 2.0)
-        if mode != "H" && mode != "P" && mode != "K" { DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { self.window.toggleFullScreen(nil) } }
+        if mode != "H" && mode != "P" && mode != "K" && mode != "S" { DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { self.window.toggleFullScreen(nil) } }
     }
 
     var copies: [NSButton] = []
+    var chrome: NSView?
+
+    // Dia's slide: once the menu bar's lower edge passes the screen's top, everything moves down with it.
+    var lastStripTop: CGFloat = -32
+    var slidDown = false
+    // Taken while windowed; taller on Macs with a notch.
+    lazy var menuBarHeight: CGFloat = max(NSApp.mainMenu?.menuBarHeight ?? 0, 24)
+
+    func slide(to offset: CGFloat, animated: Bool = false) {
+        guard let chrome else { return }
+        if offset == 0 && !animated { slidDown = false; lastStripTop = -32 }
+        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                ctx.allowsImplicitAnimation = true
+                chrome.animator().setFrameOrigin(NSPoint(x: 0, y: offset))
+            }
+        } else {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            chrome.setFrameOrigin(NSPoint(x: 0, y: offset))
+            CATransaction.commit()
+        }
+    }
 
     // Our own copies of the lights: AppKit never lays these out, so it can't move them.
     func makeCopies() {
-        guard let content = window.contentView else { return }
+        guard let content = chrome ?? window.contentView else { return }
         var x: CGFloat = 17
         let actions: [(NSWindow.ButtonType, Selector)] = [
             (.closeButton, #selector(NSWindow.performClose(_:))),
@@ -156,11 +201,11 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowDidExitFullScreen(_ note: Notification) {
-        if mode == "K" { DispatchQueue.main.async { self.hideRealButtons(); print("  K after exit: copy0=\(self.copies.first?.frame.origin ?? .zero) realHidden=\(self.window.standardWindowButton(.closeButton)?.isHidden ?? false)") } }
+        if mode == "K" || mode == "S" { DispatchQueue.main.async { self.hideRealButtons(); self.slide(to: 0); print("  K after exit: copy0=\(self.copies.first?.frame.origin ?? .zero) realHidden=\(self.window.standardWindowButton(.closeButton)?.isHidden ?? false)") } }
         describe("didExitFullScreen", window)
         if mode == "C" || mode == "H" || mode == "P" { DispatchQueue.main.async { self.moveButtonsIntoContent(); describe("C: moved back after exit", self.window) } }
         shoot("after", after: 1.0)
-        if mode != "H" && mode != "P" && mode != "K" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) } }
+        if mode != "H" && mode != "P" && mode != "K" && mode != "S" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) } }
     }
 
     func shoot(_ name: String, after: Double) {

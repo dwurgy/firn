@@ -218,8 +218,9 @@ enum Theme {
     }
 
     static let rowHeight: CGFloat = 36
-    /// Air between the traffic lights and the first button after them.
-    static let trafficLightGap: CGFloat = 16
+    /// The traffic lights' share of the sidebar's top row: the three lights
+    /// (11pt in, 14pt each, 23pt apart) and 16pt of air before the next button.
+    static let trafficLightsWidth: CGFloat = 85
     static let rowSpacing: CGFloat = 4
     static let rowPadding: CGFloat = 12
     static let sectionSpacing: CGFloat = 20

@@ -85,69 +85,166 @@ struct BlankSpaceMenuItem {
     static let divider = BlankSpaceMenuItem(title: nil)
 }
 
-/// Where the traffic lights sit, measured from the window's top-left corner.
-struct TrafficLights: Equatable {
-    /// How far below the top edge their centers are.
-    var centerY: CGFloat = Theme.pageInset + Theme.rowHeight / 2
-    /// How far from the left edge the last one ends.
-    var trailingX: CGFloat = 76
-}
-
-/// Gives the window an empty, invisible toolbar, so macOS itself places the
-/// traffic lights in the roomier spot every app with a toolbar has, then
-/// reports where they landed so the sidebar's top row can line up with them.
-/// AppKit because SwiftUI only makes a toolbar when it has items to show.
+/// Sets up the window: no title or toolbar showing, the content running up
+/// under the title bar, and see-through. The real traffic lights stay hidden
+/// (Firn draws its own, `WindowLights`), and in full screen the strip macOS
+/// slides down under the menu bar is made clear and click-through, so only
+/// the menu bar itself comes down, as in Dia.
+/// AppKit because SwiftUI can't reach the title bar or the full-screen strip.
 struct WindowSetup: NSViewRepresentable {
-    @Binding var lights: TrafficLights
-    func makeNSView(context: Context) -> NSView {
-        SetupView { measured in
-            if measured != lights { lights = measured }
-        }
-    }
-
+    func makeNSView(context: Context) -> NSView { SetupView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class SetupView: NSView {
-        let report: (TrafficLights) -> Void
-
-        init(report: @escaping (TrafficLights) -> Void) {
-            self.report = report
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) { fatalError("not used") }
+        private var observers: [NSObjectProtocol] = []
 
         // Invisible; clicks go through to the frame underneath.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
             guard let window else { return }
-            if window.toolbar == nil {
-                let toolbar = NSToolbar(identifier: "Firn")
-                toolbar.showsBaselineSeparator = false
-                window.toolbar = toolbar
-            }
-            window.toolbarStyle = .unified
+            // No toolbar: with one, AppKit keeps laying the real lights out as
+            // its own, and full screen gets a white bar across the top.
+            window.toolbar = nil
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             // See-through, so the frame's glass shows the desktop behind it.
             window.isOpaque = false
             window.backgroundColor = .clear
-            // The title bar lays its buttons out after this, so measure on the next turn.
-            DispatchQueue.main.async { [weak self] in self?.measure() }
+            hideRealLights()
+            for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self] note in
+                    let entered = note.name == NSWindow.didEnterFullScreenNotification
+                    // AppKit attaches the strip, and shows the lights again, just after this.
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            self?.hideRealLights()
+                            if entered { self?.quietStrip() }
+                        }
+                    }
+                })
+            }
         }
 
-        private func measure() {
-            guard let window, let content = window.contentView,
-                  let close = window.standardWindowButton(.closeButton),
-                  let zoom = window.standardWindowButton(.zoomButton) else { return }
-            let closeRect = close.convert(close.bounds, to: content)
-            let zoomRect = zoom.convert(zoom.bounds, to: content)
-            let centerY = content.isFlipped ? closeRect.midY : content.bounds.height - closeRect.midY
-            guard centerY > 0 else { return }
-            report(TrafficLights(centerY: centerY, trailingX: zoomRect.maxX))
+        private func hideRealLights() {
+            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window?.standardWindowButton(type)?.isHidden = true
+            }
+        }
+
+        /// The strip under the menu bar (`NSToolbarFullScreenWindow`, a private
+        /// class, so it's found by name): clear, no shadow, and clicks pass through.
+        private func quietStrip() {
+            guard let strip = window?.childWindows?.first(where: {
+                String(describing: type(of: $0)).contains("ToolbarFullScreen")
+            }) else { return }
+            strip.isOpaque = false
+            strip.backgroundColor = .clear
+            strip.hasShadow = false
+            strip.ignoresMouseEvents = true
+            strip.contentView?.isHidden = true
+        }
+
+        deinit {
+            MainActor.assumeIsolated { observers.forEach(NotificationCenter.default.removeObserver) }
+        }
+    }
+}
+
+/// Firn's own traffic lights: macOS's close, minimize, and full-screen
+/// buttons (made with `NSWindow.standardWindowButton(_:for:)`), placed in the
+/// sidebar's top row where macOS put them when Firn had a toolbar (19pt from
+/// the window's top and left). They're copies because AppKit keeps moving the
+/// window's real ones back as its own, in full screen most of all; copies sit
+/// in Firn's own views, so they stay put and travel with the sidebar.
+/// AppKit because SwiftUI has no traffic lights.
+struct WindowLights: NSViewRepresentable {
+    /// From the row's top-left: the row starts 8pt into the window each way.
+    static let origin = CGPoint(x: 11, y: 11)
+    static let spacing: CGFloat = 23
+
+    func makeNSView(context: Context) -> LightsView { LightsView() }
+    func updateNSView(_ view: LightsView, context: Context) {}
+
+    final class LightsView: NSView {
+        private var buttons: [NSButton] = []
+        private var observers: [NSObjectProtocol] = []
+        private var pointerInside = false
+
+        override var isFlipped: Bool { true }
+
+        // Only the buttons take clicks; the rest of the row still moves the window.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            let hit = super.hitTest(point)
+            return hit === self ? nil : hit
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            buttons.forEach { $0.removeFromSuperview() }
+            buttons = []
+            guard let window else { return }
+            let kinds: [(NSWindow.ButtonType, Selector)] = [
+                (.closeButton, #selector(NSWindow.performClose(_:))),
+                (.miniaturizeButton, #selector(NSWindow.performMiniaturize(_:))),
+                (.zoomButton, #selector(NSWindow.toggleFullScreen(_:))),
+            ]
+            for (index, (type, action)) in kinds.enumerated() {
+                guard let button = NSWindow.standardWindowButton(type, for: window.styleMask) else { continue }
+                button.target = window
+                button.action = action
+                button.setFrameOrigin(NSPoint(x: WindowLights.origin.x + CGFloat(index) * WindowLights.spacing, y: WindowLights.origin.y))
+                addSubview(button)
+                buttons.append(button)
+            }
+            // Grey while the window is in the background, lit when it comes forward.
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+                         NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification] {
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.redrawButtons() }
+                })
+            }
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            guard let first = buttons.first, let last = buttons.last else { return }
+            addTrackingArea(NSTrackingArea(
+                rect: first.frame.union(last.frame),
+                options: [.mouseEnteredAndExited, .activeAlways],
+                owner: self
+            ))
+        }
+
+        override func mouseEntered(with event: NSEvent) { setPointerInside(true) }
+        override func mouseExited(with event: NSEvent) { setPointerInside(false) }
+
+        private func setPointerInside(_ inside: Bool) {
+            pointerInside = inside
+            redrawButtons()
+        }
+
+        private func redrawButtons() { buttons.forEach { $0.needsDisplay = true } }
+
+        /// The buttons ask the view they sit in whether the pointer is over
+        /// the group, to show ×, −, and + on all three at once. A private
+        /// AppKit question (the title bar answers it for the real ones), long
+        /// relied on by apps that place their own lights.
+        @objc func _mouseInGroup(_ button: NSButton) -> Bool { pointerInside }
+
+        deinit {
+            MainActor.assumeIsolated { observers.forEach(NotificationCenter.default.removeObserver) }
         }
     }
 }
@@ -189,104 +286,6 @@ private struct BehindWindowBlur: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
-}
-
-/// Moves the window's own traffic lights sideways (or fades them, with Reduce
-/// Motion), so they travel with the sidebar they sit in. macOS still draws and
-/// runs them; Firn only shifts them. AppKit puts them back in their home spot
-/// whenever it lays out the title bar (a resize, for one), so this notices
-/// and shifts them again.
-struct TrafficLightsMover: NSViewRepresentable {
-    var offset: CGFloat
-    var alpha: CGFloat
-    /// Fully slid away: hidden, so they can't be clicked.
-    var hidden: Bool
-
-    func makeNSView(context: Context) -> MoverView { MoverView() }
-
-    func updateNSView(_ view: MoverView, context: Context) {
-        view.offset = offset
-        view.alpha = alpha
-        view.lightsHidden = hidden
-        view.apply()
-    }
-
-    final class MoverView: NSView {
-        // Invisible; clicks go through to the frame underneath.
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        var offset: CGFloat = 0
-        var alpha: CGFloat = 1
-        var lightsHidden = false
-        /// Where macOS puts each button, and where Firn last put it.
-        private var home: [NSWindow.ButtonType: CGFloat] = [:]
-        private var placed: [NSWindow.ButtonType: CGFloat] = [:]
-        private var observers: [NSObjectProtocol] = []
-        private var reapplyQueued = false
-        private static let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers = []
-            guard let window else { return }
-            for type in Self.types {
-                guard let button = window.standardWindowButton(type) else { continue }
-                button.postsFrameChangedNotifications = true
-                observers.append(NotificationCenter.default.addObserver(
-                    forName: NSView.frameDidChangeNotification, object: button, queue: .main
-                ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.buttonMoved(type) }
-                })
-            }
-            for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
-                observers.append(NotificationCenter.default.addObserver(
-                    forName: name, object: window, queue: .main
-                ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.apply() }
-                })
-            }
-            apply()
-        }
-
-        /// A button moved. If Firn didn't move it, macOS did: that's its new home.
-        private func buttonMoved(_ type: NSWindow.ButtonType) {
-            guard let button = window?.standardWindowButton(type) else { return }
-            let x = button.frame.origin.x
-            guard x != placed[type] else { return }
-            home[type] = x
-            // macOS is mid-layout; shifting it back right now wouldn't stick.
-            guard !reapplyQueued else { return }
-            reapplyQueued = true
-            DispatchQueue.main.async { [weak self] in
-                self?.reapplyQueued = false
-                self?.apply()
-            }
-        }
-
-        func apply() {
-            guard let window else { return }
-            // In full screen the lights live in the menu bar's drop-down; leave them be.
-            let fullScreen = window.styleMask.contains(.fullScreen)
-            for type in Self.types {
-                guard let button = window.standardWindowButton(type) else { continue }
-                let shouldHide = lightsHidden && !fullScreen
-                // Changing isHidden makes macOS lay the title bar out again, so do it first.
-                if button.isHidden != shouldHide { button.isHidden = shouldHide }
-                let homeX = home[type] ?? button.frame.origin.x
-                home[type] = homeX
-                let x = homeX + (fullScreen ? 0 : offset)
-                placed[type] = x
-                if button.frame.origin.x != x { button.setFrameOrigin(NSPoint(x: x, y: button.frame.origin.y)) }
-                let a = fullScreen ? 1 : alpha
-                if button.alphaValue != a { button.alphaValue = a }
-            }
-        }
-
-        deinit {
-            MainActor.assumeIsolated { observers.forEach(NotificationCenter.default.removeObserver) }
-        }
-    }
 }
 
 /// The strip between the sidebar and the page that resizes the sidebar

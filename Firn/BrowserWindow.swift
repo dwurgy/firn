@@ -803,7 +803,6 @@ struct BrowserWindow: View {
     /// The whole window's space, for a tab dragged from the sidebar onto the page.
     nonisolated static let space = "browserWindow"
     let window: WindowModel
-    @State private var lights = TrafficLights()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Preference.newTabPlacement) private var newTabPlacement = NewTabPlacement.bottom
     @AppStorage(Preference.driftAfter) private var driftAfter = DriftAfter.sevenDays
@@ -857,21 +856,11 @@ struct BrowserWindow: View {
                 .opacity(window.welcomeFinish == .begun || window.welcomeFinish == .rising ? 0 : 1)
                 // Empty frame (around the page, the sidebar's top row) moves the window.
                 WindowDragArea()
-                WindowSetup(lights: $lights)
+                WindowSetup()
                 PointerTracker(
                     onMove: { window.pointerMoved(toX: $0) },
                     onLeave: { window.pointerLeftWindow() }
                 )
-                // The traffic lights ride along with the sidebar, frame by frame.
-                Color.clear
-                    .modifier(TrafficLightsSlide(
-                        reveal: showsSidebar ? 1 : 0,
-                        shift: peekShift,
-                        distance: window.sidebarWidth,
-                        fades: reduceMotion
-                    ))
-                    .animation(slide, value: showsSidebar)
-                    .animation(slide, value: window.isPeeking)
             }
             .ignoresSafeArea()
         }
@@ -947,7 +936,7 @@ struct BrowserWindow: View {
     }
 
     /// While peeking, the sidebar is a card floating just inside the window
-    /// edge, so it and its traffic lights sit this much further in.
+    /// edge, so it (and the traffic lights in it) sits this much further in.
     private var peekShift: CGFloat { window.isPeeking ? Theme.peekInset : 0 }
     /// Hidden, the sidebar keeps its card look (wider by the page inset, with a
     /// shadow up to 24pt blur and 4pt across), so it slides that much further out.
@@ -959,7 +948,7 @@ struct BrowserWindow: View {
     /// slide can reverse midway (a quick peek in and out) without a jump.
     private var sidebarLayer: some View {
         ZStack(alignment: .leading) {
-            Sidebar(store: store, window: window, lights: lights)
+            Sidebar(store: store, window: window)
                 .frame(width: window.sidebarWidth)
                 // Blank sidebar moves the window (as in Dia), and never lets a
                 // click fall through to the page under a peeking card.
@@ -1029,31 +1018,6 @@ private struct PageBesideSidebar: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         content.padding(.leading, Theme.pageInset + reveal * sidebarWidth)
-    }
-}
-
-/// Hands the sidebar's slide, one frame at a time, to the traffic lights.
-/// SwiftUI calls `body` on every frame of the animation with the in-between
-/// value, so the lights move on exactly the sidebar's curve.
-private struct TrafficLightsSlide: ViewModifier, Animatable {
-    /// 1 when the sidebar is showing, 0 when it's slid away.
-    var reveal: CGFloat
-    /// How far in the peeking card sits.
-    var shift: CGFloat
-    let distance: CGFloat
-    let fades: Bool
-
-    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(reveal, shift) }
-        set { reveal = newValue.first; shift = newValue.second }
-    }
-
-    func body(content: Content) -> some View {
-        content.background(TrafficLightsMover(
-            offset: fades ? shift : -(1 - reveal) * distance + shift,
-            alpha: fades ? reveal : 1,
-            hidden: reveal <= 0.001
-        ))
     }
 }
 

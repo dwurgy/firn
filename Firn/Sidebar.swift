@@ -8,8 +8,6 @@ struct Sidebar: View {
     nonisolated static let space = "sidebar"
     let store: BrowserStore
     let window: WindowModel
-    /// Where macOS put the traffic lights; the top row lines up with them.
-    let lights: TrafficLights
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,10 +27,11 @@ struct Sidebar: View {
         .padding(.leading, Theme.pageInset)
     }
 
-    /// Centered on the traffic lights, which sit at its left.
+    /// The traffic lights at its left, then the sidebar button.
     private var topRow: some View {
         HStack(spacing: 2) {
-            Color.clear.frame(width: lights.trailingX + Theme.trafficLightGap - Theme.pageInset - 2, height: 1)
+            WindowLights()
+                .frame(width: Theme.trafficLightsWidth, height: Theme.rowHeight)
             ChromeButton(
                 window.sidebarCollapsed ? "Keep sidebar open (⌘S)" : "Hide sidebar (⌘S)",
                 systemImage: "sidebar.left"
@@ -45,7 +44,7 @@ struct Sidebar: View {
             }
         }
         .frame(height: Theme.rowHeight)
-        .padding(.top, max(lights.centerY - Theme.rowHeight / 2, 0))
+        .padding(.top, Theme.pageInset)
     }
 }
 

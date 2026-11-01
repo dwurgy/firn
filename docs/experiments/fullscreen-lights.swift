@@ -117,7 +117,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             MainActor.assumeIsolated {
                 guard let self, let strip else { return }
                 let top = self.window.frame.maxY - strip.frame.maxY
-                if mode == "S" {
+                if mode == "S" && !self.leavingFullScreen {
                     // Glide once per direction instead of following AppKit's uneven steps.
                     if top > self.lastStripTop && !self.slidDown {
                         self.slidDown = true
@@ -151,6 +151,21 @@ final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // Dia's slide: once the menu bar's lower edge passes the screen's top, everything moves down with it.
     var lastStripTop: CGFloat = -32
+    var leavingFullScreen = false
+
+    // Back to rest before AppKit takes its picture for the exit animation, and ignore the strip from here on.
+    func windowWillExitFullScreen(_ note: Notification) {
+        guard mode == "S" else { return }
+        leavingFullScreen = true
+        if let stripObserver { NotificationCenter.default.removeObserver(stripObserver) }
+        stripObserver = nil
+        slide(to: 0)
+        print("  willExit: slid back to rest")
+    }
+
+    func windowWillEnterFullScreen(_ note: Notification) {
+        leavingFullScreen = false
+    }
     var slidDown = false
     // Taken while windowed; taller on Macs with a notch.
     lazy var menuBarHeight: CGFloat = max(NSApp.mainMenu?.menuBarHeight ?? 0, 24)

@@ -50,7 +50,8 @@ missing.
 2. **Raise the version and build number** in Xcode (the Firn target › General › Identity: Version and Build),
    which sets both the Debug and Release values. The build number goes up by one each release.
 3. **Write the notes** in `CHANGELOG.md`, newest at the top, in plain words. Each fixed bug thanks whoever
-   reported it, by the name they gave ("Thanks to Noah", "Thanks to u/name on Reddit"; David, 2026-11-01). Preview how the update window shows
+   reported it, by the name they gave ("Thanks to Noah", "Thanks to u/name on Reddit"; David, 2026-11-01). Every version opens with its own
+   one-line title in bold, a short sentence ("Firn, made for the Mac."). Preview how the update window shows
    them:
 
    ```bash
@@ -103,7 +104,8 @@ an update that can't download.
    ```
 
 2. **Make the GitHub release** from that tag (github.com/dwurgy/firn › Releases › Draft a new release), titled
-   `Firn 1.0.1`, with the version's notes from `CHANGELOG.md` pasted in, and the DMG attached twice: as
+   with the version's own one-line title (the bold line under its heading in `CHANGELOG.md`, such as "Firn,
+   made for the Mac."; never just the version, which is the tag), the rest of its notes from `CHANGELOG.md` pasted in, and the DMG attached twice: as
    `Firn-<version>.dmg` (the update feed's download) and as `Firn.dmg` (the website's). GitHub sends
    `https://github.com/dwurgy/firn/releases/latest/download/Firn.dmg` to the newest release's `Firn.dmg`, so the
    website's button never changes. Make the copy with:

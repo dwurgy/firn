@@ -2,6 +2,8 @@
 
 ## Firn 1.0.1
 
+**A calmer full screen, and corners that fit.**
+
 ### Fixed
 
 - **Full screen looks like the rest of Firn.** The blank bar across the top is gone. The window buttons stay where they always are, and when the menu bar comes down, the sidebar and the top of the page glide down with it. Thanks to u/Disastrous-Job-9948 on Reddit for reporting it.

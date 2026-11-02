@@ -87,6 +87,17 @@ Nothing else, and no analytics.
 
 macOS 14 Sonoma or later. Firn looks its best on macOS 26, with Liquid Glass.
 
+## Installation
+
+Install with Homebrew:
+
+```bash
+brew tap dwurgy/firn https://github.com/dwurgy/firn
+brew install --cask dwurgy/firn/firn
+```
+
+Or download [Firn for Mac](https://github.com/dwurgy/firn/releases/latest/download/Firn.dmg) directly.
+
 ## Building from source
 
 You'll need Xcode.

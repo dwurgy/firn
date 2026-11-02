@@ -1,5 +1,12 @@
 # What's new in Firn
 
+## Firn 1.0.1
+
+### Fixed
+
+- **Full screen looks like the rest of Firn.** The blank bar across the top is gone. The window buttons stay where they always are, and when the menu bar comes down, the sidebar and the top of the page glide down with it. Thanks to u/Disastrous-Job-9948 on Reddit for reporting it.
+- **The page's corners match the window's** on macOS Tahoe. Thanks to Noah for reporting it.
+
 ## Firn 1.0.0
 
 **Firn, made for the Mac.**

@@ -49,7 +49,8 @@ missing.
 
 2. **Raise the version and build number** in Xcode (the Firn target › General › Identity: Version and Build),
    which sets both the Debug and Release values. The build number goes up by one each release.
-3. **Write the notes** in `CHANGELOG.md`, newest at the top, in plain words. Preview how the update window shows
+3. **Write the notes** in `CHANGELOG.md`, newest at the top, in plain words. Each fixed bug thanks whoever
+   reported it, by the name they gave ("Thanks to Noah", "Thanks to u/name on Reddit"; David, 2026-11-01). Preview how the update window shows
    them:
 
    ```bash

@@ -173,7 +173,7 @@ fi
 
 step "Done: $DMG"
 print "Nothing is published yet. To release Firn $VERSION:"
-print "  1. Commit appcast.xml."
-print "  2. On GitHub, make release v$VERSION and attach $(basename "$DMG") (its notes: Firn $VERSION's section of CHANGELOG.md)."
-print "  3. Once the DMG downloads, have the website session put appcast.xml at https://firnbrowser.com/appcast.xml."
+print "  1. Tag the code that was built (git tag -a v$VERSION -m \"Firn $VERSION\") and push the tag."
+print "  2. On GitHub, make release v$VERSION, titled with its own line from CHANGELOG.md, and attach $(basename "$DMG") and a copy named Firn.dmg."
+print "  3. Once the DMG downloads, commit appcast.xml and push main (firnbrowser.com/appcast.xml points to it)."
 open -R "$DMG"

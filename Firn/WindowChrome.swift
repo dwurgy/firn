@@ -135,6 +135,9 @@ struct WindowSetup: NSViewRepresentable {
             window.backgroundColor = .clear
             hideRealLights()
             readMenuBarHeight()
+            readCornerRadius()
+            // Once more after AppKit lays out the new style.
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.readCornerRadius() } }
             for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
                 observers.append(NotificationCenter.default.addObserver(
                     forName: name, object: window, queue: .main
@@ -173,6 +176,20 @@ struct WindowSetup: NSViewRepresentable {
             guard let window, !window.styleMask.contains(.fullScreen) else { return }
             let height = NSApp.mainMenu?.menuBarHeight ?? 0
             if height > 0 { menuBarHeight = height }
+        }
+
+        /// The window's corner radius, from AppKit's private `_cornerRadius`
+        /// (no public way to read it; the pixels agree, HISTORY.md). Asked only
+        /// if the window answers it, and only while windowed (full screen has
+        /// none); anything odd is ignored and the page keeps 8pt.
+        private func readCornerRadius() {
+            guard let window, !window.styleMask.contains(.fullScreen),
+                  window.responds(to: NSSelectorFromString("_cornerRadius")),
+                  let value = window.value(forKey: "_cornerRadius") as? NSNumber
+            else { return }
+            let radius = CGFloat(value.doubleValue)
+            guard (8...40).contains(radius) else { return }
+            if WindowCorners.shared.radius != radius { WindowCorners.shared.radius = radius }
         }
 
         private func hideRealLights() {

@@ -1217,7 +1217,7 @@ private struct MenuBarCover: View {
     let color: String
 
     var body: some View {
-        let cover = PageTopCover(drop: drop)
+        let cover = PageTopCover(drop: drop, radius: Theme.pageCornerRadius)
         ZStack {
             FrameGlass()
             SpaceTint(color: color)
@@ -1231,6 +1231,7 @@ private struct MenuBarCover: View {
 /// The page's top `drop` points, with its corners rounded again below them.
 private struct PageTopCover: Shape {
     var drop: CGFloat
+    var radius: CGFloat
 
     var animatableData: CGFloat {
         get { drop }
@@ -1239,7 +1240,6 @@ private struct PageTopCover: Shape {
 
     func path(in rect: CGRect) -> Path {
         guard drop >= 0.5 else { return Path() }
-        let radius = Theme.pageCornerRadius
         // The band down to where the new corners end, less the page below the new edge.
         let band = Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: drop + radius))
         let page = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY + drop, width: rect.width,

@@ -212,9 +212,16 @@ enum Theme {
     /// The page floats this far inside the window frame.
     static let pageInset: CGFloat = 8
 
-    /// 8pt on macOS 26 and later, matching Liquid Glass window corners; 12pt before.
-    static var pageCornerRadius: CGFloat {
-        if #available(macOS 26, *) { 8 } else { 12 }
+    /// On macOS 26 and later, the window's own corners less the inset, so the
+    /// two nest (window corners differ between 26 and 27); 8pt until the
+    /// window is measured. 12pt before 26.
+    @MainActor static var pageCornerRadius: CGFloat {
+        if #available(macOS 26, *) {
+            guard let window = WindowCorners.shared.radius else { return 8 }
+            return min(max(window - pageInset, 6), 24)
+        } else {
+            return 12
+        }
     }
 
     static let rowHeight: CGFloat = 36
@@ -244,7 +251,7 @@ enum Theme {
     static let peekInset: CGFloat = 4
     /// Its corners run parallel to the page's (same center, larger by the
     /// difference in inset), so window, card, and page corners nest.
-    static var peekCornerRadius: CGFloat { pageCornerRadius + pageInset - peekInset }
+    @MainActor static var peekCornerRadius: CGFloat { pageCornerRadius + pageInset - peekInset }
     /// How close to the left edge the pointer must be to bring the card out.
     static let peekEdgeZone: CGFloat = 8
     /// How far past the card's right edge the pointer may drift before it hides.
@@ -351,4 +358,12 @@ enum Tug {
         if value > high { return high + highGive * tanh((value - high) / 50) }
         return value
     }
+}
+
+/// The window's corner radius, measured once it's set up (`WindowSetup`).
+/// Observable, so the page's corners redraw when it arrives.
+@MainActor @Observable
+final class WindowCorners {
+    static let shared = WindowCorners()
+    var radius: CGFloat?
 }

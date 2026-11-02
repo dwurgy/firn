@@ -4,7 +4,7 @@ cask "firn" do
 
   url "https://github.com/dwurgy/firn/releases/download/v#{version}/Firn-#{version}.dmg"
   name "Firn"
-  desc "Quiet, minimalist web browser"
+  desc "Calm, minimalist web browser"
   homepage "https://firnbrowser.com/"
 
   livecheck do

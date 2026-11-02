@@ -11,12 +11,17 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            topRow
-            AddressBar(store: store, window: window)
-                .padding(.top, 8)
-                .padding(.bottom, Theme.sectionSpacing)
-            BasecampGrid(store: store, window: window)
-            TabList(store: store, window: window)
+            VStack(alignment: .leading, spacing: 0) {
+                topRow
+                AddressBar(store: store, window: window)
+                    .padding(.top, 8)
+                    .padding(.bottom, Theme.sectionSpacing)
+                BasecampGrid(store: store, window: window)
+                TabList(store: store, window: window)
+            }
+            // In full screen, everything above the bottom row glides down
+            // with the menu bar, as in Dia.
+            .padding(.top, window.menuBarDrop)
             MiniPlayer(store: store)
             SpaceRow(store: store, window: window)
                 .padding(.bottom, Theme.pageInset)

@@ -89,14 +89,32 @@ struct BlankSpaceMenuItem {
 /// under the title bar, and see-through. The real traffic lights stay hidden
 /// (Firn draws its own, `WindowLights`), and in full screen the strip macOS
 /// slides down under the menu bar is made clear and click-through, so only
-/// the menu bar itself comes down, as in Dia.
+/// the menu bar itself comes down, as in Dia. As the strip starts down or
+/// back up, it tells the window model, which glides the sidebar and the
+/// page's top edge with it.
 /// AppKit because SwiftUI can't reach the title bar or the full-screen strip.
 struct WindowSetup: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { SetupView() }
+    let window: WindowModel
+
+    func makeNSView(context: Context) -> NSView { SetupView(model: window) }
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class SetupView: NSView {
+        private let model: WindowModel
         private var observers: [NSObjectProtocol] = []
+        private var stripObserver: NSObjectProtocol?
+        /// The strip's top edge, below the window's top, when it last moved.
+        private var lastStripTop: CGFloat = 0
+        /// The menu bar's height, read while windowed (taller with a notch).
+        private var menuBarHeight: CGFloat = 24
+
+        init(model: WindowModel) {
+            self.model = model
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("not used") }
 
         // Invisible; clicks go through to the frame underneath.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -116,11 +134,13 @@ struct WindowSetup: NSViewRepresentable {
             window.isOpaque = false
             window.backgroundColor = .clear
             hideRealLights()
+            readMenuBarHeight()
             for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
                 observers.append(NotificationCenter.default.addObserver(
                     forName: name, object: window, queue: .main
                 ) { [weak self] note in
                     let entered = note.name == NSWindow.didEnterFullScreenNotification
+                    MainActor.assumeIsolated { self?.model.setFullScreen(entered) }
                     // AppKit attaches the strip, and shows the lights again, just after this.
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
@@ -130,6 +150,29 @@ struct WindowSetup: NSViewRepresentable {
                     }
                 })
             }
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.willEnterFullScreenNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.readMenuBarHeight() }
+            })
+            // Back to rest before AppKit takes its picture for the exit, and
+            // stop watching the strip: it moves while leaving and would set
+            // off a glide (the lights twitched). Watched again on the next entry.
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.willExitFullScreenNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.stopWatchingStrip()
+                    self?.model.menuBarMoved(to: 0, animated: false)
+                }
+            })
+        }
+
+        /// Only while windowed: in full screen the menu bar is hidden and may read 0.
+        private func readMenuBarHeight() {
+            guard let window, !window.styleMask.contains(.fullScreen) else { return }
+            let height = NSApp.mainMenu?.menuBarHeight ?? 0
+            if height > 0 { menuBarHeight = height }
         }
 
         private func hideRealLights() {
@@ -149,10 +192,41 @@ struct WindowSetup: NSViewRepresentable {
             strip.hasShadow = false
             strip.ignoresMouseEvents = true
             strip.contentView?.isHidden = true
+            watch(strip)
+        }
+
+        /// The strip slides down with the menu bar and back up with it. The
+        /// first move each way starts one glide, by the menu bar's height.
+        private func watch(_ strip: NSWindow) {
+            stopWatchingStrip()
+            guard let window else { return }
+            lastStripTop = window.frame.maxY - strip.frame.maxY
+            stripObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didMoveNotification, object: strip, queue: .main
+            ) { [weak self, weak strip] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let strip, let window = self.window else { return }
+                    let top = window.frame.maxY - strip.frame.maxY
+                    if top > self.lastStripTop {
+                        self.model.menuBarMoved(to: self.menuBarHeight, animated: true)
+                    } else if top < self.lastStripTop {
+                        self.model.menuBarMoved(to: 0, animated: true)
+                    }
+                    self.lastStripTop = top
+                }
+            }
+        }
+
+        private func stopWatchingStrip() {
+            if let stripObserver { NotificationCenter.default.removeObserver(stripObserver) }
+            stripObserver = nil
         }
 
         deinit {
-            MainActor.assumeIsolated { observers.forEach(NotificationCenter.default.removeObserver) }
+            MainActor.assumeIsolated {
+                observers.forEach(NotificationCenter.default.removeObserver)
+                stopWatchingStrip()
+            }
         }
     }
 }

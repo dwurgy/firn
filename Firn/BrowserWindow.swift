@@ -115,6 +115,25 @@ final class WindowModel {
     var showsOverflow = false
     /// Whether the downloads popover is open.
     var showsDownloads = false
+    /// In full screen.
+    private(set) var isFullScreen = false
+    /// How far the menu bar has come down in full screen (0 at rest): the
+    /// sidebar above its bottom row and the page's top edge sit this much
+    /// lower, as in Dia. The web page itself doesn't move.
+    private(set) var menuBarDrop: CGFloat = 0
+
+    func setFullScreen(_ on: Bool) {
+        isFullScreen = on
+        if !on { menuBarDrop = 0 }
+    }
+
+    /// The menu bar came down (by `height`) or went back up. One glide, not
+    /// following AppKit's uneven steps; `animated` false puts it in place.
+    func menuBarMoved(to drop: CGFloat, animated: Bool) {
+        guard drop != menuBarDrop else { return }
+        let glide = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        withAnimation(glide ? .easeOut(duration: 0.2) : nil) { menuBarDrop = drop }
+    }
 
     init(store: BrowserStore, restoring saved: WindowRecord? = nil) {
         self.store = store
@@ -856,7 +875,7 @@ struct BrowserWindow: View {
                 .opacity(window.welcomeFinish == .begun || window.welcomeFinish == .rising ? 0 : 1)
                 // Empty frame (around the page, the sidebar's top row) moves the window.
                 WindowDragArea()
-                WindowSetup()
+                WindowSetup(window: window)
                 PointerTracker(
                     onMove: { window.pointerMoved(toX: $0) },
                     onLeave: { window.pointerLeftWindow() }
@@ -1169,18 +1188,63 @@ private struct PageArea: View {
         return PagePane(store: store, tab: tab, firstLight: firstLight,
                         onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
-                    .strokeBorder(Theme.frost, lineWidth: 2)
-                    .opacity(isInUse ? 1 : 0)
-                    .allowsHitTesting(false)
-            }
-            .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
-            .overlay {
                 if frosted != nil {
                     DropFrost(window: window, color: Theme.spaceColor(store.activeSpace.color))
                         .transition(.opacity)
                 }
             }
+            .overlay {
+                if window.isFullScreen { MenuBarCover(drop: window.menuBarDrop, color: store.activeSpace.color) }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
+                    .strokeBorder(Theme.frost, lineWidth: 2)
+                    .padding(.top, window.menuBarDrop)
+                    .opacity(isInUse ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: isInUse)
+    }
+}
+
+/// In full screen, with the menu bar down: the window's own frame, laid over
+/// the page's top, so the page's edge sits as far under the menu bar as it
+/// does under the screen's edge at rest. The page underneath keeps its size
+/// (no reflow); its top is only covered, as Dia's is. SwiftUI can't clip the
+/// web view (its corners are its own layer's), so this covers instead.
+private struct MenuBarCover: View {
+    var drop: CGFloat
+    let color: String
+
+    var body: some View {
+        let cover = PageTopCover(drop: drop)
+        ZStack {
+            FrameGlass()
+            SpaceTint(color: color)
+        }
+        .mask(cover.fill(style: FillStyle(eoFill: true)))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The page's top `drop` points, with its corners rounded again below them.
+private struct PageTopCover: Shape {
+    var drop: CGFloat
+
+    var animatableData: CGFloat {
+        get { drop }
+        set { drop = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard drop >= 0.5 else { return Path() }
+        let radius = Theme.pageCornerRadius
+        var path = Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: drop + radius))
+        path.addRoundedRect(in: CGRect(x: rect.minX, y: rect.minY + drop, width: rect.width,
+                                       height: max(rect.height - drop, radius * 2)),
+                            cornerSize: CGSize(width: radius, height: radius), style: .continuous)
+        return path
     }
 }
 

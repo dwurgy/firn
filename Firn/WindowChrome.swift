@@ -216,26 +216,42 @@ struct WindowLights: NSViewRepresentable {
             }
         }
 
+        // The whole view, not the buttons' frames: this can run before the
+        // buttons exist, and a rectangle taken then would cover nothing.
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
             trackingAreas.forEach(removeTrackingArea)
-            guard let first = buttons.first, let last = buttons.last else { return }
             addTrackingArea(NSTrackingArea(
-                rect: first.frame.union(last.frame),
-                options: [.mouseEnteredAndExited, .activeAlways],
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
                 owner: self
             ))
         }
 
-        override func mouseEntered(with event: NSEvent) { setPointerInside(true) }
+        override func mouseEntered(with event: NSEvent) { pointerMoved(event) }
+        override func mouseMoved(with event: NSEvent) { pointerMoved(event) }
         override func mouseExited(with event: NSEvent) { setPointerInside(false) }
 
+        /// Over the three lights themselves, not the air around them.
+        private func pointerMoved(_ event: NSEvent) {
+            guard let first = buttons.first, let last = buttons.last else { return }
+            setPointerInside(first.frame.union(last.frame).contains(convert(event.locationInWindow, from: nil)))
+        }
+
         private func setPointerInside(_ inside: Bool) {
+            guard inside != pointerInside else { return }
             pointerInside = inside
             redrawButtons()
         }
 
-        private func redrawButtons() { buttons.forEach { $0.needsDisplay = true } }
+        /// In SwiftUI's layer-backed views `needsDisplay` alone doesn't redraw
+        /// them; `updateCell` makes each button take its look afresh.
+        private func redrawButtons() {
+            for button in buttons {
+                if let cell = button.cell { button.updateCell(cell) }
+                button.needsDisplay = true
+            }
+        }
 
         /// The buttons ask the view they sit in whether the pointer is over
         /// the group, to show ×, −, and + on all three at once. A private

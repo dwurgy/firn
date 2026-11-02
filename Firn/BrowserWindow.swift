@@ -1222,7 +1222,7 @@ private struct MenuBarCover: View {
             FrameGlass()
             SpaceTint(color: color)
         }
-        .mask(cover.fill(style: FillStyle(eoFill: true)))
+        .mask(cover)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -1240,11 +1240,12 @@ private struct PageTopCover: Shape {
     func path(in rect: CGRect) -> Path {
         guard drop >= 0.5 else { return Path() }
         let radius = Theme.pageCornerRadius
-        var path = Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: drop + radius))
-        path.addRoundedRect(in: CGRect(x: rect.minX, y: rect.minY + drop, width: rect.width,
-                                       height: max(rect.height - drop, radius * 2)),
-                            cornerSize: CGSize(width: radius, height: radius), style: .continuous)
-        return path
+        // The band down to where the new corners end, less the page below the new edge.
+        let band = Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: drop + radius))
+        let page = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY + drop, width: rect.width,
+                                            height: max(rect.height - drop, radius * 2)),
+                        cornerRadius: radius, style: .continuous)
+        return band.subtracting(page)
     }
 }
 

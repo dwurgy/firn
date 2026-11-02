@@ -8,6 +8,34 @@
 		<language>en</language>
 		<!-- New releases go below this line. -->
 		<item>
+			<title>Firn 1.0.1</title>
+			<pubDate>Mon, 02 Nov 2026 06:51:36 +0000</pubDate>
+			<sparkle:version>4</sparkle:version>
+			<sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+			<sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+			<description><![CDATA[
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.5 -apple-system, system-ui, sans-serif; color: #241F1B; margin: 4px 2px; }
+h3 { font-size: 12px; font-weight: 600; color: #5E564E; margin: 16px 0 4px; }
+p { margin: 0 0 10px; }
+ul { margin: 0; padding-left: 18px; }
+li { margin: 0 0 6px; }
+@media (prefers-color-scheme: dark) {
+  body { color: #F5F1EC; }
+  h3 { color: #D4CDC5; }
+}
+</style>
+<p><strong>A calmer full screen, and corners that fit.</strong></p>
+<h3>Fixed</h3>
+<ul>
+<li><strong>Full screen looks like the rest of Firn.</strong> The blank bar across the top is gone. The window buttons stay where they always are, and when the menu bar comes down, the sidebar and the top of the page glide down with it. Thanks to u/Disastrous-Job-9948 on Reddit for reporting it.</li>
+<li><strong>The page's corners match the window's</strong> on macOS Tahoe. Thanks to Noah for reporting it.</li>
+</ul>
+			]]></description>
+			<enclosure url="https://github.com/dwurgy/firn/releases/download/v1.0.1/Firn-1.0.1.dmg" type="application/octet-stream" sparkle:edSignature="ZMCLyLHmza/gXUXzEd1Qwdhg7O8YvbShj+cHMROReFrfBd3qEsa0QLf1Jyg9EByEnJw/1ddyWbqv/WNuZOIaBQ==" length="9559346"/>
+		</item>
+		<item>
 			<title>Firn 1.0.0</title>
 			<pubDate>Tue, 27 Oct 2026 07:17:15 +0000</pubDate>
 			<sparkle:version>3</sparkle:version>

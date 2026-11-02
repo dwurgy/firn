@@ -371,7 +371,7 @@ For the website's screenshots and videos before 1.0. Three steps: a launch optio
 
 ## Bug reports after 1.0: full screen and page corners (2026-11-01)
 
-Two reports. **Reddit (MacBook Air M1, macOS 27.0.1):** in full screen a blank bar runs across the top and covers the sidebar's top row and half the address bar. **Noah (email):** the page's rounded corners and the window's "fight". Claude Duet's PRs for both (dwurgy/firn#80 corners 18pt, dwurgy/firn#81 hide the toolbar in full screen) were tried and rejected by David: the corners looked far off and the traffic lights vanished in full screen and came back misplaced. Both PRs are still open; close them once the real fixes land. Nothing below is committed in code.
+Two reports. **Reddit (MacBook Air M1, macOS 27.0.1):** in full screen a blank bar runs across the top and covers the sidebar's top row and half the address bar. **Noah (email):** the page's rounded corners and the window's "fight". Claude Duet's PRs for both (dwurgy/firn#80 corners 18pt, dwurgy/firn#81 hide the toolbar in full screen) were tried and rejected by David: the corners looked far off and the traffic lights vanished in full screen and came back misplaced. Both PRs are closed. Nothing below is committed in code.
 
 **What David wants (full screen), from a recording of Dia:** exactly Dia's. The traffic lights stay visible at all times, at the same spot relative to the window's corner and with the same spacing as outside full screen. Hovering the top edge brings down only the black menu bar (no strip under it), and Dia's window contents slide down with it.
 

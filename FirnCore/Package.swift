@@ -5,7 +5,7 @@ import PackageDescription
 // command line (`swift build`, `swift test`) and can later be shared with iOS.
 let package = Package(
     name: "FirnCore",
-    platforms: [.macOS(.v14), .iOS(.v17)],
+    platforms: [.macOS(.v14), .iOS("26.0")],
     products: [
         .library(name: "FirnCore", targets: ["FirnCore"]),
     ],

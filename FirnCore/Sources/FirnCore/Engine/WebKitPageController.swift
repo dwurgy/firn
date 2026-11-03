@@ -193,6 +193,7 @@ final class WebKitPageController: NSObject, PageController {
         if isPausedByFirn { isPausedByFirn = false }
     }
 
+    #if os(macOS)
     func focus() {
         webView.window?.makeFirstResponder(webView)
     }
@@ -216,6 +217,7 @@ final class WebKitPageController: NSObject, PageController {
             didRun: #selector(printOperationDidRun(_:success:contextInfo:)), contextInfo: nil
         )
     }
+    #endif
 
     func setZoom(_ zoom: Double) {
         self.zoom = zoom
@@ -275,11 +277,13 @@ final class WebKitPageController: NSObject, PageController {
         return true;
         """
 
+    #if os(macOS)
     @objc private func printOperationDidRun(
         _ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?
     ) {
         isShowingPanel = false
     }
+    #endif
 
     // MARK: - Keeping state in step with WebKit
 
@@ -652,6 +656,7 @@ private enum PageMenuChoice {
     case copyAddress
 }
 
+#if os(macOS)
 /// A Firn menu item's choice, and WebKit's item it runs to learn the address.
 private final class PageMenuItem: NSObject {
     let choice: PageMenuChoice
@@ -662,6 +667,7 @@ private final class PageMenuItem: NSObject {
         self.original = original
     }
 }
+#endif
 
 /// WKWebView sends keys to the page first, and when the page doesn't use
 /// ⌃Tab, AppKit takes it as "next field" and focuses the address bar, so the

@@ -84,7 +84,7 @@ You'll install each build on your iPhone from Xcode (your iPhone needs Developer
 
 ### Phase 0: Groundwork (no iOS app yet)
 
-FirnCore builds and passes its tests for iOS (section 2, items 1, 2, and 4), and the shared folder exists (item 5).
+FirnCore builds and passes its tests for iOS (section 2, items 1, 2, and 4), and the shared folder exists (item 5). `Package.swift`'s iOS line moves from 17 to 26 (the Mac line stays at 14).
 **Done:** FirnCore's tests pass on the iPhone Simulator; the Mac app built from `ios` looks and works exactly as it does today (open it, browse, switch spaces, open Settings).
 
 ### Phase 1: A window that browses
@@ -94,8 +94,8 @@ The `Firn iOS` target; one tab; the address bar fixed at the bottom (full size, 
 
 ### Phase 2: Tabs, the overview, and the command bar
 
-The tab model on iOS; the one-column overview behind the page (swipe up on the bar or tap the tabs button); tall cards and slim rows, aging over 24 hours, the tab on screen always tall with a frost ring; pinch to switch the whole list; swipe a row to close; long-press drag to reorder; + opens the command bar over the dimmed page; quit and reopen brings everything back.
-**Done:** open 10 tabs from the command bar, close and reorder some, pinch to slim rows and back, force-quit Firn (swipe it away), reopen: every tab is there in the same order, and the overview opens on the tab you were on.
+The tab model on iOS; the one-column overview behind the page (swipe up on the bar or tap the tabs button); tall cards and slim rows, aging over 24 hours, the tab on screen always tall with a frost ring; page previews saved on the device so they survive a restart (decided, section 5); pinch to switch the whole list; swipe a row to close; long-press drag to reorder; + opens the command bar over the dimmed page; quit and reopen brings everything back.
+**Done:** open 10 tabs from the command bar, close and reorder some, pinch to slim rows and back, force-quit Firn (swipe it away), reopen: every tab is there in the same order, tall cards still show their page pictures, and the overview opens on the tab you were on. Close a tab and its picture is gone too.
 
 ### Phase 3: Groups and Basecamp
 
@@ -104,7 +104,7 @@ Groups as frosted cards (fold, rename, ungroup, close), made by dragging a tab o
 
 ### Phase 4: Spaces, truly separate
 
-Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways in the overview changes space (see section 5 for a concern); the tint cross-fades.
+Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways on the overview's bottom bar changes space, with a dot per space; the tint cross-fades.
 **Done:** two spaces signed into two different Google accounts at once on your iPhone; a new space that shares sign-ins is already signed in; deleting a space signs it out for good. (Same test as the Mac's Phase 4.)
 
 ### Phase 5: The address bar's glide (its own plan first)
@@ -148,6 +148,7 @@ A short section after "How spaces work" (draft):
 > The iOS app (`Firn iOS` target, `docs/IOS-BRIEF.md`) shares FirnCore with the Mac app and has its own views: iOS's ways, Firn's shapes and calm. Plan and phases: `docs/IOS-PLAN.md`.
 >
 > - **Never change how the Mac app behaves** from iOS work. Shared changes are additions only: an iOS-only file or an `#if os(iOS)` branch. Before every commit: the Mac builds, FirnCore's tests pass on macOS and the iOS Simulator, and `git diff main -- Firn/` holds nothing unexpected.
+> - **iOS 26 and later** (David, 2026-11-03): Liquid Glass only, no fallback materials. The Mac stays on 14 and later.
 > - **One design that adds columns as the window widens** (one column, two columns, the roomy sidebar), chosen by window width, never by how the device is held.
 > - **Address bar always at the bottom** on iPhone and iPad; it shrinks to a domain-only pill on scroll. No top option.
 > - **The same separation promise:** every web view in a space uses its `dataStoreID`, never the default store, and iOS gets the same "two Google accounts" check.
@@ -157,11 +158,23 @@ A short section after "How spaces work" (draft):
 
 And in "Where we are":
 
-> - **iPhone and iPad (branch `ios`):** planned (2026-11-03, `docs/IOS-PLAN.md`), ten phases; sync is phase 9 with its own plan. Next: phase 0, FirnCore building for iOS.
+> - **iPhone and iPad (branch `ios`):** planned (2026-11-03, `docs/IOS-PLAN.md`), ten phases; sync is phase 9 with its own plan. David's answers recorded (iOS 26, Basecamp per space, previews saved). Next: phase 0, FirnCore building for iOS.
 
 ---
 
 ## 5. Risks, unclear parts, and pushback
+
+### Decided (David, 2026-11-03)
+
+- **Basecamp is per space on iOS,** as on the Mac.
+- **Between iPhone and iPad, Basecamp and tabs sync; between iOS and the Mac, they don't.** A loose tab on the other kind of device is found through the command bar ("On your Mac" on iOS, "On your iPhone" on the Mac). Groups still sync everywhere. This changes the brief's sync table (loose tabs no longer stay on each device between iPhone and iPad); phase 9's plan follows this.
+- **Spaces change by swiping on the overview's bottom bar;** a sideways swipe on a row closes it.
+- **Page previews are saved,** as in Safari: on the device only, in Firn's own container, protected by iOS while the phone is locked, deleted with their tab (and with their space), never synced.
+- **iOS 26 is the minimum.** Liquid Glass only, no fallback materials on iOS.
+- **Apple paperwork:** request the default-browser entitlement during phase 2; check the bundle ID before phase 1.
+- **Privacy label:** "Data Not Collected"; Apple's opt-in crash reports are Apple's, not Firn's.
+
+The items below are kept for the reasoning; 1, 2, 3, 4, 6, 7, 8, 9, and 10 are answered above.
 
 ### Unclear in the brief (I need your answer before the phase that uses it)
 

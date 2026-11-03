@@ -8,7 +8,9 @@ public struct BasecampLayout: Equatable, Sendable {
 
     public static let gap = 6.0
     public static let tileHeight = 40.0
-    /// Tiles never get narrower than this; narrower sidebars use fewer columns.
+    /// The Mac's limits: tiles never get narrower than this (narrower
+    /// sidebars use fewer columns), and never more than this many across.
+    /// iOS passes its own to `make`.
     public static let minimumWidth = 52.0
     public static let maximumColumns = 4
 
@@ -22,7 +24,10 @@ public struct BasecampLayout: Equatable, Sendable {
     }
 
     /// The layout for `count` tiles in `width` points.
-    public static func make(count: Int, width: Double) -> BasecampLayout {
+    public static func make(
+        count: Int, width: Double,
+        maximumColumns: Int = maximumColumns, minimumWidth: Double = minimumWidth
+    ) -> BasecampLayout {
         guard count > 0, width > 0 else { return BasecampLayout(rows: [], tileWidth: 0) }
         let fitting = Int((width + gap) / (minimumWidth + gap))
         let widest = min(max(fitting, 1), maximumColumns)

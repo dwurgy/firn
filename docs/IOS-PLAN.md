@@ -92,6 +92,12 @@ FirnCore builds and passes its tests for iOS (section 2, items 1, 2, and 4), and
 The `Firn iOS` target; one tab; the address bar fixed at the bottom (full size, no shrinking yet); back and forward by swiping from the edge; reload; typed addresses and search, as on the Mac. One space, using its own data store (never the default one).
 **Done:** you browse normally on your iPhone for 10 minutes, rotate it, use the keyboard, and swipe back and forward.
 
+Steps (written down 2026-11-03):
+1. **The target** (done 2026-11-03): `Firn iOS`, iPhone and iPad, iOS 26, opening to an empty page.
+2. **The page, in its own data store** (built 2026-11-03; checked in the Simulator: browse, swipe back, rotate, restart): `PageView+iOS.swift` in FirnCore (edge to edge, swipe back and forward); the app runs a `BrowserStore` with one space and saves its session in its own container; a plain field at the bottom takes an address or a search, as on the Mac. *Test:* in the iPhone Simulator, type an address, browse, swipe from the left edge to go back, rotate.
+3. **The bottom address bar:** Firn's look, back, forward, and reload, the keyboard (Go, rising with the keyboard, tapping out to cancel), and showing the committed address only.
+4. **A look over and your iPhone:** light, dark, Reduce Motion, VoiceOver, installing on your iPhone (Developer Mode), then the done test.
+
 ### Phase 2: Tabs, the overview, and the command bar
 
 The tab model on iOS; the one-column overview behind the page (swipe up on the bar or tap the tabs button); tall cards and slim rows, aging over 24 hours, the tab on screen always tall with a frost ring; page previews saved on the device so they survive a restart (decided, section 5); pinch to switch the whole list; swipe a row to close; long-press drag to reorder; + opens the command bar over the dimmed page; quit and reopen brings everything back.

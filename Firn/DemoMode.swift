@@ -74,6 +74,7 @@ enum DemoMode {
         defaults.removePersistentDomain(forName: domain)
         // The welcome is skipped: the demo starts as someone's own Firn.
         defaults.set(true, forKey: Preference.welcomed)
+        defaults.set(true, forKey: Preference.lookoutHinted)
     }
 
     /// Writes the demo's ready-made session, before the store loads it, and

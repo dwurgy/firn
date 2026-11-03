@@ -14,6 +14,10 @@ struct LookoutLayer: View {
     /// 0 as a card; 1 once grown to fill the page area, just before it
     /// becomes the tab.
     @State private var growth: CGFloat = 0
+    /// The very first Lookout explains itself, once (Noah, 2026-11-02: it
+    /// read as a stray popup window).
+    @AppStorage(Preference.lookoutHinted) private var hinted = false
+    @State private var showsHint = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.pageCornerRadius, style: .continuous)
@@ -31,6 +35,7 @@ struct LookoutLayer: View {
                     lookout: lookout,
                     color: Theme.spaceColor(store.activeSpace.color),
                     growth: growth,
+                    showsHint: showsHint,
                     keep: keep,
                     close: close
                 )
@@ -44,6 +49,9 @@ struct LookoutLayer: View {
         .animation(.easeOut(duration: 0.2), value: store.lookout?.id)
         .onChange(of: store.lookout?.id) {
             growth = 0
+            // Shown for this one Lookout's life; counted as seen at once.
+            showsHint = store.lookout != nil && !hinted
+            if showsHint { hinted = true }
             // Its page takes the keys, so space and the arrows scroll it.
             if store.lookout != nil { window.focusPage() }
         }
@@ -88,6 +96,7 @@ private struct LookoutCard: View, Animatable {
     let lookout: Lookout
     let color: Color
     var growth: CGFloat
+    let showsHint: Bool
     let keep: () -> Void
     let close: () -> Void
 
@@ -137,13 +146,22 @@ private struct LookoutCard: View, Animatable {
                 VStack(alignment: .trailing, spacing: 8) {
                     LookoutButton(label: "Close Lookout", systemImage: "xmark", color: color, action: close)
                     LookoutButton(label: "Open as tab", systemImage: "arrow.up.left.and.arrow.down.right",
-                                  color: color, showsLabel: true, action: keep)
+                                  color: color, showsLabel: true, alwaysLabeled: showsHint, action: keep)
                 }
                 // Just off the card's edge, level with its top.
                 .padding(.top, Self.inset.top)
                 .padding(.trailing, Self.inset.trailing - Self.buttonGap - Self.buttonSize)
                 .opacity(shrink)
                 .allowsHitTesting(growth == 0)
+            }
+            .overlay(alignment: .bottom) {
+                if showsHint {
+                    LookoutHint(color: color)
+                        // Centered in the gap under the card.
+                        .padding(.bottom, (Self.inset.bottom - LookoutHint.height) / 2)
+                        .opacity(shrink)
+                        .allowsHitTesting(false)
+                }
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Lookout")
@@ -159,6 +177,8 @@ private struct LookoutButton: View {
     let systemImage: String
     let color: Color
     var showsLabel = false
+    /// Its words stay out without the pointer (while the first Lookout's hint shows).
+    var alwaysLabeled = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -166,7 +186,7 @@ private struct LookoutButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if showsLabel && hovering {
+                if showsLabel && (hovering || alwaysLabeled) {
                     Text(label)
                         .font(.system(size: 12, weight: .medium))
                         .fixedSize()
@@ -177,6 +197,9 @@ private struct LookoutButton: View {
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 32, height: 32)
             }
+            // The words are laid out at full width at once, so the widening
+            // pill reveals them rather than letting them float outside it.
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .foregroundStyle(Theme.ink)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -195,6 +218,27 @@ private struct LookoutButton: View {
         .help(showsLabel ? "" : label)
         .onHover { hovering = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.2), value: hovering)
+    }
+}
+
+/// The first Lookout's one-time note, a small frosted pill under the card:
+/// what this is, and how to keep it.
+private struct LookoutHint: View {
+    let color: Color
+    static let height: CGFloat = 28
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.height / 2, style: .continuous)
+        Text("This is a Lookout, a quick look at a link. Open as tab to keep it.")
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .frame(height: Self.height)
+            .background {
+                FrostGlass(shape: shape, color: color, lifted: true)
+                    .shadow(color: Theme.shadowSoft, radius: 6, y: 2)
+            }
     }
 }
 

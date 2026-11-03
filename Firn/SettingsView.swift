@@ -17,6 +17,8 @@ enum Preference {
     static let addressBar = "addressBar"
     /// Set once the welcome has been finished or skipped.
     static let welcomed = "welcomed"
+    /// Set once the first Lookout has shown its one-time hint.
+    static let lookoutHinted = "lookoutHinted"
 
     /// The "Block ads and trackers" setting before any view has read it (on by default).
     static var blocksContentAtLaunch: Bool {

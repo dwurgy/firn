@@ -34,7 +34,7 @@ One touch design that adds columns as the window grows, chosen by how wide Firn'
 
 The Mac keeps its address bar where it is (sidebar or top).
 
-**Gestures.** Safari's, unchanged: swipe along the bar to switch tabs, swipe up for the overview, swipe from the edge to go back, swipe a row sideways to close it. Firn adds one: swipe sideways in the overview to change spaces.
+**Gestures.** Safari's, unchanged: swipe along the bar to switch tabs, swipe up for the overview, swipe from the edge to go back, swipe a row sideways to close it. Firn adds one: swipe sideways on the overview's bottom bar to change spaces, so it never fights a row's close swipe (David, 2026-11-03).
 
 **New tabs.** No new-tab page, matching the Mac. Tapping + opens the command bar over the dimmed current page, just above the keyboard; no tab exists until you pick something, and swiping down cancels. It handles addresses, search, open tabs in this space, and actions.
 
@@ -54,7 +54,7 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 
 ## Basecamp, spaces, and the rest
 
-**Basecamp.** Your Mac has one Basecamp; your iPhone and iPad share another. On a phone you use apps for many everyday sites (mail, calendar, music), so the Mac's tiles would mostly go unused there.
+**Basecamp.** Each space has its own Basecamp, as on the Mac (David, 2026-11-03): one set on your Macs, and another your iPhone and iPad share. On a phone you use apps for many everyday sites (mail, calendar, music), so the Mac's tiles would mostly go unused there.
 
 - It starts empty, and the row doesn't show until you add something.
 - You add a tile by long-pressing a tab and choosing "Add to Basecamp."
@@ -87,11 +87,13 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 
 Sync is off by default and goes only through the person's own iCloud, encrypted, never to Firn or any server of ours. No account.
 
-| Syncs | Stays on each device |
-| --- | --- |
-| Spaces | Loose tabs |
-| Groups and the tabs in them | Basecamp (one set for Macs, one for iPhone and iPad) |
-| Saved passwords, through iCloud Keychain | Sign-ins and cookies (WebKit can't sync them) |
+| Syncs everywhere | Syncs between iPhone and iPad only | Stays on each device |
+| --- | --- | --- |
+| Spaces | Loose tabs | Sign-ins and cookies (WebKit can't sync them) |
+| Groups and the tabs in them | Basecamp (each space has one set for Macs, one for iPhone and iPad) | |
+| Saved passwords, through iCloud Keychain | | |
+
+Between the Mac and iPhone or iPad, loose tabs don't sync: they're found through the command bar ("On your Mac", "On your iPhone"), as below (David, 2026-11-03).
 
 **A group is one group everywhere,** not a copy. Rename it, add a tab, close a tab, or delete it on any device, and it changes on all of them. Dragging a loose tab into a group is what makes it a tab that syncs.
 

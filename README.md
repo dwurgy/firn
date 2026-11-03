@@ -6,7 +6,6 @@
 </p>
 
 <p align="center"><strong>A calm browser, made for Mac.</strong><br>
-Privacy, simplicity, calm, and beauty.<br>
 <a href="https://firnbrowser.com">firnbrowser.com</a></p>
 
 ---

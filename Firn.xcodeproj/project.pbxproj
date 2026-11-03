@@ -34,6 +34,11 @@
 			path = Firn;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000017 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000005 /* Firn */,
+				A10000000000000000000017 /* Shared */,
 				A10000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -82,6 +88,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A10000000000000000000005 /* Firn */,
+				A10000000000000000000017 /* Shared */,
 			);
 			name = Firn;
 			packageProductDependencies = (

@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import FirnCore
 import SwiftUI
 
@@ -177,7 +181,11 @@ enum Theme {
         static let sun = Color(light: 0xF4C298, lightOpacity: 0.62, dark: 0xD68C60, darkOpacity: 0.32)
         static let sunMid = Color(light: 0xF4C298, lightOpacity: 0.22, dark: 0xD68C60, darkOpacity: 0.10)
         /// The flakes: Firn's small mark in Glacier, faint, in both looks.
+        #if os(macOS)
         static let flake = NSColor(hex: 0x7F9CB0, opacity: 1)
+        #else
+        static let flake = UIColor(hex: 0x7F9CB0, opacity: 1)
+        #endif
         static let flakeOpacity: Float = 0.22
         /// The paper grain: multiplied in light, soft light in dark.
         static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
@@ -326,13 +334,21 @@ private extension Color {
     }
 
     init(light: UInt32, lightOpacity: CGFloat, dark: UInt32, darkOpacity: CGFloat) {
+        #if os(macOS)
         self.init(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark ? NSColor(hex: dark, opacity: darkOpacity) : NSColor(hex: light, opacity: lightOpacity)
         })
+        #else
+        self.init(uiColor: UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            return isDark ? UIColor(hex: dark, opacity: darkOpacity) : UIColor(hex: light, opacity: lightOpacity)
+        })
+        #endif
     }
 }
 
+#if os(macOS)
 private extension NSColor {
     convenience init(hex: UInt32, opacity: CGFloat) {
         self.init(
@@ -343,6 +359,18 @@ private extension NSColor {
         )
     }
 }
+#else
+private extension UIColor {
+    convenience init(hex: UInt32, opacity: CGFloat) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: opacity
+        )
+    }
+}
+#endif
 
 /// Something dragged that wants to stay where it belongs (a Basecamp tile,
 /// a tab row, a group's card): free between its limits, and past them it

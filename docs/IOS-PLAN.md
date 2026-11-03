@@ -1,0 +1,197 @@
+# Firn for iPhone and iPad: the plan
+
+Draft for David's review (2026-11-03, branch `ios`). Nothing is built yet. Read with `CLAUDE.md` and `docs/IOS-BRIEF.md`.
+
+## The short version
+
+- One Xcode project, two app targets: the Mac app (`Firn`, unchanged) and a new `Firn iOS` (iPhone and iPad together, one app).
+- Both use the same `FirnCore` package: tabs, spaces, groups, Basecamp, tidying, history, passwords, blocking, the command bar's results, and the engine layer. The iOS app gets its own views, because the brief asks for iOS's ways, not the Mac's layout.
+- The Mac app's behavior doesn't change in any phase before sync. Every shared change is an addition (a new iOS-only file, or an `#if os(iOS)` branch next to Mac code that stays exactly as it is).
+- Ten small phases, each with a test you can do on your iPhone (iPad steps work in the Simulator if you don't have one). Sync is phase 9, with its own plan, and it's the first phase that has to touch the Mac app, so it needs your explicit OK.
+- No new network traffic and no data collection before sync. The iOS app sends exactly what the Mac app already sends: the pages you visit, search suggestions (as on the Mac), and the welcome's site icons.
+
+---
+
+## 1. How the iPhone and iPad app fits into the project
+
+### What I checked
+
+- `FirnCore/Package.swift` already lists iOS 17 as a platform, and most of FirnCore already compiles for iOS.
+- I tried building FirnCore for the iOS Simulator (nothing changed, nothing committed). It fails only in `Engine/WebKitPageController.swift`: printing, the page's right-click menu, giving the page keyboard focus, and turning a snapshot into a picture use Mac-only parts of Apple's frameworks. `Engine/PageView.swift` is Mac-only on purpose (it's wrapped in `#if os(macOS)`).
+- The model, history (SQLite), saved passwords (Keychain), ad blocking, address handling, and the command bar's results all compile for iOS as they are.
+
+### Shared (one copy, used by both apps)
+
+| Shared | Where it lives today | Notes |
+| --- | --- | --- |
+| Tabs, spaces, groups, Basecamp, split groups, tidying, session saving | `FirnCore/Model` (`BrowserStore`, `Tab`, `Space`, `Session`…) | Same rules, same file format. iOS keeps its own `session.json` in its own container. |
+| Per-space data stores (`dataStoreID`) | `FirnCore/Engine/DataStores.swift` | `WKWebsiteDataStore(forIdentifier:)` exists on iOS 17, so separate spaces work the same way. |
+| Engine layer (`PageController`, `WebKitPageController`) | `FirnCore/Engine` | Needs iOS branches (see section 2). |
+| Address handling, search engines, suggestions | `FirnCore/Address` | Unchanged. |
+| History | `FirnCore/History` | Unchanged; one SQLite file per data store, as on the Mac. |
+| Saved passwords | `FirnCore/Passwords` | The store works on iOS; the fill list is a new iOS view. |
+| Ad and tracker blocking, scam warnings | `FirnCore/Blocking`, WebKit settings | WebKit's content rules work on iOS with the same limits. |
+| Command bar results | `FirnCore/Model/CommandBar.swift` | The bar itself is a new iOS view. |
+| Basecamp's balanced rows | `FirnCore/Model/BasecampLayout.swift` | Already does what the brief's table asks (I checked every row); only needs "up to 6 across" for iPad. |
+| Colors, Fraunces, First light | `Firn/Theme.swift`, `Firn/FirstLight.swift`, `Firn/Fonts` (Mac app) | Move to a `Shared/` folder both apps build (section 2). |
+
+### New for iOS (only in the iOS app)
+
+- The app's entry point and its one window (iPad: one window at first; see section 5).
+- The page with the bottom address bar, then the shrinking pill (its own step and plan).
+- The tab overview: one column, two columns, tall cards and slim rows, pinch, long-press drag.
+- The iPad's roomy sidebar and split view.
+- The command bar's iOS look (over the dimmed page, above the keyboard, swipe down to cancel).
+- Long-press menus (Add to Basecamp, New group with this tab…), iOS's link preview for Lookout.
+- Space switching in the overview, the space sheet, Settings (iOS style: a list, not the Mac's sidebar).
+- The password fill list, downloads to Files, find in page, the welcome.
+- `PageView` for iOS (`UIViewRepresentable`), in its own new file.
+- Its own `Info.plist`, entitlements, and icon (from `brand/`; Icon Composer's `Firn.icon` works for iOS too).
+
+### Not on iOS
+
+- Sparkle and "Check for Updates…" (the App Store updates it), Arc import, the demo-shot scripts, the ⌃Tab switcher (the overview does that job), the Mac menu bar, full-screen work, the mini player at first (needs background audio; later).
+
+---
+
+## 2. Mac code that has to change, and how it stays the same for the Mac
+
+Rule for every one of these: the Mac's code lines stay as they are. iOS gets a new branch or a new file beside them.
+
+1. **`WebKitPageController.swift` builds for iOS.** Wrap the four Mac-only spots (print, the right-click menu, focus, snapshot) in `#if os(macOS)`, and put the iOS versions in a new file, `WebKitPageController+iOS.swift`. The Mac lines inside the `#if` don't change; only `#if`/`#endif` lines are added around them.
+2. **`PageView` for iOS** goes in a new file, `PageView+iOS.swift`. `PageView.swift` isn't touched.
+3. **Page scrolling for the shrinking bar.** Views never talk to `WKWebView` (the engine rule), so the bar needs a small iOS-only protocol (for example, `PageScrolling`) that only the iOS side implements. The shared `PageController` protocol doesn't grow, so the Mac doesn't have to implement anything new.
+4. **`BasecampLayout`** gets the column limit and minimum width as settings, with today's Mac values (4 across, 52pt) as the defaults. The Mac calls it exactly as now. The brief's table becomes a test.
+5. **Colors, Fraunces, First light.** `Theme.swift`, the Fraunces helper, and `FirstLight.swift` move into `Shared/`, built by both apps. Their few `NSColor`/`NSImage` uses get an iOS twin behind `#if os(iOS)`. The Mac build includes the same code it does today, from a new folder.
+6. **The Xcode project** gets a new target and a new scheme (`Firn iOS`). The `Firn` target's settings, the `Firn` scheme, and `scripts/release.sh` aren't touched.
+
+**How we prove the Mac is untouched, at every commit on this branch:**
+
+- The Mac app builds, and FirnCore's tests pass on macOS, as before.
+- FirnCore's tests also run on the iOS Simulator.
+- `git diff main -- Firn/` is empty, except the files moved to `Shared/` (checked line by line: only `#if` additions).
+- You open the Mac Firn built from this branch and use it for a minute: nothing looks or acts differently.
+
+**Branches.** Mac fixes keep happening on `main` in their own sessions. The `ios` branch takes `main` in regularly. I'd suggest merging phase 0's small FirnCore changes into `main` early (after your check), so later Mac fixes to the engine don't collide with them. Nothing else from `ios` goes to `main` until you decide.
+
+---
+
+## 3. Phases
+
+Each phase has a "done" test you can do yourself. Like the Mac roadmap: don't start the next until the current one passes. Each phase is a few small, committed steps, planned in detail when we get there. All on Opus (they're SwiftUI, engine, or architecture work), except wording steps.
+
+You'll install each build on your iPhone from Xcode (your iPhone needs Developer Mode on once; I'll walk you through it in phase 1).
+
+### Phase 0: Groundwork (no iOS app yet)
+
+FirnCore builds and passes its tests for iOS (section 2, items 1, 2, and 4), and the shared folder exists (item 5).
+**Done:** FirnCore's tests pass on the iPhone Simulator; the Mac app built from `ios` looks and works exactly as it does today (open it, browse, switch spaces, open Settings).
+
+### Phase 1: A window that browses
+
+The `Firn iOS` target; one tab; the address bar fixed at the bottom (full size, no shrinking yet); back and forward by swiping from the edge; reload; typed addresses and search, as on the Mac. One space, using its own data store (never the default one).
+**Done:** you browse normally on your iPhone for 10 minutes, rotate it, use the keyboard, and swipe back and forward.
+
+### Phase 2: Tabs, the overview, and the command bar
+
+The tab model on iOS; the one-column overview behind the page (swipe up on the bar or tap the tabs button); tall cards and slim rows, aging over 24 hours, the tab on screen always tall with a frost ring; pinch to switch the whole list; swipe a row to close; long-press drag to reorder; + opens the command bar over the dimmed page; quit and reopen brings everything back.
+**Done:** open 10 tabs from the command bar, close and reorder some, pinch to slim rows and back, force-quit Firn (swipe it away), reopen: every tab is there in the same order, and the overview opens on the tab you were on.
+
+### Phase 3: Groups and Basecamp
+
+Groups as frosted cards (fold, rename, ungroup, close), made by dragging a tab onto another or from the long-press menu; drag in and out. Basecamp: starts empty and hidden, "Add to Basecamp" from a tab's long-press, up to 12 with the plain-words message on the 13th, balanced rows, scrolls with the list.
+**Done:** make two groups, drag tabs between them and out of them, add five sites to Basecamp (rows read 3 + 2), try a 13th, force-quit and reopen: all of it comes back.
+
+### Phase 4: Spaces, truly separate
+
+Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways in the overview changes space (see section 5 for a concern); the tint cross-fades.
+**Done:** two spaces signed into two different Google accounts at once on your iPhone; a new space that shares sign-ins is already signed in; deleting a space signs it out for good. (Same test as the Mac's Phase 4.)
+
+### Phase 5: The address bar's glide (its own plan first)
+
+Scrolling down shrinks the bar to a domain-only pill; scrolling up, tapping, or reaching the end brings it back; swiping along the bar or pill switches tabs. Follows your finger with Firn's easing; Reduce Motion simply fades.
+**Done:** read three long articles; the bar never jitters, never hides the domain, and swiping along it walks through your tabs. With Reduce Motion on, it only fades.
+
+### Phase 6: The everyday features
+
+In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy away (the overview button and the frost-and-thaw moment), history, find in page, downloads to Files, ad and tracker blocking with Stop Blocking per site, scam warnings, saved passwords (save, fill after a tap, Settings › Passwords behind Face ID), and Settings.
+**Done:** a week of using Firn as the iPhone's only browser (it can't be the default yet, so open it yourself), plus the Mac's test pages (`docs/blocking-test.html`, `docs/password-test.html`) passing on the iPhone.
+
+### Phase 7: iPad
+
+The two-column overview, the roomy sidebar when the window is wide enough (drag to resize, swipe to hide), split view in that layout only, layouts chosen by window width (Stage Manager, split screen, and Slide Over included), keyboard shortcuts with a hardware keyboard.
+**Done:** on an iPad (or the iPad Simulator if you don't have one): rotate, resize the window in Stage Manager, and watch it move between one column, two columns, and the sidebar without losing your place; open a split view.
+
+### Phase 8: First light, and being the default browser
+
+The welcome (iOS version of the Mac's steps, without Arc and Mac-only tips), the empty page, and "Set as default browser" (needs Apple's default-browser entitlement; see section 5).
+**Done:** delete and reinstall Firn: the welcome plays in light, dark, and with Reduce Motion; after setting Firn as default, a link tapped in Mail opens in Firn, in the space you used last.
+
+### Phase 9: Sync (its own plan, its own approval)
+
+Planned separately before any code, with you, on Opus. This is the first phase that changes the Mac app (the Mac needs sync too), so it needs your explicit go-ahead for each Mac change. It covers: CloudKit in your own iCloud (off by default), what syncs per the brief's tables, delete confirmations and Undo, offline and "latest change wins", "On your Mac" / "On your iPhone", Handoff, passwords through iCloud Keychain, and the new privacy wording (needs your OK).
+**Done (to be refined in its plan):** with sync on, a group made on the Mac appears on the iPhone, renaming it on the iPhone renames it on the Mac, a separate space stays signed out on the new device, and with sync off nothing leaves either device.
+
+### Phase 10: Release
+
+TestFlight for a few friends, the App Store listing and its privacy label, the iOS screenshots (an iOS `--demo` mode, like the Mac's), and the release notes. Ships together with phase 9, as the brief says.
+**Done:** a friend installs it from TestFlight and uses it for a week.
+
+---
+
+## 4. What goes into CLAUDE.md
+
+A short section after "How spaces work" (draft):
+
+> ## iPhone and iPad
+>
+> The iOS app (`Firn iOS` target, `docs/IOS-BRIEF.md`) shares FirnCore with the Mac app and has its own views: iOS's ways, Firn's shapes and calm. Plan and phases: `docs/IOS-PLAN.md`.
+>
+> - **Never change how the Mac app behaves** from iOS work. Shared changes are additions only: an iOS-only file or an `#if os(iOS)` branch. Before every commit: the Mac builds, FirnCore's tests pass on macOS and the iOS Simulator, and `git diff main -- Firn/` holds nothing unexpected.
+> - **One design that adds columns as the window widens** (one column, two columns, the roomy sidebar), chosen by window width, never by how the device is held.
+> - **Address bar always at the bottom** on iPhone and iPad; it shrinks to a domain-only pill on scroll. No top option.
+> - **The same separation promise:** every web view in a space uses its `dataStoreID`, never the default store, and iOS gets the same "two Google accounts" check.
+> - **No new network traffic or data collection** beyond the Mac's, until sync, which has its own plan and needs David's OK, including any Mac change it makes.
+> - **Not doing on iOS:** cards that grow as you scroll, a Mac-style sidebar, a top address bar, a new-tab page, a "Send to" button, a synced Basecamp between Mac and iOS, AI-first features.
+> - **Build:** `xcodebuild -scheme "Firn iOS" -destination 'platform=iOS Simulator,name=iPhone 17' build`, quiet as usual. David tests on his iPhone from Xcode.
+
+And in "Where we are":
+
+> - **iPhone and iPad (branch `ios`):** planned (2026-11-03, `docs/IOS-PLAN.md`), ten phases; sync is phase 9 with its own plan. Next: phase 0, FirnCore building for iOS.
+
+---
+
+## 5. Risks, unclear parts, and pushback
+
+### Unclear in the brief (I need your answer before the phase that uses it)
+
+1. **Is Basecamp per space on iOS?** On the Mac, every space has its own Basecamp. The brief says "your Mac has one Basecamp; your iPhone and iPad share another," which reads like one per device. My suggestion: per space on iOS too (same rule everywhere), so "one set for Macs, one for iPhone and iPad" means each space has a Mac set and an iOS set. Needed by phase 3.
+2. **Basecamp does sync, a little.** The sync table puts Basecamp under "stays on each device," but iPhone and iPad sharing one set (and Macs sharing another) means Basecamp syncs between devices of the same kind. The table should say so. Phase 9.
+3. **Loose tabs also reach iCloud.** The table says loose tabs stay on each device, but "On your Mac" needs their addresses in iCloud. The privacy-wording paragraph already says this; the table should match it. Phase 9.
+4. **Swipe sideways to change spaces vs. swipe a row to close.** Both are sideways swipes in the overview. A swipe that starts on a row would close it; one that starts between rows would change space. That's the kind of thing people trip over. Suggestion: change spaces by swiping on the overview's bottom bar (with dots per space, as on the Mac), and let rows keep the close swipe. Decide by phase 4.
+5. **Basecamp tiles' links.** On the Mac, a tile's links to other sites open in a Lookout. iOS Lookout is the long-press preview only. Suggestion: on iOS they open where new tabs go. Phase 6.
+
+### Things I'd push back on or ask about
+
+6. **Page previews after a restart.** iOS closes apps in the background often. The tall cards' page pictures are in memory on the Mac; on iOS they'd be gone after every restart unless Firn saves them to disk. Saving pictures of pages is new stored data (on the device only, deleted with the tab, encrypted by iOS while the phone is locked). Your call: save them, or show the site's icon on soft frost until you open the tab again. Phase 2.
+7. **Minimum iOS version.** CLAUDE.md says iOS 17. Since iOS ships with sync, well after today, I'd lean toward iOS 26 (iPhone 11 and newer): one look (Liquid Glass) with no fallback to design and test twice. iOS 18 is a middle path. Your call before phase 1.
+8. **The default-browser entitlement** comes from Apple, by request, and can take a while. I'd ask for it early (during phase 2), the way passkeys were requested.
+9. **The bundle ID.** I'd use `com.firnbrowser.firn` for iOS too (one app ID, easier for iCloud and Keychain later), but I'm not sure how it mixes with the Mac's Developer ID provisioning profile. I'll check in Xcode before phase 1 and tell you; it's hard to change after release.
+10. **App Store and "no data collection."** The Mac ships outside the App Store; iOS can't. Firn itself collects nothing, but Apple offers crash reports to developers from people who opt in ("Share with App Developers"), and TestFlight testers can send feedback. That's Apple's, opt-in, and Firn adds nothing; the privacy label can still say "Data Not Collected." Worth knowing before you make privacy claims.
+11. **Sync needs Mac changes.** "Never change the Mac app" holds until phase 9. Sync (and Handoff, which also goes through Apple's services) can't work without the Mac app joining in. That phase's plan will list every Mac change for your OK.
+12. **Saved passwords through iCloud Keychain** means moving the Mac's passwords from Firn's local Keychain items to ones that sync. That changes where people's passwords live, so it's part of phase 9's plan, carefully, never a quiet switch.
+13. **iPad windows.** I'd start with one window on iPad (multiple windows add a lot), and add more later if you miss them.
+14. **System password AutoFill.** I'm not sure whether iOS offers the Passwords app's logins inside Firn's pages on its own; I'll check in phase 6 before building Firn's fill list on iOS, so the two don't fight.
+
+### Risks
+
+- **The shrinking bar** is the hardest piece to make feel calm (watching the page's scroll without jitter). It's isolated in phase 5 so it can't hold up the rest.
+- **Memory.** iOS is much stricter than the Mac about memory; the Mac's tab sleeping needs to be more eager on iPhone. Watched from phase 2.
+- **Sync** is the biggest risk overall (conflicts, deletes across devices, and privacy wording). It gets its own plan and stays last.
+- **Two branches drifting.** Mac fixes on `main` while iOS grows on `ios`. Merging `main` in often, and phase 0 into `main` early, keeps that small.
+
+### Already true in the brief (no change needed)
+
+- Basecamp's balanced rows match the Mac's existing code exactly, row for row; only "up to 6 across" is new.
+- Tidying uses days of using Firn, 7 by default, as on the Mac.
+- Lookout, tidy away, First light, and split view (roomy layout only) carry over as the brief says.

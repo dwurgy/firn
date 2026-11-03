@@ -46,4 +46,30 @@ import Testing
     @Test func emptyHasNoRows() {
         #expect(rows(0, 244).isEmpty)
     }
+
+    /// The iOS brief's table (docs/IOS-BRIEF.md): iPhone up to 4 across, a
+    /// narrow iPad sidebar 3 (its width allows no more), and a two-column
+    /// iPad up to 6, all with iOS's 56pt minimum tile width.
+    @Test func iOSMatchesTheBriefsTable() {
+        func iOS(_ count: Int, _ width: Double, upTo columns: Int) -> [Int] {
+            BasecampLayout.make(count: count, width: width, maximumColumns: columns, minimumWidth: 56).rows
+        }
+        let iPhone: [Int: [Int]] = [
+            4: [4], 5: [3, 2], 6: [3, 3], 7: [4, 3], 8: [4, 4],
+            9: [3, 3, 3], 10: [4, 3, 3], 11: [4, 4, 3], 12: [4, 4, 4],
+        ]
+        let narrowIPad: [Int: [Int]] = [
+            4: [2, 2], 5: [3, 2], 6: [3, 3], 7: [3, 2, 2], 8: [3, 3, 2],
+            9: [3, 3, 3], 10: [3, 3, 2, 2], 11: [3, 3, 3, 2], 12: [3, 3, 3, 3],
+        ]
+        let twoColumnIPad: [Int: [Int]] = [
+            4: [4], 5: [5], 6: [6], 7: [4, 3], 8: [4, 4],
+            9: [5, 4], 10: [5, 5], 11: [6, 5], 12: [6, 6],
+        ]
+        for count in 4...12 {
+            #expect(iOS(count, 370, upTo: 4) == iPhone[count], "iPhone, \(count) tiles")
+            #expect(iOS(count, 220, upTo: 6) == narrowIPad[count], "narrow iPad, \(count) tiles")
+            #expect(iOS(count, 700, upTo: 6) == twoColumnIPad[count], "two-column iPad, \(count) tiles")
+        }
+    }
 }

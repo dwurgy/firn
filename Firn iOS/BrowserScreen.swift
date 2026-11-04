@@ -6,6 +6,7 @@ import SwiftUI
 /// the bar, shows it).
 struct BrowserScreen: View {
     let store: BrowserStore
+    let pictures: PagePictures
     @FocusState private var editing: Bool
     /// Whether the overview is showing instead of the page.
     @State private var showingTabs = false
@@ -32,6 +33,7 @@ struct BrowserScreen: View {
             }
             pageLayer
                 .ignoresSafeArea()
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pictures.pageWidth = $0 }
                 // The page steps back a little as it fades, so the overview
                 // reads as behind it. Reduce Motion: only the fade.
                 .scaleEffect(showingTabs && !reduceMotion ? 0.94 : 1)
@@ -110,6 +112,8 @@ struct BrowserScreen: View {
     }
 
     private func showTabs() {
+        // The page as it was, for its card (taken as it starts to fade).
+        if let tab = store.activeTab { pictures.capture(tab) }
         editing = false
         menuOpen = false
         showingTabs = true

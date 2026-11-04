@@ -18,7 +18,7 @@ struct FirnIOSApp: App {
         WindowGroup {
             Group {
                 if let browser {
-                    BrowserScreen(store: browser.store)
+                    BrowserScreen(store: browser.store, pictures: browser.pictures)
                 } else {
                     Theme.page.ignoresSafeArea()
                 }
@@ -28,7 +28,11 @@ struct FirnIOSApp: App {
             }
         }
         .onChange(of: scenePhase) {
-            if scenePhase != .active { browser?.saver.saveNow() }
+            guard scenePhase != .active, let browser else { return }
+            // A fresh picture of the page on screen, for the overview
+            // after a restart (taken before iOS dims the app away).
+            if let tab = browser.store.activeTab { browser.pictures.capture(tab) }
+            browser.saver.saveNow()
         }
     }
 }
@@ -39,6 +43,7 @@ final class Browser {
     let store: BrowserStore
     let saver: SessionSaver
     let sleeper: TabSleeper
+    let pictures: PagePictures
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -58,8 +63,11 @@ final class Browser {
         if session == nil { try? file.save(snapshot()) }
         self.store = store
         // Each tab's back history goes with the session, and whenever Firn
-        // leaves the screen.
-        saver = SessionSaver(file: file, placesFile: placesFile, snapshot: snapshot, places: { store.pagePlaces() })
+        // leaves the screen; closed tabs' pictures go after each save.
+        let pictureStore = PagePictureStore.standard
+        pictures = PagePictures(store: pictureStore)
+        saver = SessionSaver(file: file, placesFile: placesFile, snapshot: snapshot,
+                             places: { store.pagePlaces() }, pictures: pictureStore)
         saver.start()
         sleeper = TabSleeper(store: store)
         sleeper.start()

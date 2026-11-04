@@ -50,7 +50,7 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 - **Pinch** switches the whole list between previews and slim rows, as in Photos. Firn remembers the choice.
 - **Groups** are frosted cards with a name and a fold arrow, the same as on the Mac. Tabs inside are always slim rows: grouping a tab means you're keeping it.
 - **Two columns** (wider windows): items flow in the same order across two columns; tall cards come before slim rows, so neighbours usually match in height.
-- **Bottom bar in the overview:** a glass bar with a new-tab button, search, and Done.
+- **Bottom bar in the overview:** a glass bar with + on the left (it opens the command bar, which also finds open tabs, so there's no separate search), the space's name in the middle, in its color, with a dot per space under it (the Mac's bottom row), and Done on the right. Swiping sideways on the bar changes space; tapping the name opens the space menu. The Tidied away button sits beside the name, there only while it holds tabs, as on the Mac (David, 2026-11-03).
 
 ## Basecamp, spaces, and the rest
 
@@ -79,7 +79,7 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 **Carried over from the Mac:**
 
 - **Lookout:** iOS's own link preview when you long-press a link, plus "Open as tab."
-- **Tidy away:** idle loose tabs drift into the overview button, with the same frost-and-thaw moment.
+- **Tidy away:** idle loose tabs drift into the Tidied away button in the overview's bottom bar, with the same frost-and-thaw moment.
 - **First light:** the welcome screen, and the empty page when every tab in a space is closed. Never everyday browsing.
 - **Split view:** roomy layout only.
 

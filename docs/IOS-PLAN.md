@@ -107,7 +107,7 @@ The tab model on iOS; the one-column overview behind the page (swipe up on the b
 
 Steps (written down 2026-11-03, David's OK):
 1. **More than one tab** (built 2026-11-03; checked in the Simulator): links that open a new window become a tab (the model already did), and Back on such a tab, with nowhere to go back, closes it and shows the tab it came from, as in Safari (`BrowserStore.opener(of:)`). Background tabs sleep sooner than on the Mac (`Firn iOS/TabSleeper.swift`, `sleepIdleTabs(keepingRecent: 2)`): the tab on screen and the two most recent stay awake, and all but the tab on screen sleep when iOS warns about memory; a sleeping tab keeps its place and back history, and a page holding unsent text or playing sound stays awake (the Mac's rule). The round tabs button moved to step 2: with no overview behind it, it would do nothing. Fixed on the way: a page shown again (or restored) sat below the status bar, a new one under it; WebKit now hears about the status bar too (`PageView+iOS.swift`), so every page starts just below it. *Known:* at the end of a long page, the last lines rest behind the bar (in phase 1's setup too, so not new); two tries (Firn setting the scroll room itself) didn't settle it, so it's left for a fresh look. In landscape the side gutters show Firn's page color, not the site's (Safari uses the site's); for the look over.
-2. **The overview, plain:** the round tabs button on the bar's right (where 3b left room); swipe up on the bar or tap the tabs button; one column of slim rows behind the page, opening scrolled to your tab; tap to switch, swipe a row sideways to close; a glass bottom bar with +, search, and Done. Search opens the command bar (it already finds open tabs: one search, not two; David, 2026-11-03).
+2. **The overview, plain:** the round tabs button on the bar's right (where 3b left room); swipe up on the bar or tap the tabs button; one column of slim rows behind the page, opening scrolled to your tab; tap to switch, swipe a row sideways to close; a glass bottom bar with + on the left (opens the command bar, which also finds open tabs, so no separate search), the space's name in its color in the middle, and Done on the right; with one space, no dots yet (David, 2026-11-03).
 3. **Page pictures, saved:** a small store in FirnCore, one picture per tab, in Firn's own container only, protected by iOS while the phone is locked, deleted with its tab or space.
 4. **Tall cards and aging:** tall for 24 hours after last viewed, then slim; the tab on screen always tall with a frost ring; pinch switches the whole list, remembered; nothing changes size while scrolling.
 5. **Long-press drag to reorder,** like Safari (loose tabs; onto another tab to group comes with phase 3).
@@ -122,7 +122,7 @@ Groups as frosted cards (fold, rename, ungroup, close), made by dragging a tab o
 
 ### Phase 4: Spaces, truly separate
 
-Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways on the overview's bottom bar changes space, with a dot per space; the tint cross-fades.
+Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways on the overview's bottom bar changes space, with a dot per space under the space's name, and tapping the name opens the space menu (as on the Mac); the tint cross-fades.
 **Done:** two spaces signed into two different Google accounts at once on your iPhone; a new space that shares sign-ins is already signed in; deleting a space signs it out for good. (Same test as the Mac's Phase 4.)
 
 ### Phase 5: The address bar's glide (its own plan first)
@@ -132,7 +132,7 @@ Scrolling down shrinks the bar to a domain-only pill; scrolling up, tapping, or 
 
 ### Phase 6: The everyday features
 
-In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy away (the overview button and the frost-and-thaw moment), history, find in page, downloads to Files, ad and tracker blocking with Stop Blocking per site, scam warnings, saved passwords (save, fill after a tap, Settings › Passwords behind Face ID), and Settings.
+In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy away (the Tidied away button beside the space's name in the overview's bottom bar, and the frost-and-thaw moment), history, find in page, downloads to Files, ad and tracker blocking with Stop Blocking per site, scam warnings, saved passwords (save, fill after a tap, Settings › Passwords behind Face ID), and Settings.
 **Done:** a week of using Firn as the iPhone's only browser (it can't be the default yet, so open it yourself), plus the Mac's test pages (`docs/blocking-test.html`, `docs/password-test.html`) passing on the iPhone.
 
 ### Phase 7: iPad

@@ -416,6 +416,8 @@ Two reports. **Reddit (MacBook Air M1, macOS 27.0.1):** in full screen a blank b
 
 **Step 1 done (2026-11-03):** `PagePlace` and `PagePlacesFile` (`FirnCore/Sources/FirnCore/Model/PagePlacesFile.swift`), `Tab.savedPlace` and `rest(at:)`, `BrowserStore.pagePlaces()`, and `init(restoring:pagePlaces:…)`, which gives places back before any page wakes. Tested in `PagePlacesTests`, including a real web view: WebKit's `interactionState` is `Data`, and a new web view given it can go back. (Loading HTML strings makes no back history in a test; two files on disk do.)
 
+**Step 2 built (2026-11-03):** `SessionSaver` takes the places file: it writes places whenever it writes the session, and always on `saveNow()` (quit on the Mac, leaving the screen on iPhone), skipping the write if nothing changed. Both apps load places at launch; a demo keeps its own in `Demo/`. Checked in the Simulator: Earth, then a link to Planet, Home, quit, reopen: Back is lit and goes back to Earth. If Xcode says `PagePlacesFile` isn't found, its copy of FirnCore's module is stale: delete `Build/Products/Debug/FirnCore.swiftmodule` in DerivedData. Next: David checks on the Mac.
+
 **Security check:**
 - *New input:* a file Firn itself wrote, inside its sandbox container; WebKit reads it. Malformed or too large: skipped, the tab loads its address fresh.
 - *What a page can do:* nothing new. A page piling up history (pushState) only hits the cap.

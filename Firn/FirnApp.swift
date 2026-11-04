@@ -15,8 +15,9 @@ struct FirnApp: App {
         BrowserEngine.startBlocking(enabled: Preference.blocksContentAtLaunch)
         let file = DemoMode.sessionFile
         let session = file.load()
+        let placesFile = DemoMode.pagePlacesFile
         let store = BrowserStore(
-            restoring: session, defaultSpaces: [FirstSpace.space],
+            restoring: session, pagePlaces: placesFile.load(), defaultSpaces: [FirstSpace.space],
             makePage: BrowserEngine.makePage,
             removeData: { id in
                 BrowserEngine.removeData(for: id)
@@ -43,9 +44,12 @@ struct FirnApp: App {
         // The welcome, the very first time (no session yet).
         if session == nil, !UserDefaults.standard.bool(forKey: Preference.welcomed) { window.showWelcome() }
         _window = State(initialValue: window)
-        saver = SessionSaver(file: file) {
-            store.session(sidebarWidth: window.sidebarWidth, sidebarCollapsed: window.sidebarCollapsed)
-        }
+        // Each tab's back history goes with the session, and at quit.
+        saver = SessionSaver(
+            file: file, placesFile: placesFile,
+            snapshot: { store.session(sidebarWidth: window.sidebarWidth, sidebarCollapsed: window.sidebarCollapsed) },
+            places: { store.pagePlaces() }
+        )
         saver.start()
         sleeper = TabSleeper(store: store)
         sleeper.start()

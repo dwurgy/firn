@@ -45,8 +45,9 @@ final class Browser {
     init() {
         let file = SessionFile.standard
         let session = file.load()
+        let placesFile = PagePlacesFile.standard
         let store = BrowserStore(
-            restoring: session, defaultSpaces: [FirstSpace.make()],
+            restoring: session, pagePlaces: placesFile.load(), defaultSpaces: [FirstSpace.make()],
             makePage: BrowserEngine.makePage,
             removeData: { BrowserEngine.removeData(for: $0) }
         )
@@ -55,7 +56,9 @@ final class Browser {
         // within the first seconds doesn't leave it nameless and forgotten.
         if session == nil { try? file.save(snapshot()) }
         self.store = store
-        saver = SessionSaver(file: file, snapshot: snapshot)
+        // Each tab's back history goes with the session, and whenever Firn
+        // leaves the screen.
+        saver = SessionSaver(file: file, placesFile: placesFile, snapshot: snapshot, places: { store.pagePlaces() })
         saver.start()
     }
 }

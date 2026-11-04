@@ -44,6 +44,30 @@ struct PagePlacesTests {
         #expect(PagePlace(url: URL(filePath: "/tmp/page.html"), state: Data([1])) == nil)
     }
 
+    // MARK: - The saver
+
+    @Test func theSaverWritesPlacesAtQuitEvenIfTheSessionDidntChange() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "FirnTests-\(UUID().uuidString)")
+        let sessionFile = SessionFile(url: dir.appending(path: "session.json"))
+        let placesFile = PagePlacesFile(url: dir.appending(path: "page-places.plist"))
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let saver = SessionSaver(
+            file: sessionFile, placesFile: placesFile, delay: .seconds(60),
+            snapshot: { store.session(sidebarWidth: 260, sidebarCollapsed: false) },
+            places: { store.pagePlaces() }
+        )
+        saver.saveNow()
+        #expect(placesFile.load()[a.id]?.url == url("a"))
+        #expect(sessionFile.load() != nil)
+
+        // Only the page's place changes (as scrolling would): still written.
+        try FileManager.default.removeItem(at: placesFile.url)
+        (a.page as? FakePage)?.url = url("a/scrolled")
+        saver.saveNow()
+        #expect(placesFile.load()[a.id]?.url == url("a/scrolled"))
+    }
+
     // MARK: - The store
 
     @Test func aRestartedTabPicksUpWhereItWas() throws {

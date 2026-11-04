@@ -28,6 +28,11 @@ enum DemoMode {
         isOn ? SessionFile(url: folder.appending(path: "session.json")) : .standard
     }
 
+    /// Each tab's back history and scroll, next to the session.
+    static var pagePlacesFile: PagePlacesFile {
+        isOn ? PagePlacesFile(url: folder.appending(path: "page-places.plist")) : .standard
+    }
+
     /// Where a screenshot's window number goes (`DemoShot`): the real
     /// Downloads folder, the one place outside Firn's sandbox it may write
     /// and the script may read. Hidden, and removed after each shot.

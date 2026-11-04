@@ -115,6 +115,15 @@ public protocol PageController: AnyObject, Observable {
 /// but the engine that made it.
 public struct PageMemory {
     let state: Any
+
+    init(state: Any) { self.state = state }
+
+    /// Bytes read back from the places file (see `PagePlacesFile`).
+    init(data: Data) { state = data }
+
+    /// The place as bytes, to keep across a restart; nil if the engine's
+    /// state isn't bytes. WebKit's `interactionState` is.
+    var data: Data? { state as? Data }
 }
 
 /// Something a page asks of the browser. Always started by a click: sites

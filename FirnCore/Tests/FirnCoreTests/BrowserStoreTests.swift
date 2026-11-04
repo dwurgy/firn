@@ -47,9 +47,10 @@ final class FakePage: PageController {
     /// Where it resumed from, if it woke from a sleep that kept its place.
     var resumedFrom: URL?
     var inUse = false
-    func memory() -> PageMemory? { url.map { PageMemory(state: $0) } }
+    /// Bytes, as WebKit's are, so a place can go through the places file.
+    func memory() -> PageMemory? { url.map { PageMemory(state: Data($0.absoluteString.utf8)) } }
     func resume(from memory: PageMemory) {
-        resumedFrom = memory.state as? URL
+        resumedFrom = (memory.state as? Data).flatMap { URL(string: String(decoding: $0, as: UTF8.self)) }
         url = resumedFrom
     }
     func isInUse() async -> Bool { inUse }

@@ -104,9 +104,11 @@ public final class BrowserStore {
 
     /// Picks up where the saved session left off, or starts with
     /// `defaultSpaces` if there's none. Only the tab on screen loads; the
-    /// rest rest until shown.
+    /// rest rest until shown. Tabs with a place in `pagePlaces` (see
+    /// `PagePlacesFile`) come back with their history.
     public convenience init(
         restoring session: Session?,
+        pagePlaces: [UUID: PagePlace] = [:],
         defaultSpaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
@@ -127,7 +129,7 @@ public final class BrowserStore {
             spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData,
             passwords: passwords, history: history, now: now
         )
-        if let session { restore(session) }
+        if let session { restore(session, pagePlaces: pagePlaces) }
     }
 
     public var activeSpace: Space {
@@ -1678,6 +1680,16 @@ public final class BrowserStore {
 
     // MARK: - Saving and restoring
 
+    /// Where each tab's page is or was, for the places file: only tabs the
+    /// session keeps (not files), and only places small enough to keep.
+    public func pagePlaces() -> [UUID: PagePlace] {
+        var places: [UUID: PagePlace] = [:]
+        for tab in tabs where tab.url?.isFileURL != true {
+            places[tab.id] = tab.savedPlace
+        }
+        return places
+    }
+
     /// The session as it is now, for `SessionSaver`. The window's sidebar
     /// lives in the app, so it's passed in.
     public func session(sidebarWidth: Double, sidebarCollapsed: Bool) -> Session {
@@ -1737,7 +1749,9 @@ public final class BrowserStore {
     /// tabs are put back together where its first one is. A split view
     /// comes back only with exactly two everyday tabs of its own space; they
     /// go side by side where its first one is, in that one's group.
-    private func restore(_ session: Session) {
+    /// Each tab with a place in `pagePlaces` at its own address gets its
+    /// history back, before any page wakes.
+    private func restore(_ session: Session, pagePlaces: [UUID: PagePlace]) {
         let spaceIDs = Set(spaces.map(\.id))
         var seenGroups = Set<UUID>()
         let restoredGroups = session.groups.sorted { $0.order < $1.order }.compactMap { record -> TabGroup? in
@@ -1780,6 +1794,9 @@ public final class BrowserStore {
                 // come) start their 30 days now.
                 driftedAt: place == .drifted ? min(record.driftedAt ?? restoredAt, restoredAt) : nil
             )
+        }
+        for tab in tabs {
+            if let place = pagePlaces[tab.id] { tab.rest(at: place) }
         }
         // Only pairs make a split; both halves go in the first one's group.
         let halves = Dictionary(grouping: tabs.filter { $0.splitID != nil }, by: { $0.splitID! })

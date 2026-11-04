@@ -402,3 +402,23 @@ Two reports. **Reddit (MacBook Air M1, macOS 27.0.1):** in full screen a blank b
 
 **What we learned (corners):** on David's Mac (macOS 27) a window with Firn's empty unified toolbar has 16pt continuous corners (the private `_cornerRadius` says 16; the pixels agree). Page inset 8 + page radius 8 nest exactly, which is what Firn has on macOS 26+; Duet's 26pt assumption was wrong. Likely cause of Noah's report: he's on macOS 14 or 15, where windows have about 10pt corners and Firn's page has 12pt (rounder than the window around it). Waiting on Noah's macOS version and a full-size screenshot (David asked him).
 - **Noah is on macOS 26 (2026-11-01),** so the 14/15 guess is wrong. Not yet checked, so a lead, not a finding: on macOS 26 a window's corners depend on what it has (a toolbar makes them larger; Duet's 26pt may have been right for 26 with Firn 1.0.0's empty toolbar, while 27 gives 16pt). Firn's page is 8pt on 26+, so the gap wouldn't nest. Full-screen step 2 dropped the toolbar, which may change Noah's corners again. Idea: read the window's real corner radius at launch and make the page's `radius − 8`, instead of a fixed 8. Still useful: Noah's exact 26.x version and a full-size screenshot.
+
+## Plan: tabs remember their back history across a restart (David, 2026-11-03)
+
+**Why:** on the iPhone, Back was greyed out after a restart. It wasn't the button: the session saves only each tab's address, title, and icon, so a restarted tab loads fresh with nothing behind it. The Mac does the same. A page's history (back and forward, and where it was scrolled) is already kept in memory for a tab that sleeps (`PageMemory`, WebKit's `interactionState`); this keeps it on disk too, as Safari does. David: Mac and iPhone.
+
+**How:** a second file next to the session, `Firn/page-places.plist` (binary, a tab id to its WebKit data and the address it was at). Kept apart so the session's JSON stays small and readable, and a damaged places file never costs the session. It's written whenever the session is, and also at quit and when the iPhone app leaves the screen (scrolling alone doesn't change the session). On launch, a tab gets its place back only if the saved address matches the tab's own; otherwise it loads its address fresh, as today. Each tab's place is capped (256 KB); a larger one isn't saved.
+
+**Steps:**
+1. **FirnCore:** `PageMemory` to and from `Data` (engine only); the places file (read, write, cap, damaged file ignored); `BrowserStore` gathers places from awake tabs and sleeping ones and hands them back on restore. Tests: round trip, address mismatch, cap, a deleted tab's place is gone at the next save, a damaged file.
+2. **The apps:** the saver writes places with the session, and at quit (Mac) and on leaving the screen (iPhone). Check in the Simulator: open a page, follow a link, quit, reopen, Back works and goes back. David checks on the Mac.
+3. **Docs and commit.**
+
+**Step 1 done (2026-11-03):** `PagePlace` and `PagePlacesFile` (`FirnCore/Sources/FirnCore/Model/PagePlacesFile.swift`), `Tab.savedPlace` and `rest(at:)`, `BrowserStore.pagePlaces()`, and `init(restoring:pagePlaces:…)`, which gives places back before any page wakes. Tested in `PagePlacesTests`, including a real web view: WebKit's `interactionState` is `Data`, and a new web view given it can go back. (Loading HTML strings makes no back history in a test; two files on disk do.)
+
+**Security check:**
+- *New input:* a file Firn itself wrote, inside its sandbox container; WebKit reads it. Malformed or too large: skipped, the tab loads its address fresh.
+- *What a page can do:* nothing new. A page piling up history (pushState) only hits the cap.
+- *Stored:* each tab's back and forward addresses, scroll position, and possibly text typed into forms, on the device only, next to the session (which already holds the addresses). Nothing sent, nothing logged.
+- *Spaces:* a place goes back only to its own tab, in its own space's data store. A closed tab or deleted space drops out at the next save (within seconds). Stop Sharing already forgets its tabs' places.
+- *Clear History* keeps open tabs' back and forward lists, as it already says; saved places follow the same rule.

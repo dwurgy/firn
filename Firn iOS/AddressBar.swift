@@ -12,6 +12,7 @@ struct AddressBar: View {
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
     @Namespace private var glass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -27,6 +28,11 @@ struct AddressBar: View {
                     .glassEffectID("field", in: glass)
             }
         }
+        // Forward coming or going moves the pill, the field, and their
+        // glass together, in one glide. Set on the pill alone, the field
+        // jumped at once and the glass caught up late (David's recording,
+        // 2026-11-03). Reduce Motion: no glide.
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: page?.canGoForward)
         .frame(maxWidth: 640)
         // Larger text grows the bar's words only as far as its 48pt height
         // holds them, as in Safari's bar.
@@ -43,22 +49,30 @@ struct AddressBar: View {
 private struct NavigationPill: View {
     let page: any PageController
     let space: String
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Round (Back alone) or wide (Back and Forward). Forward is always
+    /// there, faded out and clipped away when it can't be used: a width
+    /// that glides is smooth both ways, where adding and removing the
+    /// button snapped the pill narrow before the field had moved over.
+    private static let padding: CGFloat = 2
+    private static let roundWidth = BarButton.size + padding * 2
+    private static let wideWidth = BarButton.size * 2 + padding * 2
 
     var body: some View {
         HStack(spacing: 0) {
             BarButton(symbol: "chevron.backward", label: "Back", action: page.goBack)
                 .disabled(!page.canGoBack)
-            if page.canGoForward {
-                BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
-                    .transition(.opacity)
-            }
+            BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
+                .opacity(page.canGoForward ? 1 : 0)
+                .disabled(!page.canGoForward)
+                .accessibilityHidden(!page.canGoForward)
         }
-        .padding(.horizontal, 2)
-        .frame(height: AddressField.height)
+        .padding(.horizontal, Self.padding)
+        .frame(width: page.canGoForward ? Self.wideWidth : Self.roundWidth,
+               height: AddressField.height, alignment: .leading)
+        .clipShape(.capsule)
         .background(Theme.barFrost, in: .capsule)
         .glassEffect(.regular.tint(Theme.frameTint(space)), in: .capsule)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: page.canGoForward)
     }
 }
 
@@ -109,6 +123,9 @@ private struct AddressField: View {
                     }
                 }
             trailingButton
+                // Reload and Stop cross-fade rather than snap (a fade, so
+                // it stays with Reduce Motion).
+                .animation(.easeOut(duration: 0.15), value: page?.isLoading)
         }
         .frame(height: Self.height)
         .background {

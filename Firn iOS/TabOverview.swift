@@ -153,7 +153,9 @@ private struct OverviewBar: View {
         ZStack {
             Text(space.name)
                 .font(.headline)
-                .foregroundStyle(Theme.spaceInk(space.color))
+                // The same ink as + : the glass is already tinted, so the
+                // words carry no color of their own (David, 2026-11-04).
+                .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .padding(.horizontal, 24)
                 .frame(height: Self.height)
@@ -185,7 +187,7 @@ private struct OverviewBar: View {
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, AddressBar.sideInset)
         .padding(.top, 8)
         .padding(.bottom, 4)
     }

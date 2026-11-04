@@ -44,10 +44,17 @@ struct AddressBar: View {
         // Larger text grows the bar's words only as far as its 48pt height
         // holds them, as in Safari's bar.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 4)
     }
+
+    /// How far the bar's round buttons sit from the screen's edges, at rest.
+    /// Safari's spot (about 35pt on David's iPhone, from his screenshots,
+    /// 2026-11-04), shared with the overview's bar so + and the check sit
+    /// exactly where Back and the tabs button were. Typing gives the field
+    /// the usual 16pt instead.
+    static let sideInset: CGFloat = 34
 }
 
 /// Back, as one round button that widens to hold Forward once there's

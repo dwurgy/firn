@@ -34,7 +34,7 @@ struct AddressBar: View {
     /// timing, so the glass trailed Firn's frost and words as a grey ghost
     /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Self.spacing) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
                 hidesForMenu(toward: .trailing) { NavigationPill(store: store, tab: tab, page: page, space: space) }
                     .transition(.opacity)
@@ -63,7 +63,7 @@ struct AddressBar: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
         .padding(.top, 8)
-        .padding(.bottom, editing.wrappedValue ? 8 : 4)
+        .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
         .onChange(of: editing.wrappedValue) { if editing.wrappedValue { menuOpen = false } }
     }
@@ -74,7 +74,7 @@ struct AddressBar: View {
     /// field's, kept inside the bar's right edge (the tabs button's).
     private var menuFrame: CGRect {
         let width = max(fieldFrame.width, PageMenuPanel.width)
-        let rightEdge = fieldFrame.maxX + 10 + BarButton.size + 4
+        let rightEdge = fieldFrame.maxX + Self.spacing + BarButton.size + 4
         let x = min(fieldFrame.minX, rightEdge - width)
         return CGRect(x: x, y: fieldFrame.maxY - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
     }
@@ -133,6 +133,9 @@ struct AddressBar: View {
     /// exactly where Back and the tabs button were. Typing gives the field
     /// the usual 16pt instead.
     static let sideInset: CGFloat = 34
+    /// The gap between Back, the field, and the tabs button: Safari's 8pt
+    /// (measured from David's screenshots, 2026-11-04).
+    static let spacing: CGFloat = 8
 }
 
 /// Back, as one round button that widens to hold Forward once there's
@@ -203,12 +206,18 @@ private struct AddressField: View {
             if !isEditing, frontURL != nil {
                 BarButton(symbol: "line.3.horizontal", label: "Page Menu") { menuOpen.toggle() }
                     .accessibilityHint("Share or copy this page's link")
+                    // Safari's icon sits this much further in from the
+                    // field's rounded end.
+                    .padding(.leading, 3.5)
                     .opacity(menuOpen ? 0 : 1)
                     .animation(.easeOut(duration: 0.1), value: menuOpen)
             }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
+                // At rest the site shows as a label instead (below); the
+                // field itself is only seen while typing.
+                .opacity(isEditing ? 1 : 0)
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(isEditing ? .leading : .center)
                 .keyboardType(.webSearch)
@@ -229,6 +238,11 @@ private struct AddressField: View {
                 // the middle of the address.
                 .allowsHitTesting(isEditing)
                 .accessibilityHidden(!isEditing)
+                .overlay {
+                    if !isEditing {
+                        restingLabel
+                    }
+                }
                 .overlay {
                     if !isEditing {
                         Button(action: beginEditing) { Color.clear.contentShape(.rect) }
@@ -253,6 +267,30 @@ private struct AddressField: View {
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onAppear(perform: showRestingAddress)
+    }
+
+    /// The site at rest, as Safari shows it: 16pt rather than the field's
+    /// 17, and a long name first draws its letters a little closer, then a
+    /// touch smaller, before it's cut short. A text field can do neither,
+    /// so this is a plain label over it.
+    private var restingLabel: some View {
+        Group {
+            if text.isEmpty {
+                Text("Search or enter address").foregroundStyle(Theme.muted)
+            } else {
+                Text(verbatim: text).foregroundStyle(Theme.ink)
+            }
+        }
+        .font(.callout)
+        .lineLimit(1)
+        .allowsTightening(true)
+        .minimumScaleFactor(0.9)
+        .truncationMode(.tail)
+        .frame(maxWidth: .infinity)
+        .opacity(menuOpen ? 0 : 1)
+        .animation(.easeOut(duration: 0.1), value: menuOpen)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder private var trailingButton: some View {

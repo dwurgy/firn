@@ -344,6 +344,6 @@ private struct OverviewBar: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, AddressBar.sideInset)
         .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.bottom, 0)
     }
 }

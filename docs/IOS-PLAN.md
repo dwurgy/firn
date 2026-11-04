@@ -105,6 +105,16 @@ Steps (written down 2026-11-03):
 The tab model on iOS; the one-column overview behind the page (swipe up on the bar or tap the tabs button); tall cards and slim rows, aging over 24 hours, the tab on screen always tall with a frost ring; page previews saved on the device so they survive a restart (decided, section 5); pinch to switch the whole list; swipe a row to close; long-press drag to reorder; + opens the command bar over the dimmed page; quit and reopen brings everything back.
 **Done:** open 10 tabs from the command bar, close and reorder some, pinch to slim rows and back, force-quit Firn (swipe it away), reopen: every tab is there in the same order, tall cards still show their page pictures, and the overview opens on the tab you were on. Close a tab and its picture is gone too.
 
+Steps (written down 2026-11-03, David's OK):
+1. **More than one tab:** the round tabs button on the bar's right (where 3b left room); links that open a new window become a tab, with a way back to the first. Background tabs sleep sooner than on the Mac (iOS is strict about memory): the tab on screen and the two most recent stay awake; a sleeping tab keeps its place and back history, and a page holding unsent text stays awake (the Mac's rule).
+2. **The overview, plain:** swipe up on the bar or tap the tabs button; one column of slim rows behind the page, opening scrolled to your tab; tap to switch, swipe a row sideways to close; a glass bottom bar with +, search, and Done. Search opens the command bar (it already finds open tabs: one search, not two; David, 2026-11-03).
+3. **Page pictures, saved:** a small store in FirnCore, one picture per tab, in Firn's own container only, protected by iOS while the phone is locked, deleted with its tab or space.
+4. **Tall cards and aging:** tall for 24 hours after last viewed, then slim; the tab on screen always tall with a frost ring; pinch switches the whole list, remembered; nothing changes size while scrolling.
+5. **Long-press drag to reorder,** like Safari (loose tabs; onto another tab to group comes with phase 3).
+6. **The command bar:** + opens it over the dimmed page above the keyboard: addresses, search, open tabs in this space, history, and a short list of actions; no tab until you pick; swipe down cancels. Then a look over (light, dark, Reduce Motion, VoiceOver) and the done test on your iPhone.
+
+Paperwork for David during phase 2: request Apple's default-browser entitlement.
+
 ### Phase 3: Groups and Basecamp
 
 Groups as frosted cards (fold, rename, ungroup, close), made by dragging a tab onto another or from the long-press menu; drag in and out. Basecamp: starts empty and hidden, "Add to Basecamp" from a tab's long-press, up to 12 with the plain-words message on the 13th, balanced rows, scrolls with the list.

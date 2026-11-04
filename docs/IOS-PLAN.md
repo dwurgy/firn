@@ -90,7 +90,7 @@ FirnCore builds and passes its tests for iOS (section 2, items 1, 2, and 4), and
 ### Phase 1: A window that browses
 
 The `Firn iOS` target; one tab; the address bar fixed at the bottom (full size, no shrinking yet); back and forward by swiping from the edge; reload; typed addresses and search, as on the Mac. One space, using its own data store (never the default one).
-**Done:** you browse normally on your iPhone for 10 minutes, rotate it, use the keyboard, and swipe back and forward.
+**Done:** you browse normally on your iPhone for 10 minutes, rotate it, use the keyboard, and swipe back and forward. *Passed* (2026-11-03): David checked light, dark, Reduce Motion, VoiceOver, and the done test on his iPhone.
 
 Steps (written down 2026-11-03):
 1. **The target** (done 2026-11-03): `Firn iOS`, iPhone and iPad, iOS 26, opening to an empty page.

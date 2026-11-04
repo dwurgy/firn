@@ -21,9 +21,6 @@ struct AddressBar: View {
     /// the bar slips into the field, as in Safari; closing is the same move
     /// back. The screen closes it on a tap anywhere else.
     @Binding var menuOpen: Bool
-    /// Where the field sits in the bar, so its glass knows where to grow
-    /// from and come back to.
-    @State private var fieldFrame: CGRect = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
@@ -41,15 +38,17 @@ struct AddressBar: View {
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
                          menuOpen: $menuOpen, opened: opened)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.coordinates)) } action: { fieldFrame = $0 }
+                // The glass and the menu are laid out with the field itself,
+                // in the same pass, so they glide with it as Back widens or
+                // narrows; measured afterwards, they trailed it (step 2c).
+                .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
+                .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
+                .zIndex(1)
             if !editing.wrappedValue {
                 hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
                     .transition(.opacity)
             }
         }
-        .background { fieldGlass }
-        .overlay { menuPanel }
-        .coordinateSpace(.named(Self.coordinates))
         // One glide, no bounce: Safari's move, made calm. Reduce Motion: the
         // menu fades in place instead (below).
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: menuOpen)
@@ -68,22 +67,21 @@ struct AddressBar: View {
         .onChange(of: editing.wrappedValue) { if editing.wrappedValue { menuOpen = false } }
     }
 
-    private nonisolated static let coordinates = "AddressBar"
-
-    /// The menu's spot: from the field's left edge up, its bottom on the
-    /// field's, kept inside the bar's right edge (the tabs button's).
-    private var menuFrame: CGRect {
-        let width = max(fieldFrame.width, PageMenuPanel.width)
-        let rightEdge = fieldFrame.maxX + Self.spacing + BarButton.size + 4
-        let x = min(fieldFrame.minX, rightEdge - width)
-        return CGRect(x: x, y: fieldFrame.maxY - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
+    /// The menu's spot, in the field's own coordinates: from the field's
+    /// left edge up, its bottom on the field's, kept inside the bar's right
+    /// edge (the tabs button's).
+    private func menuFrame(fieldSize: CGSize) -> CGRect {
+        let width = max(fieldSize.width, PageMenuPanel.width)
+        let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
+        let x = min(0, rightEdge - width)
+        return CGRect(x: x, y: fieldSize.height - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
     }
 
     /// The field's glass, as one piece that becomes the menu: the same tint
     /// and the same glass as the bar, because it is the bar.
-    @ViewBuilder private var fieldGlass: some View {
-        let open = menuOpen && fieldFrame != .zero
-        let frame = open ? menuFrame : fieldFrame
+    @ViewBuilder private func fieldGlass(fieldSize: CGSize) -> some View {
+        let open = menuOpen && fieldSize != .zero
+        let frame = open ? menuFrame(fieldSize: fieldSize) : CGRect(origin: .zero, size: fieldSize)
         let radius = open ? PageMenuPanel.cornerRadius : AddressField.height / 2
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
@@ -100,9 +98,9 @@ struct AddressBar: View {
         }
     }
 
-    @ViewBuilder private var menuPanel: some View {
-        if menuOpen, let url = page?.url, fieldFrame != .zero {
-            let frame = menuFrame
+    @ViewBuilder private func menuPanel(fieldSize: CGSize) -> some View {
+        if menuOpen, let url = page?.url, fieldSize != .zero {
+            let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -164,7 +162,7 @@ private struct NavigationPill: View {
     /// that glides is smooth both ways, where adding and removing the
     /// button snapped the pill narrow before the field had moved over.
     private static let padding: CGFloat = 2
-    private static let roundWidth = BarButton.size + padding * 2
+    private static let roundWidth = BarButton.glassSize
     private static let wideWidth = BarButton.size * 2 + padding * 2
 
     var body: some View {
@@ -204,7 +202,7 @@ private struct AddressField: View {
             // The page menu also balances the button on the right, so the
             // site sits centered.
             if !isEditing, frontURL != nil {
-                BarButton(symbol: "line.3.horizontal", label: "Page Menu") { menuOpen.toggle() }
+                BarButton(symbol: "ellipsis", label: "Page Menu") { menuOpen.toggle() }
                     .accessibilityHint("Share or copy this page's link")
                     // Safari's icon sits this much further in from the
                     // field's rounded end.
@@ -380,7 +378,7 @@ private struct PageMenuPanel: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .medium))
+                    .font(BarButton.symbolFont)
                     .frame(width: 24)
                     .accessibilityHidden(true)
                 Text(title)
@@ -435,9 +433,15 @@ private struct TabsButton: View {
     }
 }
 
-/// A round 44pt tap target with an SF Symbol, in Firn's ink.
-private struct BarButton: View {
+/// A round 44pt tap target with an SF Symbol, in Firn's ink. Every symbol
+/// on Firn's bars, the overview's included, takes `symbolFont`, so they all
+/// read as one set (step 2c).
+struct BarButton: View {
     static let size: CGFloat = 44
+    /// A round glass button's whole size: the tap target and 2pt of glass
+    /// around it (Back, Tabs, and the overview's + and check).
+    static let glassSize: CGFloat = size + 4
+    static let symbolFont = Font.system(size: 17, weight: .medium)
     let symbol: String
     let label: String
     var tint: Color = Theme.ink
@@ -447,7 +451,7 @@ private struct BarButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
+                .font(Self.symbolFont)
                 .foregroundStyle(tint.opacity(isEnabled ? 1 : 0.3))
                 .frame(width: Self.size, height: Self.size)
                 .contentShape(.circle)

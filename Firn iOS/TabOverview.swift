@@ -187,7 +187,7 @@ private struct OverviewRow: View {
 
             Button(action: close) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.muted)
                     // The whole row's height, so the X is easy to hit.
                     .frame(width: 44)
@@ -302,7 +302,9 @@ private struct OverviewBar: View {
     let newTab: () -> Void
     let done: () -> Void
 
-    private static let height: CGFloat = 50
+    /// Back's and the tabs button's size, so + and the check sit exactly
+    /// where they were.
+    private static let height = BarButton.glassSize
 
     var body: some View {
         ZStack {
@@ -320,7 +322,7 @@ private struct OverviewBar: View {
             HStack {
                 Button(action: newTab) {
                     Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(BarButton.symbolFont)
                         .foregroundStyle(Theme.ink)
                         .frame(width: Self.height, height: Self.height)
                         .contentShape(.circle)
@@ -331,7 +333,7 @@ private struct OverviewBar: View {
                 Spacer()
                 Button(action: done) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(BarButton.symbolFont)
                         .foregroundStyle(.white)
                         .frame(width: Self.height, height: Self.height)
                         .contentShape(.circle)

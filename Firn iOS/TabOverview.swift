@@ -208,9 +208,11 @@ struct OverviewRow: View {
     private var site: String { WebAddress.site(of: tab.url) }
     static let cornerRadius: CGFloat = 14
     private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    /// A tall card's picture is a little taller than wide: the top of the
-    /// page, as it was on screen.
-    private static let pictureAspect: CGFloat = 1.2
+    /// A card is the mockup's height (docs/ios-overview-design.html): the
+    /// top of the page, a glance rather than a screenshot.
+    static let cardHeight: CGFloat = 148
+    /// The line with the icon, title, and X, over the picture's top.
+    private static let headerHeight: CGFloat = 44
 
     var body: some View {
         Group {
@@ -224,46 +226,75 @@ struct OverviewRow: View {
         .allowsHitTesting(!leaving)
     }
 
-    /// The tab on screen: its page's picture, rounded and ringed in frost,
-    /// with its icon, title, and X on a line below.
+    /// The tab on screen: its page's picture fills the card, rounded and
+    /// ringed in frost. Its icon, title, and X sit on the picture's top,
+    /// where the page softly blurs and fades under them, as a page does
+    /// under a bar.
     private var card: some View {
-        VStack(spacing: 6) {
-            Button(action: open) {
-                Color.clear
-                    .aspectRatio(1 / Self.pictureAspect, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .background(Theme.page)
-                    .overlay(alignment: .top) { pictureView }
-                    .clipShape(Self.shape)
-                    .overlay { Self.shape.strokeBorder(Theme.frost, lineWidth: 2) }
-                    .contentShape(Self.shape)
-            }
-            .buttonStyle(.plain)
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
-            .accessibilityLabel(tab.title)
-            .accessibilityValue("On screen")
-            .accessibilityAddTraits(.isSelected)
-
-            HStack(spacing: 10) {
-                SiteIconView(icon: tab.icon, size: 20) { LetterMark(site: site) }
-                    .accessibilityHidden(true)
+        Button(action: open) {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.cardHeight)
+                .background(Theme.page)
+                .overlay(alignment: .top) { pictureView(sharp: true) }
+                // The blur and wash arrive with the line, after the glide,
+                // so the swap from the gliding picture shows nothing.
+                .overlay(alignment: .top) { headerVeil.opacity(lineShown ? 1 : 0) }
+                .clipShape(Self.shape)
+                .overlay { Self.shape.strokeBorder(Theme.frost, lineWidth: 2) }
+                .contentShape(Self.shape)
+        }
+        .buttonStyle(.plain)
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
+        .accessibilityLabel(tab.title)
+        .accessibilityValue("On screen")
+        .accessibilityAddTraits(.isSelected)
+        .overlay(alignment: .top) {
+            HStack(spacing: 12) {
+                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
                 Text(tab.title)
                     .font(.subheadline)
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityHidden(true)
-                closeButton
             }
-            .padding(.leading, 4)
-            .frame(minHeight: 36)
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, 14)
+            .frame(height: Self.headerHeight)
+            // Taps on the icon and title open the card; only the X is its own.
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .overlay(alignment: .trailing) { closeButton.frame(height: Self.headerHeight) }
             .opacity(lineShown ? 1 : 0)
         }
     }
 
-    @ViewBuilder private var pictureView: some View {
+    /// The page's top blurred under the line, the blur easing out below
+    /// it, with a soft wash of page color so the title always reads. Still
+    /// images and gradients: nothing redraws while it sits there.
+    private var headerVeil: some View {
+        ZStack(alignment: .top) {
+            if picture != nil {
+                pictureView(sharp: false)
+                    .mask {
+                        LinearGradient(stops: [.init(color: .black, location: 0),
+                                               .init(color: .black, location: 0.55),
+                                               .init(color: .clear, location: 1)],
+                                       startPoint: .top, endPoint: .bottom)
+                    }
+            }
+            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
+                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
+                                   .init(color: Theme.page.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+        .frame(height: Self.headerHeight + 28)
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private func pictureView(sharp: Bool) -> some View {
         if let picture, picture.size.width > 0 {
             // As wide as the card, from just below the status bar: exactly
             // where the glide lands, so swapping one for the other shows
@@ -274,11 +305,13 @@ struct OverviewRow: View {
                     .resizable()
                     .frame(width: box.size.width, height: picture.size.height * scale)
                     .offset(y: -pictureTop * scale)
+                    .blur(radius: sharp ? 0 : 10, opaque: true)
             }
             .accessibilityHidden(true)
         } else {
             SiteIconView(icon: tab.icon, size: 40) { LetterMark(site: site) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, Self.headerHeight / 2)
                 .accessibilityHidden(true)
         }
     }

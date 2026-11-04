@@ -7,16 +7,23 @@ import WebKit
 /// SwiftUI's own WebView would be its own step (see CLAUDE.md, Engine).
 public struct PageView: UIViewRepresentable {
     private let page: any PageController
+    private let obscuredBottom: CGFloat
 
-    public init(page: any PageController) {
+    /// `obscuredBottom` is how much of the page's bottom edge Firn's own bar
+    /// covers, so WebKit can scroll the page's end clear of it and keep
+    /// fixed footers above it.
+    public init(page: any PageController, obscuredBottom: CGFloat = 0) {
         self.page = page
+        self.obscuredBottom = obscuredBottom
     }
 
     public func makeUIView(context: Context) -> PageHolder {
         PageHolder(webView: webKitPage.webView)
     }
 
-    public func updateUIView(_ holder: PageHolder, context: Context) {}
+    public func updateUIView(_ holder: PageHolder, context: Context) {
+        holder.obscuredBottom = max(obscuredBottom, 0)
+    }
 
     private var webKitPage: WebKitPageController {
         guard let page = page as? WebKitPageController else {
@@ -31,6 +38,14 @@ public struct PageView: UIViewRepresentable {
 /// makes WebKit lay the whole page out again.
 public final class PageHolder: UIView {
     let webView: WKWebView
+
+    /// How much of the page's bottom edge Firn's bar covers.
+    var obscuredBottom: CGFloat = 0 {
+        didSet {
+            guard obscuredBottom != oldValue else { return }
+            webView.obscuredContentInsets = UIEdgeInsets(top: 0, left: 0, bottom: obscuredBottom, right: 0)
+        }
+    }
 
     init(webView: WKWebView) {
         self.webView = webView

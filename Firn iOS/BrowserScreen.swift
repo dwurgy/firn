@@ -1,71 +1,55 @@
 import FirnCore
 import SwiftUI
 
-/// The one screen of phase 1: the page, with a plain address field below it.
-/// Step 3 gives the field Firn's look, and back, forward, and reload.
+/// The one screen of phase 1: the page, edge to edge, with Firn's address
+/// bar floating over its bottom edge.
 struct BrowserScreen: View {
     let store: BrowserStore
+    @FocusState private var editing: Bool
+    /// Where the bar's top edge and the page's bottom edge sit on screen, so
+    /// the page knows how much of it the bar covers.
+    @State private var barTop: CGFloat = 0
+    @State private var pageBottom: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let page = store.activeTab?.page {
-                PageView(page: page)
-                    // A new tab gets a new web view, not the last one's.
-                    .id(ObjectIdentifier(page))
-            } else {
-                Theme.page
+        ZStack(alignment: .bottom) {
+            pageLayer
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { pageBottom = $0 }
+
+            // While typing, the page dims a little; a tap on it cancels.
+            if editing {
+                Theme.lookoutDim
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { editing = false }
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
             }
-            AddressField(store: store)
+
+            AddressBar(store: store, editing: $editing)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
+                    // Only the bar at rest counts: while it rides the
+                    // keyboard, the page underneath shouldn't lay out again.
+                    if !editing { barTop = top }
+                }
+                // The bar rises with the keyboard only for typing an
+                // address; a page's own fields leave it resting behind the
+                // keyboard, as in Safari.
+                .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
         }
-        .background(Theme.page)
-    }
-}
-
-/// Takes an address or a search, as on the Mac. While no one is typing it
-/// shows only the committed address's site, never a pending one.
-private struct AddressField: View {
-    let store: BrowserStore
-    @State private var text = ""
-    @FocusState private var focused: Bool
-
-    private var frontURL: URL? { store.activeTab?.page?.url }
-
-    var body: some View {
-        TextField("Search or enter address", text: $text)
-            .font(.body)
-            .foregroundStyle(Theme.ink)
-            .multilineTextAlignment(focused ? .leading : .center)
-            .keyboardType(.webSearch)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .submitLabel(.go)
-            .focused($focused)
-            .padding(.horizontal, 14)
-            .frame(height: 44)
-            .background(Theme.frame, in: .rect(cornerRadius: 14))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .accessibilityLabel("Address")
-            .onSubmit(open)
-            .onChange(of: focused) {
-                if focused { text = frontURL?.absoluteString ?? "" } else { showRestingAddress() }
-            }
-            .onChange(of: frontURL) { showRestingAddress() }
-            .onAppear(perform: showRestingAddress)
+        .background(Theme.page.ignoresSafeArea())
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
     }
 
-    private func open() {
-        guard let url = AddressInput.url(for: text, searchEngine: SearchEngine.chosen) else { return }
+    @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
-            page.load(url)
+            PageView(page: page, obscuredBottom: barTop > 0 ? pageBottom - barTop : 0)
+                // A new tab gets a new web view, not the last one's.
+                .id(ObjectIdentifier(page))
         } else {
-            store.openTab(url)
+            Theme.page
         }
-        focused = false
-    }
-
-    private func showRestingAddress() {
-        guard !focused else { return }
-        text = WebAddress.site(of: frontURL)
     }
 }

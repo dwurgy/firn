@@ -82,8 +82,8 @@ private struct SpaceGlow: View {
     }
 }
 
-/// A slim row on glass: the site's icon, the page's title, and the site
-/// below it. The tab on screen stands out on solid page white with a frost
+/// A slim row on glass: the site's icon and the page's title, one line, as
+/// in Safari and Firn's Mac sidebar. The tab on screen stands out on solid page white with a frost
 /// ring.
 private struct OverviewRow: View {
     let tab: FirnCore.Tab
@@ -97,23 +97,15 @@ private struct OverviewRow: View {
         Button(action: open) {
             HStack(spacing: 12) {
                 SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(tab.title)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.ink)
-                    if !site.isEmpty {
-                        Text(site)
-                            .font(.caption)
-                            .foregroundStyle(Theme.muted)
-                    }
-                }
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(tab.title)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .frame(minHeight: 58)
+            .frame(minHeight: 48)
             .background {
                 if isOnScreen {
                     Self.shape.fill(Theme.page)

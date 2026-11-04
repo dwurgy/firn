@@ -19,32 +19,28 @@ struct BrowserScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             if showingTabs {
-                TabOverview(store: store, done: hideTabs, newTab: startNewTab)
+                TabOverview(store: store, done: hideTabs, newTab: startNewTab, typing: editing)
+                    // Typing from + leaves the overview where it is, under
+                    // the dim; its own bar stays behind the keyboard.
+                    .ignoresSafeArea(.keyboard)
+                    .allowsHitTesting(!editing)
+                    .accessibilityHidden(editing)
                     .transition(.opacity)
             }
-            pageAndBar
+            pageLayer
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { pageBottom = $0 }
                 // The page steps back a little as it fades, so the overview
                 // reads as behind it. Reduce Motion: only the fade.
                 .scaleEffect(showingTabs && !reduceMotion ? 0.94 : 1)
                 .opacity(showingTabs ? 0 : 1)
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
-        }
-        .background(Theme.page.ignoresSafeArea())
-        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
-        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3), value: showingTabs)
-        .onChange(of: editing) { if !editing { typingNewTab = false } }
-    }
 
-    private var pageAndBar: some View {
-        ZStack(alignment: .bottom) {
-            pageLayer
-                .ignoresSafeArea()
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { pageBottom = $0 }
-
-            // While typing, the page dims a little; a tap on it cancels.
+            // While typing, the page (or the overview) dims a little; a tap
+            // on it cancels.
             if editing {
                 Theme.lookoutDim
                     .ignoresSafeArea()
@@ -54,27 +50,43 @@ struct BrowserScreen: View {
                     .accessibilityHidden(true)
             }
 
-            AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab, showTabs: showTabs)
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
-                    // Only the bar at rest counts: while it rides the
-                    // keyboard, the page underneath shouldn't lay out again.
-                    if !editing { barTop = top }
-                }
-                // A swipe up on the bar shows the overview, as in Safari.
-                // Alongside the bar's own buttons, so a tap still taps.
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 20).onEnded { drag in
-                        if !editing, drag.translation.height < -40,
-                           abs(drag.translation.height) > abs(drag.translation.width) {
-                            showTabs()
-                        }
-                    }
-                )
-                // The bar rises with the keyboard only for typing an
-                // address; a page's own fields leave it resting behind the
-                // keyboard, as in Safari.
-                .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
+            bar
+                // Over the overview, the bar shows only while typing from +.
+                .opacity(barShown ? 1 : 0)
+                .scaleEffect(showingTabs && !editing && !reduceMotion ? 0.94 : 1, anchor: .bottom)
+                .allowsHitTesting(barShown)
+                .accessibilityHidden(!barShown)
         }
+        .background(Theme.page.ignoresSafeArea())
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3), value: showingTabs)
+        .onChange(of: editing) { if !editing { typingNewTab = false } }
+    }
+
+    private var barShown: Bool { !showingTabs || editing }
+
+    private var bar: some View {
+        AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
+                   showTabs: showTabs, opened: hideTabs)
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
+                // Only the bar at rest counts: while it rides the keyboard,
+                // the page underneath shouldn't lay out again.
+                if !editing { barTop = top }
+            }
+            // A swipe up on the bar shows the overview, as in Safari.
+            // Alongside the bar's own buttons, so a tap still taps.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20).onEnded { drag in
+                    if !editing, drag.translation.height < -40,
+                       abs(drag.translation.height) > abs(drag.translation.width) {
+                        showTabs()
+                    }
+                }
+            )
+            // The bar rises with the keyboard only for typing an address; a
+            // page's own fields leave it resting behind the keyboard, as in
+            // Safari.
+            .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
     }
 
     @ViewBuilder private var pageLayer: some View {
@@ -96,12 +108,11 @@ struct BrowserScreen: View {
         showingTabs = false
     }
 
-    /// Until the command bar comes (step 6), + goes back to the page with an
-    /// empty address field; Go opens what's typed as a new tab, and
-    /// cancelling opens nothing.
+    /// + types right on the overview: an empty address field over it, and
+    /// only Go opens a tab (and then shows the page); cancelling stays in
+    /// the overview with nothing opened. Step 6's command bar opens here too.
     private func startNewTab() {
         typingNewTab = true
-        showingTabs = false
         editing = true
     }
 }

@@ -15,6 +15,10 @@ struct AddressBar: View {
     /// new tab.
     let typingNewTab: Bool
     let showTabs: () -> Void
+    /// After Go has opened what was typed (the overview closes then).
+    var opened: () -> Void = {}
+    /// While the page menu is open, it's all the bar shows, as in Safari.
+    @State private var menuOpen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
@@ -28,14 +32,20 @@ struct AddressBar: View {
         HStack(spacing: 10) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
                 NavigationPill(store: store, tab: tab, page: page, space: space)
+                    .opacity(menuOpen ? 0 : 1)
                     .transition(.opacity)
             }
-            AddressField(store: store, editing: editing, typingNewTab: typingNewTab)
+            AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
+                         menuOpen: $menuOpen, opened: opened)
             if !editing.wrappedValue {
                 TabsButton(space: space, action: showTabs)
+                    .opacity(menuOpen ? 0 : 1)
                     .transition(.opacity)
             }
         }
+        // The rest of the bar fades as the menu grows out of its button,
+        // and back as it closes (a fade, so it stays with Reduce Motion).
+        .animation(.easeOut(duration: 0.2), value: menuOpen)
         // Forward coming or going moves the pill and the field together, in
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
@@ -109,6 +119,8 @@ private struct AddressField: View {
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
     let typingNewTab: Bool
+    @Binding var menuOpen: Bool
+    let opened: () -> Void
     @State private var text = ""
     @State private var selection: TextSelection?
 
@@ -120,7 +132,7 @@ private struct AddressField: View {
         HStack(spacing: 0) {
             // The page menu also balances the button on the right, so the
             // site sits centered.
-            if !isEditing, let frontURL { PageMenu(url: frontURL) }
+            if !isEditing, let frontURL { PageMenu(url: frontURL, isOpen: $menuOpen) }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
@@ -132,6 +144,7 @@ private struct AddressField: View {
                 .submitLabel(.go)
                 .focused(editing)
                 .padding(.leading, isEditing ? 18 : 0)
+                .opacity(menuOpen ? 0 : 1)
                 .accessibilityLabel("Address")
                 .onSubmit(open)
                 // VoiceOver's scrub cancels, as tapping the page does (the
@@ -155,13 +168,15 @@ private struct AddressField: View {
                 // Reload and Stop cross-fade rather than snap (a fade, so
                 // it stays with Reduce Motion).
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
+                .opacity(menuOpen ? 0 : 1)
         }
         .frame(height: Self.height)
         .background {
             LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
                 .clipShape(.capsule)
+                .opacity(menuOpen ? 0 : 1)
         }
-        .glassEffect(.regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
+        .glassEffect(menuOpen ? .identity : .regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onAppear(perform: showRestingAddress)
@@ -205,6 +220,7 @@ private struct AddressField: View {
         } else {
             store.openTab(url)
         }
+        opened()
     }
 
     private func showRestingAddress() {
@@ -217,22 +233,69 @@ private struct AddressField: View {
 /// The page's own short menu, at the field's left (where Safari keeps its).
 /// Only what people reach for; Find, Zoom, Stop Blocking, and Request
 /// Desktop Site join it in phase 6.
-private struct PageMenu: View {
+///
+/// UIKit, because the bar hides while the menu is open (as Safari's does)
+/// and SwiftUI's `Menu` doesn't say when it opens or closes: watching its
+/// items appear missed the closing, so the bar stayed hidden. A `UIButton`
+/// hears both from its own menu.
+private struct PageMenu: UIViewRepresentable {
     let url: URL
+    @Binding var isOpen: Bool
 
-    var body: some View {
-        Menu {
-            ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
-            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
-        } label: {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(Theme.ink)
-                .frame(width: BarButton.size, height: BarButton.size)
-                .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Page Menu")
+    func makeUIView(context: Context) -> PageMenuButton {
+        let button = PageMenuButton(type: .system)
+        button.showsMenuAsPrimaryAction = true
+        var look = UIButton.Configuration.plain()
+        look.image = UIImage(systemName: "line.3.horizontal",
+                             withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))
+        look.baseForegroundColor = UIColor(Theme.ink)
+        button.configuration = look
+        button.accessibilityLabel = "Page Menu"
+        return button
+    }
+
+    func updateUIView(_ button: PageMenuButton, context: Context) {
+        let isOpen = $isOpen
+        button.openChanged = { isOpen.wrappedValue = $0 }
+        button.menu = UIMenu(children: [
+            UIAction(title: "Share…", image: UIImage(systemName: "square.and.arrow.up")) { [weak button] _ in
+                button?.share(url)
+            },
+            UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in
+                UIPasteboard.general.url = url
+            },
+        ])
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PageMenuButton, context: Context) -> CGSize? {
+        CGSize(width: BarButton.size, height: BarButton.size)
+    }
+}
+
+private final class PageMenuButton: UIButton {
+    var openChanged: (Bool) -> Void = { _ in }
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         willDisplayMenuFor configuration: UIContextMenuConfiguration,
+                                         animator: (any UIContextMenuInteractionAnimating)?) {
+        super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
+        openChanged(true)
+    }
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         willEndFor configuration: UIContextMenuConfiguration,
+                                         animator: (any UIContextMenuInteractionAnimating)?) {
+        super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
+        openChanged(false)
+    }
+
+    /// iOS's own share sheet, from the menu's button.
+    func share(_ url: URL) {
+        guard var presenter = window?.rootViewController else { return }
+        while let next = presenter.presentedViewController { presenter = next }
+        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = self
+        presenter.present(sheet, animated: true)
     }
 }
 

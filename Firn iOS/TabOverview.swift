@@ -14,6 +14,9 @@ struct TabOverview: View {
     let done: () -> Void
     /// A new tab: back to the page, with the address field ready to type.
     let newTab: () -> Void
+    /// Typing from +: the address field takes the bar's place, so the bar
+    /// steps out of its way (it would show through the field's glass).
+    var typing = false
 
     private var space: String { store.activeSpace.color }
 
@@ -51,6 +54,7 @@ struct TabOverview: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, newTab: newTab, done: done)
+                    .opacity(typing ? 0 : 1)
             }
             .onAppear {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }

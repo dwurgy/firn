@@ -12,6 +12,8 @@ struct BrowserScreen: View {
     /// Whether the address being typed opens a new tab (from the overview's
     /// +) rather than replacing the page on screen.
     @State private var typingNewTab = false
+    /// The page menu, grown out of the bar.
+    @State private var menuOpen = false
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
     /// the page knows how much of it the bar covers.
     @State private var barTop: CGFloat = 0
@@ -50,6 +52,16 @@ struct BrowserScreen: View {
                     .accessibilityHidden(true)
             }
 
+            // The page menu closes on a tap anywhere else, as iOS's menus
+            // do (no dim: it's a small menu, not a mode).
+            if menuOpen {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture { menuOpen = false }
+                    .accessibilityHidden(true)
+            }
+
             bar
                 // Over the overview, the bar shows only while typing from +.
                 .opacity(barShown ? 1 : 0)
@@ -67,7 +79,7 @@ struct BrowserScreen: View {
 
     private var bar: some View {
         AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
-                   showTabs: showTabs, opened: hideTabs)
+                   showTabs: showTabs, opened: hideTabs, menuOpen: $menuOpen)
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
                 // Only the bar at rest counts: while it rides the keyboard,
                 // the page underneath shouldn't lay out again.
@@ -77,7 +89,7 @@ struct BrowserScreen: View {
             // Alongside the bar's own buttons, so a tap still taps.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 20).onEnded { drag in
-                    if !editing, drag.translation.height < -40,
+                    if !editing, !menuOpen, drag.translation.height < -40,
                        abs(drag.translation.height) > abs(drag.translation.width) {
                         showTabs()
                     }
@@ -101,6 +113,7 @@ struct BrowserScreen: View {
 
     private func showTabs() {
         editing = false
+        menuOpen = false
         showingTabs = true
     }
 

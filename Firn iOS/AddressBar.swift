@@ -17,8 +17,13 @@ struct AddressBar: View {
     let showTabs: () -> Void
     /// After Go has opened what was typed (the overview closes then).
     var opened: () -> Void = {}
-    /// While the page menu is open, it's all the bar shows, as in Safari.
-    @State private var menuOpen = false
+    /// The page menu. Open, the field's glass grows into it and the rest of
+    /// the bar slips into the field, as in Safari; closing is the same move
+    /// back. The screen closes it on a tap anywhere else.
+    @Binding var menuOpen: Bool
+    /// Where the field sits in the bar, so its glass knows where to grow
+    /// from and come back to.
+    @State private var fieldFrame: CGRect = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
@@ -31,19 +36,23 @@ struct AddressBar: View {
     var body: some View {
         HStack(spacing: 10) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
-                hidesForMenu { NavigationPill(store: store, tab: tab, page: page, space: space) }
+                hidesForMenu(toward: .trailing) { NavigationPill(store: store, tab: tab, page: page, space: space) }
                     .transition(.opacity)
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
                          menuOpen: $menuOpen, opened: opened)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.coordinates)) } action: { fieldFrame = $0 }
             if !editing.wrappedValue {
-                hidesForMenu { TabsButton(space: space, action: showTabs) }
+                hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
                     .transition(.opacity)
             }
         }
-        // The rest of the bar fades as the menu grows out of its button,
-        // and back as it closes (a fade, so it stays with Reduce Motion).
-        .animation(.easeOut(duration: 0.2), value: menuOpen)
+        .background { fieldGlass }
+        .overlay { menuPanel }
+        .coordinateSpace(.named(Self.coordinates))
+        // One glide, no bounce: Safari's move, made calm. Reduce Motion: the
+        // menu fades in place instead (below).
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: menuOpen)
         // Forward coming or going moves the pill and the field together, in
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
@@ -55,18 +64,67 @@ struct AddressBar: View {
         .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 4)
+        .onChange(of: page?.url) { menuOpen = false }
+        .onChange(of: editing.wrappedValue) { if editing.wrappedValue { menuOpen = false } }
     }
 
-    /// Leaves while the page menu is open and comes back after, keeping its
-    /// place so nothing else moves. Glass is taken away and brought back
-    /// rather than faded: Liquid Glass doesn't follow `.opacity`, so a fade
-    /// left empty grey discs behind (David's recording, 2026-11-04).
-    private func hidesForMenu(@ViewBuilder _ content: () -> some View) -> some View {
-        let view = content()
-        return ZStack {
-            view.hidden()
-            if !menuOpen { view.transition(.opacity) }
+    private nonisolated static let coordinates = "AddressBar"
+
+    /// The menu's spot: from the field's left edge up, its bottom on the
+    /// field's, kept inside the bar's right edge (the tabs button's).
+    private var menuFrame: CGRect {
+        let width = max(fieldFrame.width, PageMenuPanel.width)
+        let rightEdge = fieldFrame.maxX + 10 + BarButton.size + 4
+        let x = min(fieldFrame.minX, rightEdge - width)
+        return CGRect(x: x, y: fieldFrame.maxY - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
+    }
+
+    /// The field's glass, as one piece that becomes the menu: the same tint
+    /// and the same glass as the bar, because it is the bar.
+    @ViewBuilder private var fieldGlass: some View {
+        let open = menuOpen && fieldFrame != .zero
+        let frame = open ? menuFrame : fieldFrame
+        let radius = open ? PageMenuPanel.cornerRadius : AddressField.height / 2
+        let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
+            .opacity(open ? 0 : 1)
+            .clipShape(.rect(cornerRadius: radius, style: .continuous))
+            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .rect(cornerRadius: radius, style: .continuous))
+            .frame(width: frame.width, height: frame.height)
+            .position(x: frame.midX, y: frame.midY)
+        if reduceMotion {
+            // Reduce Motion: no growing; the bar's glass and the menu's
+            // swap with a fade.
+            glass.id(open).transition(.opacity)
+        } else {
+            glass
         }
+    }
+
+    @ViewBuilder private var menuPanel: some View {
+        if menuOpen, let url = page?.url, fieldFrame != .zero {
+            let frame = menuFrame
+            PageMenuPanel(url: url) { menuOpen = false }
+                .frame(width: frame.width, height: frame.height)
+                .position(x: frame.midX, y: frame.midY)
+                // The words come in once the glass has mostly grown, and go
+                // first when it closes.
+                .transition(.asymmetric(
+                    insertion: .opacity.animation(.easeOut(duration: 0.16).delay(reduceMotion ? 0 : 0.12)),
+                    removal: .opacity.animation(.easeOut(duration: 0.08))))
+        }
+    }
+
+    /// Slips into the field while the page menu is open and comes back
+    /// out after, keeping its place so nothing else moves. Shrunk rather
+    /// than removed or faded: Liquid Glass follows neither a removal nor
+    /// `.opacity`, and both left dark discs behind (David's recordings,
+    /// 2026-11-04); a glass view's size it does follow.
+    private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .scaleEffect(menuOpen && !reduceMotion ? 0.01 : 1, anchor: anchor)
+            .opacity(menuOpen ? 0 : 1)
+            .allowsHitTesting(!menuOpen)
+            .accessibilityHidden(menuOpen)
     }
 
     /// How far the bar's round buttons sit from the screen's edges, at rest.
@@ -142,7 +200,12 @@ private struct AddressField: View {
         HStack(spacing: 0) {
             // The page menu also balances the button on the right, so the
             // site sits centered.
-            if !isEditing, let frontURL { PageMenu(url: frontURL, isOpen: $menuOpen) }
+            if !isEditing, frontURL != nil {
+                BarButton(symbol: "line.3.horizontal", label: "Page Menu") { menuOpen.toggle() }
+                    .accessibilityHint("Share or copy this page's link")
+                    .opacity(menuOpen ? 0 : 1)
+                    .animation(.easeOut(duration: 0.1), value: menuOpen)
+            }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
@@ -155,6 +218,7 @@ private struct AddressField: View {
                 .focused(editing)
                 .padding(.leading, isEditing ? 18 : 0)
                 .opacity(menuOpen ? 0 : 1)
+                .animation(.easeOut(duration: 0.1), value: menuOpen)
                 .accessibilityLabel("Address")
                 .onSubmit(open)
                 // VoiceOver's scrub cancels, as tapping the page does (the
@@ -179,19 +243,13 @@ private struct AddressField: View {
                 // it stays with Reduce Motion).
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
                 .opacity(menuOpen ? 0 : 1)
+                .animation(.easeOut(duration: 0.1), value: menuOpen)
         }
         .frame(height: Self.height)
-        // The glass is its own layer, so it can leave while the page menu
-        // is open and the menu's button stays (it's what the menu hangs
-        // from). Switching the glass to `.identity` showed a blank blob.
-        .background {
-            if !menuOpen {
-                LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
-                    .clipShape(.capsule)
-                    .glassEffect(.regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
-                    .transition(.opacity)
-            }
-        }
+        // The field's glass is the bar's (`AddressBar.fieldGlass`), so it
+        // can grow into the page menu.
+        .allowsHitTesting(!menuOpen)
+        .accessibilityHidden(menuOpen)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onAppear(perform: showRestingAddress)
@@ -245,82 +303,82 @@ private struct AddressField: View {
     }
 }
 
-/// The page's own short menu, at the field's left (where Safari keeps its).
-/// Only what people reach for; Find, Zoom, Stop Blocking, and Request
-/// Desktop Site join it in phase 6.
-///
-/// UIKit, because the bar hides while the menu is open (as Safari's does)
-/// and SwiftUI's `Menu` doesn't say when it opens or closes: watching its
-/// items appear missed the closing, so the bar stayed hidden. A `UIButton`
-/// hears both from its own menu.
-private struct PageMenu: UIViewRepresentable {
+/// The page's own short menu, grown out of the field's glass (Firn's own,
+/// not iOS's, so it carries the bar's tint and glass). Only what people
+/// reach for; Find, Zoom, Stop Blocking, and Request Desktop Site join it
+/// in phase 6.
+private struct PageMenuPanel: View {
     let url: URL
-    @Binding var isOpen: Bool
+    let close: () -> Void
+    @AccessibilityFocusState private var firstFocused: Bool
 
-    func makeUIView(context: Context) -> PageMenuButton {
-        let button = PageMenuButton(type: .system)
-        button.showsMenuAsPrimaryAction = true
-        var look = UIButton.Configuration.plain()
-        look.image = UIImage(systemName: "line.3.horizontal",
-                             withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))
-        look.baseForegroundColor = UIColor(Theme.ink)
-        button.configuration = look
-        button.accessibilityLabel = "Page Menu"
-        return button
-    }
+    static let width: CGFloat = 250
+    static let cornerRadius: CGFloat = 22
+    private static let rowHeight: CGFloat = 48
+    private static let rows = 2
+    private static let inset: CGFloat = 6
+    static var height: CGFloat { rowHeight * CGFloat(rows) + inset * 2 }
 
-    func updateUIView(_ button: PageMenuButton, context: Context) {
-        let isOpen = $isOpen
-        button.openChanged = { isOpen.wrappedValue = $0 }
-        button.menu = UIMenu(children: [
-            UIAction(title: "Share…", image: UIImage(systemName: "square.and.arrow.up")) { [weak button] _ in
-                button?.share(url)
-            },
-            UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in
+    var body: some View {
+        VStack(spacing: 0) {
+            row("Share…", symbol: "square.and.arrow.up") {
+                close()
+                ShareSheet.present(url)
+            }
+            .accessibilityFocused($firstFocused)
+            row("Copy Link", symbol: "link") {
                 UIPasteboard.general.url = url
-            },
-        ])
+                close()
+            }
+        }
+        .padding(Self.inset)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, close)
+        .onAppear { firstFocused = true }
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PageMenuButton, context: Context) -> CGSize? {
-        CGSize(width: BarButton.size, height: BarButton.size)
+    private func row(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.body)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 14)
+            .frame(height: Self.rowHeight)
+            .contentShape(.rect)
+        }
+        .buttonStyle(MenuRowStyle())
     }
 }
 
-private final class PageMenuButton: UIButton {
-    var openChanged: (Bool) -> Void = { _ in }
-    private var closing: Task<Void, Never>?
-
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
-                                         willDisplayMenuFor configuration: UIContextMenuConfiguration,
-                                         animator: (any UIContextMenuInteractionAnimating)?) {
-        super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
-        closing?.cancel()
-        openChanged(true)
+/// A row pressed: Firn's warm wash, in the row's rounded shape.
+private struct MenuRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Theme.press : .clear,
+                        in: .rect(cornerRadius: PageMenuPanel.cornerRadius - 6, style: .continuous))
     }
+}
 
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
-                                         willEndFor configuration: UIContextMenuConfiguration,
-                                         animator: (any UIContextMenuInteractionAnimating)?) {
-        super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
-        // The bar comes back once the menu has gone back into its button
-        // (about 0.2s), not while it's still shrinking over it. A fixed wait:
-        // the animator's completion never came. Reopening in the meantime
-        // cancels it.
-        closing?.cancel()
-        closing = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.2))
-            guard !Task.isCancelled else { return }
-            self?.openChanged(false)
-        }
-    }
-
-    /// iOS's own share sheet, from the menu's button.
-    func share(_ url: URL) {
-        guard var presenter = window?.rootViewController else { return }
+/// iOS's own share sheet, over whatever's on screen.
+@MainActor private enum ShareSheet {
+    static func present(_ url: URL) {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        guard let window = scene?.keyWindow, var presenter = window.rootViewController else { return }
         while let next = presenter.presentedViewController { presenter = next }
         let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        sheet.popoverPresentationController?.sourceView = self
+        // iPad: from the bottom of the screen, where the menu was.
+        sheet.popoverPresentationController?.sourceView = window
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.maxY - 60, width: 1, height: 1)
         presenter.present(sheet, animated: true)
     }
 }

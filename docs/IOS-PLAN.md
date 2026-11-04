@@ -96,6 +96,7 @@ Steps (written down 2026-11-03):
 1. **The target** (done 2026-11-03): `Firn iOS`, iPhone and iPad, iOS 26, opening to an empty page.
 2. **The page, in its own data store** (built 2026-11-03; checked in the Simulator: browse, swipe back, rotate, restart): `PageView+iOS.swift` in FirnCore (edge to edge, swipe back and forward); the app runs a `BrowserStore` with one space and saves its session in its own container; a plain field at the bottom takes an address or a search, as on the Mac. *Test:* in the iPhone Simulator, type an address, browse, swipe from the left edge to go back, rotate.
 3. **The bottom address bar:** Firn's look, back, forward, and reload, the keyboard (Go, rising with the keyboard, tapping out to cancel), and showing the committed address only.
+   *Known (2026-11-03):* in the Simulator, scrolling Wikipedia with a Mac mouse and then clicking crashed once inside UIKit (`-[UIGestureRecognizer _delayTouchesForEvent:inPhase:]`, "insertObject:atIndex: object cannot be nil"); Xcode's debugger made it look frozen. Firn's code isn't in the stack and adds no gesture recognizers; touch swipes didn't repeat it. The same crash is reported on iOS 18 with no fix (Apple Developer Forums thread 764352). Watch for it on a real iPhone in step 4, and with a trackpad on iPad (phase 7).
 4. **A look over and your iPhone:** light, dark, Reduce Motion, VoiceOver, installing on your iPhone (Developer Mode), then the done test.
 
 ### Phase 2: Tabs, the overview, and the command bar

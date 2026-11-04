@@ -19,6 +19,10 @@ struct BrowserScreen: View {
     /// the glide froze. The live page stays put, hidden, and swaps with the
     /// picture at either end.
     @State private var standIn: UIImage?
+    /// The page's color behind the status bar, which the picture leaves
+    /// out: it fades as the picture shrinks and back as it grows, so the
+    /// swap with the page shows nothing.
+    @State private var standInTop: CGColor?
     /// Where the picture sits when it's in its card, and whether it's there
     /// now (animated between the page's place and the card).
     @State private var cardSpot: CGRect = .zero
@@ -69,10 +73,19 @@ struct BrowserScreen: View {
                 .accessibilityHidden(showingTabs)
 
             if let standIn, standIn.size.width > 0 {
-                // From the screen's top-left corner, where WebKit's picture
-                // starts, in the screen's own points, as the cards report
-                // theirs (measured: the layer's own corner isn't the
-                // screen's).
+                if let standInTop {
+                    Color(cgColor: standInTop)
+                        .frame(height: pictures.topInset)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .opacity(inCard ? 0 : 1)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                // Placed from the screen's top-left corner, in the screen's
+                // own points, as the cards report theirs (measured: the
+                // layer's own corner isn't the screen's); the picture starts
+                // where the page does, below the status bar.
                 let width = pageFrame.width
                 let height = width * standIn.size.height / standIn.size.width
                 GeometryReader { layer in
@@ -124,8 +137,11 @@ struct BrowserScreen: View {
 
     private var barShown: Bool { !arrived || editing }
 
-    /// The glide: a bounce-free spring, as Safari's (about 0.3s).
-    private static let glide = Animation.smooth(duration: 0.3)
+    /// The glide: quick, then easing gently into place (about 0.3s, as
+    /// Safari's). A curve rather than a spring: a spring's last frames
+    /// creep (about 0.4s on David's iPhone), and it reports done before it
+    /// has landed, so the swap with the page jumped the last few points.
+    private static let glide = Animation.timingCurve(0.2, 0.85, 0.25, 1, duration: 0.32)
     private static let fade = Animation.easeOut(duration: 0.2)
 
     private var bar: some View {
@@ -198,6 +214,7 @@ struct BrowserScreen: View {
                 // The picture takes the page's place, then glides.
             cardSpot = spot
             inCard = false
+            standInTop = tab.page?.topColor
             standIn = image
             pageHidden = true
             await Task.yield()
@@ -231,6 +248,7 @@ struct BrowserScreen: View {
         }
         cardSpot = spot
         inCard = true
+        standInTop = tab.page?.topColor
         standIn = image
         gliding = tab.id
         Task {
@@ -304,9 +322,9 @@ struct BrowserScreen: View {
 }
 
 /// The page's picture in its card: scaled to the card's width, placed on
-/// it, and cut to the card's height with its corners, leaving out the strip
-/// behind the status bar (`top`). Transforms and a mask only, so nothing
-/// lays out again while it glides.
+/// it, and cut to the card's height with its corners. Full size, it sits
+/// where the page does, just below the status bar (`top`). Transforms and a
+/// mask only, so nothing lays out again while it glides.
 private struct CardGlide: ViewModifier {
     let width: CGFloat
     let height: CGFloat
@@ -323,9 +341,8 @@ private struct CardGlide: ViewModifier {
             .mask(alignment: .top) {
                 RoundedRectangle(cornerRadius: ready ? cornerRadius / scale : 0, style: .continuous)
                     .frame(height: ready ? card.height / scale : height)
-                    .offset(y: ready ? top : 0)
             }
             .scaleEffect(scale, anchor: .topLeading)
-            .offset(x: ready ? card.minX : 0, y: ready ? card.minY - top * scale : 0)
+            .offset(x: ready ? card.minX : 0, y: ready ? card.minY : top)
     }
 }

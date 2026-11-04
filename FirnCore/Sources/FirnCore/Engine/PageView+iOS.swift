@@ -35,11 +35,12 @@ public struct PageView: UIViewControllerRepresentable {
     }
 }
 
-/// Holds a page's web view. The page runs edge to edge, and WebKit keeps
-/// it clear of the status bar and Firn's bar through the safe area, its own
-/// way: an ordinary page starts below the status bar, and a page that asks
-/// to fill the screen (`viewport-fit=cover`) gets the room as
-/// `env(safe-area-inset-…)` and makes it itself.
+/// Holds a page's web view. The page starts below the status bar (see
+/// `PageFrame`) and runs down to the screen's bottom edge, and WebKit keeps
+/// it clear of Firn's bar through the safe area, its own way: an ordinary
+/// page scrolls its end clear, and a page that asks to fill the screen
+/// (`viewport-fit=cover`) gets the room as `env(safe-area-inset-bottom)`
+/// and makes it itself.
 ///
 /// Not `obscuredContentInsets`: setting it switches WebKit's own safe-area
 /// handling off, and a page that fills the screen, saved while Firn was in
@@ -99,23 +100,56 @@ public final class PageHolder: UIViewController {
 /// Passes on only real sizes, as on the Mac: SwiftUI sizes a newly shown
 /// view at 0×0 first, and every size change makes WebKit lay the whole page
 /// out again.
+///
+/// The page starts just below the status bar, as in Safari before iOS 26,
+/// and runs down under Firn's bar. Under the status bar, a page's bar
+/// pinned to its top (apple.com's, firnbrowser.com's menu) slid up behind
+/// the clock (David's recordings, 2026-11-04): WebKit pins such bars to the
+/// top of the web view, not below the safe area. The strip behind the
+/// status bar takes the page's own color (its theme color, else its
+/// background), so the page still seems to reach the top.
 private final class PageFrame: UIView {
     let webView: WKWebView
+    private var colorWatchers: [NSKeyValueObservation] = []
 
     init(webView: WKWebView) {
         self.webView = webView
         super.init(frame: .zero)
         if webView.frame.isEmpty { webView.frame = bounds }
         addSubview(webView)
+        updateStripColor()
+        // KVO hands changes over on the main thread here: WebKit sets both
+        // colors from the main thread.
+        colorWatchers = [
+            webView.observe(\.themeColor) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.updateStripColor() }
+            },
+            webView.observe(\.underPageBackgroundColor) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.updateStripColor() }
+            },
+        ]
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    private func updateStripColor() {
+        // The same color the page reports as `topColor`, for the glide.
+        backgroundColor = webView.themeColor ?? webView.underPageBackgroundColor
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
-        webView.frame = bounds
+        let top = min(safeAreaInsets.top, bounds.height)
+        let frame = CGRect(x: 0, y: top, width: bounds.width, height: bounds.height - top)
+        // Only on a real change: each new frame lays the page out again.
+        if webView.frame != frame { webView.frame = frame }
     }
 }
 #endif

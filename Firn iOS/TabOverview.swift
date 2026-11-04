@@ -57,7 +57,6 @@ struct TabOverview: View {
                             tab: tab,
                             isOnScreen: onScreen,
                             picture: onScreen ? pictures.image(for: tab.id) : nil,
-                            pictureTop: pictures.topInset,
                             lineShown: !onScreen || lineShown,
                             open: { open(tab) },
                             close: { close(tab) },
@@ -189,9 +188,6 @@ struct OverviewRow: View {
     let isOnScreen: Bool
     /// The page's picture, for the tab on screen's tall card.
     let picture: UIImage?
-    /// How much of the picture's top is the strip behind the status bar,
-    /// in the picture's points (left out of the card).
-    var pictureTop: CGFloat = 0
     var lineShown = true
     let open: () -> Void
     let close: () -> Void
@@ -278,7 +274,7 @@ struct OverviewRow: View {
                 pictureView(sharp: false)
                     .mask {
                         LinearGradient(stops: [.init(color: .black, location: 0),
-                                               .init(color: .black, location: 0.55),
+                                               .init(color: .black, location: 0.45),
                                                .init(color: .clear, location: 1)],
                                        startPoint: .top, endPoint: .bottom)
                     }
@@ -288,7 +284,7 @@ struct OverviewRow: View {
                                    .init(color: Theme.page.opacity(0), location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }
-        .frame(height: Self.headerHeight + 28)
+        .frame(height: Self.headerHeight + 14)
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -296,15 +292,13 @@ struct OverviewRow: View {
 
     @ViewBuilder private func pictureView(sharp: Bool) -> some View {
         if let picture, picture.size.width > 0 {
-            // As wide as the card, from just below the status bar: exactly
-            // where the glide lands, so swapping one for the other shows
-            // nothing.
+            // As wide as the card, from the page's top: exactly where the
+            // glide lands, so swapping one for the other shows nothing.
             GeometryReader { box in
                 let scale = box.size.width / picture.size.width
                 Image(uiImage: picture)
                     .resizable()
                     .frame(width: box.size.width, height: picture.size.height * scale)
-                    .offset(y: -pictureTop * scale)
                     .blur(radius: sharp ? 0 : 10, opaque: true)
             }
             .accessibilityHidden(true)

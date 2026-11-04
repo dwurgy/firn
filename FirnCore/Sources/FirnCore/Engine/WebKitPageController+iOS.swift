@@ -17,6 +17,10 @@ extension WebKitPageController {
         return image?.cgImage
     }
 
+    var topColor: CGColor? {
+        (webView.themeColor ?? webView.underPageBackgroundColor)?.cgColor
+    }
+
     /// iOS prints from the share sheet, which comes in a later phase.
     func printPage() {}
 }

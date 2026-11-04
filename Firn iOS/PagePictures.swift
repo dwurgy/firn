@@ -16,9 +16,8 @@ final class PagePictures {
     private var images: [UUID: UIImage] = [:]
     /// How wide the page is on screen, in points (set by the screen).
     @ObservationIgnored var pageWidth: CGFloat = 0
-    /// The status bar's height, in points (set by the screen). A picture
-    /// starts at the screen's top edge, so it holds the strip behind the
-    /// status bar; cards leave that strip out.
+    /// The status bar's height, in points (set by the screen): where the
+    /// page, and so its picture, starts on screen.
     @ObservationIgnored var topInset: CGFloat = 0
     @ObservationIgnored private var warning: (any NSObjectProtocol)?
 

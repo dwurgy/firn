@@ -8,8 +8,32 @@ struct BrowserScreen: View {
     let store: BrowserStore
     let pictures: PagePictures
     @FocusState private var editing: Bool
-    /// Whether the overview is showing instead of the page.
+    /// Whether the overview is there behind (or instead of) the page.
     @State private var showingTabs = false
+    /// Whether the overview has arrived (animated): its bar shows, the dim
+    /// over its cards has lifted, and the page's bar has gone.
+    @State private var arrived = false
+    /// The glide (step 3b). The page's picture makes the move, standing in
+    /// for the page: moving the page itself makes UIKit work out its safe
+    /// area again every frame, so WebKit lays the whole page out again and
+    /// the glide froze. The live page stays put, hidden, and swaps with the
+    /// picture at either end.
+    @State private var standIn: UIImage?
+    /// Where the picture sits when it's in its card, and whether it's there
+    /// now (animated between the page's place and the card).
+    @State private var cardSpot: CGRect = .zero
+    @State private var inCard = false
+    /// While the overview is up (and while the picture moves).
+    @State private var pageHidden = false
+    /// The tab whose card is hidden while the picture stands in for it.
+    @State private var gliding: UUID?
+    /// The tab on screen's title line, faded in after the landing.
+    @State private var lineShown = true
+    /// The card that keeps its size while another tab grows out of its row.
+    @State private var heldCard: UUID?
+    @State private var spots = OverviewSpots()
+    /// The page's own frame on screen, to aim the glide from.
+    @State private var pageFrame: CGRect = .zero
     /// Whether the address being typed opens a new tab (from the overview's
     /// +) rather than replacing the page on screen.
     @State private var typingNewTab = false
@@ -23,23 +47,47 @@ struct BrowserScreen: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if showingTabs {
-                TabOverview(store: store, done: hideTabs, newTab: startNewTab, typing: editing)
+                TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding,
+                            lineShown: lineShown, heldCard: heldCard, arrived: arrived, open: openTab,
+                            done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
+                            newTab: startNewTab, typing: editing)
                     // Typing from + leaves the overview where it is, under
                     // the dim; its own bar stays behind the keyboard.
                     .ignoresSafeArea(.keyboard)
-                    .allowsHitTesting(!editing)
+                    .allowsHitTesting(!editing && gliding == nil)
                     .accessibilityHidden(editing)
                     .transition(.opacity)
             }
             pageLayer
                 .ignoresSafeArea()
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pictures.pageWidth = $0 }
-                // The page steps back a little as it fades, so the overview
-                // reads as behind it. Reduce Motion: only the fade.
-                .scaleEffect(showingTabs && !reduceMotion ? 0.94 : 1)
-                .opacity(showingTabs ? 0 : 1)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                    pageFrame = $0
+                    pictures.pageWidth = $0.width
+                }
+                .opacity(pageHidden ? 0 : 1)
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
+
+            if let standIn, standIn.size.width > 0 {
+                // From the screen's top-left corner, where WebKit's picture
+                // starts, in the screen's own points, as the cards report
+                // theirs (measured: the layer's own corner isn't the
+                // screen's).
+                let width = pageFrame.width
+                let height = width * standIn.size.height / standIn.size.width
+                GeometryReader { layer in
+                    let corner = layer.frame(in: .global).origin
+                    Image(uiImage: standIn)
+                        .resizable()
+                        .frame(width: width, height: height)
+                        .modifier(CardGlide(width: width, height: height, top: pictures.topInset, card: cardSpot,
+                                            inCard: inCard, cornerRadius: OverviewRow.cornerRadius))
+                        .offset(x: -corner.x, y: -corner.y)
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
 
             // While typing, the page (or the overview) dims a little; a tap
             // on it cancels.
@@ -65,17 +113,20 @@ struct BrowserScreen: View {
             bar
                 // Over the overview, the bar shows only while typing from +.
                 .opacity(barShown ? 1 : 0)
-                .scaleEffect(showingTabs && !editing && !reduceMotion ? 0.94 : 1, anchor: .bottom)
                 .allowsHitTesting(barShown)
                 .accessibilityHidden(!barShown)
         }
         .background(Theme.page.ignoresSafeArea())
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
-        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3), value: showingTabs)
         .onChange(of: editing) { if !editing { typingNewTab = false } }
     }
 
-    private var barShown: Bool { !showingTabs || editing }
+    private var barShown: Bool { !arrived || editing }
+
+    /// The glide: a bounce-free spring, as Safari's (about 0.3s).
+    private static let glide = Animation.smooth(duration: 0.3)
+    private static let fade = Animation.easeOut(duration: 0.2)
 
     private var bar: some View {
         AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
@@ -111,16 +162,136 @@ struct BrowserScreen: View {
         }
     }
 
+    /// The page shrinks, corners rounding, straight into its own card; the
+    /// other cards wait under a dim that lifts as it goes, and the bars
+    /// cross-fade in place. Once it lands the card takes its place and its
+    /// title line fades in. Reduce Motion, or no tab: a cross-fade.
     private func showTabs() {
-        // The page as it was, for its card (taken as it starts to fade).
-        if let tab = store.activeTab { pictures.capture(tab) }
+        guard !showingTabs else { return }
+        let tab = store.activeTab
         editing = false
         menuOpen = false
+        guard let tab, !reduceMotion else {
+            // The page as it is, for its card.
+            if let tab { pictures.capture(tab) }
+            withAnimation(Self.fade) {
+                showingTabs = true
+                arrived = true
+                pageHidden = true
+            }
+            return
+        }
+        // The overview lays out behind the page, scrolled to its card, with
+        // the card hidden and its line out until the picture lands; the
+        // page's picture is taken meanwhile.
+        let picture = pictures.capture(tab)
+        gliding = tab.id
+        lineShown = false
         showingTabs = true
+        Task {
+            let spot = await spot(of: tab.id)
+            guard let spot, let image = await picture?.value else {
+                withAnimation(Self.fade) { arrived = true; pageHidden = true } completion: { gliding = nil }
+                lineShown = true
+                return
+            }
+                // The picture takes the page's place, then glides.
+            cardSpot = spot
+            inCard = false
+            standIn = image
+            pageHidden = true
+            await Task.yield()
+            withAnimation(Self.glide) {
+                inCard = true
+                arrived = true
+            } completion: {
+                // The card shows the same picture: they swap in one frame.
+                gliding = nil
+                standIn = nil
+                withAnimation(Self.fade) { lineShown = true }
+            }
+        }
     }
 
+    /// The tapped card (or row) grows to the full screen and the rest dim
+    /// behind it; the overview leaves once the page has its room.
+    private func openTab(_ tab: FirnCore.Tab) {
+        guard showingTabs, gliding == nil else { return }
+        let spot = spots.frames[tab.id].flatMap { visible($0) }
+        // The tab already on screen is still drawn, hidden, so it swaps in
+        // at once; another tab's page is made (or woken) now and can be
+        // blank for a moment, so its picture fades off it.
+        let switching = tab.id != store.activeTab?.id
+        heldCard = store.activeTab?.id
+        store.select(tab)
+        guard let spot, let image = pictures.image(for: tab.id), !reduceMotion else {
+            heldCard = nil
+            hideTabs()
+            return
+        }
+        cardSpot = spot
+        inCard = true
+        standIn = image
+        gliding = tab.id
+        Task {
+            await Task.yield()
+            withAnimation(Self.glide) {
+                inCard = false
+                arrived = false
+            } completion: {
+                pageHidden = false
+                showingTabs = false
+                gliding = nil
+                heldCard = nil
+                lineShown = true
+                guard switching else {
+                    standIn = nil
+                    return
+                }
+                Task {
+                    // A tab that was asleep (or shown again) draws nothing
+                    // until its page comes: the picture stays until then
+                    // (1.5s at most), then fades off it.
+                    for _ in 0..<30 {
+                        if let page = store.activeTab?.page, page.url != nil,
+                           !page.isLoading || page.progress > 0.5 { break }
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    withAnimation(Self.fade) { standIn = nil }
+                }
+            }
+        }
+    }
+
+    /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,
+    /// or a card off screen).
     private func hideTabs() {
-        showingTabs = false
+        standIn = nil
+        inCard = false
+        withAnimation(Self.fade) {
+            pageHidden = false
+            arrived = false
+            showingTabs = false
+        } completion: {
+            gliding = nil
+            lineShown = true
+        }
+    }
+
+    /// Where the tab's card is once the overview has laid out and scrolled
+    /// to it: a few frames at most.
+    private func spot(of id: UUID) async -> CGRect? {
+        for _ in 0..<6 {
+            try? await Task.sleep(for: .milliseconds(16))
+            if let frame = spots.frames[id], let spot = visible(frame) { return spot }
+        }
+        return nil
+    }
+
+    /// The spot, if it's on screen (a card scrolled away has no glide).
+    private func visible(_ frame: CGRect) -> CGRect? {
+        guard frame.width > 0, frame.height > 0, pageFrame.intersects(frame) else { return nil }
+        return frame
     }
 
     /// + types right on the overview: an empty address field over it, and
@@ -129,5 +300,32 @@ struct BrowserScreen: View {
     private func startNewTab() {
         typingNewTab = true
         editing = true
+    }
+}
+
+/// The page's picture in its card: scaled to the card's width, placed on
+/// it, and cut to the card's height with its corners, leaving out the strip
+/// behind the status bar (`top`). Transforms and a mask only, so nothing
+/// lays out again while it glides.
+private struct CardGlide: ViewModifier {
+    let width: CGFloat
+    let height: CGFloat
+    let top: CGFloat
+    let card: CGRect
+    let inCard: Bool
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        let ready = inCard && width > 0 && card.width > 0
+        let scale = ready ? card.width / width : 1
+        content
+            // One shape throughout, so its size and corners glide.
+            .mask(alignment: .top) {
+                RoundedRectangle(cornerRadius: ready ? cornerRadius / scale : 0, style: .continuous)
+                    .frame(height: ready ? card.height / scale : height)
+                    .offset(y: ready ? top : 0)
+            }
+            .scaleEffect(scale, anchor: .topLeading)
+            .offset(x: ready ? card.minX : 0, y: ready ? card.minY - top * scale : 0)
     }
 }

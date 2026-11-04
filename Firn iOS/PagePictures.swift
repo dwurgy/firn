@@ -16,6 +16,10 @@ final class PagePictures {
     private var images: [UUID: UIImage] = [:]
     /// How wide the page is on screen, in points (set by the screen).
     @ObservationIgnored var pageWidth: CGFloat = 0
+    /// The status bar's height, in points (set by the screen). A picture
+    /// starts at the screen's top edge, so it holds the strip behind the
+    /// status bar; cards leave that strip out.
+    @ObservationIgnored var topInset: CGFloat = 0
     @ObservationIgnored private var warning: (any NSObjectProtocol)?
 
     init(store: PagePictureStore) {
@@ -38,26 +42,31 @@ final class PagePictures {
 
     /// Takes a picture of the tab's page as it is now and saves it. A
     /// sleeping tab (no page) or a page that can't be pictured (nothing
-    /// loaded, or a load error) keeps the picture it had.
-    func capture(_ tab: FirnCore.Tab) {
-        guard let page = tab.page, pageWidth > 0 else { return }
+    /// loaded, or a load error) keeps the picture it had. The task gives
+    /// the new picture once it's in memory (saving goes on after), for the
+    /// glide to stand in for the page with; nil if none was taken.
+    @discardableResult
+    func capture(_ tab: FirnCore.Tab) -> Task<UIImage?, Never>? {
+        guard let page = tab.page, pageWidth > 0 else { return nil }
         let id = tab.id
         // Twice the page's width in pixels: sharp on a card a little
         // narrower than the screen, and a quarter of a 3x picture's size.
         let scale = UITraitCollection.current.displayScale
         let width = pageWidth * 2 / max(scale, 1)
-        Task {
-            guard let picture = await page.snapshot(width: width) else { return }
-            images[id] = UIImage(cgImage: picture, scale: 2, orientation: .up)
-            let store = store
+        let store = store
+        return Task {
+            guard let picture = await page.snapshot(width: width) else { return nil }
+            let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
+            images[id] = image
             // Encoding and writing happen off the main thread.
-            await Task.detached(priority: .utility) {
+            Task.detached(priority: .utility) {
                 do {
                     try store.save(picture, for: id)
                 } catch {
                     // A locked phone can refuse; the picture in memory stays.
                 }
-            }.value
+            }
+            return image
         }
     }
 }

@@ -7,10 +7,28 @@ import SwiftUI
 /// brings it back (phase 2, step 2b, part 2). The glass bar
 /// at the bottom: + for a new tab, the space's name in a pill, and a check
 /// to go back. Behind it all, the space glow (step 2b). Looks from
-/// docs/ios-overview-design.html; tall cards come in step 4, groups and
-/// Basecamp in phase 3.
+/// docs/ios-overview-design.html. The tab on screen is a tall card with its
+/// page's picture, the spot the page glides into (step 3b); the other
+/// tabs' tall cards come in step 4, groups and Basecamp in phase 3.
 struct TabOverview: View {
     let store: BrowserStore
+    let pictures: PagePictures
+    /// Where each card's picture (or slim row) is on screen, for the glide.
+    let spots: OverviewSpots
+    /// The tab whose card the page is gliding into or out of: hidden, so
+    /// the page is the only one of it on screen.
+    var gliding: UUID?
+    /// The tab on screen's title line, faded in once the page has landed.
+    var lineShown = true
+    /// Which tab has the tall card while a picked tab grows to the full
+    /// screen: still the one that was on screen, so nothing behind the
+    /// glide changes size.
+    var heldCard: UUID?
+    /// Whether the overview has arrived: its bar shows and the dim over
+    /// the other cards has lifted.
+    var arrived = true
+    /// Shows a tab (the page grows out of its card or row).
+    let open: (FirnCore.Tab) -> Void
     /// Back to the page, showing the tab on screen.
     let done: () -> Void
     /// A new tab: back to the page, with the address field ready to type.
@@ -34,15 +52,18 @@ struct TabOverview: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(store.openTabs) { tab in
+                        let onScreen = tab.id == (heldCard ?? store.activeTab?.id)
                         OverviewRow(
                             tab: tab,
-                            isOnScreen: tab.id == store.activeTab?.id,
-                            open: {
-                                store.select(tab)
-                                done()
-                            },
-                            close: { close(tab) }
+                            isOnScreen: onScreen,
+                            picture: onScreen ? pictures.image(for: tab.id) : nil,
+                            pictureTop: pictures.topInset,
+                            lineShown: !onScreen || lineShown,
+                            open: { open(tab) },
+                            close: { close(tab) },
+                            spot: { spots.frames[tab.id] = $0 }
                         )
+                        .opacity(gliding == tab.id ? 0 : 1)
                         .id(tab.id)
                         .transition(.opacity)
                     }
@@ -51,6 +72,14 @@ struct TabOverview: View {
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // The other cards wait behind a dim that lifts as the page
+            // shrinks into its card.
+            .overlay {
+                Theme.lookoutDim
+                    .ignoresSafeArea()
+                    .opacity(arrived ? 0 : 1)
+                    .allowsHitTesting(false)
+            }
             .overlay {
                 if store.openTabs.isEmpty {
                     Text("No open tabs")
@@ -60,7 +89,7 @@ struct TabOverview: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, newTab: newTab, done: done)
-                    .opacity(typing ? 0 : 1)
+                    .opacity(typing || !arrived ? 0 : 1)
             }
             .onAppear {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
@@ -87,6 +116,13 @@ struct TabOverview: View {
         undoManager?.setActionName("Close Tab")
         closes += 1
     }
+}
+
+/// Where each tab's spot (a card's picture, or a slim row) sits on screen,
+/// in global points. Not observed: rows write it as they move, and only the
+/// glide reads it, so scrolling redraws nothing else.
+@MainActor final class OverviewSpots {
+    var frames: [UUID: CGRect] = [:]
 }
 
 /// UIKit offers "Undo Close Tab" on a shake only when something holds
@@ -148,11 +184,19 @@ private struct SpaceGlow: View {
 /// ring. An X closes it in one tap; a swipe left follows the finger and,
 /// past a third of the row or with a flick, slides it off and closes it
 /// (a short swipe glides back), as in Safari.
-private struct OverviewRow: View {
+struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
+    /// The page's picture, for the tab on screen's tall card.
+    let picture: UIImage?
+    /// How much of the picture's top is the strip behind the status bar,
+    /// in the picture's points (left out of the card).
+    var pictureTop: CGFloat = 0
+    var lineShown = true
     let open: () -> Void
     let close: () -> Void
+    /// Reports where the card's picture (or the slim row) is on screen.
+    let spot: (CGRect) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far the finger has pulled the row left (0 or less).
@@ -162,9 +206,99 @@ private struct OverviewRow: View {
     @State private var leaving = false
 
     private var site: String { WebAddress.site(of: tab.url) }
-    private static let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+    static let cornerRadius: CGFloat = 14
+    private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    /// A tall card's picture is a little taller than wide: the top of the
+    /// page, as it was on screen.
+    private static let pictureAspect: CGFloat = 1.2
 
     var body: some View {
+        Group {
+            if isOnScreen { card } else { row }
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+        .offset(x: pull)
+        .opacity(reduceMotion && leaving ? 0 : 1)
+        .gesture(SidewaysPan(changed: follow, ended: letGo))
+        .allowsHitTesting(!leaving)
+    }
+
+    /// The tab on screen: its page's picture, rounded and ringed in frost,
+    /// with its icon, title, and X on a line below.
+    private var card: some View {
+        VStack(spacing: 6) {
+            Button(action: open) {
+                Color.clear
+                    .aspectRatio(1 / Self.pictureAspect, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.page)
+                    .overlay(alignment: .top) { pictureView }
+                    .clipShape(Self.shape)
+                    .overlay { Self.shape.strokeBorder(Theme.frost, lineWidth: 2) }
+                    .contentShape(Self.shape)
+            }
+            .buttonStyle(.plain)
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
+            .accessibilityLabel(tab.title)
+            .accessibilityValue("On screen")
+            .accessibilityAddTraits(.isSelected)
+
+            HStack(spacing: 10) {
+                SiteIconView(icon: tab.icon, size: 20) { LetterMark(site: site) }
+                    .accessibilityHidden(true)
+                Text(tab.title)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityHidden(true)
+                closeButton
+            }
+            .padding(.leading, 4)
+            .frame(minHeight: 36)
+            .fixedSize(horizontal: false, vertical: true)
+            .opacity(lineShown ? 1 : 0)
+        }
+    }
+
+    @ViewBuilder private var pictureView: some View {
+        if let picture, picture.size.width > 0 {
+            // As wide as the card, from just below the status bar: exactly
+            // where the glide lands, so swapping one for the other shows
+            // nothing.
+            GeometryReader { box in
+                let scale = box.size.width / picture.size.width
+                Image(uiImage: picture)
+                    .resizable()
+                    .frame(width: box.size.width, height: picture.size.height * scale)
+                    .offset(y: -pictureTop * scale)
+            }
+            .accessibilityHidden(true)
+        } else {
+            SiteIconView(icon: tab.icon, size: 40) { LetterMark(site: site) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var closeButton: some View {
+        Button(action: close) {
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.muted)
+                // The whole row's height, so the X is easy to hit.
+                .frame(width: 44)
+                .frame(maxHeight: .infinity)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 2)
+        .accessibilityLabel("Close \(tab.title)")
+    }
+
+    private var row: some View {
         HStack(spacing: 0) {
             Button(action: open) {
                 HStack(spacing: 12) {
@@ -182,39 +316,15 @@ private struct OverviewRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(tab.title)
-            .accessibilityValue(isOnScreen ? "On screen" : "")
-            .accessibilityAddTraits(isOnScreen ? .isSelected : [])
 
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    // The whole row's height, so the X is easy to hit.
-                    .frame(width: 44)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 2)
-            .accessibilityLabel("Close \(tab.title)")
+            closeButton
         }
         .frame(minHeight: 48)
         .fixedSize(horizontal: false, vertical: true)
-        .background {
-            if isOnScreen {
-                Self.shape.fill(Theme.page)
-                Self.shape.strokeBorder(Theme.frost, lineWidth: 2)
-            }
-        }
         .contentShape(Self.shape)
         // Other tabs sit on glass over the space glow.
-        .glassEffect(isOnScreen ? .identity : .regular, in: Self.shape)
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-        .offset(x: pull)
-        .opacity(reduceMotion && leaving ? 0 : 1)
-        .gesture(SidewaysPan(changed: follow, ended: letGo))
-        .allowsHitTesting(!leaving)
+        .glassEffect(.regular, in: Self.shape)
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
     }
 
     /// The row stays under the finger going left; going right it barely

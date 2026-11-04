@@ -11,6 +11,10 @@ import SwiftUI
 struct AddressBar: View {
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
+    /// Typing from the overview's +: the field starts empty and Go opens a
+    /// new tab.
+    let typingNewTab: Bool
+    let showTabs: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
@@ -26,7 +30,11 @@ struct AddressBar: View {
                 NavigationPill(store: store, tab: tab, page: page, space: space)
                     .transition(.opacity)
             }
-            AddressField(store: store, editing: editing)
+            AddressField(store: store, editing: editing, typingNewTab: typingNewTab)
+            if !editing.wrappedValue {
+                TabsButton(space: space, action: showTabs)
+                    .transition(.opacity)
+            }
         }
         // Forward coming or going moves the pill and the field together, in
         // one glide. Reduce Motion: a short plain ease rather than a jump
@@ -93,6 +101,7 @@ private struct AddressField: View {
     static let height: CGFloat = 48
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
+    let typingNewTab: Bool
     @State private var text = ""
     @State private var selection: TextSelection?
 
@@ -173,6 +182,7 @@ private struct AddressField: View {
 
     private func startOrEndEditing() {
         guard isEditing else { return showRestingAddress() }
+        if typingNewTab { text = ""; return }
         // The field takes focus first, then the selection; set together,
         // UIKit puts the cursor at the end instead.
         Task { @MainActor in
@@ -183,7 +193,7 @@ private struct AddressField: View {
     private func open() {
         defer { editing.wrappedValue = false }
         guard let url = AddressInput.url(for: text, searchEngine: SearchEngine.chosen) else { return }
-        if let page {
+        if let page, !typingNewTab {
             page.load(url)
         } else {
             store.openTab(url)
@@ -216,6 +226,20 @@ private struct PageMenu: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Page Menu")
+    }
+}
+
+/// The overview's button, at the bar's right: round glass, the same size
+/// as Back's.
+private struct TabsButton: View {
+    let space: String
+    let action: () -> Void
+
+    var body: some View {
+        BarButton(symbol: "square.on.square", label: "Tabs", action: action)
+            .padding(2)
+            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .circle)
+            .accessibilityHint("Shows all your tabs")
     }
 }
 

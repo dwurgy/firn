@@ -11,28 +11,27 @@ import SwiftUI
 struct AddressBar: View {
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
-    @Namespace private var glass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
 
+    /// The pill and the field each carry their own glass, with no
+    /// `GlassEffectContainer`: a container morphs its glass on its own
+    /// timing, so the glass trailed Firn's frost and words as a grey ghost
+    /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                if let page, !editing.wrappedValue {
-                    NavigationPill(page: page, space: space)
-                        .glassEffectID("navigation", in: glass)
-                }
-                AddressField(store: store, editing: editing)
-                    .glassEffectID("field", in: glass)
+        HStack(spacing: 10) {
+            if let page, !editing.wrappedValue {
+                NavigationPill(page: page, space: space)
+                    .transition(.opacity)
             }
+            AddressField(store: store, editing: editing)
         }
-        // Forward coming or going moves the pill, the field, and their
-        // glass together, in one glide. Set on the pill alone, the field
-        // jumped at once and the glass caught up late (David's recording,
-        // 2026-11-03). Reduce Motion: no glide.
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: page?.canGoForward)
+        // Forward coming or going moves the pill and the field together, in
+        // one glide. Reduce Motion: a short plain ease rather than a jump
+        // (it's a small change of width, not movement across the screen).
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: page?.canGoForward)
         .frame(maxWidth: 640)
         // Larger text grows the bar's words only as far as its 48pt height
         // holds them, as in Safari's bar.

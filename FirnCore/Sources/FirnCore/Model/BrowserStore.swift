@@ -557,6 +557,14 @@ public final class BrowserStore {
         close(tab, showing: next, remembering: true)
     }
 
+    /// The everyday tab a link opened `tab` from, if it's still open in the
+    /// same space. On iPhone and iPad, Back on a tab with no page to go back
+    /// to closes it and shows this one, as in Safari.
+    public func opener(of tab: Tab) -> Tab? {
+        guard let id = tab.openerTabID, tab.place == .open else { return nil }
+        return tabs.first { $0.id == id && $0.spaceID == tab.spaceID && $0.place == .open }
+    }
+
     /// Close on a tile's menu: it leaves Basecamp altogether, rather than
     /// resting there. ⇧⌘T brings it back to its place among the tiles.
     public func closeTile(_ tab: Tab) {
@@ -1550,11 +1558,29 @@ public final class BrowserStore {
     /// pages holding text typed and not yet sent. The app calls this after the tab on screen changes and when memory
     /// runs short; nothing runs on a timer.
     public func sleepIdleTabs(memoryIsShort: Bool = false) async {
-        for tab in tabs where mayLetSleep(tab, memoryIsShort: memoryIsShort) {
+        await sleepTabs { [unowned self] in mayLetSleep($0, memoryIsShort: memoryIsShort) }
+    }
+
+    /// iPhone and iPad, where memory is much tighter than on the Mac: beyond
+    /// the tab on screen, only the `count` tabs seen most recently stay
+    /// awake, and the rest sleep (keeping their place) however briefly
+    /// they've been out of sight. The same tabs never sleep as in
+    /// `sleepIdleTabs`. The Mac doesn't use this.
+    public func sleepIdleTabs(keepingRecent count: Int) async {
+        let recent = Set(
+            tabs.filter { mayLetSleep($0, memoryIsShort: true) }
+                .sorted { $0.lastActiveAt > $1.lastActiveAt }
+                .prefix(count).map(\.id)
+        )
+        await sleepTabs { [unowned self] in mayLetSleep($0, memoryIsShort: true) && !recent.contains($0.id) }
+    }
+
+    private func sleepTabs(where mayLetSleep: (Tab) -> Bool) async {
+        for tab in tabs where mayLetSleep(tab) {
             guard let page = tab.page, !(await page.isInUse()) else { continue }
             // Things may have changed while the page answered.
             guard tab.page === page, tabs.contains(where: { $0.id == tab.id }),
-                  mayLetSleep(tab, memoryIsShort: memoryIsShort) else { continue }
+                  mayLetSleep(tab) else { continue }
             tab.sleep(keepingPlace: true)
         }
     }

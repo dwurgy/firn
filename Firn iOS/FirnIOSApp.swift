@@ -38,6 +38,7 @@ struct FirnIOSApp: App {
 final class Browser {
     let store: BrowserStore
     let saver: SessionSaver
+    let sleeper: TabSleeper
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -60,6 +61,8 @@ final class Browser {
         // leaves the screen.
         saver = SessionSaver(file: file, placesFile: placesFile, snapshot: snapshot, places: { store.pagePlaces() })
         saver.start()
+        sleeper = TabSleeper(store: store)
+        sleeper.start()
     }
 }
 

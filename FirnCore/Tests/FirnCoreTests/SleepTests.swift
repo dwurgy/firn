@@ -104,4 +104,32 @@ struct SleepTests {
         #expect((a.page as? FakePage)?.resumedFrom == nil)
         #expect(a.page?.url == url("a/page-two"))
     }
+
+    @Test func onIPhoneOnlyTheMostRecentTabsStayAwake() async {
+        let clock = Clock()
+        let store = makeStore(clock)
+        let a = store.openTab(url("a"))
+        clock.advance(minutes: 1)
+        let b = store.openTab(url("b"))
+        clock.advance(minutes: 1)
+        let c = store.openTab(url("c"))
+        clock.advance(minutes: 1)
+        let d = store.openTab(url("d"))
+        clock.advance(minutes: 1)
+        await store.sleepIdleTabs(keepingRecent: 2)
+        #expect(a.isResting)
+        #expect(!b.isResting && !c.isResting && !d.isResting)
+        #expect(a.url == url("a"))
+    }
+
+    @Test func onIPhoneAPageInUseStillStaysAwake() async {
+        let clock = Clock()
+        let store = makeStore(clock)
+        let call = store.openTab(url("call"))
+        (call.page as? FakePage)?.inUse = true
+        clock.advance(minutes: 1)
+        store.openTab(url("b"))
+        await store.sleepIdleTabs(keepingRecent: 0)
+        #expect(!call.isResting)
+    }
 }

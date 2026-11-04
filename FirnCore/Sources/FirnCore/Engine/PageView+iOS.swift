@@ -43,8 +43,22 @@ public final class PageHolder: UIView {
     var obscuredBottom: CGFloat = 0 {
         didSet {
             guard obscuredBottom != oldValue else { return }
-            webView.obscuredContentInsets = UIEdgeInsets(top: 0, left: 0, bottom: obscuredBottom, right: 0)
+            updateObscuredInsets()
         }
+    }
+
+    public override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        updateObscuredInsets()
+    }
+
+    /// WebKit also hears about the status bar: it scrolls a new page to its
+    /// own idea of the top, and without this that was under the status bar,
+    /// while a page shown again or restored sat below it, where UIKit puts
+    /// the top. The same page sat in two places (2026-11-03).
+    private func updateObscuredInsets() {
+        let insets = UIEdgeInsets(top: safeAreaInsets.top, left: 0, bottom: obscuredBottom, right: 0)
+        if webView.obscuredContentInsets != insets { webView.obscuredContentInsets = insets }
     }
 
     init(webView: WKWebView) {

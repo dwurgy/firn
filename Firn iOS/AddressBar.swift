@@ -22,8 +22,8 @@ struct AddressBar: View {
     /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
         HStack(spacing: 10) {
-            if let page, !editing.wrappedValue {
-                NavigationPill(page: page, space: space)
+            if let tab = store.activeTab, let page, !editing.wrappedValue {
+                NavigationPill(store: store, tab: tab, page: page, space: space)
                     .transition(.opacity)
             }
             AddressField(store: store, editing: editing)
@@ -46,8 +46,22 @@ struct AddressBar: View {
 /// somewhere to go forward (as Safari does). Back with nowhere to go fades
 /// rather than leaving, so the field never jumps.
 private struct NavigationPill: View {
+    let store: BrowserStore
+    let tab: FirnCore.Tab
     let page: any PageController
     let space: String
+
+    /// On a tab a link opened, with no page to go back to, Back closes it
+    /// and shows the tab it came from, as in Safari.
+    private var opener: FirnCore.Tab? { page.canGoBack ? nil : store.opener(of: tab) }
+
+    private func goBack() {
+        if let opener {
+            store.close(tab, showing: opener)
+        } else {
+            page.goBack()
+        }
+    }
 
     /// Round (Back alone) or wide (Back and Forward). Forward is always
     /// there, faded out and clipped away when it can't be used: a width
@@ -59,8 +73,9 @@ private struct NavigationPill: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            BarButton(symbol: "chevron.backward", label: "Back", action: page.goBack)
-                .disabled(!page.canGoBack)
+            BarButton(symbol: "chevron.backward", label: "Back", action: goBack)
+                .disabled(!page.canGoBack && opener == nil)
+                .accessibilityHint(opener != nil ? "Closes this tab and goes back to the one it came from" : "")
             BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
                 .opacity(page.canGoForward ? 1 : 0)
                 .disabled(!page.canGoForward)

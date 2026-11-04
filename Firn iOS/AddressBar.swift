@@ -28,6 +28,9 @@ struct AddressBar: View {
             }
         }
         .frame(maxWidth: 640)
+        // Larger text grows the bar's words only as far as its 48pt height
+        // holds them, as in Safari's bar.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 4)
@@ -88,6 +91,9 @@ private struct AddressField: View {
                 .padding(.leading, isEditing ? 18 : 0)
                 .accessibilityLabel("Address")
                 .onSubmit(open)
+                // VoiceOver's scrub cancels, as tapping the page does (the
+                // dimmed page is hidden from VoiceOver).
+                .accessibilityAction(.escape) { editing.wrappedValue = false }
                 // At rest the field only shows the site; a tap on it starts
                 // editing (below), so the finger never drops a cursor into
                 // the middle of the address.
@@ -121,6 +127,7 @@ private struct AddressField: View {
             BarButton(symbol: "xmark.circle.fill", label: "Clear", tint: Theme.faint) { text = "" }
                 .opacity(text.isEmpty ? 0 : 1)
                 .disabled(text.isEmpty)
+                .accessibilityHidden(text.isEmpty)
         } else if let page, page.isLoading {
             BarButton(symbol: "xmark", label: "Stop", action: page.stopLoading)
         } else if let page, page.url != nil {

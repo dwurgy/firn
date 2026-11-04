@@ -24,9 +24,9 @@ struct TabOverview: View {
     /// screen: still the one that was on screen, so nothing behind the
     /// glide changes size.
     var heldCard: UUID?
-    /// Whether the overview has arrived: its bar shows and the dim over
-    /// the other cards has lifted.
-    var arrived = true
+    /// How far the overview has arrived (0 to 1, following the page as
+    /// it's pulled): its bar fades in and the dim over the cards lifts.
+    var arrival: CGFloat = 1
     /// Shows a tab (the page grows out of its card or row).
     let open: (FirnCore.Tab) -> Void
     /// Back to the page, showing the tab on screen.
@@ -76,7 +76,7 @@ struct TabOverview: View {
             .overlay {
                 Theme.lookoutDim
                     .ignoresSafeArea()
-                    .opacity(arrived ? 0 : 1)
+                    .opacity(1 - arrival)
                     .allowsHitTesting(false)
             }
             .overlay {
@@ -88,7 +88,7 @@ struct TabOverview: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, newTab: newTab, done: done)
-                    .opacity(typing || !arrived ? 0 : 1)
+                    .opacity(typing ? 0 : arrival)
             }
             .onAppear {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
@@ -207,8 +207,6 @@ struct OverviewRow: View {
     /// A card is the mockup's height (docs/ios-overview-design.html): the
     /// top of the page, a glance rather than a screenshot.
     static let cardHeight: CGFloat = 148
-    /// The line with the icon, title, and X, over the picture's top.
-    private static let headerHeight: CGFloat = 44
 
     var body: some View {
         Group {
@@ -223,21 +221,16 @@ struct OverviewRow: View {
     }
 
     /// The tab on screen: its page's picture fills the card, rounded and
-    /// ringed in frost. Its icon, title, and X sit on the picture's top,
-    /// where the page softly blurs and fades under them, as a page does
-    /// under a bar.
+    /// ringed in frost. Its icon, title, and X sit on the picture's top
+    /// (`CardTop`, the same one that rides on the gliding picture).
     private var card: some View {
         Button(action: open) {
             Color.clear
                 .frame(maxWidth: .infinity)
                 .frame(height: Self.cardHeight)
                 .background(Theme.page)
-                .overlay(alignment: .top) { pictureView(sharp: true) }
-                // The blur and wash arrive with the line, after the glide,
-                // so the swap from the gliding picture shows nothing.
-                .overlay(alignment: .top) { headerVeil.opacity(lineShown ? 1 : 0) }
+                .overlay(alignment: .top) { pictureView }
                 .clipShape(Self.shape)
-                .overlay { Self.shape.strokeBorder(Theme.frost, lineWidth: 2) }
                 .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
@@ -246,51 +239,16 @@ struct OverviewRow: View {
         .accessibilityValue("On screen")
         .accessibilityAddTraits(.isSelected)
         .overlay(alignment: .top) {
-            HStack(spacing: 12) {
-                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                Text(tab.title)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.leading, 14)
-            .frame(height: Self.headerHeight)
-            // Taps on the icon and title open the card; only the X is its own.
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-            .overlay(alignment: .trailing) { closeButton.frame(height: Self.headerHeight) }
-            .opacity(lineShown ? 1 : 0)
+            CardTop(tab: tab, picture: picture, close: close)
+                .clipShape(CardTop.shape(Self.cornerRadius))
+                .opacity(lineShown ? 1 : 0)
+        }
+        .overlay {
+            Self.shape.strokeBorder(Theme.frost, lineWidth: 2).allowsHitTesting(false)
         }
     }
 
-    /// The page's top blurred under the line, the blur easing out below
-    /// it, with a soft wash of page color so the title always reads. Still
-    /// images and gradients: nothing redraws while it sits there.
-    private var headerVeil: some View {
-        ZStack(alignment: .top) {
-            if picture != nil {
-                pictureView(sharp: false)
-                    .mask {
-                        LinearGradient(stops: [.init(color: .black, location: 0),
-                                               .init(color: .black, location: 0.45),
-                                               .init(color: .clear, location: 1)],
-                                       startPoint: .top, endPoint: .bottom)
-                    }
-            }
-            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
-                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
-                                   .init(color: Theme.page.opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-        }
-        .frame(height: Self.headerHeight + 14)
-        .clipped()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    @ViewBuilder private func pictureView(sharp: Bool) -> some View {
+    @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
             // As wide as the card, from the page's top: exactly where the
             // glide lands, so swapping one for the other shows nothing.
@@ -299,13 +257,12 @@ struct OverviewRow: View {
                 Image(uiImage: picture)
                     .resizable()
                     .frame(width: box.size.width, height: picture.size.height * scale)
-                    .blur(radius: sharp ? 0 : 10, opaque: true)
             }
             .accessibilityHidden(true)
         } else {
             SiteIconView(icon: tab.icon, size: 40) { LetterMark(site: site) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, Self.headerHeight / 2)
+                .padding(.top, CardTop.lineHeight / 2)
                 .accessibilityHidden(true)
         }
     }
@@ -377,6 +334,100 @@ struct OverviewRow: View {
         let gone = -(width + 40)
         let duration = min(0.25, max(0.12, Double((gone - pull) / min(speed, -900))))
         withAnimation(.easeOut(duration: duration)) { pull = gone } completion: { close() }
+    }
+}
+
+/// A card's top: the icon, title, and X on the picture's top, where the
+/// page softly blurs and fades under them, as a page does under a bar.
+/// Drawn on the card, and on the page's picture as it glides into the card
+/// (there without a working X), so the two match when they swap. Still
+/// images and gradients; the blur covers only this strip.
+struct CardTop: View {
+    let tab: FirnCore.Tab
+    let picture: UIImage?
+    /// Closes the tab; nil draws the X without one (on the gliding picture).
+    var close: (() -> Void)?
+
+    static let lineHeight: CGFloat = 44
+    static let veilHeight: CGFloat = lineHeight + 14
+
+    /// Rounded at the top only, as the card's corners.
+    static func shape(_ radius: CGFloat) -> UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous)
+    }
+
+    private var site: String { WebAddress.site(of: tab.url) }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            veil
+            HStack(spacing: 12) {
+                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
+                Text(tab.title)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 46)
+            .frame(height: Self.lineHeight)
+            // Taps on the icon and title open the card; only the X is its own.
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .overlay(alignment: .trailing) { xMark }
+        }
+        .frame(height: Self.veilHeight, alignment: .top)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+
+    @ViewBuilder private var xMark: some View {
+        let mark = Image(systemName: "xmark")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.muted)
+            .frame(width: 44, height: Self.lineHeight)
+            .contentShape(.rect)
+            .padding(.trailing, 2)
+        if let close {
+            Button(action: close) { mark }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close \(tab.title)")
+        } else {
+            mark.accessibilityHidden(true)
+        }
+    }
+
+    /// The picture's top, blurred and fading out below the line, with a
+    /// wash of page color so the title always reads.
+    private var veil: some View {
+        ZStack(alignment: .top) {
+            if let picture, picture.size.width > 0 {
+                GeometryReader { box in
+                    let scale = box.size.width / picture.size.width
+                    Image(uiImage: picture)
+                        .resizable()
+                        .frame(width: box.size.width, height: picture.size.height * scale)
+                        // Cut to the strip before blurring, so only it blurs.
+                        .frame(width: box.size.width, height: box.size.height, alignment: .top)
+                        .clipped()
+                        .blur(radius: 10, opaque: true)
+                }
+                .mask {
+                    LinearGradient(stops: [.init(color: .black, location: 0),
+                                           .init(color: .black, location: 0.45),
+                                           .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
+            }
+            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
+                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
+                                   .init(color: Theme.page.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+        .frame(height: Self.veilHeight)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

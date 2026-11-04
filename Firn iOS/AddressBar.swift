@@ -184,6 +184,7 @@ private struct NavigationPill: View {
 }
 
 private struct AddressField: View {
+    @Environment(\.barQuiet) private var barQuiet
     static let height: CGFloat = 48
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
@@ -243,7 +244,7 @@ private struct AddressField: View {
                 }
                 .overlay {
                     if !isEditing {
-                        Button(action: beginEditing) { Color.clear.contentShape(.rect) }
+                        Button { if !barQuiet { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
                             .accessibilityValue(text)
@@ -447,9 +448,10 @@ struct BarButton: View {
     var tint: Color = Theme.ink
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.barQuiet) private var barQuiet
 
     var body: some View {
-        Button(action: action) {
+        Button { if !barQuiet { action() } } label: {
             Image(systemName: symbol)
                 .font(Self.symbolFont)
                 .foregroundStyle(tint.opacity(isEnabled ? 1 : 0.3))
@@ -459,4 +461,10 @@ struct BarButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
+}
+
+extension EnvironmentValues {
+    /// While the page is pulled up from the bar (and a moment after), the
+    /// bar's buttons don't act: the finger lifting over one isn't a tap.
+    @Entry var barQuiet = false
 }

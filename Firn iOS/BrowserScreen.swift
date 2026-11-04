@@ -17,7 +17,6 @@ struct BrowserScreen: View {
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
     /// the page knows how much of it the bar covers.
     @State private var barTop: CGFloat = 0
-    @State private var pageBottom: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -33,7 +32,6 @@ struct BrowserScreen: View {
             }
             pageLayer
                 .ignoresSafeArea()
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { pageBottom = $0 }
                 // The page steps back a little as it fades, so the overview
                 // reads as behind it. Reduce Motion: only the fade.
                 .scaleEffect(showingTabs && !reduceMotion ? 0.94 : 1)
@@ -103,7 +101,7 @@ struct BrowserScreen: View {
 
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
-            PageView(page: page, obscuredBottom: barTop > 0 ? pageBottom - barTop : 0)
+            PageView(page: page, barTop: barTop)
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
         } else {

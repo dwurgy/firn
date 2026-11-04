@@ -70,7 +70,6 @@ private struct NavigationPill: View {
         .frame(width: page.canGoForward ? Self.wideWidth : Self.roundWidth,
                height: AddressField.height, alignment: .leading)
         .clipShape(.capsule)
-        .background(Theme.barFrost, in: .capsule)
         .glassEffect(.regular.tint(Theme.frameTint(space)), in: .capsule)
     }
 }
@@ -131,7 +130,6 @@ private struct AddressField: View {
             LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
                 .clipShape(.capsule)
         }
-        .background(Theme.barFrost, in: .capsule)
         .glassEffect(.regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
@@ -226,11 +224,4 @@ private struct BarButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
-}
-
-private extension Theme {
-    /// A soft layer of the page's own color inside the bar's glass, so its
-    /// words stay easy to read over any page (bare glass let busy or dark
-    /// pages show through too clearly).
-    static let barFrost = Theme.page.opacity(0.72)
 }

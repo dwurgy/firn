@@ -31,15 +31,13 @@ struct AddressBar: View {
     var body: some View {
         HStack(spacing: 10) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
-                NavigationPill(store: store, tab: tab, page: page, space: space)
-                    .opacity(menuOpen ? 0 : 1)
+                hidesForMenu { NavigationPill(store: store, tab: tab, page: page, space: space) }
                     .transition(.opacity)
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
                          menuOpen: $menuOpen, opened: opened)
             if !editing.wrappedValue {
-                TabsButton(space: space, action: showTabs)
-                    .opacity(menuOpen ? 0 : 1)
+                hidesForMenu { TabsButton(space: space, action: showTabs) }
                     .transition(.opacity)
             }
         }
@@ -57,6 +55,18 @@ struct AddressBar: View {
         .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 4)
+    }
+
+    /// Leaves while the page menu is open and comes back after, keeping its
+    /// place so nothing else moves. Glass is taken away and brought back
+    /// rather than faded: Liquid Glass doesn't follow `.opacity`, so a fade
+    /// left empty grey discs behind (David's recording, 2026-11-04).
+    private func hidesForMenu(@ViewBuilder _ content: () -> some View) -> some View {
+        let view = content()
+        return ZStack {
+            view.hidden()
+            if !menuOpen { view.transition(.opacity) }
+        }
     }
 
     /// How far the bar's round buttons sit from the screen's edges, at rest.
@@ -171,12 +181,17 @@ private struct AddressField: View {
                 .opacity(menuOpen ? 0 : 1)
         }
         .frame(height: Self.height)
+        // The glass is its own layer, so it can leave while the page menu
+        // is open and the menu's button stays (it's what the menu hangs
+        // from). Switching the glass to `.identity` showed a blank blob.
         .background {
-            LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
-                .clipShape(.capsule)
-                .opacity(menuOpen ? 0 : 1)
+            if !menuOpen {
+                LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
+                    .clipShape(.capsule)
+                    .glassEffect(.regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
+                    .transition(.opacity)
+            }
         }
-        .glassEffect(menuOpen ? .identity : .regular.tint(Theme.frameTint(store.activeSpace.color)), in: .capsule)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onAppear(perform: showRestingAddress)
@@ -274,11 +289,13 @@ private struct PageMenu: UIViewRepresentable {
 
 private final class PageMenuButton: UIButton {
     var openChanged: (Bool) -> Void = { _ in }
+    private var closing: Task<Void, Never>?
 
     override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                          willDisplayMenuFor configuration: UIContextMenuConfiguration,
                                          animator: (any UIContextMenuInteractionAnimating)?) {
         super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
+        closing?.cancel()
         openChanged(true)
     }
 
@@ -286,7 +303,16 @@ private final class PageMenuButton: UIButton {
                                          willEndFor configuration: UIContextMenuConfiguration,
                                          animator: (any UIContextMenuInteractionAnimating)?) {
         super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
-        openChanged(false)
+        // The bar comes back once the menu has gone back into its button
+        // (about 0.2s), not while it's still shrinking over it. A fixed wait:
+        // the animator's completion never came. Reopening in the meantime
+        // cancels it.
+        closing?.cancel()
+        closing = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.2))
+            guard !Task.isCancelled else { return }
+            self?.openChanged(false)
+        }
     }
 
     /// iOS's own share sheet, from the menu's button.

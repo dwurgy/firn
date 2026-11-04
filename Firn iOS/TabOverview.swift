@@ -4,7 +4,8 @@ import SwiftUI
 /// The overview behind the page (phase 2, step 2: plain): one column of
 /// slim rows, opening scrolled to the tab on screen, which carries a frost
 /// ring. Tap a row to show it; swipe it sideways to close it. The glass bar
-/// at the bottom: + for a new tab, the space's name, and Done. Looks from
+/// at the bottom: + for a new tab, the space's name in a pill, and a check
+/// to go back. Behind it all, the space glow (step 2b). Looks from
 /// docs/ios-overview-design.html; tall cards come in step 4, groups and
 /// Basecamp in phase 3.
 struct TabOverview: View {
@@ -55,45 +56,75 @@ struct TabOverview: View {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
             }
         }
-        .background {
-            ZStack {
-                Theme.frame
-                Theme.frameTint(space)
-            }
-            .ignoresSafeArea()
-        }
+        .background { SpaceGlow(space: space) }
     }
 }
 
-/// A slim row: the site's icon and the page's title. The tab on screen
-/// stands out on solid page white with a frost ring.
+/// The overview's backdrop: a still mesh in the space's color with Firn's
+/// glacier and apricot glow, so the glass rows have something to show.
+/// Nothing animates while idle; a space change cross-fades.
+private struct SpaceGlow: View {
+    let space: String
+
+    var body: some View {
+        MeshGradient(
+            width: 3, height: 3,
+            points: [
+                [0, 0], [0.5, 0], [1, 0],
+                [0, 0.42], [0.58, 0.5], [1, 0.38],
+                [0, 1], [0.45, 1], [1, 1],
+            ],
+            colors: Theme.overviewGlow(space)
+        )
+        .ignoresSafeArea()
+        .animation(.easeOut(duration: 0.4), value: space)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A slim row on glass: the site's icon, the page's title, and the site
+/// below it. The tab on screen stands out on solid page white with a frost
+/// ring.
 private struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
     let open: () -> Void
 
+    private var site: String { WebAddress.site(of: tab.url) }
     private static let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: 12) {
-                SiteIconView(icon: tab.icon, size: 22) { LetterMark(site: WebAddress.site(of: tab.url)) }
-                Text(tab.title)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tab.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.ink)
+                    if !site.isEmpty {
+                        Text(site)
+                            .font(.caption)
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 48)
-            .background(isOnScreen ? Theme.page : Theme.page.opacity(0.5), in: Self.shape)
-            .overlay {
-                if isOnScreen { Self.shape.strokeBorder(Theme.frost, lineWidth: 2) }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 58)
+            .background {
+                if isOnScreen {
+                    Self.shape.fill(Theme.page)
+                    Self.shape.strokeBorder(Theme.frost, lineWidth: 2)
+                }
             }
             .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
+        // Other tabs sit on glass over the space glow.
+        .glassEffect(isOnScreen ? .identity : .regular, in: Self.shape)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityLabel(tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
@@ -107,16 +138,18 @@ private struct LetterMark: View {
 
     var body: some View {
         Text(site.first.map { String($0).uppercased() } ?? "")
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Theme.page)
-            .frame(width: 22, height: 22)
+            .frame(width: 24, height: 24)
             .background(Theme.siteColor(for: site), in: .rect(cornerRadius: 6))
             .accessibilityHidden(true)
     }
 }
 
-/// The overview's glass bar: + on the left, the space's name in its color
-/// in the middle (dots for other spaces come with phase 4), Done on the right.
+/// The overview's bar, balanced like Safari's: + on the left, the space's
+/// name in a tinted glass pill in the middle (the switcher and its dots come
+/// with phase 4), and a round check on the right in a vivid version of the
+/// space's color.
 private struct OverviewBar: View {
     let space: Space
     let newTab: () -> Void
@@ -130,7 +163,10 @@ private struct OverviewBar: View {
                 .font(.headline)
                 .foregroundStyle(Theme.spaceInk(space.color))
                 .lineLimit(1)
-                .padding(.horizontal, 90)
+                .padding(.horizontal, 24)
+                .frame(height: Self.height)
+                .glassEffect(.regular.tint(Theme.frameTint(space.color)), in: .capsule)
+                .padding(.horizontal, Self.height + 16)
                 .accessibilityAddTraits(.isHeader)
             HStack {
                 Button(action: newTab) {
@@ -145,15 +181,15 @@ private struct OverviewBar: View {
                 .accessibilityLabel("New Tab")
                 Spacer()
                 Button(action: done) {
-                    Text("Done")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.page)
-                        .padding(.horizontal, 18)
-                        .frame(height: Self.height)
-                        .background(Theme.ink, in: .capsule)
-                        .contentShape(.capsule)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: Self.height, height: Self.height)
+                        .contentShape(.circle)
                 }
                 .buttonStyle(.plain)
+                .glassEffect(.regular.tint(Theme.spaceVivid(space.color)).interactive(), in: .circle)
+                .accessibilityLabel("Done")
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)

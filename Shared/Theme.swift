@@ -146,6 +146,42 @@ enum Theme {
         return Color(light: mix(hex, 0x241F1B, 0.5), dark: mix(hex, 0xF5F1EC, 0.35))
     }
 
+    /// A livelier version of a space's color, for a filled button with a
+    /// white symbol on it (the overview's check, in place of Safari's blue).
+    /// More saturated than the space color, deepened just enough for the
+    /// white to read (about 3.5:1 or better); the same in light and dark.
+    static func spaceVivid(_ name: String) -> Color {
+        let hex: UInt32 = switch name {
+        case "sand": 0xB87C46
+        case "sage": 0x55994C
+        case "heather": 0xB85C84
+        case "ochre": 0xA1873D
+        case "dusk": 0x5C5EB8
+        case "clay": 0xB86846
+        case "lagoon": 0x3C9994
+        default: 0x5690B8
+        }
+        return Color(light: hex, dark: hex)
+    }
+
+    /// The tab overview's "space glow" (iOS): a still 3×3 mesh, cool and in
+    /// the space's color up high, warmer low, like First light's sky but
+    /// quieter. Light mixes toward the frame, dark toward the page. Row by
+    /// row, left to right.
+    static func overviewGlow(_ name: String) -> [Color] {
+        let space = spaceHex(name)
+        let light: UInt32 = 0xE9E3DA, dark: UInt32 = 0x2B2826
+        let glacier: UInt32 = 0x9DB7C8, apricot: UInt32 = 0xF2C4A0, peach: UInt32 = 0xECCEBA
+        let deepGlacier: UInt32 = 0x6E98B2, ember: UInt32 = 0xD69268
+        // (light color, how far toward the frame) and (dark color, how far toward the page).
+        let stops: [(UInt32, Double, UInt32, Double)] = [
+            (glacier, 0.30, deepGlacier, 0.62), (space, 0.30, space, 0.55), (peach, 0.35, deepGlacier, 0.75),
+            (space, 0.45, space, 0.66), (apricot, 0.62, space, 0.80), (space, 0.20, space, 0.50),
+            (apricot, 0.30, ember, 0.80), (space, 0.35, space, 0.70), (glacier, 0.40, ember, 0.86),
+        ]
+        return stops.map { Color(light: mix($0.0, light, $0.1), dark: mix($0.2, dark, $0.3)) }
+    }
+
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {
         func channel(_ shift: UInt32) -> UInt32 {

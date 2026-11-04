@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The overview behind the page (phase 2, step 2: plain): one column of
 /// slim rows, opening scrolled to the tab on screen, which carries a frost
-/// ring. Tap a row to show it; swipe it sideways to close it. The glass bar
+/// ring. Tap a row to show it; its X or a swipe left closes it, and a shake
+/// brings it back (phase 2, step 2b, part 2). The glass bar
 /// at the bottom: + for a new tab, the space's name in a pill, and a check
 /// to go back. Behind it all, the space glow (step 2b). Looks from
 /// docs/ios-overview-design.html; tall cards come in step 4, groups and
@@ -18,31 +19,36 @@ struct TabOverview: View {
     /// steps out of its way (it would show through the field's glass).
     var typing = false
 
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Counts closes, so the shake listener takes focus again after each.
+    @State private var closes = 0
+
     private var space: String { store.activeSpace.color }
 
     var body: some View {
         ScrollViewReader { scroller in
-            List {
-                ForEach(store.openTabs) { tab in
-                    OverviewRow(tab: tab, isOnScreen: tab.id == store.activeTab?.id) {
-                        store.select(tab)
-                        done()
-                    }
-                    .id(tab.id)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    // iOS's own swipe, as in Safari; a full swipe closes at once.
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { store.close(tab) } label: {
-                            Label("Close", systemImage: "xmark")
-                        }
-                        .tint(Theme.muted)
+            // A plain stack, not a List: List's own swipe can't follow the
+            // finger and slide the row away the way Safari's does.
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(store.openTabs) { tab in
+                        OverviewRow(
+                            tab: tab,
+                            isOnScreen: tab.id == store.activeTab?.id,
+                            open: {
+                                store.select(tab)
+                                done()
+                            },
+                            close: { close(tab) }
+                        )
+                        .id(tab.id)
+                        .transition(.opacity)
                     }
                 }
+                .padding(.horizontal, 16)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             .overlay {
@@ -61,6 +67,57 @@ struct TabOverview: View {
             }
         }
         .background { SpaceGlow(space: space) }
+        .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
+    }
+
+    /// Closes a tab with no question, and lets a shake bring it back:
+    /// iOS's own "Undo Close Tab" alert, through the window's undo manager.
+    private func close(_ tab: FirnCore.Tab) {
+        let id = tab.id
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
+            store.close(tab)
+        }
+        undoManager?.registerUndo(withTarget: store) { store in
+            MainActor.assumeIsolated {
+                // This very tab, even if something else closed since.
+                guard let entry = store.recentlyClosed.first(where: { $0.id == id }) else { return }
+                withAnimation(.smooth(duration: 0.25)) { store.reopen(entry) }
+            }
+        }
+        undoManager?.setActionName("Close Tab")
+        closes += 1
+    }
+}
+
+/// UIKit offers "Undo Close Tab" on a shake only when something holds
+/// keyboard focus, and the overview has no text field. This invisible view
+/// takes that focus (giving it back to any field that wants it) and hands
+/// UIKit SwiftUI's undo list. UIKit, because SwiftUI has no say in shakes.
+private struct ShakeToUndo: UIViewRepresentable {
+    let undoManager: UndoManager?
+    let closes: Int
+
+    func makeUIView(context: Context) -> Listener { Listener() }
+
+    func updateUIView(_ view: Listener, context: Context) {
+        view.undo = undoManager
+        // Only right after a close, never on other updates: typing from +
+        // keeps its keyboard.
+        if closes != view.closes {
+            view.closes = closes
+            if view.window != nil { view.becomeFirstResponder() }
+        }
+    }
+
+    final class Listener: UIView {
+        weak var undo: UndoManager?
+        var closes = 0
+        override var canBecomeFirstResponder: Bool { true }
+        override var undoManager: UndoManager? { undo }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { becomeFirstResponder() }
+        }
     }
 }
 
@@ -88,43 +145,137 @@ private struct SpaceGlow: View {
 
 /// A slim row on glass: the site's icon and the page's title, one line, as
 /// in Safari and Firn's Mac sidebar. The tab on screen stands out on solid page white with a frost
-/// ring.
+/// ring. An X closes it in one tap; a swipe left follows the finger and,
+/// past a third of the row or with a flick, slides it off and closes it
+/// (a short swipe glides back), as in Safari.
 private struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
     let open: () -> Void
+    let close: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// How far the finger has pulled the row left (0 or less).
+    @State private var pull: CGFloat = 0
+    @State private var width: CGFloat = 0
+    /// Set once the row is on its way out, so it takes no more touches.
+    @State private var leaving = false
 
     private var site: String { WebAddress.site(of: tab.url) }
     private static let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: 12) {
-                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                Text(tab.title)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 48)
-            .background {
-                if isOnScreen {
-                    Self.shape.fill(Theme.page)
-                    Self.shape.strokeBorder(Theme.frost, lineWidth: 2)
+        HStack(spacing: 0) {
+            Button(action: open) {
+                HStack(spacing: 12) {
+                    SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
+                    Text(tab.title)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(.leading, 14)
+                .frame(maxHeight: .infinity)
+                .contentShape(.rect)
             }
-            .contentShape(Self.shape)
+            .buttonStyle(.plain)
+            .accessibilityLabel(tab.title)
+            .accessibilityValue(isOnScreen ? "On screen" : "")
+            .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                    // The whole row's height, so the X is easy to hit.
+                    .frame(width: 44)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 2)
+            .accessibilityLabel("Close \(tab.title)")
         }
-        .buttonStyle(.plain)
+        .frame(minHeight: 48)
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            if isOnScreen {
+                Self.shape.fill(Theme.page)
+                Self.shape.strokeBorder(Theme.frost, lineWidth: 2)
+            }
+        }
+        .contentShape(Self.shape)
         // Other tabs sit on glass over the space glow.
         .glassEffect(isOnScreen ? .identity : .regular, in: Self.shape)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .accessibilityLabel(tab.title)
-        .accessibilityValue(isOnScreen ? "On screen" : "")
-        .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+        .offset(x: pull)
+        .opacity(reduceMotion && leaving ? 0 : 1)
+        .gesture(SidewaysPan(changed: follow, ended: letGo))
+        .allowsHitTesting(!leaving)
+    }
+
+    /// The row stays under the finger going left; going right it barely
+    /// gives, so it's clear that way does nothing.
+    private func follow(_ dx: CGFloat) {
+        pull = dx < 0 ? dx : dx * 0.15
+    }
+
+    private func letGo(_ dx: CGFloat, _ speed: CGFloat) {
+        let far = width > 0 && -dx > width / 3
+        let flick = speed < -700 && dx < -20
+        guard far || flick else {
+            withAnimation(.smooth(duration: 0.25)) { pull = 0 }
+            return
+        }
+        if reduceMotion {
+            // A fade where it stands, no slide.
+            withAnimation(.easeOut(duration: 0.2)) { leaving = true } completion: { close() }
+            return
+        }
+        leaving = true
+        // Off the left edge at the flick's pace, then closed.
+        let gone = -(width + 40)
+        let duration = min(0.25, max(0.12, Double((gone - pull) / min(speed, -900))))
+        withAnimation(.easeOut(duration: duration)) { pull = gone } completion: { close() }
+    }
+}
+
+/// A sideways pan for a row in a scrolling list: it starts only when the
+/// finger moves more across than up or down, so vertical scrolling is left
+/// alone. UIKit's pan, because SwiftUI's DragGesture inside a ScrollView
+/// either steals the scroll or never starts.
+private struct SidewaysPan: UIGestureRecognizerRepresentable {
+    let changed: (CGFloat) -> Void
+    /// The distance moved and the speed across, in points per second.
+    let ended: (CGFloat, CGFloat) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        let dx = pan.translation(in: pan.view).x
+        switch pan.state {
+        case .changed: changed(dx)
+        case .ended: ended(dx, pan.velocity(in: pan.view).x)
+        case .cancelled, .failed: ended(0, 0)
+        default: break
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer else { return true }
+            let speed = pan.velocity(in: pan.view)
+            return abs(speed.x) > abs(speed.y)
+        }
     }
 }
 

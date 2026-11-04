@@ -1,8 +1,9 @@
 import FirnCore
 import SwiftUI
 
-/// The bar at the bottom of the screen: back and forward in a small glass
-/// pill, and the address field beside it, with reload (or stop) inside.
+/// The bar at the bottom of the screen, laid out as Safari's: Back (widening
+/// to hold Forward) in a small glass pill, and the address field beside it,
+/// with the page menu on its left and reload (or stop) on its right.
 /// Tapping the field hides the pill so the field has the whole width, picks
 /// out the whole address, and the bar rides up with the keyboard. Go opens
 /// it; tapping the page cancels. At rest it shows only the committed
@@ -33,26 +34,33 @@ struct AddressBar: View {
     }
 }
 
-/// Back and forward. A button that can't go anywhere fades rather than
-/// leaving, so nothing shifts as you browse.
+/// Back, as one round button that widens to hold Forward once there's
+/// somewhere to go forward (as Safari does). Back with nowhere to go fades
+/// rather than leaving, so the field never jumps.
 private struct NavigationPill: View {
     let page: any PageController
     let space: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
             BarButton(symbol: "chevron.backward", label: "Back", action: page.goBack)
                 .disabled(!page.canGoBack)
-            BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
-                .disabled(!page.canGoForward)
+            if page.canGoForward {
+                BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
+                    .transition(.opacity)
+            }
         }
         .padding(.horizontal, 2)
+        .frame(height: AddressField.height)
         .background(Theme.barFrost, in: .capsule)
         .glassEffect(.regular.tint(Theme.frameTint(space)), in: .capsule)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: page.canGoForward)
     }
 }
 
 private struct AddressField: View {
+    static let height: CGFloat = 48
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
     @State private var text = ""
@@ -64,8 +72,9 @@ private struct AddressField: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Balances the button on the right, so the site sits centered.
-            if !isEditing, frontURL != nil { Color.clear.frame(width: BarButton.size) }
+            // The page menu also balances the button on the right, so the
+            // site sits centered.
+            if !isEditing, let frontURL { PageMenu(url: frontURL) }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
@@ -95,7 +104,7 @@ private struct AddressField: View {
                 }
             trailingButton
         }
-        .frame(height: 48)
+        .frame(height: Self.height)
         .background {
             LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: store.activeSpace.color)
                 .clipShape(.capsule)
@@ -149,6 +158,28 @@ private struct AddressField: View {
         guard !isEditing else { return }
         selection = nil
         text = WebAddress.site(of: frontURL)
+    }
+}
+
+/// The page's own short menu, at the field's left (where Safari keeps its).
+/// Only what people reach for; Find, Zoom, Stop Blocking, and Request
+/// Desktop Site join it in phase 6.
+private struct PageMenu: View {
+    let url: URL
+
+    var body: some View {
+        Menu {
+            ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
+            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Theme.ink)
+                .frame(width: BarButton.size, height: BarButton.size)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Page Menu")
     }
 }
 

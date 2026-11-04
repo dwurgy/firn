@@ -5,9 +5,39 @@ import SwiftUI
 /// for addresses (see docs/IOS-PLAN.md).
 @main
 struct FirnIOSApp: App {
-    @State private var store: BrowserStore
-    private let saver: SessionSaver
+    /// Made once the screen first appears, never in `init`: a web view made
+    /// while iOS is still starting the app gets its touch handling wired up
+    /// wrong, and the first scrolls or taps on the page crash inside UIKit
+    /// (`-[UIGestureRecognizer _delayTouchesForEvent:inPhase:]`, found
+    /// 2026-11-03). Restoring the session makes the page's web view, so it
+    /// waits too.
+    @State private var browser: Browser?
     @Environment(\.scenePhase) private var scenePhase
+
+    var body: some Scene {
+        WindowGroup {
+            Group {
+                if let browser {
+                    BrowserScreen(store: browser.store)
+                } else {
+                    Theme.page.ignoresSafeArea()
+                }
+            }
+            .onAppear {
+                if browser == nil { browser = Browser() }
+            }
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase != .active { browser?.saver.saveNow() }
+        }
+    }
+}
+
+/// The browser behind the screen: the restored session and its saver.
+@MainActor
+final class Browser {
+    let store: BrowserStore
+    let saver: SessionSaver
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -24,18 +54,9 @@ struct FirnIOSApp: App {
         // The first space's data store is new: save it at once, so a quit
         // within the first seconds doesn't leave it nameless and forgotten.
         if session == nil { try? file.save(snapshot()) }
-        _store = State(initialValue: store)
+        self.store = store
         saver = SessionSaver(file: file, snapshot: snapshot)
         saver.start()
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            BrowserScreen(store: store)
-        }
-        .onChange(of: scenePhase) {
-            if scenePhase != .active { saver.saveNow() }
-        }
     }
 }
 

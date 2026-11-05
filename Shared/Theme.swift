@@ -164,22 +164,15 @@ enum Theme {
         return Color(light: hex, dark: hex)
     }
 
-    /// The tab overview's "space glow" (iOS): a still 3×3 mesh, cool and in
-    /// the space's color up high, warmer low, like First light's sky but
-    /// quieter. Light mixes toward the frame, dark toward the page. Row by
-    /// row, left to right.
-    static func overviewGlow(_ name: String) -> [Color] {
-        let space = spaceHex(name)
-        let light: UInt32 = 0xE9E3DA, dark: UInt32 = 0x2B2826
-        let glacier: UInt32 = 0x9DB7C8, apricot: UInt32 = 0xF2C4A0, peach: UInt32 = 0xECCEBA
-        let deepGlacier: UInt32 = 0x6E98B2, ember: UInt32 = 0xD69268
-        // (light color, how far toward the frame) and (dark color, how far toward the page).
-        let stops: [(UInt32, Double, UInt32, Double)] = [
-            (glacier, 0.30, deepGlacier, 0.62), (space, 0.30, space, 0.55), (peach, 0.35, deepGlacier, 0.75),
-            (space, 0.45, space, 0.66), (apricot, 0.62, space, 0.80), (space, 0.20, space, 0.50),
-            (apricot, 0.30, ember, 0.80), (space, 0.35, space, 0.70), (glacier, 0.40, ember, 0.86),
-        ]
-        return stops.map { Color(light: mix($0.0, light, $0.1), dark: mix($0.2, dark, $0.3)) }
+    /// The tab overview's haze (iOS): how strongly the frame's color washes
+    /// over the blurred picture of the page you came from. Enough that the
+    /// rows and the bar read on any page: more when the page fights the
+    /// look (a dark page in light, a bright one in dark) and when it's
+    /// loud; dark stays a dim, warm haze, never black. `lightness` and
+    /// `colorfulness` are the page's averages, 0 to 1.
+    static func overviewWash(dark: Bool, lightness: Double, colorfulness: Double) -> Double {
+        let fights = dark ? lightness : 1 - lightness
+        return min((dark ? 0.65 : 0.6) + 0.3 * fights + 0.2 * colorfulness, 0.92)
     }
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).

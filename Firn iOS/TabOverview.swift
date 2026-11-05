@@ -6,7 +6,7 @@ import SwiftUI
 /// ring. Tap a row to show it; its X or a swipe left closes it, and a shake
 /// brings it back (phase 2, step 2b, part 2). The glass bar
 /// at the bottom: + for a new tab, the space's name in a pill, and a check
-/// to go back. Behind it all, the space glow (step 2b). Looks from
+/// to go back. Behind it all, a haze of the page you came from (step 3d). Looks from
 /// docs/ios-overview-design.html. The tab on screen is a tall card with its
 /// page's picture, the spot the page glides into (step 3b); the other
 /// tabs' tall cards come in step 4, groups and Basecamp in phase 3.
@@ -97,7 +97,9 @@ struct TabOverview: View {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
             }
         }
-        .background { SpaceGlow(space: space) }
+        .background {
+            OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
+        }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
     }
 
@@ -159,25 +161,104 @@ private struct ShakeToUndo: UIViewRepresentable {
     }
 }
 
-/// The overview's backdrop: a still mesh in the space's color with Firn's
-/// glacier and apricot glow, so the glass rows have something to show.
-/// Nothing animates while idle; a space change cross-fades.
-private struct SpaceGlow: View {
+/// The overview's backdrop, as Firn's Mac window shows a haze of what's
+/// behind it: the page you came from, blurred by shrinking its picture to
+/// a few pixels and stretching it back up (one still image, no live blur),
+/// under a wash of the frame's color, the space's tint, and the paper
+/// grain. With no picture (no tab), or Reduce Transparency: the plain
+/// tinted frame. Nothing redraws while idle or scrolling; the haze is
+/// remade only when the tab on screen or its picture changes, and a space
+/// change cross-fades the tint.
+private struct OverviewHaze: View {
+    let picture: UIImage?
     let space: String
+    @State private var haze: Haze?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        MeshGradient(
-            width: 3, height: 3,
-            points: [
-                [0, 0], [0.5, 0], [1, 0],
-                [0, 0.42], [0.58, 0.5], [1, 0.38],
-                [0, 1], [0.45, 1], [1, 1],
-            ],
-            colors: Theme.overviewGlow(space)
-        )
+        ZStack {
+            Theme.frame
+            if !reduceTransparency, let haze {
+                // Filling the screen, never sizing the backdrop itself.
+                Color.clear
+                    .overlay {
+                        Image(uiImage: haze.image)
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                    }
+                    .clipped()
+                    .transition(.opacity)
+                Theme.frame.opacity(Theme.overviewWash(
+                    dark: colorScheme == .dark, lightness: haze.lightness, colorfulness: haze.colorfulness))
+            }
+            Rectangle()
+                .fill(Theme.frameTint(space))
+                .animation(.easeOut(duration: 0.2), value: space)
+            if !reduceTransparency {
+                Image("FirstLightGrain")
+                    .resizable(resizingMode: .tile)
+                    .opacity(Theme.FirstLight.grainOpacity(dark: colorScheme == .dark))
+                    .blendMode(colorScheme == .dark ? .softLight : .multiply)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: haze?.image)
         .ignoresSafeArea()
-        .animation(.easeOut(duration: 0.4), value: space)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .task(id: picture.map(ObjectIdentifier.init)) {
+            haze = picture.flatMap(Self.blurred)
+        }
+    }
+
+    /// The blurred picture, and how light and how colorful the page is
+    /// (each 0 to 1), so the wash can hold back a page that fights the rows.
+    private struct Haze {
+        let image: UIImage
+        let lightness: Double
+        let colorfulness: Double
+    }
+
+    /// The picture shrunk to 8 pixels wide, halving step by step so
+    /// every part of the page counts, then enlarged once to 8 times that
+    /// with smooth interpolation; SwiftUI stretches that the rest of the way.
+    private static func blurred(_ picture: UIImage) -> Haze? {
+        guard var image = picture.cgImage else { return nil }
+        let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
+        func resized(_ image: CGImage, width: Int) -> CGImage? {
+            let height = max(Int((CGFloat(width) * aspect).rounded()), 1)
+            guard let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return nil }
+            context.interpolationQuality = .high
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return context.makeImage()
+        }
+        let tiny = 8
+        while image.width / 2 >= tiny, let half = resized(image, width: image.width / 2) {
+            image = half
+        }
+        guard let small = resized(image, width: tiny),
+              let soft = resized(small, width: tiny * 8),
+              let bytes = small.dataProvider?.data as Data? else { return nil }
+        // The few pixels' average lightness and colorfulness (sRGB, 0 to 1).
+        var lightness = 0.0, colorfulness = 0.0, count = 0.0
+        for y in 0..<small.height {
+            for x in 0..<small.width {
+                let i = y * small.bytesPerRow + x * 4
+                guard i + 2 < bytes.count else { continue }
+                let r = Double(bytes[i]) / 255, g = Double(bytes[i + 1]) / 255, b = Double(bytes[i + 2]) / 255
+                let high = max(r, g, b), low = min(r, g, b)
+                lightness += 0.2126 * r + 0.7152 * g + 0.0722 * b
+                colorfulness += high > 0 ? (high - low) / high : 0
+                count += 1
+            }
+        }
+        guard count > 0 else { return nil }
+        return Haze(image: UIImage(cgImage: soft), lightness: lightness / count, colorfulness: colorfulness / count)
     }
 }
 
@@ -309,7 +390,7 @@ struct OverviewRow: View {
         .frame(minHeight: 48)
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(Self.shape)
-        // Other tabs sit on glass over the space glow.
+        // Other tabs sit on glass over the overview's haze.
         .glassEffect(.regular, in: Self.shape)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
     }

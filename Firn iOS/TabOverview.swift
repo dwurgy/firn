@@ -76,7 +76,9 @@ struct TabOverview: View {
             // A plain stack, not a List: List's own swipe can't follow the
             // finger and slide the row away the way Safari's does.
             ScrollView {
-                LazyVStack(spacing: 8) {
+                // 12pt apart (David, 2026-11-05: 8 felt a little tight),
+                // which also gives the ring around the tab on screen room.
+                LazyVStack(spacing: 12) {
                     ForEach(store.openTabs) { tab in
                         let onScreen = tab.id == (heldCard ?? store.activeTab?.id)
                         let tall = isTall(tab, onScreen: onScreen)

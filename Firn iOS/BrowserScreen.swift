@@ -115,7 +115,12 @@ struct BrowserScreen: View {
                                 .clipShape(CardTop.shape(OverviewRow.cornerRadius))
                                 .scaleEffect(box.width / cardWidth, anchor: .topLeading)
                                 .offset(x: box.minX, y: box.minY)
-                                .opacity(lineOnPicture)
+                                // Never quite 0 while it rides the
+                                // picture: at 0 iOS drops the line's blur,
+                                // and building it again (or dropping it)
+                                // froze a frame about 100ms into every
+                                // glide (David's recording, 2026-11-04).
+                                .opacity(max(lineOnPicture, 0.002))
                         }
                     }
                     .offset(x: -corner.x, y: -corner.y)

@@ -46,6 +46,10 @@ struct TabOverview: View {
     /// Every tab a slim row (pinched together), or cards for tabs looked
     /// at in the last day (pinched apart). Remembered across restarts.
     @AppStorage("overviewSlimRows") private var slimRows = false
+    /// What the list shows, set from `slimRows` as the overview opens.
+    /// Saved settings change outside any animation, so the list reads this
+    /// copy, which glides.
+    @State private var slim = UserDefaults.standard.bool(forKey: "overviewSlimRows")
     /// "Now" and each tab's last-viewed time, taken as the overview opens,
     /// so nothing changes size while it's open (picking a tab marks it
     /// viewed, which would grow its row into a card behind the glide).
@@ -62,7 +66,7 @@ struct TabOverview: View {
 
     private func isTall(_ tab: FirnCore.Tab, onScreen: Bool) -> Bool {
         if onScreen { return true }
-        if slimRows { return false }
+        if slim { return false }
         let viewed = lastViewed[tab.id] ?? tab.lastActiveAt
         return openedAt.timeIntervalSince(viewed) < Self.cardAge
     }
@@ -106,14 +110,14 @@ struct TabOverview: View {
                     .onEnded { m in
                         lastPinch = .now
                         let scale = m.magnification
-                        if scale < 0.85, !slimRows { setSlim(true, scroller) }
-                        else if scale > 1.15, slimRows { setSlim(false, scroller) }
+                        if scale < 0.85, !slim { setSlim(true, scroller) }
+                        else if scale > 1.15, slim { setSlim(false, scroller) }
                     }
             )
-            .sensoryFeedback(.selection, trigger: slimRows)
+            .sensoryFeedback(.selection, trigger: slim)
             // Pinching can't be found by VoiceOver: the same choice as an action.
-            .accessibilityAction(named: slimRows ? "Show Cards" : "Show Rows") {
-                setSlim(!slimRows, scroller)
+            .accessibilityAction(named: slim ? "Show Cards" : "Show Rows") {
+                setSlim(!slim, scroller)
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -155,8 +159,9 @@ struct TabOverview: View {
     /// sizes with the tab on screen held in the middle; a short ease with
     /// Reduce Motion.
     private func setSlim(_ slim: Bool, _ scroller: ScrollViewProxy) {
+        slimRows = slim
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3)) {
-            slimRows = slim
+            self.slim = slim
             if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
         }
     }
@@ -351,39 +356,47 @@ struct OverviewRow: View {
     static let cardHeight: CGFloat = 148
 
     var body: some View {
-        Group {
-            if isTall { card } else { row }
-        }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-        .offset(x: pull)
-        .opacity(reduceMotion && leaving ? 0 : 1)
-        .gesture(SidewaysPan(changed: follow, ended: letGo))
-        .allowsHitTesting(!leaving)
+        tile
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+            .offset(x: pull)
+            .opacity(reduceMotion && leaving ? 0 : 1)
+            .gesture(SidewaysPan(changed: follow, ended: letGo))
+            .allowsHitTesting(!leaving)
     }
 
-    /// A tall card: the page's picture fills it, rounded. Its icon, title,
-    /// and X sit on the picture's top (`CardTop`, the same one that rides on
-    /// the gliding picture). The tab on screen is ringed in the space's
-    /// color just outside the card, with a soft glow of it, as the Mac's
-    /// ⌃Tab switcher marks its pick, so it reads at a glance.
-    private var card: some View {
+    /// A slim row is one line on glass; a tall card is the same line on its
+    /// page's picture. One view for both, so a pinch glides between them:
+    /// the line stays put, the tile grows or shrinks under it, and the
+    /// picture fades in or out over the glass. The tab on screen is ringed
+    /// in the space's color just outside the card, with a soft glow of it,
+    /// as the Mac's ⌃Tab switcher marks its pick, so it reads at a glance.
+    private var tile: some View {
         Button(action: open) {
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: Self.cardHeight)
-                .background(Theme.page)
-                .overlay(alignment: .top) { pictureView }
-                .clipShape(Self.shape)
+                .frame(height: isTall ? Self.cardHeight : Self.rowHeight)
                 .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
+        .background {
+            // The glass stays under the picture rather than fading itself:
+            // iOS rebuilds glass that has faded to nothing, a frozen frame.
+            ZStack(alignment: .top) {
+                Color.clear.glassEffect(.regular, in: Self.shape)
+                Theme.page
+                    .overlay(alignment: .top) { pictureView }
+                    .clipShape(Self.shape)
+                    .opacity(isTall ? 1 : 0)
+            }
+        }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
         .accessibilityLabel(tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .overlay(alignment: .top) {
-            CardTop(tab: tab, picture: picture, close: close)
+            CardTop(tab: tab, picture: picture, close: close,
+                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, veiled: isTall)
                 .clipShape(CardTop.shape(Self.cornerRadius))
                 .opacity(lineShown ? 1 : 0)
         }
@@ -397,9 +410,12 @@ struct OverviewRow: View {
         }
         // An older card's picture is read from disk once it's in view,
         // then fades in over the site's icon.
-        .task(id: picture == nil) { if picture == nil { await loadPicture() } }
+        .task(id: isTall && picture == nil) { if isTall && picture == nil { await loadPicture() } }
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
+
+    /// A slim row's height.
+    static let rowHeight: CGFloat = 48
 
     @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
@@ -418,50 +434,6 @@ struct OverviewRow: View {
                 .padding(.top, CardTop.lineHeight / 2)
                 .accessibilityHidden(true)
         }
-    }
-
-    private var closeButton: some View {
-        Button(action: close) {
-            Image(systemName: "xmark")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                // The whole row's height, so the X is easy to hit.
-                .frame(width: 44)
-                .frame(maxHeight: .infinity)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .padding(.trailing, 2)
-        .accessibilityLabel("Close \(tab.title)")
-    }
-
-    private var row: some View {
-        HStack(spacing: 0) {
-            Button(action: open) {
-                HStack(spacing: 12) {
-                    SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                    Text(tab.title)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.leading, 14)
-                .frame(maxHeight: .infinity)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(tab.title)
-
-            closeButton
-        }
-        .frame(minHeight: 48)
-        .fixedSize(horizontal: false, vertical: true)
-        .contentShape(Self.shape)
-        // Other tabs sit on glass over the overview's haze.
-        .glassEffect(.regular, in: Self.shape)
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
     }
 
     /// The row stays under the finger going left; going right it barely
@@ -500,6 +472,10 @@ struct CardTop: View {
     let picture: UIImage?
     /// Closes the tab; nil draws the X without one (on the gliding picture).
     var close: (() -> Void)?
+    /// The line's own height: a card's, or a slim row's while it glides.
+    var lineHeight: CGFloat = Self.lineHeight
+    /// The veil shows on a card; a slim row is the line alone on glass.
+    var veiled = true
 
     static let lineHeight: CGFloat = 44
     static let veilHeight: CGFloat = lineHeight + 14
@@ -525,21 +501,26 @@ struct CardTop: View {
             }
             .padding(.leading, 14)
             .padding(.trailing, 46)
-            .frame(height: Self.lineHeight)
+            .frame(height: lineHeight)
             // Taps on the icon and title open the card; only the X is its own.
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .overlay(alignment: .trailing) { xMark }
         }
-        .frame(height: Self.veilHeight, alignment: .top)
+        .frame(height: max(Self.veilHeight, lineHeight), alignment: .top)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
+
+    /// How much page color lies over the blurred picture behind the line.
+    private static let wash = 0.82
+    /// The part of the veil the line covers, solid; below it, it fades.
+    private static let lineShare = lineHeight / veilHeight
 
     @ViewBuilder private var xMark: some View {
         let mark = Image(systemName: "xmark")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.muted)
-            .frame(width: 44, height: Self.lineHeight)
+            .frame(width: 44, height: lineHeight)
             .contentShape(.rect)
             .padding(.trailing, 2)
         if let close {
@@ -552,7 +533,10 @@ struct CardTop: View {
     }
 
     /// The picture's top, blurred and fading out below the line, with a
-    /// wash of page color so the title always reads.
+    /// wash of page color so the title always reads. One fixed level for
+    /// every page (honest, like the Mac): solid enough through the whole
+    /// line that a page's own words never sit under the title, and blurred
+    /// enough that they turn to soft color, then fading out below it.
     private var veil: some View {
         ZStack(alignment: .top) {
             if let picture, picture.size.width > 0 {
@@ -564,21 +548,22 @@ struct CardTop: View {
                         // Cut to the strip before blurring, so only it blurs.
                         .frame(width: box.size.width, height: box.size.height, alignment: .top)
                         .clipped()
-                        .blur(radius: 10, opaque: true)
+                        .blur(radius: 18, opaque: true)
                 }
                 .mask {
                     LinearGradient(stops: [.init(color: .black, location: 0),
-                                           .init(color: .black, location: 0.45),
+                                           .init(color: .black, location: Self.lineShare),
                                            .init(color: .clear, location: 1)],
                                    startPoint: .top, endPoint: .bottom)
                 }
             }
-            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
-                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
+            LinearGradient(stops: [.init(color: Theme.page.opacity(Self.wash), location: 0),
+                                   .init(color: Theme.page.opacity(Self.wash), location: Self.lineShare),
                                    .init(color: Theme.page.opacity(0), location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }
         .frame(height: Self.veilHeight)
+        .opacity(veiled ? 1 : 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

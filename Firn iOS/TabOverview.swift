@@ -80,6 +80,8 @@ struct TabOverview: View {
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
     /// Scrolls the list while a held tab rests near its top or bottom.
     @State private var edgeScroll: Task<Void, Never>?
+    /// The tab whose menu iOS may hand off to a drag (see HandOffDrop).
+    @State private var handOff: UUID?
     /// A pinch, a drag, or the moment after either: a finger lifting then
     /// would otherwise count as a tap.
     private var busy: Bool {
@@ -124,6 +126,7 @@ struct TabOverview: View {
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
+            .onDrop(of: [.item], delegate: HandOffDrop(moved: handOffMoved, ended: handOffEnded))
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
             // The held tab, lifted over the list and following the finger.
@@ -300,6 +303,18 @@ struct TabOverview: View {
             // staying where it is, as in Safari.
             .contentShape(.contextMenuPreview,
                           RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
+            // Moving the finger away from the menu hands it off to a drag,
+            // as in Safari. That hand-off is iOS's own and only happens
+            // with iOS's drag, so there is one, but it carries nothing and
+            // shows nothing: it only tells Firn's own drag where the finger
+            // is (see HandOffDrop). Its empty item can't be dropped in
+            // another app.
+            .onDrag {
+                handOff = tab.id
+                return NSItemProvider()
+            } preview: {
+                Color.clear.frame(width: 1, height: 1)
+            }
             .contextMenu { menu(for: tab) }
             // Its place stays open while it's held.
             .opacity(hidden ? 0 : 1)
@@ -420,6 +435,27 @@ struct TabOverview: View {
         }
     }
 
+    /// iOS handed a tab's menu off to a drag and the finger moved: the tab
+    /// lifts, its middle under the finger (the finger has left the menu,
+    /// often far from the row), then follows it as any drag does.
+    private func handOffMoved(_ local: CGPoint) {
+        guard let id = handOff else { return }
+        let view = spots.viewport
+        let point = CGPoint(x: local.x + view.minX, y: local.y + view.minY)
+        if drag == nil {
+            guard let tab = store.openTabs.first(where: { $0.id == id }),
+                  let frame = spots.frames[id] else { return }
+            lift(tab, at: CGPoint(x: point.x, y: frame.midY))
+        }
+        follow(to: point)
+    }
+
+    private func handOffEnded() {
+        guard handOff != nil else { return }
+        handOff = nil
+        letGo()
+    }
+
     /// While a tab is held, resting it near the top or bottom of the list
     /// scrolls the list that way, faster the nearer the edge. Runs only
     /// during a drag.
@@ -491,6 +527,28 @@ private struct Drag {
     let grab: CGFloat
     /// False once let go, as the tile settles into its place.
     var lifted = true
+}
+
+/// Where the finger is during iOS's drag (after a tab's menu was handed off
+/// to one), in the list's own points. Letting go anywhere, or leaving the
+/// list, lands the tab.
+private struct HandOffDrop: DropDelegate {
+    let moved: (CGPoint) -> Void
+    let ended: () -> Void
+
+    func dropEntered(info: DropInfo) { moved(info.location) }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        moved(info.location)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) { ended() }
+
+    func performDrop(info: DropInfo) -> Bool {
+        ended()
+        return true
+    }
 }
 
 /// Where the held tile is (global points): observed only by the tile.

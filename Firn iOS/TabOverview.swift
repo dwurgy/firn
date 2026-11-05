@@ -67,6 +67,32 @@ struct TabOverview: View {
     @State private var lastPinch = Date.distantPast
     private var pinchedRecently: Bool { Date.now.timeIntervalSince(lastPinch) < 0.35 }
 
+    /// A tab held and being dragged to a new place (phase 2, step 5).
+    @State private var drag: Drag?
+    /// Where the held tile's top is, under the finger: its own observed
+    /// object, so following the finger redraws only the lifted tile.
+    @State private var finger = DragFinger()
+    /// The list's order while a drag moves tabs aside; saved on letting go.
+    @State private var order: [UUID]?
+    @State private var lastDrop = Date.distantPast
+    @State private var lifts = 0
+    @State private var scrollPosition = ScrollPosition(idType: UUID.self)
+    /// Scrolls the list while a held tab rests near its top or bottom.
+    @State private var edgeScroll: Task<Void, Never>?
+    /// A pinch, a drag, or the moment after either: a finger lifting then
+    /// would otherwise count as a tap.
+    private var busy: Bool {
+        pinchedRecently || drag != nil || Date.now.timeIntervalSince(lastDrop) < 0.35
+    }
+
+    /// The tabs in the order shown: the store's, or the drag's while one moves.
+    private var shownTabs: [FirnCore.Tab] {
+        let tabs = store.openTabs
+        guard let order else { return tabs }
+        let byID = Dictionary(tabs.map { ($0.id, $0) }) { a, _ in a }
+        return order.compactMap { byID[$0] }
+    }
+
     private var space: String { store.activeSpace.color }
     /// How long a tab stays a tall card after it was last looked at.
     private static let cardAge: TimeInterval = 24 * 60 * 60
@@ -88,34 +114,26 @@ struct TabOverview: View {
                 // 12pt apart (David, 2026-11-05: 8 felt a little tight),
                 // which also gives the ring around the tab on screen room.
                 LazyVStack(spacing: 12) {
-                    ForEach(store.openTabs) { tab in
-                        let onScreen = tab.id == (heldCard ?? store.activeTab?.id)
-                        let tall = tallness(tab, onScreen: onScreen)
-                        OverviewRow(
-                            tab: tab,
-                            isOnScreen: onScreen,
-                            tallness: tall,
-                            picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
-                            loadPicture: { await pictures.loadImage(for: tab.id) },
-                            ring: Theme.spaceColor(space),
-                            space: space,
-                            lineShown: !onScreen || lineShown,
-                            open: { if !pinchedRecently { open(tab) } },
-                            close: { if !pinchedRecently { close(tab) } },
-                            spot: { frame in
-                                spots.frames[tab.id] = frame
-                                if tall == 1 { spots.cards.insert(tab.id) } else { spots.cards.remove(tab.id) }
-                            }
-                        )
-                        .opacity(gliding == tab.id ? 0 : 1)
-                        .id(tab.id)
-                        .transition(.opacity)
+                    let tabs = shownTabs
+                    ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                        listTile(tab, at: index, of: tabs.count)
                     }
                 }
                 .padding(.horizontal, 16)
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
+            // The held tab, lifted over the list and following the finger.
+            .overlay {
+                if let drag, let tab = store.openTabs.first(where: { $0.id == drag.id }) {
+                    LiftedTile(finger: finger, frame: drag.start, lifted: drag.lifted) {
+                        tile(tab, spot: { _ in })
+                    }
+                }
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
             // Pinch together for slim rows, apart for cards, as a photo
             // grid zooms. Once the pinch clearly goes one way, the whole
             // change runs as one glide, the tab under the fingers held in
@@ -179,7 +197,7 @@ struct TabOverview: View {
     private static let pinchStart: CGFloat = 1.08
 
     private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
-        guard !pinchDone else { return }
+        guard !pinchDone, drag == nil else { return }
         let target: CGFloat
         if slim, m.magnification > Self.pinchStart { target = 1 }
         else if !slim, m.magnification < 1 / Self.pinchStart { target = 0 }
@@ -234,6 +252,164 @@ struct TabOverview: View {
         }
     }
 
+    private func isOnScreen(_ tab: FirnCore.Tab) -> Bool {
+        tab.id == (heldCard ?? store.activeTab?.id)
+    }
+
+    /// A tab's tile: in the list, or lifted under the finger.
+    private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void,
+                      moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil) -> OverviewRow {
+        let onScreen = isOnScreen(tab)
+        return OverviewRow(
+            tab: tab,
+            isOnScreen: onScreen,
+            tallness: tallness(tab, onScreen: onScreen),
+            picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
+            loadPicture: { await pictures.loadImage(for: tab.id) },
+            ring: Theme.spaceColor(space),
+            space: space,
+            lineShown: !onScreen || lineShown,
+            open: { if !busy { open(tab) } },
+            close: { if !busy { close(tab) } },
+            spot: spot,
+            moveUp: moveUp,
+            moveDown: moveDown
+        )
+    }
+
+    /// A tab's tile in the list, at `index` of `count`.
+    private func listTile(_ tab: FirnCore.Tab, at index: Int, of count: Int) -> some View {
+        let spot: (CGRect) -> Void = { frame in
+            spots.frames[tab.id] = frame
+            if tallness(tab, onScreen: isOnScreen(tab)) == 1 {
+                spots.cards.insert(tab.id)
+            } else {
+                spots.cards.remove(tab.id)
+            }
+        }
+        let up: (() -> Void)? = index > 0 ? { move(tab, to: index - 1) } : nil
+        let down: (() -> Void)? = index < count - 1 ? { move(tab, to: index + 1) } : nil
+        let hidden = gliding == tab.id || drag?.id == tab.id
+        return tile(tab, spot: spot, moveUp: up, moveDown: down)
+            // Long-press to lift a tab and drag it to a new place, as in
+            // Safari. Loose tabs only: groups come in phase 3.
+            .gesture(HoldToDrag(enabled: tab.groupID == nil && gliding == nil,
+                                began: { lift(tab, at: $0) }, moved: follow(to:), ended: letGo))
+            // Its place stays open while it's held.
+            .opacity(hidden ? 0 : 1)
+            .id(tab.id)
+            .transition(.opacity)
+    }
+
+    // MARK: - Dragging a tab to a new place
+
+    /// VoiceOver's Move Up and Move Down: the same move as a drag.
+    private func move(_ tab: FirnCore.Tab, to position: Int) {
+        guard drag == nil else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            store.move(tab, to: position)
+        }
+    }
+
+    /// The long press has held: the tab lifts out of its place.
+    private func lift(_ tab: FirnCore.Tab, at point: CGPoint) {
+        guard drag == nil, !pinchedRecently, let frame = spots.frames[tab.id] else { return }
+        order = shownTabs.map(\.id)
+        finger.top = frame.minY
+        finger.y = point.y
+        drag = Drag(id: tab.id, start: frame, grab: point.y - frame.minY)
+        lifts += 1
+        keepScrollingAtEdges()
+    }
+
+    /// The tile stays under the finger, straight up and down, and the
+    /// other tabs glide aside to show where it will land.
+    private func follow(to point: CGPoint) {
+        guard let drag, drag.lifted else { return }
+        finger.top = point.y - drag.grab
+        finger.y = point.y
+        makeRoom()
+    }
+
+    /// Opens a place for the held tab where its middle is: before the
+    /// first tab on screen whose middle is below it. Only tabs on screen
+    /// count (the list is lazy, so others' spots may be old); the ones
+    /// above the screen stay above.
+    private func makeRoom() {
+        guard let drag, var ids = order else { return }
+        let middle = finger.top + drag.start.height / 2
+        let view = spots.viewport
+        ids.removeAll { $0 == drag.id }
+        let shown = ids.indices.filter { index in
+            spots.frames[ids[index]].map { $0.maxY > view.minY && $0.minY < view.maxY } ?? false
+        }
+        guard let first = shown.first else { return }
+        let above = shown.filter { spots.frames[ids[$0]].map { $0.midY < middle } ?? false }.count
+        ids.insert(drag.id, at: first + above)
+        guard ids != order else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { order = ids }
+    }
+
+    /// Lets go: the tab is saved in its new place and the tile settles
+    /// into it (0.25s, no bounce; with Reduce Motion it's simply there).
+    private func letGo() {
+        edgeScroll?.cancel()
+        edgeScroll = nil
+        guard var drag else { return }
+        if let ids = order, let to = ids.firstIndex(of: drag.id),
+           let tab = store.openTabs.first(where: { $0.id == drag.id }),
+           store.openTabs.firstIndex(where: { $0.id == drag.id }) != to {
+            // Its place among the other tabs, counted without it. (With
+            // groups, phase 3 counts each group as one, as the store does.)
+            store.move(tab, to: to)
+        }
+        order = nil
+        let landing = spots.frames[drag.id]?.minY ?? drag.start.minY
+        guard !reduceMotion else {
+            self.drag = nil
+            lastDrop = .now
+            return
+        }
+        drag.lifted = false
+        withAnimation(.smooth(duration: 0.25)) {
+            finger.top = landing
+            self.drag = drag
+        } completion: {
+            self.drag = nil
+            lastDrop = .now
+        }
+    }
+
+    /// While a tab is held, resting it near the top or bottom of the list
+    /// scrolls the list that way, faster the nearer the edge. Runs only
+    /// during a drag.
+    private func keepScrollingAtEdges() {
+        edgeScroll?.cancel()
+        edgeScroll = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
+                guard drag?.lifted == true, let scroll = spots.scroll else { continue }
+                let view = spots.viewport
+                let top = view.minY + scroll.contentInsets.top
+                let bottom = view.maxY - scroll.contentInsets.bottom
+                let reach: CGFloat = 72
+                let speed: CGFloat  // points a frame
+                if finger.y < top + reach {
+                    speed = -12 * min(1, (top + reach - finger.y) / reach)
+                } else if finger.y > bottom - reach {
+                    speed = 12 * min(1, (finger.y - (bottom - reach)) / reach)
+                } else { continue }
+                let lowest = -scroll.contentInsets.top
+                let highest = max(lowest, scroll.contentSize.height + scroll.contentInsets.bottom
+                                  - scroll.containerSize.height)
+                let y = min(max(scroll.contentOffset.y + speed, lowest), highest)
+                guard abs(y - scroll.contentOffset.y) > 0.5 else { continue }
+                scrollPosition.scrollTo(y: y)
+                makeRoom()
+            }
+        }
+    }
+
     /// Closes a tab with no question, and lets a shake bring it back:
     /// iOS's own "Undo Close Tab" alert, through the window's undo manager.
     private func close(_ tab: FirnCore.Tab) {
@@ -263,6 +439,98 @@ struct TabOverview: View {
     /// The tabs shown as tall cards (the rest are slim rows): a card's
     /// title line rides on its picture as the page grows out of it.
     var cards: Set<UUID> = []
+    /// The list's scroll, for scrolling while a tab is held at an edge.
+    var scroll: ScrollGeometry?
+}
+
+/// A tab being dragged: which, where its tile was when it lifted, and
+/// where on the tile the finger holds it.
+private struct Drag {
+    let id: UUID
+    let start: CGRect
+    let grab: CGFloat
+    /// False once let go, as the tile settles into its place.
+    var lifted = true
+}
+
+/// Where the held tile is (global points): observed only by the tile.
+@MainActor @Observable private final class DragFinger {
+    /// The tile's top.
+    var top: CGFloat = 0
+    /// The finger itself.
+    var y: CGFloat = 0
+}
+
+/// The held tab, over the list: a little larger with a soft warm shadow
+/// while held, settling back to its own size as it lands.
+private struct LiftedTile<Content: View>: View {
+    let finger: DragFinger
+    let frame: CGRect
+    let lifted: Bool
+    @ViewBuilder let content: Content
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var up = false
+
+    var body: some View {
+        let raised = lifted && up && !reduceMotion
+        GeometryReader { box in
+            let origin = box.frame(in: .global).origin
+            content
+                .frame(width: frame.width, height: frame.height)
+                .scaleEffect(raised ? 1.03 : 1)
+                .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
+                .offset(x: frame.minX - origin.x, y: finger.top - origin.y)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { withAnimation(.smooth(duration: 0.2)) { up = true } }
+    }
+}
+
+/// A long press that then follows the finger, for lifting a tab: UIKit's,
+/// so it waits for a still finger and leaves the list's scrolling alone
+/// until it has held (0.35s, a beat before iOS's own long-press menus).
+private struct HoldToDrag: UIGestureRecognizerRepresentable {
+    let enabled: Bool
+    let began: (CGPoint) -> Void
+    let moved: (CGPoint) -> Void
+    let ended: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let hold = UILongPressGestureRecognizer()
+        hold.minimumPressDuration = 0.35
+        hold.isEnabled = enabled
+        hold.delegate = context.coordinator
+        return hold
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    /// The row's own tap would otherwise outrank the hold and it would never
+    /// begin, so it runs alongside taps (a tap ends ignored during a drag).
+    /// Pans (the list's scroll, a row's sideways swipe) still give way once
+    /// it has held.
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIPanGestureRecognizer)
+        }
+    }
+
+    func updateUIGestureRecognizer(_ hold: UILongPressGestureRecognizer, context: Context) {
+        hold.isEnabled = enabled
+    }
+
+    func handleUIGestureRecognizerAction(_ hold: UILongPressGestureRecognizer, context: Context) {
+        let point = context.converter.location(in: .global)
+        switch hold.state {
+        case .began: began(point)
+        case .changed: moved(point)
+        case .ended, .cancelled: ended()
+        default: break
+        }
+    }
 }
 
 /// UIKit offers "Undo Close Tab" on a shake only when something holds
@@ -412,6 +680,9 @@ struct OverviewRow: View {
     let close: () -> Void
     /// Reports where the card's picture (or the slim row) is on screen.
     let spot: (CGRect) -> Void
+    /// VoiceOver's way to reorder (a drag can't be found by it); nil at an end.
+    var moveUp: (() -> Void)?
+    var moveDown: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far the finger has pulled the row left (0 or less).
@@ -466,6 +737,10 @@ struct OverviewRow: View {
         .accessibilityLabel(tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+        .accessibilityActions {
+            if let moveUp { Button("Move Up", action: moveUp) }
+            if let moveDown { Button("Move Down", action: moveDown) }
+        }
         .overlay(alignment: .top) {
             CardTop(tab: tab, close: close, progress: t, space: space)
                 .opacity(lineShown ? 1 : 0)

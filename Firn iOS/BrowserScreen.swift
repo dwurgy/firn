@@ -273,6 +273,12 @@ struct BrowserScreen: View {
             PageView(page: page, barTop: barTop)
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
+        } else if store.openTabs.isEmpty {
+            // A space with no tabs: First light, exactly as the Mac's empty
+            // page (no words, no centered mark; only the snow takes the
+            // space's color).
+            FirstLightScene(spaceColor: store.activeSpace.color)
+                .transition(.opacity)
         } else {
             Theme.page
         }

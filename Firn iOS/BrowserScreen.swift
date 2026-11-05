@@ -42,8 +42,8 @@ struct BrowserScreen: View {
     /// True while a finger is on the bar's drag; iOS resets it when the
     /// drag is cancelled too, which `onEnded` never hears about.
     @GestureState private var dragging = false
-    /// The pull whose page picture may still take the page's place: set
-    /// when a pull starts, cleared once it's let go without one. A picture
+    /// The pull (or tabs-button glide) whose page picture may still take
+    /// the page's place: set when it starts, cleared once it gives up. A picture
     /// arriving later (WebKit can take a while on a heavy page) is dropped:
     /// it used to land during the fade back and hide the page for good
     /// (David's recordings, 2026-11-04).
@@ -309,10 +309,26 @@ struct BrowserScreen: View {
         // page's picture is taken meanwhile.
         let picture = pictures.capture(tab)
         beginGlide(of: tab)
+        // WebKit may never answer (a busy page). Waited on with no limit,
+        // the page stayed over the overview and every swipe up after was
+        // refused; after half a second the overview fades in instead, and
+        // a picture that comes later is dropped.
+        let glide = UUID()
+        pullAwaitingPicture = glide
         Task {
-            guard let image = await picture?.value else { return fadeToTabs() }
+            guard let image = await picture?.value, pullAwaitingPicture == glide else {
+                if pullAwaitingPicture == glide { pullAwaitingPicture = nil; fadeToTabs() }
+                return
+            }
+            pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             land(inCardOf: tab, curve: Self.glide)
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard pullAwaitingPicture == glide else { return }
+            pullAwaitingPicture = nil
+            fadeToTabs()
         }
     }
 
@@ -522,11 +538,20 @@ struct BrowserScreen: View {
         let beside = neighbors(of: tab)
         // Sideways with no other tab: nothing to slide to.
         guard up || !beside.isEmpty else { return }
-        let picture = pictures.capture(tab)
+        // A tab just opened keeps its picture over the page until the page
+        // has loaded (up to 2.5s). Pulled meanwhile, that picture is the
+        // pull's own, taken over at once. Left there, the pull's new
+        // picture was refused (one was already up), the page never hid,
+        // and after landing in its card the live page stayed over the
+        // overview, stuck, with no bar (David, 2026-11-05). No new picture
+        // either: the page is likely still blank.
+        let lingering = standIn
+        let lingeringTop = standInTop
+        let picture = lingering == nil ? pictures.capture(tab) : nil
         let started = Pull(tab: tab, start: drag.startLocation, picture: picture,
                            translation: drag.translation, sideways: !up)
         pull = started
-        pullAwaitingPicture = started.id
+        pullAwaitingPicture = lingering == nil ? started.id : nil
         barQuiet = true
         neighbors = beside
         neighborsOpacity = 1
@@ -537,6 +562,13 @@ struct BrowserScreen: View {
             gliding = tab.id
             lineOnPicture = 0
             swiping = true
+        }
+        if let lingering {
+            putStandIn(lingering, of: tab, at: pageBox(for: lingering))
+            if lingeringTop != nil { standInTop = lingeringTop }
+            box = pulledBox(started)
+            followPull(started)
+            return
         }
         Task {
             guard let image = await picture?.value ?? pictures.image(for: tab.id) else { return }

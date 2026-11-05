@@ -166,6 +166,12 @@ struct BrowserScreen: View {
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }
+        // The bar's buttons wake once the pull's landing is over, not on a
+        // timer: waking them redraws the whole bar, and 150ms after the
+        // finger lifted that fell mid-landing and froze a frame (David's
+        // recordings, 2026-11-04). Every landing ends with gliding = nil,
+        // well past the finger's lift.
+        .onChange(of: gliding) { if gliding == nil, barQuiet { barQuiet = false } }
     }
 
     private var barShown: Bool { arrival < 1 || editing }
@@ -287,8 +293,12 @@ struct BrowserScreen: View {
                 standIn = nil
                 standInTab = nil
             }
-            // The line fades in over the glide's second half.
-            withAnimation(.easeOut(duration: 0.14).delay(0.12)) { lineOnPicture = 1 }
+            // The line's fade starts on the glide's first frame (where the
+            // page has just become its picture, so a hiccup can't show) and
+            // eases in, so it's mostly seen over the second half. Started
+            // 0.12s in, it froze a frame there (David's recordings,
+            // 2026-11-04).
+            withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
         }
     }
 
@@ -468,10 +478,6 @@ struct BrowserScreen: View {
         guard var pull else { return }
         pull.translation = drag.translation
         self.pull = nil
-        Task {
-            try? await Task.sleep(for: .milliseconds(150))
-            barQuiet = false
-        }
         let up = -drag.velocity.height
         let toTabs = up > 500 || (lift(pull) > 0.22 && up > -300)
         Task {

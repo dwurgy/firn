@@ -101,7 +101,9 @@ struct BrowserScreen: View {
 
             if let standIn, standIn.size.width > 0 {
                 if let standInTop {
-                    Color(cgColor: standInTop)
+                    // A fill, so a new tab's color fades in rather than snaps.
+                    Rectangle()
+                        .fill(Color(cgColor: standInTop))
                         .frame(height: pictures.topInset)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .opacity(stripOpacity)
@@ -515,11 +517,12 @@ struct BrowserScreen: View {
     /// far the page has been pulled.
     private func followPull(_ pull: Pull) {
         if pull.sideways {
-            // Corners round and the strip behind the clock fades as soon
-            // as the page moves, so it reads as a page among pages.
-            let moved = min(abs(pull.translation.width) / 60, 1)
-            stripOpacity = Double(1 - moved)
-            boxRadius = moved * 34
+            // Corners round as soon as the page moves, so it reads as a
+            // page among pages. The strip behind the clock stays: iOS picks
+            // the clock's color from what's under it, a moment late, and
+            // with the strip gone the clock vanished against the sand
+            // (David's recording, 2026-11-04, dark mode).
+            boxRadius = min(abs(pull.translation.width) / 60, 1) * 34
             return
         }
         let progress = min(lift(pull), 1)
@@ -636,11 +639,14 @@ struct BrowserScreen: View {
         box = spot
         standIn = image
         standInTab = neighbor.tab
-        standInTop = neighbor.tab.page?.topColor
+        // The strip keeps its color until the glide, then fades to the new
+        // tab's (an asleep tab has none yet: it keeps the old one).
+        let newTop = neighbor.tab.page?.topColor
         Task {
             // One frame in its new role before the glide, so it starts
             // where it is.
             await Task.yield()
+            if let newTop { withAnimation(.easeOut(duration: 0.3)) { standInTop = newTop } }
             land(onPage: neighbor.tab, curve: carrying(velocity, to: pageBox(for: image)), switching: true)
         }
     }

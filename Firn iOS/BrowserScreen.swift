@@ -42,6 +42,12 @@ struct BrowserScreen: View {
     /// True while a finger is on the bar's drag; iOS resets it when the
     /// drag is cancelled too, which `onEnded` never hears about.
     @GestureState private var dragging = false
+    /// The pull whose page picture may still take the page's place: set
+    /// when a pull starts, cleared once it's let go without one. A picture
+    /// arriving later (WebKit can take a while on a heavy page) is dropped:
+    /// it used to land during the fade back and hide the page for good
+    /// (David's recordings, 2026-11-04).
+    @State private var pullAwaitingPicture: UUID?
     /// The bar's buttons stay still from a pull's start until just after
     /// the finger lifts (the button would see the lift as a tap).
     @State private var barQuiet = false
@@ -472,6 +478,7 @@ struct BrowserScreen: View {
     /// A pull under way: where the finger came down, and the page's picture
     /// being taken for it.
     private struct Pull {
+        let id = UUID()
         let tab: FirnCore.Tab
         let start: CGPoint
         let picture: Task<UIImage?, Never>?
@@ -510,8 +517,10 @@ struct BrowserScreen: View {
         // Sideways with no other tab: nothing to slide to.
         guard up || !beside.isEmpty else { return }
         let picture = pictures.capture(tab)
-        pull = Pull(tab: tab, start: drag.startLocation, picture: picture,
-                    translation: drag.translation, sideways: !up)
+        let started = Pull(tab: tab, start: drag.startLocation, picture: picture,
+                           translation: drag.translation, sideways: !up)
+        pull = started
+        pullAwaitingPicture = started.id
         barQuiet = true
         neighbors = beside
         neighborsOpacity = 1
@@ -527,7 +536,8 @@ struct BrowserScreen: View {
             guard let image = await picture?.value ?? pictures.image(for: tab.id) else { return }
             // Still held (or let go but not landed yet): the picture comes
             // in under the finger, a short glide from the page's place.
-            guard standIn == nil, gliding == tab.id else { return }
+            guard pullAwaitingPicture == started.id, standIn == nil, gliding == tab.id else { return }
+            pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             if let pull {
                 withAnimation(.easeOut(duration: 0.1)) {
@@ -603,6 +613,8 @@ struct BrowserScreen: View {
                 try? await Task.sleep(for: .milliseconds(16))
             }
             guard standIn != nil else {
+                // Too late now: a picture arriving after this is dropped.
+                if pullAwaitingPicture == pull.id { pullAwaitingPicture = nil }
                 return toTabs ? fadeToTabs() : hideTabs()
             }
             // A tab beside it nearer the middle (or flicked toward) opens;

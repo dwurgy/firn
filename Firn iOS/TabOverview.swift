@@ -353,9 +353,11 @@ struct OverviewRow: View {
     private var site: String { WebAddress.site(of: tab.url) }
     static let cornerRadius: CGFloat = 14
     private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    /// A card is the mockup's height (docs/ios-overview-design.html): the
-    /// top of the page, a glance rather than a screenshot.
-    static let cardHeight: CGFloat = 148
+    /// The top of the page, a glance rather than a screenshot: a fixed
+    /// 160pt on every iPhone (David, 2026-11-05; the mockup's was 148), so
+    /// a 15 Pro shows four whole cards and a sliver of the fifth, and
+    /// bigger phones simply show more of the list.
+    static let cardHeight: CGFloat = 160
 
     var body: some View {
         tile
@@ -397,8 +399,8 @@ struct OverviewRow: View {
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .overlay(alignment: .top) {
-            CardTop(tab: tab, picture: picture, close: close,
-                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, veiled: isTall)
+            CardTop(tab: tab, close: close,
+                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, tall: isTall)
                 .clipShape(CardTop.shape(Self.cornerRadius))
                 .opacity(lineShown ? 1 : 0)
         }
@@ -464,23 +466,33 @@ struct OverviewRow: View {
     }
 }
 
-/// A card's top: the icon, title, and X on the picture's top, where the
-/// page softly blurs and fades under them, as a page does under a bar.
-/// Drawn on the card, and on the page's picture as it glides into the card
-/// (there without a working X), so the two match when they swap. Still
-/// images and gradients; the blur covers only this strip.
+/// A card's top. On a tall card: the icon and title in a small capsule of
+/// Liquid Glass in the top-left corner, and the X its own round glass button
+/// in the top-right, over a picture that runs clean to the card's edges
+/// (David, 2026-11-05). The system glass keeps them readable on white, dark,
+/// and colorful pages by itself. On a slim row: the plain line on glass.
+/// Both are drawn and cross-fade, so a pinch glides between them. Drawn on
+/// the card, and on the page's picture as it glides into the card (there
+/// without a working X), so the two match when they swap.
 struct CardTop: View {
     let tab: FirnCore.Tab
-    let picture: UIImage?
     /// Closes the tab; nil draws the X without one (on the gliding picture).
     var close: (() -> Void)?
-    /// The line's own height: a card's, or a slim row's while it glides.
+    /// The slim line's own height: a card's, or a slim row's while it glides.
     var lineHeight: CGFloat = Self.lineHeight
-    /// The veil shows on a card; a slim row is the line alone on glass.
-    var veiled = true
+    /// The pill and round X show on a tall card; a slim row is the line alone.
+    var tall = true
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     static let lineHeight: CGFloat = 44
-    static let veilHeight: CGFloat = lineHeight + 14
+    /// The pill's and the round X's visible height, and how far in they sit.
+    private static let glassHeight: CGFloat = 38
+    private static let inset: CGFloat = 10
+    /// The X's tap area, larger than what shows.
+    private static let tapSize: CGFloat = 44
+    /// Room the card's top needs: the inset and the pill, and a little more.
+    private static let cardLineHeight: CGFloat = inset + glassHeight + 6
 
     /// Rounded at the top only, as the card's corners.
     static func shape(_ radius: CGFloat) -> UnevenRoundedRectangle {
@@ -491,34 +503,106 @@ struct CardTop: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            veil
-            HStack(spacing: 12) {
-                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                Text(tab.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .modifier(Halo(on: veiled))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.leading, 14)
-            .padding(.trailing, 46)
-            .frame(height: lineHeight)
-            // Taps on the icon and title open the card; only the X is its own.
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-            .overlay(alignment: .trailing) { xMark }
+            slimLine
+                .opacity(tall ? 0 : 1)
+                .allowsHitTesting(!tall)
+                .accessibilityHidden(tall)
+            cardLine
+                // Never quite 0: iOS rebuilds glass that has faded to
+                // nothing, a frozen frame mid-pinch.
+                .opacity(tall ? 1 : 0.002)
+                .allowsHitTesting(tall)
+                .accessibilityHidden(!tall)
         }
-        .frame(height: max(Self.veilHeight, lineHeight), alignment: .top)
+        .frame(height: max(Self.cardLineHeight, lineHeight), alignment: .top)
+    }
+
+    // MARK: Tall card
+
+    private var cardLine: some View {
+        // The X's tap area is centered on its circle, so the row sits
+        // (tap − glass) / 2 higher to put both at 10pt from the top.
+        let slack = (Self.tapSize - Self.glassHeight) / 2
+        return HStack(spacing: 0) {
+            pill
+            Spacer(minLength: 8)
+            roundX
+        }
+        .padding(.top, Self.inset - slack)
+        .padding(.leading, Self.inset)
+        .padding(.trailing, Self.inset - slack)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    /// Only as wide as the icon and title, up to just short of the X.
+    private var pill: some View {
+        HStack(spacing: 7) {
+            SiteIconView(icon: tab.icon, size: 22) { LetterMark(site: site) }
+            Text(tab.title)
+                .font(.system(.subheadline, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(labelStyle)
+        .padding(.leading, (Self.glassHeight - 22) / 2)
+        .padding(.trailing, 14)
+        .frame(minHeight: Self.glassHeight)
+        .modifier(GlassOrFrame(shape: .capsule, solid: reduceTransparency))
+        // Taps on the pill open the card; only the X is its own.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var roundX: some View {
+        let mark = Image(systemName: "xmark")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(labelStyle)
+            .frame(width: Self.glassHeight, height: Self.glassHeight)
+            .modifier(GlassOrFrame(shape: .circle, solid: reduceTransparency))
+            .frame(width: Self.tapSize, height: Self.tapSize)
+            .contentShape(.circle)
+        if let close {
+            Button(action: close) { mark }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close tab")
+        } else {
+            mark.accessibilityHidden(true)
+        }
+    }
+
+    /// On glass the system's primary label, which follows the glass as it
+    /// turns light or dark over the page; on the solid frame, ink.
+    private var labelStyle: AnyShapeStyle {
+        reduceTransparency ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(.primary)
+    }
+
+    // MARK: Slim row
+
+    private var slimLine: some View {
+        HStack(spacing: 12) {
+            SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
+            Text(tab.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 46)
+        .frame(height: lineHeight)
+        // Taps on the icon and title open the row; only the X is its own.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .overlay(alignment: .trailing) { slimX }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
 
-    @ViewBuilder private var xMark: some View {
+    @ViewBuilder private var slimX: some View {
         let mark = Image(systemName: "xmark")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.muted)
-            .modifier(Halo(on: veiled))
             .frame(width: 44, height: lineHeight)
             .contentShape(.rect)
             .padding(.trailing, 2)
@@ -530,58 +614,19 @@ struct CardTop: View {
             mark.accessibilityHidden(true)
         }
     }
-
-    /// The picture's top, blurred enough that a page's words turn to soft
-    /// color, fading out below the line, under a light wash of page color
-    /// (50% to nothing, so a dark page in light mode hazes rather than
-    /// turning to a gray bar), so the picture keeps its height.
-    /// The title reads because of its halo, not a heavy veil (David,
-    /// 2026-11-05: 82% wash and blur 18 read but felt too solid). One fixed
-    /// level for every page (honest, like the Mac).
-    private var veil: some View {
-        ZStack(alignment: .top) {
-            if let picture, picture.size.width > 0 {
-                GeometryReader { box in
-                    let scale = box.size.width / picture.size.width
-                    Image(uiImage: picture)
-                        .resizable()
-                        .frame(width: box.size.width, height: picture.size.height * scale)
-                        // Cut to the strip before blurring, so only it blurs.
-                        .frame(width: box.size.width, height: box.size.height, alignment: .top)
-                        .clipped()
-                        .blur(radius: 18, opaque: true)
-                }
-                .mask {
-                    LinearGradient(stops: [.init(color: .black, location: 0),
-                                           // Full blur just past the title's letters, then a long fade (David, 2026-11-05).
-                                           .init(color: .black, location: 0.55),
-                                           .init(color: .clear, location: 1)],
-                                   startPoint: .top, endPoint: .bottom)
-                }
-            }
-            LinearGradient(stops: [.init(color: Theme.page.opacity(0.5), location: 0),
-                                   .init(color: Theme.page.opacity(0.3), location: 0.5),
-                                   .init(color: Theme.page.opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-        }
-        .frame(height: Self.veilHeight)
-        .opacity(veiled ? 1 : 0)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
 }
 
-/// A soft glow of page color hugging each letter, so ink reads over a
-/// blurred page without a box behind it (as the Lock Screen's clock reads
-/// over any wallpaper). A tight ring clears the letters' edges; a wider,
-/// fainter one quiets what's around them. Fixed, never adapting to the page.
-/// Only on a card: on a slim row's glass it reads as a smudge.
-private struct Halo: ViewModifier {
-    let on: Bool
+/// Apple's own Liquid Glass, or with Reduce Transparency on, the solid
+/// frame color (light #E9E3DA, dark #3A3734).
+private struct GlassOrFrame<S: Shape>: ViewModifier {
+    let shape: S
+    let solid: Bool
     func body(content: Content) -> some View {
-        content
-            .shadow(color: Theme.page.opacity(on ? 0.9 : 0), radius: 1.5)
-            .shadow(color: Theme.page.opacity(on ? 0.7 : 0), radius: 5)
+        if solid {
+            content.background(Theme.frame, in: shape)
+        } else {
+            content.glassEffect(.regular, in: shape)
+        }
     }
 }
 

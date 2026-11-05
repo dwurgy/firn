@@ -39,6 +39,23 @@ final class PagePictures {
         return image
     }
 
+    /// The tab's picture if it's already in memory; never reads the disk,
+    /// so a list of cards can ask while it draws.
+    func cachedImage(for tabID: UUID) -> UIImage? { images[tabID] }
+
+    /// Reads the tab's picture from disk and decodes it off the main thread
+    /// (for the overview's older cards, as they come into view), so
+    /// scrolling never waits on it.
+    func loadImage(for tabID: UUID) async {
+        guard images[tabID] == nil else { return }
+        let store = store
+        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let picture = store.load(for: tabID) else { return nil }
+            return UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
+        }.value
+        if let image, images[tabID] == nil { images[tabID] = image }
+    }
+
     /// Takes a picture of the tab's page as it is now and saves it. A
     /// sleeping tab (no page) or a page that can't be pictured (nothing
     /// loaded, or a load error) keeps the picture it had. The task gives

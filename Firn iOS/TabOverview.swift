@@ -43,8 +43,29 @@ struct TabOverview: View {
 
     /// Counts closes, so the shake listener takes focus again after each.
     @State private var closes = 0
+    /// Every tab a slim row (pinched together), or cards for tabs looked
+    /// at in the last day (pinched apart). Remembered across restarts.
+    @AppStorage("overviewSlimRows") private var slimRows = false
+    /// "Now" and each tab's last-viewed time, taken as the overview opens,
+    /// so nothing changes size while it's open (picking a tab marks it
+    /// viewed, which would grow its row into a card behind the glide).
+    @State private var openedAt = Date.now
+    @State private var lastViewed: [UUID: Date] = [:]
+    /// When a pinch last moved: a finger lifting off a card at the end of a
+    /// pinch would otherwise count as a tap and open it.
+    @State private var lastPinch = Date.distantPast
+    private var pinchedRecently: Bool { Date.now.timeIntervalSince(lastPinch) < 0.35 }
 
     private var space: String { store.activeSpace.color }
+    /// How long a tab stays a tall card after it was last looked at.
+    private static let cardAge: TimeInterval = 24 * 60 * 60
+
+    private func isTall(_ tab: FirnCore.Tab, onScreen: Bool) -> Bool {
+        if onScreen { return true }
+        if slimRows { return false }
+        let viewed = lastViewed[tab.id] ?? tab.lastActiveAt
+        return openedAt.timeIntervalSince(viewed) < Self.cardAge
+    }
 
     var body: some View {
         ScrollViewReader { scroller in
@@ -54,14 +75,21 @@ struct TabOverview: View {
                 LazyVStack(spacing: 8) {
                     ForEach(store.openTabs) { tab in
                         let onScreen = tab.id == (heldCard ?? store.activeTab?.id)
+                        let tall = isTall(tab, onScreen: onScreen)
                         OverviewRow(
                             tab: tab,
                             isOnScreen: onScreen,
-                            picture: onScreen ? pictures.image(for: tab.id) : nil,
+                            isTall: tall,
+                            picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
+                            loadPicture: { await pictures.loadImage(for: tab.id) },
+                            ring: Theme.spaceColor(space),
                             lineShown: !onScreen || lineShown,
-                            open: { open(tab) },
-                            close: { close(tab) },
-                            spot: { spots.frames[tab.id] = $0 }
+                            open: { if !pinchedRecently { open(tab) } },
+                            close: { if !pinchedRecently { close(tab) } },
+                            spot: { frame in
+                                spots.frames[tab.id] = frame
+                                if tall { spots.cards.insert(tab.id) } else { spots.cards.remove(tab.id) }
+                            }
                         )
                         .opacity(gliding == tab.id ? 0 : 1)
                         .id(tab.id)
@@ -69,6 +97,23 @@ struct TabOverview: View {
                     }
                 }
                 .padding(.horizontal, 16)
+            }
+            // Pinch together for slim rows, apart for cards, as a photo
+            // grid zooms; the tab on screen stays put while rows resize.
+            .simultaneousGesture(
+                MagnifyGesture(minimumScaleDelta: 0.02)
+                    .onChanged { _ in lastPinch = .now }
+                    .onEnded { m in
+                        lastPinch = .now
+                        let scale = m.magnification
+                        if scale < 0.85, !slimRows { setSlim(true, scroller) }
+                        else if scale > 1.15, slimRows { setSlim(false, scroller) }
+                    }
+            )
+            .sensoryFeedback(.selection, trigger: slimRows)
+            // Pinching can't be found by VoiceOver: the same choice as an action.
+            .accessibilityAction(named: slimRows ? "Show Cards" : "Show Rows") {
+                setSlim(!slimRows, scroller)
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -95,6 +140,8 @@ struct TabOverview: View {
                     .opacity(typing ? 0 : max(gliding != nil ? 0.002 : 0, arrival * 2 - 1))
             }
             .onAppear {
+                openedAt = .now
+                lastViewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
             }
         }
@@ -102,6 +149,16 @@ struct TabOverview: View {
             OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
+    }
+
+    /// Switches between slim rows and cards: the rows glide to their new
+    /// sizes with the tab on screen held in the middle; a short ease with
+    /// Reduce Motion.
+    private func setSlim(_ slim: Bool, _ scroller: ScrollViewProxy) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3)) {
+            slimRows = slim
+            if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
+        }
     }
 
     /// Closes a tab with no question, and lets a shake bring it back:
@@ -128,6 +185,9 @@ struct TabOverview: View {
 /// glide reads it, so scrolling redraws nothing else.
 @MainActor final class OverviewSpots {
     var frames: [UUID: CGRect] = [:]
+    /// The tabs shown as tall cards (the rest are slim rows): a card's
+    /// title line rides on its picture as the page grows out of it.
+    var cards: Set<UUID> = []
 }
 
 /// UIKit offers "Undo Close Tab" on a shake only when something holds
@@ -261,8 +321,15 @@ private struct OverviewHaze: View {
 struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
-    /// The page's picture, for the tab on screen's tall card.
+    /// A tall card with the page's picture (the tab on screen, and tabs
+    /// looked at in the last day), else a slim row.
+    let isTall: Bool
+    /// The page's picture, for a tall card, if it's in memory.
     let picture: UIImage?
+    /// Reads the picture from disk when a card comes into view without one.
+    let loadPicture: () async -> Void
+    /// The ring around the tab on screen: the space's color.
+    let ring: Color
     var lineShown = true
     let open: () -> Void
     let close: () -> Void
@@ -285,7 +352,7 @@ struct OverviewRow: View {
 
     var body: some View {
         Group {
-            if isOnScreen { card } else { row }
+            if isTall { card } else { row }
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
@@ -295,9 +362,11 @@ struct OverviewRow: View {
         .allowsHitTesting(!leaving)
     }
 
-    /// The tab on screen: its page's picture fills the card, rounded and
-    /// ringed in frost. Its icon, title, and X sit on the picture's top
-    /// (`CardTop`, the same one that rides on the gliding picture).
+    /// A tall card: the page's picture fills it, rounded. Its icon, title,
+    /// and X sit on the picture's top (`CardTop`, the same one that rides on
+    /// the gliding picture). The tab on screen is ringed in the space's
+    /// color just outside the card, with a soft glow of it, as the Mac's
+    /// ⌃Tab switcher marks its pick, so it reads at a glance.
     private var card: some View {
         Button(action: open) {
             Color.clear
@@ -311,16 +380,25 @@ struct OverviewRow: View {
         .buttonStyle(.plain)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
         .accessibilityLabel(tab.title)
-        .accessibilityValue("On screen")
-        .accessibilityAddTraits(.isSelected)
+        .accessibilityValue(isOnScreen ? "On screen" : "")
+        .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .overlay(alignment: .top) {
             CardTop(tab: tab, picture: picture, close: close)
                 .clipShape(CardTop.shape(Self.cornerRadius))
                 .opacity(lineShown ? 1 : 0)
         }
         .overlay {
-            Self.shape.strokeBorder(Theme.frost, lineWidth: 2).allowsHitTesting(false)
+            if isOnScreen {
+                Self.shape.inset(by: -3.5)
+                    .strokeBorder(ring, lineWidth: 3)
+                    .shadow(color: ring.opacity(0.55), radius: 6)
+                    .allowsHitTesting(false)
+            }
         }
+        // An older card's picture is read from disk once it's in view,
+        // then fades in over the site's icon.
+        .task(id: picture == nil) { if picture == nil { await loadPicture() } }
+        .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
     @ViewBuilder private var pictureView: some View {

@@ -396,7 +396,7 @@ struct BrowserScreen: View {
         // at once; another tab's page is made (or woken) now and can be
         // blank for a moment, so its picture fades off it.
         let switching = tab.id != store.activeTab?.id
-        let fromCard = !switching
+        let fromCard = spots.cards.contains(tab.id)
         heldCard = store.activeTab?.id
         store.select(tab)
         guard let spot, let image = pictures.image(for: tab.id), !reduceMotion else {

@@ -94,7 +94,7 @@ public final class PageHolder: UIViewController {
 /// 62pt down but a restored one, or one pulled back to the top, stopped at 0
 /// with its top row under the clock (firnbrowser.com's menu, 2026-11-04;
 /// measured in `docs/IOS-PLAN.md`, step 3c.3). Under the clock the page
-/// slides beneath iOS's own soft edge blur. Behind the page, the frame takes
+/// slides beneath iOS's own edge blur. Behind the page, the frame takes
 /// the page's own color (its theme color, else its background) for the
 /// moment before it draws.
 private final class PageFrame: UIView {
@@ -152,7 +152,9 @@ private final class PageFrame: UIView {
             scroller.contentInset = covered
             scroller.verticalScrollIndicatorInsets = covered
         }
-        scroller.topEdgeEffect.style = .soft
+        // iOS's own choice, as Safari's: `.soft` ran the blur about 80pt
+        // down and whiter; `.automatic` ends just under the clock (2026-11-05).
+        scroller.topEdgeEffect.style = .automatic
     }
 }
 #endif

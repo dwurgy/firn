@@ -39,6 +39,14 @@ struct BrowserScreen: View {
     /// The bar's buttons stay still from a pull's start until just after
     /// the finger lifts (the button would see the lift as a tap).
     @State private var barQuiet = false
+    /// The tabs beside the one being pulled or swiped (step 3c, step 2),
+    /// riding with it a gap apart, and how much they show (they fade as the
+    /// page lands in its card).
+    @State private var neighbors: [Neighbor] = []
+    @State private var neighborsOpacity: Double = 1
+    /// A sideways swipe on the bar: the pages slide at full size, over the
+    /// frame's sand, with the overview left out.
+    @State private var swiping = false
     /// While the overview is up (and while the picture moves).
     @State private var pageHidden = false
     /// The tab whose card is hidden while the picture stands in for it.
@@ -74,6 +82,13 @@ struct BrowserScreen: View {
                     .accessibilityHidden(editing)
                     .transition(.opacity)
             }
+            // Under the page, so it shows only once the page's picture has
+            // taken its place (above, it covered the page for a frame).
+            if swiping {
+                Theme.frame
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+            }
             pageLayer
                 .ignoresSafeArea()
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
@@ -103,6 +118,23 @@ struct BrowserScreen: View {
                 GeometryReader { layer in
                     let corner = layer.frame(in: .global).origin
                     ZStack(alignment: .topLeading) {
+                        // The tabs beside it, the same size, a gap apart.
+                        ForEach(neighbors) { neighbor in
+                            Group {
+                                if let image = neighbor.image {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .frame(width: width, height: width * image.size.height / max(image.size.width, 1))
+                                } else {
+                                    // Never pictured: a plain page.
+                                    Color.clear.frame(width: width, height: height)
+                                }
+                            }
+                            .frame(width: width, height: height, alignment: .top)
+                            .background(Theme.page)
+                            .modifier(CardGlide(width: width, box: neighborBox(neighbor.place), radius: boxRadius))
+                            .opacity(neighborsOpacity)
+                        }
                         Image(uiImage: standIn)
                             .resizable()
                             .frame(width: width, height: height)
@@ -286,8 +318,10 @@ struct BrowserScreen: View {
                 boxRadius = OverviewRow.cornerRadius
                 stripOpacity = 0
                 arrival = 1
+                neighborsOpacity = 0
             } completion: {
                 // The card shows the same picture and line: they swap.
+                neighbors = []
                 lineShown = true
                 gliding = nil
                 standIn = nil
@@ -306,6 +340,8 @@ struct BrowserScreen: View {
     private func fadeToTabs() {
         standIn = nil
         standInTab = nil
+        neighbors = []
+        swiping = false
         withAnimation(Self.fade) {
             arrival = 1
             pageHidden = true
@@ -355,6 +391,8 @@ struct BrowserScreen: View {
         } completion: {
             pageHidden = false
             showingTabs = false
+            swiping = false
+            neighbors = []
             gliding = nil
             heldCard = nil
             lineShown = true
@@ -382,6 +420,8 @@ struct BrowserScreen: View {
     private func hideTabs() {
         standIn = nil
         standInTab = nil
+        neighbors = []
+        swiping = false
         withAnimation(Self.fade) {
             pageHidden = false
             arrival = 0
@@ -401,6 +441,18 @@ struct BrowserScreen: View {
         let start: CGPoint
         let picture: Task<UIImage?, Never>?
         var translation: CGSize = .zero
+        /// Started sideways: the page slides at full size between tabs,
+        /// and never shrinks.
+        var sideways = false
+    }
+
+    /// A tab beside the one held: -1 just before it in the list (on the
+    /// left), 1 just after it.
+    private struct Neighbor: Identifiable {
+        let id: UUID
+        let tab: FirnCore.Tab
+        let image: UIImage?
+        var place: Int
     }
 
     /// The finger moves on the bar. Going up more than across, it grabs the
@@ -414,13 +466,28 @@ struct BrowserScreen: View {
             return
         }
         guard !editing, !menuOpen, !showingTabs, gliding == nil, !reduceMotion,
-              let tab = store.activeTab,
-              drag.translation.height < -4,
-              -drag.translation.height > abs(drag.translation.width) else { return }
+              let tab = store.activeTab else { return }
+        let dx = drag.translation.width, dy = drag.translation.height
+        let up = dy < -4 && -dy > abs(dx)
+        let across = abs(dx) > 8 && abs(dx) > abs(dy)
+        guard up || across else { return }
+        let beside = neighbors(of: tab)
+        // Sideways with no other tab: nothing to slide to.
+        guard up || !beside.isEmpty else { return }
         let picture = pictures.capture(tab)
-        pull = Pull(tab: tab, start: drag.startLocation, picture: picture, translation: drag.translation)
+        pull = Pull(tab: tab, start: drag.startLocation, picture: picture,
+                    translation: drag.translation, sideways: !up)
         barQuiet = true
-        beginGlide(of: tab)
+        neighbors = beside
+        neighborsOpacity = 1
+        if up {
+            beginGlide(of: tab)
+        } else {
+            // The overview stays out of a sideways swipe.
+            gliding = tab.id
+            lineOnPicture = 0
+            swiping = true
+        }
         Task {
             guard let image = await picture?.value ?? pictures.image(for: tab.id) else { return }
             // Still held (or let go but not landed yet): the picture comes
@@ -439,6 +506,7 @@ struct BrowserScreen: View {
     /// How far up the page has been pulled, 0 at rest and 1 at half the
     /// screen's height (past that it gives less and less).
     private func lift(_ pull: Pull) -> CGFloat {
+        guard !pull.sideways else { return 0 }
         let height = max(pageFrame.height, 1)
         return max(0, -pull.translation.height) / (height * 0.5)
     }
@@ -446,6 +514,14 @@ struct BrowserScreen: View {
     /// The overview, the bars, and the strip behind the clock follow how
     /// far the page has been pulled.
     private func followPull(_ pull: Pull) {
+        if pull.sideways {
+            // Corners round and the strip behind the clock fades as soon
+            // as the page moves, so it reads as a page among pages.
+            let moved = min(abs(pull.translation.width) / 60, 1)
+            stripOpacity = Double(1 - moved)
+            boxRadius = moved * 34
+            return
+        }
         let progress = min(lift(pull), 1)
         arrival = progress * 0.85
         stripOpacity = Double(max(0, 1 - progress * 4))
@@ -462,9 +538,13 @@ struct BrowserScreen: View {
         // Past half the screen, each point of lift shrinks it less.
         let beyond = max(0, lift - 1)
         let scale = 1 - 0.42 * min(lift, 1) - 0.12 * (1 - 1 / (1 + beyond))
-        // Pulled down, it barely gives.
-        let dy = pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height
-        let finger = CGPoint(x: pull.start.x + pull.translation.width, y: pull.start.y + dy)
+        // Pulled down, it barely gives; swiped sideways, it stays level.
+        let dy = pull.sideways ? 0
+            : pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height
+        // Swiped toward a side with no tab, it gives a little and comes back.
+        var dx = pull.translation.width
+        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
+        let finger = CGPoint(x: pull.start.x + dx, y: pull.start.y + dy)
         let anchorX = pull.start.x - page.minX
         let anchorY = pull.start.y - page.minY
         return CGRect(x: finger.x - anchorX * scale, y: finger.y - anchorY * scale,
@@ -479,7 +559,8 @@ struct BrowserScreen: View {
         pull.translation = drag.translation
         self.pull = nil
         let up = -drag.velocity.height
-        let toTabs = up > 500 || (lift(pull) > 0.22 && up > -300)
+        let flickedUp = !pull.sideways && up > 500
+        let toTabs = !pull.sideways && (flickedUp || (lift(pull) > 0.22 && up > -300))
         Task {
             // The picture may still be on its way.
             for _ in 0..<20 where standIn == nil {
@@ -488,6 +569,11 @@ struct BrowserScreen: View {
             guard standIn != nil else {
                 return toTabs ? fadeToTabs() : hideTabs()
             }
+            // A tab beside it nearer the middle (or flicked toward) opens;
+            // a flick up still goes to the overview.
+            if !flickedUp, let neighbor = neighborChosen(drag.velocity) {
+                return open(neighbor, carrying: drag.velocity)
+            }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
                 land(inCardOf: pull.tab, curve: carrying(drag.velocity, to: spot))
@@ -495,6 +581,78 @@ struct BrowserScreen: View {
                 let page = pageBox(for: standIn!)
                 land(onPage: pull.tab, curve: carrying(drag.velocity, to: page), switching: false)
             }
+        }
+    }
+
+    /// The tabs just before and after this one in the list, with their
+    /// saved pictures.
+    private func neighbors(of tab: FirnCore.Tab) -> [Neighbor] {
+        let tabs = store.openTabs
+        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return [] }
+        return [-1, 1].compactMap { place in
+            let i = index + place
+            guard tabs.indices.contains(i) else { return nil }
+            return Neighbor(id: tabs[i].id, tab: tabs[i], image: pictures.image(for: tabs[i].id), place: place)
+        }
+    }
+
+    /// The gap between the held page and the ones beside it: a little
+    /// narrower as they shrink.
+    private func gap(_ box: CGRect) -> CGFloat {
+        12 + 12 * box.width / max(pageFrame.width, 1)
+    }
+
+    /// Where a tab beside the held one sits: the held box, moved over.
+    private func neighborBox(_ place: Int) -> CGRect {
+        box.offsetBy(dx: CGFloat(place) * (box.width + gap(box)), dy: 0)
+    }
+
+    /// The tab beside it to open on letting go: moved (or flicked) more
+    /// than about two fifths of the way toward the middle.
+    private func neighborChosen(_ velocity: CGSize) -> Neighbor? {
+        let spacing = box.width + gap(box)
+        guard spacing > 1 else { return nil }
+        let moved = (box.midX - pageFrame.midX + velocity.width * 0.15) / spacing
+        let place = moved > 0.4 ? -1 : moved < -0.4 ? 1 : 0
+        return place == 0 ? nil : neighbors.first { $0.place == place }
+    }
+
+    /// Opens the tab beside: it becomes the held one where it is (the one
+    /// that was held rides beside it now), then grows to the full screen,
+    /// carrying the finger's speed.
+    private func open(_ neighbor: Neighbor, carrying velocity: CGSize) {
+        guard let held = standInTab, let heldImage = standIn else { return hideTabs() }
+        let image = neighbor.image ?? plainPage(like: heldImage)
+        let spot = neighborBox(neighbor.place)
+        let shift = neighbor.place
+        var beside = neighbors.filter { $0.id != neighbor.id }
+        for i in beside.indices { beside[i].place -= shift }
+        beside.append(Neighbor(id: held.id, tab: held, image: heldImage, place: -shift))
+        neighbors = beside
+        // Behind a pull, the overview keeps the held tab's card (hidden,
+        // as gliding still names it) so nothing there changes size.
+        heldCard = held.id
+        store.select(neighbor.tab)
+        box = spot
+        standIn = image
+        standInTab = neighbor.tab
+        standInTop = neighbor.tab.page?.topColor
+        Task {
+            // One frame in its new role before the glide, so it starts
+            // where it is.
+            await Task.yield()
+            land(onPage: neighbor.tab, curve: carrying(velocity, to: pageBox(for: image)), switching: true)
+        }
+    }
+
+    /// A blank page the size of a picture, for a tab never pictured.
+    private func plainPage(like picture: UIImage) -> UIImage {
+        let color = UIColor(Theme.page).resolvedColor(with: UITraitCollection.current)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = picture.scale
+        return UIGraphicsImageRenderer(size: picture.size, format: format).image { context in
+            color.setFill()
+            context.fill(CGRect(origin: .zero, size: picture.size))
         }
     }
 

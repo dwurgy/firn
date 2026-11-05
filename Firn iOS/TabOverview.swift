@@ -89,6 +89,7 @@ struct TabOverview: View {
                             picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
                             loadPicture: { await pictures.loadImage(for: tab.id) },
                             ring: Theme.spaceColor(space),
+                            space: space,
                             lineShown: !onScreen || lineShown,
                             open: { if !pinchedRecently { open(tab) } },
                             close: { if !pinchedRecently { close(tab) } },
@@ -337,6 +338,8 @@ struct OverviewRow: View {
     let loadPicture: () async -> Void
     /// The ring around the tab on screen: the space's color.
     let ring: Color
+    /// The space's color name, for the card's frost.
+    let space: String
     var lineShown = true
     let open: () -> Void
     let close: () -> Void
@@ -400,7 +403,7 @@ struct OverviewRow: View {
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .overlay(alignment: .top) {
             CardTop(tab: tab, close: close,
-                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, tall: isTall)
+                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, tall: isTall, space: space)
                 .clipShape(CardTop.shape(Self.cornerRadius))
                 .opacity(lineShown ? 1 : 0)
         }
@@ -482,6 +485,8 @@ struct CardTop: View {
     var lineHeight: CGFloat = Self.lineHeight
     /// The pill and round X show on a tall card; a slim row is the line alone.
     var tall = true
+    /// The space's color, which tints the pill as it tints the slim rows' haze.
+    var space = "glacier"
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -548,7 +553,7 @@ struct CardTop: View {
         .padding(.leading, (Self.glassHeight - 22) / 2)
         .padding(.trailing, 14)
         .frame(minHeight: Self.glassHeight)
-        .modifier(GlassOrFrame(shape: .capsule, solid: reduceTransparency))
+        .modifier(Frost(shape: .capsule, space: space, solid: reduceTransparency))
         // Taps on the pill open the card; only the X is its own.
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -559,7 +564,7 @@ struct CardTop: View {
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(labelStyle)
             .frame(width: Self.glassHeight, height: Self.glassHeight)
-            .modifier(GlassOrFrame(shape: .circle, solid: reduceTransparency))
+            .modifier(Frost(shape: .circle, space: space, solid: reduceTransparency))
             .frame(width: Self.tapSize, height: Self.tapSize)
             .contentShape(.circle)
         if let close {
@@ -571,11 +576,9 @@ struct CardTop: View {
         }
     }
 
-    /// On glass the system's primary label, which follows the glass as it
-    /// turns light or dark over the page; on the solid frame, ink.
-    private var labelStyle: AnyShapeStyle {
-        reduceTransparency ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(.primary)
-    }
+    /// Ink, as on a slim row: the frost keeps the system's light or dark
+    /// whatever page is behind it.
+    private var labelStyle: Color { Theme.ink }
 
     // MARK: Slim row
 
@@ -616,16 +619,28 @@ struct CardTop: View {
     }
 }
 
-/// Apple's own Liquid Glass, or with Reduce Transparency on, the solid
-/// frame color (light #E9E3DA, dark #3A3734).
-private struct GlassOrFrame<S: Shape>: ViewModifier {
+/// The slim rows' frost, carried over a page: the same glass on a fixed
+/// veil of the frame's color and the space's tint, so it never turns dark
+/// or liquid over the page (David, 2026-11-05: one kind of glass, not
+/// three). With Reduce Transparency on, the solid frame color (light
+/// #E9E3DA, dark #3A3734).
+private struct Frost<S: Shape>: ViewModifier {
     let shape: S
+    let space: String
     let solid: Bool
     func body(content: Content) -> some View {
         if solid {
             content.background(Theme.frame, in: shape)
         } else {
-            content.glassEffect(.regular, in: shape)
+            content
+                .background {
+                    ZStack {
+                        Theme.cardPillVeil
+                        Theme.frameTint(space)
+                    }
+                    .clipShape(shape)
+                }
+                .glassEffect(.regular, in: shape)
         }
     }
 }

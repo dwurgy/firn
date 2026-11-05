@@ -39,6 +39,9 @@ struct BrowserScreen: View {
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
     @State private var pull: Pull?
+    /// True while a finger is on the bar's drag; iOS resets it when the
+    /// drag is cancelled too, which `onEnded` never hears about.
+    @GestureState private var dragging = false
     /// The bar's buttons stay still from a pull's start until just after
     /// the finger lifts (the button would see the lift as a tap).
     @State private var barQuiet = false
@@ -236,9 +239,23 @@ struct BrowserScreen: View {
             // in Safari. Alongside the bar's own buttons, so a tap still taps.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 6, coordinateSpace: .global)
+                    .updating($dragging) { _, state, _ in state = true }
                     .onChanged(pullMoved)
-                    .onEnded(pullEnded)
+                    .onEnded { pullEnded(translation: $0.translation, velocity: $0.velocity) }
             )
+            .onChange(of: dragging) { _, now in
+                guard !now, pull != nil else { return }
+                // The drag stopped without ending: the system took the
+                // touch away (David's recording, 2026-11-04: the page's
+                // picture stayed parked over the screen, the bar gone,
+                // until the next swipe). A beat later, if no end came,
+                // let go where it is, with no speed.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(50))
+                    guard let pull else { return }
+                    pullEnded(translation: pull.translation, velocity: .zero)
+                }
+            }
             // The bar rises with the keyboard only for typing an address; a
             // page's own fields leave it resting behind the keyboard, as in
             // Safari.
@@ -573,11 +590,11 @@ struct BrowserScreen: View {
     /// Let go: pulled far enough or flicked up, it lands in its card;
     /// otherwise (or flicked down) it goes back to being the page. Either
     /// way it starts at the finger's speed.
-    private func pullEnded(_ drag: DragGesture.Value) {
+    private func pullEnded(translation: CGSize, velocity: CGSize) {
         guard var pull else { return }
-        pull.translation = drag.translation
+        pull.translation = translation
         self.pull = nil
-        let up = -drag.velocity.height
+        let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
         let toTabs = !pull.sideways && (flickedUp || (lift(pull) > 0.22 && up > -300))
         Task {
@@ -590,15 +607,15 @@ struct BrowserScreen: View {
             }
             // A tab beside it nearer the middle (or flicked toward) opens;
             // a flick up still goes to the overview.
-            if !flickedUp, let neighbor = neighborChosen(drag.velocity) {
-                return open(neighbor, carrying: drag.velocity)
+            if !flickedUp, let neighbor = neighborChosen(velocity) {
+                return open(neighbor, carrying: velocity)
             }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
-                land(inCardOf: pull.tab, curve: carrying(drag.velocity, to: spot))
+                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot))
             } else {
                 let page = pageBox(for: standIn!)
-                land(onPage: pull.tab, curve: carrying(drag.velocity, to: page), switching: false)
+                land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)
             }
         }
     }

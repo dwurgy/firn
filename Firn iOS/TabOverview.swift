@@ -1,3 +1,4 @@
+import CoreImage
 import FirnCore
 import SwiftUI
 
@@ -209,16 +210,22 @@ private struct OverviewHaze: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .task(id: picture.map(ObjectIdentifier.init)) {
-            haze = picture.flatMap(Self.blurred)
+            guard let source = picture?.cgImage else { return haze = nil }
+            let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
+            guard !Task.isCancelled else { return }
+            haze = made.map { UIImage(cgImage: $0) }
         }
     }
 
-    /// The picture shrunk to 24 pixels wide, halving step by step so
-    /// every part of the page counts, then enlarged by doubling, step by
-    /// step, to 384: each step smooths the last, so no grid of the small
-    /// pixels shows once SwiftUI stretches it the little rest of the way.
-    private static func blurred(_ picture: UIImage) -> UIImage? {
-        guard var image = picture.cgImage else { return nil }
+    /// The picture shrunk to 6 pixels wide, halving step by step so every
+    /// part of the page counts: only blobs of the page's colors are left,
+    /// no lines of text (24 kept them; David, 2026-11-04). Enlarged to 128
+    /// and softened once (a Gaussian about half a small pixel wide), so
+    /// the seams between the small pixels melt into round blobs; SwiftUI
+    /// stretches that smooth image the rest of the way. Made once, off
+    /// the main thread; never a live blur.
+    private nonisolated static func blurred(_ picture: CGImage) -> CGImage? {
+        var image = picture
         let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
         func resized(_ image: CGImage, width: Int) -> CGImage? {
             let height = max(Int((CGFloat(width) * aspect).rounded()), 1)
@@ -231,15 +238,18 @@ private struct OverviewHaze: View {
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
             return context.makeImage()
         }
-        let tiny = 24
+        let tiny = 6, wide = 128
         while image.width / 2 >= tiny, let half = resized(image, width: image.width / 2) {
             image = half
         }
-        guard var soft = resized(image, width: tiny) else { return nil }
-        while soft.width < tiny * 16, let double = resized(soft, width: soft.width * 2) {
-            soft = double
-        }
-        return UIImage(cgImage: soft)
+        guard let small = resized(image, width: tiny),
+              let enlarged = resized(small, width: wide) else { return nil }
+        let extent = CGRect(x: 0, y: 0, width: enlarged.width, height: enlarged.height)
+        let soft = CIImage(cgImage: enlarged)
+            .clampedToExtent()
+            .applyingGaussianBlur(sigma: Double(wide / tiny) / 2)
+            .cropped(to: extent)
+        return CIContext(options: [.cacheIntermediates: false]).createCGImage(soft, from: extent)
     }
 }
 

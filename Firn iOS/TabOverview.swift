@@ -531,8 +531,10 @@ struct CardTop: View {
         }
     }
 
-    /// The picture's top, gently blurred and fading out below the line,
-    /// under a light wash of page color, so the picture keeps its height.
+    /// The picture's top, blurred enough that a page's words turn to soft
+    /// color, fading out below the line, under a light wash of page color
+    /// (50% to nothing, so a dark page in light mode hazes rather than
+    /// turning to a gray bar), so the picture keeps its height.
     /// The title reads because of its halo, not a heavy veil (David,
     /// 2026-11-05: 82% wash and blur 18 read but felt too solid). One fixed
     /// level for every page (honest, like the Mac).
@@ -547,7 +549,7 @@ struct CardTop: View {
                         // Cut to the strip before blurring, so only it blurs.
                         .frame(width: box.size.width, height: box.size.height, alignment: .top)
                         .clipped()
-                        .blur(radius: 10, opaque: true)
+                        .blur(radius: 18, opaque: true)
                 }
                 .mask {
                     LinearGradient(stops: [.init(color: .black, location: 0),
@@ -556,8 +558,8 @@ struct CardTop: View {
                                    startPoint: .top, endPoint: .bottom)
                 }
             }
-            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
-                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
+            LinearGradient(stops: [.init(color: Theme.page.opacity(0.5), location: 0),
+                                   .init(color: Theme.page.opacity(0.3), location: 0.5),
                                    .init(color: Theme.page.opacity(0), location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }

@@ -88,7 +88,10 @@ struct TabOverview: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, newTab: newTab, done: done)
-                    .opacity(typing ? 0 : arrival)
+                    // In over the glide's second half, once the page's bar
+                    // is gone (see BrowserScreen's bar), never both at once;
+                    // a hair above 0 while gliding keeps its glass ready.
+                    .opacity(typing ? 0 : max(gliding != nil ? 0.002 : 0, arrival * 2 - 1))
             }
             .onAppear {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }

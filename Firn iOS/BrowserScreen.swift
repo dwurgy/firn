@@ -148,8 +148,12 @@ struct BrowserScreen: View {
 
             bar
                 // Over the overview, the bar shows only while typing from +.
-                // It fades as the page is pulled away from it.
-                .opacity(editing ? 1 : max(0, 1 - arrival * 2))
+                // It fades out over the first half of the glide, before the
+                // overview's bar fades in, so the two never overlap. During
+                // a glide it stays a hair above 0: at 0 iOS lets its glass
+                // go, and setting the glass up again froze a frame partway
+                // back to the page (David's recording, 2026-11-04).
+                .opacity(editing ? 1 : max(gliding != nil ? 0.002 : 0, 1 - arrival * 2))
                 .allowsHitTesting(barShown)
                 .accessibilityHidden(!barShown)
         }

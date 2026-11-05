@@ -495,10 +495,11 @@ struct CardTop: View {
             HStack(spacing: 12) {
                 SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
                 Text(tab.title)
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .modifier(Halo(on: veiled))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.leading, 14)
@@ -513,15 +514,11 @@ struct CardTop: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
 
-    /// How much page color lies over the blurred picture behind the line.
-    private static let wash = 0.82
-    /// The part of the veil the line covers, solid; below it, it fades.
-    private static let lineShare = lineHeight / veilHeight
-
     @ViewBuilder private var xMark: some View {
         let mark = Image(systemName: "xmark")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.muted)
+            .modifier(Halo(on: veiled))
             .frame(width: 44, height: lineHeight)
             .contentShape(.rect)
             .padding(.trailing, 2)
@@ -534,11 +531,11 @@ struct CardTop: View {
         }
     }
 
-    /// The picture's top, blurred and fading out below the line, with a
-    /// wash of page color so the title always reads. One fixed level for
-    /// every page (honest, like the Mac): solid enough through the whole
-    /// line that a page's own words never sit under the title, and blurred
-    /// enough that they turn to soft color, then fading out below it.
+    /// The picture's top, gently blurred and fading out below the line,
+    /// under a light wash of page color, so the picture keeps its height.
+    /// The title reads because of its halo, not a heavy veil (David,
+    /// 2026-11-05: 82% wash and blur 18 read but felt too solid). One fixed
+    /// level for every page (honest, like the Mac).
     private var veil: some View {
         ZStack(alignment: .top) {
             if let picture, picture.size.width > 0 {
@@ -550,17 +547,17 @@ struct CardTop: View {
                         // Cut to the strip before blurring, so only it blurs.
                         .frame(width: box.size.width, height: box.size.height, alignment: .top)
                         .clipped()
-                        .blur(radius: 18, opaque: true)
+                        .blur(radius: 10, opaque: true)
                 }
                 .mask {
                     LinearGradient(stops: [.init(color: .black, location: 0),
-                                           .init(color: .black, location: Self.lineShare),
+                                           .init(color: .black, location: 0.45),
                                            .init(color: .clear, location: 1)],
                                    startPoint: .top, endPoint: .bottom)
                 }
             }
-            LinearGradient(stops: [.init(color: Theme.page.opacity(Self.wash), location: 0),
-                                   .init(color: Theme.page.opacity(Self.wash), location: Self.lineShare),
+            LinearGradient(stops: [.init(color: Theme.page.opacity(0.78), location: 0),
+                                   .init(color: Theme.page.opacity(0.5), location: 0.5),
                                    .init(color: Theme.page.opacity(0), location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }
@@ -568,6 +565,20 @@ struct CardTop: View {
         .opacity(veiled ? 1 : 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// A soft glow of page color hugging each letter, so ink reads over a
+/// blurred page without a box behind it (as the Lock Screen's clock reads
+/// over any wallpaper). A tight ring clears the letters' edges; a wider,
+/// fainter one quiets what's around them. Fixed, never adapting to the page.
+/// Only on a card: on a slim row's glass it reads as a smudge.
+private struct Halo: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: Theme.page.opacity(on ? 0.9 : 0), radius: 1.5)
+            .shadow(color: Theme.page.opacity(on ? 0.7 : 0), radius: 5)
     }
 }
 

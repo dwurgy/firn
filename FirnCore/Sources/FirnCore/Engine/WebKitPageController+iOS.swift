@@ -13,6 +13,13 @@ extension WebKitPageController {
         guard url != nil, loadError == nil else { return nil }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(width))
+        // The page below the status bar only: the strip behind the clock
+        // (its covered top) stays out of the picture, as the glide expects.
+        let bounds = webView.bounds
+        let top = min(webView.obscuredContentInsets.top, bounds.height)
+        if top > 0 {
+            configuration.rect = CGRect(x: 0, y: top, width: bounds.width, height: bounds.height - top)
+        }
         let image = try? await webView.takeSnapshot(configuration: configuration)
         return image?.cgImage
     }

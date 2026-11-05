@@ -35,18 +35,9 @@ public struct PageView: UIViewControllerRepresentable {
     }
 }
 
-/// Holds a page's web view. The page starts below the status bar (see
-/// `PageFrame`) and runs down to the screen's bottom edge, and WebKit keeps
-/// it clear of Firn's bar through the safe area, its own way: an ordinary
-/// page scrolls its end clear, and a page that asks to fill the screen
-/// (`viewport-fit=cover`) gets the room as `env(safe-area-inset-bottom)`
-/// and makes it itself.
-///
-/// Not `obscuredContentInsets`: setting it switches WebKit's own safe-area
-/// handling off, and a page that fills the screen, saved while Firn was in
-/// the background, then came back 62pt down with its top row under the
-/// status bar, out of reach (David's recording on firnbrowser.com,
-/// 2026-11-04; the hunt is in `docs/IOS-PLAN.md`).
+/// Holds a page's web view, which fills the whole screen, as Safari's does:
+/// under the status bar (where iOS's soft blur shows once it's scrolled) and
+/// under Firn's bar. `PageFrame` tells WebKit which edges are covered.
 public final class PageHolder: UIViewController {
     let webView: WKWebView
 
@@ -80,20 +71,13 @@ public final class PageHolder: UIViewController {
         updateBarInset()
     }
 
-    /// The bar's room beyond what the screen already keeps safe at the
-    /// bottom (the home indicator's); adding it changes the safe area
-    /// again, so it's set only when the number changes. Measured against
-    /// the screen here: SwiftUI reported the page's bottom edge at the home
-    /// indicator rather than the screen's edge, so a long page's end rested
-    /// 34pt behind the bar (phase 2, step 1's Known).
+    /// The bar's room, from the screen's bottom edge up to the bar's top.
+    /// Measured against the screen: SwiftUI reported the page's bottom edge
+    /// at the home indicator rather than the screen's edge, so a long page's
+    /// end rested 34pt behind the bar (phase 2, step 1's Known).
     private func updateBarInset() {
-        guard let screen = view.window?.bounds else { return }
-        let covered = barTop > 0 ? max(screen.maxY - barTop, 0) : 0
-        let screenBottom = view.safeAreaInsets.bottom - additionalSafeAreaInsets.bottom
-        let extra = max(covered - screenBottom, 0)
-        if additionalSafeAreaInsets.bottom != extra {
-            additionalSafeAreaInsets.bottom = extra
-        }
+        guard let screen = view.window?.bounds, let frame = view as? PageFrame else { return }
+        frame.barRoom = barTop > 0 ? max(screen.maxY - barTop, 0) : 0
     }
 }
 
@@ -101,13 +85,18 @@ public final class PageHolder: UIViewController {
 /// view at 0×0 first, and every size change makes WebKit lay the whole page
 /// out again.
 ///
-/// The page starts just below the status bar, as in Safari before iOS 26,
-/// and runs down under Firn's bar. Under the status bar, a page's bar
-/// pinned to its top (apple.com's, firnbrowser.com's menu) slid up behind
-/// the clock (David's recordings, 2026-11-04): WebKit pins such bars to the
-/// top of the web view, not below the safe area. The strip behind the
-/// status bar takes the page's own color (its theme color, else its
-/// background), so the page still seems to reach the top.
+/// The page runs under the status bar and Firn's bar, as in Safari on iOS
+/// 26, and WebKit is told both are covered in two places, which must agree:
+/// `obscuredContentInsets` (so a bar a site pins to its top, like
+/// apple.com's, sits below the clock, and fixed footers sit above Firn's
+/// bar) and the scroll view's own `contentInset` (so the page's top and end
+/// can be scrolled clear of them). With only the first, a new page opened
+/// 62pt down but a restored one, or one pulled back to the top, stopped at 0
+/// with its top row under the clock (firnbrowser.com's menu, 2026-11-04;
+/// measured in `docs/IOS-PLAN.md`, step 3c.3). Under the clock the page
+/// slides beneath iOS's own soft edge blur. Behind the page, the frame takes
+/// the page's own color (its theme color, else its background) for the
+/// moment before it draws.
 private final class PageFrame: UIView {
     let webView: WKWebView
     private var colorWatchers: [NSKeyValueObservation] = []
@@ -143,13 +132,27 @@ private final class PageFrame: UIView {
         setNeedsLayout()
     }
 
+    /// Firn's bar's room from the screen's bottom edge; 0 for no bar.
+    var barRoom: CGFloat = 0 {
+        didSet { if barRoom != oldValue { setNeedsLayout() } }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let top = min(safeAreaInsets.top, bounds.height)
-        let frame = CGRect(x: 0, y: top, width: bounds.width, height: bounds.height - top)
         // Only on a real change: each new frame lays the page out again.
-        if webView.frame != frame { webView.frame = frame }
+        if webView.frame != bounds { webView.frame = bounds }
+        let top = min(safeAreaInsets.top, bounds.height)
+        let covered = UIEdgeInsets(top: top, left: 0, bottom: barRoom, right: 0)
+        if webView.obscuredContentInsets != covered {
+            webView.obscuredContentInsets = covered
+        }
+        let scroller = webView.scrollView
+        if scroller.contentInset != covered {
+            scroller.contentInset = covered
+            scroller.verticalScrollIndicatorInsets = covered
+        }
+        scroller.topEdgeEffect.style = .soft
     }
 }
 #endif

@@ -213,9 +213,10 @@ private struct OverviewHaze: View {
         }
     }
 
-    /// The picture shrunk to 8 pixels wide, halving step by step so
-    /// every part of the page counts, then enlarged once to 8 times that
-    /// with smooth interpolation; SwiftUI stretches that the rest of the way.
+    /// The picture shrunk to 24 pixels wide, halving step by step so
+    /// every part of the page counts, then enlarged by doubling, step by
+    /// step, to 384: each step smooths the last, so no grid of the small
+    /// pixels shows once SwiftUI stretches it the little rest of the way.
     private static func blurred(_ picture: UIImage) -> UIImage? {
         guard var image = picture.cgImage else { return nil }
         let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
@@ -230,12 +231,14 @@ private struct OverviewHaze: View {
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
             return context.makeImage()
         }
-        let tiny = 8
+        let tiny = 24
         while image.width / 2 >= tiny, let half = resized(image, width: image.width / 2) {
             image = half
         }
-        guard let small = resized(image, width: tiny),
-              let soft = resized(small, width: tiny * 8) else { return nil }
+        guard var soft = resized(image, width: tiny) else { return nil }
+        while soft.width < tiny * 16, let double = resized(soft, width: soft.width * 2) {
+            soft = double
+        }
         return UIImage(cgImage: soft)
     }
 }

@@ -46,10 +46,18 @@ struct TabOverview: View {
     /// Every tab a slim row (pinched together), or cards for tabs looked
     /// at in the last day (pinched apart). Remembered across restarts.
     @AppStorage("overviewSlimRows") private var slimRows = false
-    /// What the list shows, set from `slimRows` as the overview opens.
-    /// Saved settings change outside any animation, so the list reads this
-    /// copy, which glides.
-    @State private var slim = UserDefaults.standard.bool(forKey: "overviewSlimRows")
+    /// What the list shows: 0 every tab a slim row, 1 cards, and anything
+    /// between while a pinch moves. Set from `slimRows` as the overview
+    /// opens; saved settings change outside any animation, so the list
+    /// reads this copy, which follows the fingers and glides.
+    @State private var cards: CGFloat = UserDefaults.standard.bool(forKey: "overviewSlimRows") ? 0 : 1
+    private var slim: Bool { cards < 0.5 }
+    /// Where a pinch began (`cards` then), and the tab held in place under
+    /// the fingers with its anchor in the list (see `anchor(at:)`).
+    @State private var pinchFrom: CGFloat?
+    @State private var pinchHold: (id: UUID, anchor: UnitPoint)?
+    /// The list fades out and back in around a switch with Reduce Motion.
+    @State private var listFade: Double = 1
     /// "Now" and each tab's last-viewed time, taken as the overview opens,
     /// so nothing changes size while it's open (picking a tab marks it
     /// viewed, which would grow its row into a card behind the glide).
@@ -64,11 +72,13 @@ struct TabOverview: View {
     /// How long a tab stays a tall card after it was last looked at.
     private static let cardAge: TimeInterval = 24 * 60 * 60
 
-    private func isTall(_ tab: FirnCore.Tab, onScreen: Bool) -> Bool {
-        if onScreen { return true }
-        if slim { return false }
+    /// How tall a tab's tile is, 0 (slim row) to 1 (card): the tab on
+    /// screen is always a card, tabs looked at in the last day follow the
+    /// pinch, and older tabs stay rows.
+    private func tallness(_ tab: FirnCore.Tab, onScreen: Bool) -> CGFloat {
+        if onScreen { return 1 }
         let viewed = lastViewed[tab.id] ?? tab.lastActiveAt
-        return openedAt.timeIntervalSince(viewed) < Self.cardAge
+        return openedAt.timeIntervalSince(viewed) < Self.cardAge ? cards : 0
     }
 
     var body: some View {
@@ -81,11 +91,11 @@ struct TabOverview: View {
                 LazyVStack(spacing: 12) {
                     ForEach(store.openTabs) { tab in
                         let onScreen = tab.id == (heldCard ?? store.activeTab?.id)
-                        let tall = isTall(tab, onScreen: onScreen)
+                        let tall = tallness(tab, onScreen: onScreen)
                         OverviewRow(
                             tab: tab,
                             isOnScreen: onScreen,
-                            isTall: tall,
+                            tallness: tall,
                             picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
                             loadPicture: { await pictures.loadImage(for: tab.id) },
                             ring: Theme.spaceColor(space),
@@ -95,7 +105,7 @@ struct TabOverview: View {
                             close: { if !pinchedRecently { close(tab) } },
                             spot: { frame in
                                 spots.frames[tab.id] = frame
-                                if tall { spots.cards.insert(tab.id) } else { spots.cards.remove(tab.id) }
+                                if tall == 1 { spots.cards.insert(tab.id) } else { spots.cards.remove(tab.id) }
                             }
                         )
                         .opacity(gliding == tab.id ? 0 : 1)
@@ -104,23 +114,28 @@ struct TabOverview: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .opacity(listFade)
             }
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             // Pinch together for slim rows, apart for cards, as a photo
-            // grid zooms; the tab on screen stays put while rows resize.
+            // grid zooms. The list follows the fingers, the tab under them
+            // held in place while the rest reflows; let go past halfway and
+            // it finishes, short of it and it glides back.
             .simultaneousGesture(
                 MagnifyGesture(minimumScaleDelta: 0.02)
-                    .onChanged { _ in lastPinch = .now }
+                    .onChanged { m in
+                        lastPinch = .now
+                        pinchMoved(m, scroller)
+                    }
                     .onEnded { m in
                         lastPinch = .now
-                        let scale = m.magnification
-                        if scale < 0.85, !slim { setSlim(true, scroller) }
-                        else if scale > 1.15, slim { setSlim(false, scroller) }
+                        pinchEnded(m, scroller)
                     }
             )
             .sensoryFeedback(.selection, trigger: slim)
             // Pinching can't be found by VoiceOver: the same choice as an action.
             .accessibilityAction(named: slim ? "Show Cards" : "Show Rows") {
-                setSlim(!slim, scroller)
+                setCards(slim ? 1 : 0, scroller)
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -158,14 +173,76 @@ struct TabOverview: View {
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
     }
 
-    /// Switches between slim rows and cards: the rows glide to their new
-    /// sizes with the tab on screen held in the middle; a short ease with
-    /// Reduce Motion.
-    private func setSlim(_ slim: Bool, _ scroller: ScrollViewProxy) {
-        slimRows = slim
-        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3)) {
-            self.slim = slim
-            if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
+    /// How far a pinch moves the list: 1.6 times apart (or 1/1.6 together)
+    /// is the whole way from rows to cards.
+    private static let pinchSpan = log(1.6)
+
+    private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
+        if pinchFrom == nil {
+            pinchFrom = cards
+            pinchHold = anchor(at: m.startLocation)
+        }
+        // With Reduce Motion nothing follows; the switch fades on letting go.
+        guard !reduceMotion, let from = pinchFrom else { return }
+        let to = min(max(from + log(max(m.magnification, 0.01)) / Self.pinchSpan, 0), 1)
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) {
+            cards = to
+            if let hold = pinchHold { scroller.scrollTo(hold.id, anchor: hold.anchor) }
+        }
+    }
+
+    private func pinchEnded(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
+        defer { pinchFrom = nil; pinchHold = nil }
+        let from = pinchFrom ?? cards
+        let to = min(max(from + log(max(m.magnification, 0.01)) / Self.pinchSpan, 0), 1)
+        // Past halfway it finishes; short of it, back where it began.
+        let target: CGFloat = abs(to - from) >= 0.5 ? (from < 0.5 ? 1 : 0) : (from < 0.5 ? 0 : 1)
+        setCards(target, scroller, hold: pinchHold)
+    }
+
+    /// The tab under a point in the list (the nearest if it's between
+    /// tabs), and the anchor that keeps it where it is: the point at the
+    /// same fraction of its tile and of the list's height, so scrolling to
+    /// it leaves it in place now and holds it there as tiles resize.
+    private func anchor(at point: CGPoint) -> (id: UUID, anchor: UnitPoint)? {
+        let view = spots.viewport
+        guard view.height > 0 else { return nil }
+        let y = view.minY + point.y
+        let shown = store.openTabs.compactMap { tab in spots.frames[tab.id].map { (tab.id, $0) } }
+            .filter { $0.1.maxY > view.minY && $0.1.minY < view.maxY }
+        guard let (id, frame) = shown.min(by: { distance(y, $0.1) < distance(y, $1.1) }) else { return nil }
+        let top = frame.minY - view.minY
+        let room = view.height - frame.height
+        let fraction = room > 0 ? min(max(top / room, 0), 1) : 0.5
+        return (id, UnitPoint(x: 0.5, y: fraction))
+    }
+
+    private func distance(_ y: CGFloat, _ frame: CGRect) -> CGFloat {
+        y < frame.minY ? frame.minY - y : (y > frame.maxY ? y - frame.maxY : 0)
+    }
+
+    /// Switches between slim rows and cards: every row's glass glides into
+    /// its card's pill (0.3s, ease-out, no bounce), the held tab staying in
+    /// place, or the tab on screen held in the middle (VoiceOver's action).
+    /// With Reduce Motion, the list fades out, changes, and fades back in.
+    private func setCards(_ target: CGFloat, _ scroller: ScrollViewProxy,
+                          hold: (id: UUID, anchor: UnitPoint)? = nil) {
+        slimRows = target < 0.5
+        let held = hold ?? store.activeTab.map { ($0.id, UnitPoint.center) }
+        if reduceMotion {
+            guard cards != target else { return }
+            withAnimation(.easeOut(duration: 0.15)) { listFade = 0 } completion: {
+                cards = target
+                if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
+                withAnimation(.easeOut(duration: 0.15)) { listFade = 1 }
+            }
+            return
+        }
+        withAnimation(.easeOut(duration: 0.3)) {
+            cards = target
+            if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
         }
     }
 
@@ -193,6 +270,8 @@ struct TabOverview: View {
 /// glide reads it, so scrolling redraws nothing else.
 @MainActor final class OverviewSpots {
     var frames: [UUID: CGRect] = [:]
+    /// The list's own frame, to find the tab under a pinch.
+    var viewport: CGRect = .zero
     /// The tabs shown as tall cards (the rest are slim rows): a card's
     /// title line rides on its picture as the page grows out of it.
     var cards: Set<UUID> = []
@@ -329,9 +408,9 @@ private struct OverviewHaze: View {
 struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
-    /// A tall card with the page's picture (the tab on screen, and tabs
-    /// looked at in the last day), else a slim row.
-    let isTall: Bool
+    /// 1 a tall card with the page's picture (the tab on screen, and tabs
+    /// looked at in the last day), 0 a slim row, between while a pinch moves.
+    let tallness: CGFloat
     /// The page's picture, for a tall card, if it's in memory.
     let picture: UIImage?
     /// Reads the picture from disk when a card comes into view without one.
@@ -354,6 +433,7 @@ struct OverviewRow: View {
     @State private var leaving = false
 
     private var site: String { WebAddress.site(of: tab.url) }
+    private var t: CGFloat { min(max(tallness, 0), 1) }
     static let cornerRadius: CGFloat = 14
     private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     /// The top of the page, a glance rather than a screenshot: a fixed
@@ -374,37 +454,32 @@ struct OverviewRow: View {
 
     /// A slim row is one line on glass; a tall card is the same line on its
     /// page's picture. One view for both, so a pinch glides between them:
-    /// the line stays put, the tile grows or shrinks under it, and the
-    /// picture fades in or out over the glass. The tab on screen is ringed
+    /// the row's glass shrinks into the card's pill as the tile grows
+    /// around it, and the picture fades in behind. The tab on screen is ringed
     /// in the space's color just outside the card, with a soft glow of it,
     /// as the Mac's ⌃Tab switcher marks its pick, so it reads at a glance.
     private var tile: some View {
         Button(action: open) {
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: isTall ? Self.cardHeight : Self.rowHeight)
+                .frame(height: Self.rowHeight + (Self.cardHeight - Self.rowHeight) * t)
                 .contentShape(Self.shape)
         }
         .buttonStyle(.plain)
         .background {
-            // The glass stays under the picture rather than fading itself:
-            // iOS rebuilds glass that has faded to nothing, a frozen frame.
-            ZStack(alignment: .top) {
-                Color.clear.glassEffect(.regular, in: Self.shape)
-                Theme.page
-                    .overlay(alignment: .top) { pictureView }
-                    .clipShape(Self.shape)
-                    .opacity(isTall ? 1 : 0)
-            }
+            // The page fades in behind the glass as the card grows; the
+            // row's glass itself is the line's (it becomes the pill).
+            Theme.page
+                .overlay(alignment: .top) { pictureView }
+                .clipShape(Self.shape)
+                .opacity(t)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
         .accessibilityLabel(tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .overlay(alignment: .top) {
-            CardTop(tab: tab, close: close,
-                    lineHeight: isTall ? CardTop.lineHeight : Self.rowHeight, tall: isTall, space: space)
-                .clipShape(CardTop.shape(Self.cornerRadius))
+            CardTop(tab: tab, close: close, progress: t, space: space)
                 .opacity(lineShown ? 1 : 0)
         }
         .overlay {
@@ -417,7 +492,8 @@ struct OverviewRow: View {
         }
         // An older card's picture is read from disk once it's in view,
         // then fades in over the site's icon.
-        .task(id: isTall && picture == nil) { if isTall && picture == nil { await loadPicture() } }
+        // Read as soon as it starts to grow, so it can fade in mid-pinch.
+        .task(id: t > 0 && picture == nil) { if t > 0 && picture == nil { await loadPicture() } }
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
@@ -438,7 +514,7 @@ struct OverviewRow: View {
         } else {
             SiteIconView(icon: tab.icon, size: 40) { LetterMark(site: site) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, CardTop.lineHeight / 2)
+                .padding(.top, 22)  // half the card's title line
                 .accessibilityHidden(true)
         }
     }
@@ -469,178 +545,170 @@ struct OverviewRow: View {
     }
 }
 
-/// A card's top. On a tall card: the icon and title in a small capsule of
-/// Liquid Glass in the top-left corner, and the X its own round glass button
-/// in the top-right, over a picture that runs clean to the card's edges
-/// (David, 2026-11-05). The system glass keeps them readable on white, dark,
-/// and colorful pages by itself. On a slim row: the plain line on glass.
-/// Both are drawn and cross-fade, so a pinch glides between them. Drawn on
-/// the card, and on the page's picture as it glides into the card (there
-/// without a working X), so the two match when they swap.
+/// A tile's title line, from a slim row (0) to a tall card (1). A slim row
+/// and a card's pill are the same piece of glass (David, 2026-11-05): as the
+/// tile grows, the row's glass shrinks into the pill in the card's top-left
+/// corner, the icon and title slide with it as one piece, and the row's X
+/// moves to the top-right as its round glass forms around it. On a card the
+/// glass sits on a fixed veil of the frame's color and the space's tint, so
+/// it reads as the rows' frost over any page (one kind of glass, not three).
+/// Drawn on the card, and on the page's picture as it glides into the card
+/// (there at 1, without a working X), so the two match when they swap.
 struct CardTop: View {
     let tab: FirnCore.Tab
     /// Closes the tab; nil draws the X without one (on the gliding picture).
     var close: (() -> Void)?
-    /// The slim line's own height: a card's, or a slim row's while it glides.
-    var lineHeight: CGFloat = Self.lineHeight
-    /// The pill and round X show on a tall card; a slim row is the line alone.
-    var tall = true
+    /// 0 a slim row, 1 a tall card, anything between while a pinch moves.
+    var progress: CGFloat = 1
     /// The space's color, which tints the pill as it tints the slim rows' haze.
     var space = "glacier"
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    static let lineHeight: CGFloat = 44
-    /// The pill's and the round X's visible height, and how far in they sit.
-    private static let glassHeight: CGFloat = 38
-    private static let inset: CGFloat = 10
-    /// The X's tap area, larger than what shows.
-    private static let tapSize: CGFloat = 44
-    /// Room the card's top needs: the inset and the pill, and a little more.
-    private static let cardLineHeight: CGFloat = inset + glassHeight + 6
+    /// The title's own width on one line, so the pill is only as wide as
+    /// the icon and title.
+    @State private var titleWidth: CGFloat = 0
 
     /// Rounded at the top only, as the card's corners.
     static func shape(_ radius: CGFloat) -> UnevenRoundedRectangle {
         UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous)
     }
 
+    var body: some View {
+        CardLine(tab: tab, close: close, progress: progress, space: space,
+                 titleWidth: titleWidth, solid: reduceTransparency)
+            .background(alignment: .topLeading) {
+                Text(tab.title)
+                    .font(CardLine.titleFont)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .hidden()
+                    .onGeometryChange(for: CGFloat.self, of: \.size.width) { titleWidth = $0 }
+                    .accessibilityHidden(true)
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+}
+
+private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
+
+/// The line itself, laid out from `progress` alone so SwiftUI can glide it
+/// frame by frame (it's `Animatable`): every size and spot is a mix of the
+/// row's and the card's.
+private struct CardLine: View, Animatable {
+    let tab: FirnCore.Tab
+    let close: (() -> Void)?
+    var progress: CGFloat
+    let space: String
+    let titleWidth: CGFloat
+    /// Reduce Transparency: the card's frost becomes the solid frame color.
+    let solid: Bool
+
+    nonisolated var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    /// One weight for both sizes (the row's semibold), so the text can't jump.
+    static let titleFont = Font.subheadline.weight(.semibold)
+
+    // The row's measures, then the card's.
+    private static let rowHeight = OverviewRow.rowHeight          // 48
+    private static let glassHeight: CGFloat = 38                  // the pill and round X
+    private static let inset: CGFloat = 10                        // the pill's and X's distance in
+    private static let cardLineHeight: CGFloat = inset + glassHeight + 6
+    private static let tapSize: CGFloat = 44
+    /// Room on the card's right for the X and a gap before it.
+    private static let xRoom: CGFloat = 66
+
     private var site: String { WebAddress.site(of: tab.url) }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            slimLine
-                .opacity(tall ? 0 : 1)
-                .allowsHitTesting(!tall)
-                .accessibilityHidden(tall)
-            cardLine
-                // Never quite 0: iOS rebuilds glass that has faded to
-                // nothing, a frozen frame mid-pinch.
-                .opacity(tall ? 1 : 0.002)
-                .allowsHitTesting(tall)
-                .accessibilityHidden(!tall)
+        let t = min(max(progress, 0), 1)
+        GeometryReader { box in
+            let w = box.size.width
+            // The glass: the whole row, then the pill.
+            let pillWidth = min(max(w - Self.xRoom, 0), 8 + 22 + 7 + titleWidth + 14)
+            let glassWidth = mix(w, pillWidth, t)
+            let glassHeight = mix(Self.rowHeight, Self.glassHeight, t)
+            let glassShape = RoundedRectangle(cornerRadius: mix(OverviewRow.cornerRadius, Self.glassHeight / 2, t),
+                                              style: .continuous)
+            // The line's middle: the row's, then the pill's.
+            let middle = mix(Self.rowHeight / 2, Self.inset + Self.glassHeight / 2, t)
+            let titleX = mix(50, Self.inset + 8 + 22 + 7, t)
+            let titleRoom = max(mix(w - 96, pillWidth - 51, t), 0)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .frame(width: glassWidth, height: glassHeight)
+                    .background { veil(t).clipShape(glassShape) }
+                    .glassEffect(.regular, in: glassShape)
+                    .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
+                    .allowsHitTesting(false)
+                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
+                    .scaleEffect(mix(1, 22 / 24, t))
+                    .frame(width: 24, height: 24)
+                    .offset(x: mix(26, Self.inset + 8 + 11, t) - 12, y: middle - 12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                Text(tab.title)
+                    .font(Self.titleFont)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: titleRoom, height: 30, alignment: .leading)
+                    .offset(x: titleX, y: middle - 15)
+                    // Taps on the icon and title open the tile; only the X is its own.
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                closeButton(t)
+                    .offset(x: mix(w - 24, w - Self.inset - Self.glassHeight / 2, t) - Self.tapSize / 2,
+                            y: middle - Self.tapSize / 2)
+            }
         }
-        .frame(height: max(Self.cardLineHeight, lineHeight), alignment: .top)
+        .frame(height: mix(Self.rowHeight, Self.cardLineHeight, t), alignment: .top)
     }
 
-    // MARK: Tall card
-
-    private var cardLine: some View {
-        // The X's tap area is centered on its circle, so the row sits
-        // (tap − glass) / 2 higher to put both at 10pt from the top.
-        let slack = (Self.tapSize - Self.glassHeight) / 2
-        return HStack(spacing: 0) {
-            pill
-            Spacer(minLength: 8)
-            roundX
-        }
-        .padding(.top, Self.inset - slack)
-        .padding(.leading, Self.inset)
-        .padding(.trailing, Self.inset - slack)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-    }
-
-    /// Only as wide as the icon and title, up to just short of the X.
-    private var pill: some View {
-        HStack(spacing: 7) {
-            SiteIconView(icon: tab.icon, size: 22) { LetterMark(site: site) }
-            Text(tab.title)
-                .font(.system(.subheadline, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .foregroundStyle(labelStyle)
-        .padding(.leading, (Self.glassHeight - 22) / 2)
-        .padding(.trailing, 14)
-        .frame(minHeight: Self.glassHeight)
-        .modifier(Frost(shape: .capsule, space: space, solid: reduceTransparency))
-        // Taps on the pill open the card; only the X is its own.
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    @ViewBuilder private var roundX: some View {
-        let mark = Image(systemName: "xmark")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(labelStyle)
-            .frame(width: Self.glassHeight, height: Self.glassHeight)
-            .modifier(Frost(shape: .circle, space: space, solid: reduceTransparency))
-            .frame(width: Self.tapSize, height: Self.tapSize)
-            .contentShape(.circle)
-        if let close {
-            Button(action: close) { mark }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close tab")
+    /// Under the glass on a card, so it reads as the rows' frost over the
+    /// page; nothing on a row (the rows' own glass is over the haze).
+    @ViewBuilder private func veil(_ t: CGFloat) -> some View {
+        if solid {
+            Theme.frame.opacity(t)
         } else {
-            mark.accessibilityHidden(true)
+            ZStack {
+                Theme.cardPillVeil
+                Theme.frameTint(space)
+            }
+            .opacity(t)
         }
     }
 
-    /// Ink, as on a slim row: the frost keeps the system's light or dark
-    /// whatever page is behind it.
-    private var labelStyle: Color { Theme.ink }
-
-    // MARK: Slim row
-
-    private var slimLine: some View {
-        HStack(spacing: 12) {
-            SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-            Text(tab.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    /// The row's small X, moving to the card's corner as its round glass
+    /// forms around it. The glass is never quite 0: iOS rebuilds glass that
+    /// has faded to nothing, a frozen frame mid-pinch.
+    @ViewBuilder private func closeButton(_ t: CGFloat) -> some View {
+        let size = mix(28, Self.glassHeight, t)
+        let circle = Circle()
+        let formed = min(max((t - 0.3) / 0.7, 0), 1)
+        let mark = ZStack {
+            Color.clear
+                .frame(width: size, height: size)
+                .background { veil(1).clipShape(circle) }
+                .glassEffect(.regular, in: circle)
+                .opacity(max(formed, 0.002))
+            ZStack {
+                Image(systemName: "xmark").foregroundStyle(Theme.muted)
+                Image(systemName: "xmark").foregroundStyle(Theme.ink).opacity(t)
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .scaleEffect(mix(12 / 14, 1, t))
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 46)
-        .frame(height: lineHeight)
-        // Taps on the icon and title open the row; only the X is its own.
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .overlay(alignment: .trailing) { slimX }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-    }
-
-    @ViewBuilder private var slimX: some View {
-        let mark = Image(systemName: "xmark")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(Theme.muted)
-            .frame(width: 44, height: lineHeight)
-            .contentShape(.rect)
-            .padding(.trailing, 2)
+        .frame(width: Self.tapSize, height: Self.tapSize)
+        .contentShape(.circle)
         if let close {
             Button(action: close) { mark }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close \(tab.title)")
         } else {
-            mark.accessibilityHidden(true)
-        }
-    }
-}
-
-/// The slim rows' frost, carried over a page: the same glass on a fixed
-/// veil of the frame's color and the space's tint, so it never turns dark
-/// or liquid over the page (David, 2026-11-05: one kind of glass, not
-/// three). With Reduce Transparency on, the solid frame color (light
-/// #E9E3DA, dark #3A3734).
-private struct Frost<S: Shape>: ViewModifier {
-    let shape: S
-    let space: String
-    let solid: Bool
-    func body(content: Content) -> some View {
-        if solid {
-            content.background(Theme.frame, in: shape)
-        } else {
-            content
-                .background {
-                    ZStack {
-                        Theme.cardPillVeil
-                        Theme.frameTint(space)
-                    }
-                    .clipShape(shape)
-                }
-                .glassEffect(.regular, in: shape)
+            mark.allowsHitTesting(false).accessibilityHidden(true)
         }
     }
 }

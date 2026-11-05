@@ -25,6 +25,9 @@ struct BrowserScreen: View {
     /// swap with the page shows nothing.
     @State private var standInTop: CGColor?
     @State private var stripOpacity: Double = 1
+    /// The picture and its strip fading off a woken page. Its own value:
+    /// removing them inside an animation swapped in one frame.
+    @State private var standInFade: Double = 1
     /// The tab the picture is of, for the card's line riding on it.
     @State private var standInTab: FirnCore.Tab?
     /// Where the shown part of the picture sits on screen: the page's own
@@ -106,7 +109,7 @@ struct BrowserScreen: View {
                         .fill(Color(cgColor: standInTop))
                         .frame(height: pictures.topInset)
                         .frame(maxHeight: .infinity, alignment: .top)
-                        .opacity(stripOpacity)
+                        .opacity(stripOpacity * standInFade)
                         .ignoresSafeArea()
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -159,6 +162,7 @@ struct BrowserScreen: View {
                     }
                     .offset(x: -corner.x, y: -corner.y)
                 }
+                .opacity(standInFade)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -299,6 +303,7 @@ struct BrowserScreen: View {
         standInTop = tab.page?.topColor
         standInTab = tab
         standIn = image
+        standInFade = 1
         pageHidden = true
     }
 
@@ -399,20 +404,31 @@ struct BrowserScreen: View {
             heldCard = nil
             lineShown = true
             standInTab = nil
-            guard switching else {
+            guard switching, let waiting = self.standIn else {
                 self.standIn = nil
                 return
             }
             Task {
-                // A tab that was asleep (or shown again) draws nothing
-                // until its page comes: the picture stays until then
-                // (1.5s at most), then fades off it.
-                for _ in 0..<30 {
-                    if let page = store.activeTab?.page, page.url != nil,
-                       !page.isLoading || page.progress > 0.5 { break }
+                // A tab that was asleep (or shown again) gets a new web
+                // view, which is plain white until WebKit first draws, in
+                // dark mode too. The picture stays until the page has
+                // finished loading (2.5s at most), then two frames more for
+                // the drawing to reach the screen, then fades off it.
+                // Leaving once the page was half loaded showed about three
+                // white frames before a dark page (found 2026-11-04).
+                for _ in 0..<50 {
+                    if let page = store.activeTab?.page, page.url != nil, !page.isLoading { break }
                     try? await Task.sleep(for: .milliseconds(50))
                 }
-                withAnimation(Self.fade) { self.standIn = nil }
+                try? await Task.sleep(for: .milliseconds(34))
+                // A new glide may have started meanwhile, with its own picture.
+                guard self.standIn === waiting, gliding == nil else { return }
+                withAnimation(Self.fade) { standInFade = 0 } completion: {
+                    guard self.standIn === waiting, gliding == nil else { return }
+                    self.standIn = nil
+                    standInTop = nil
+                    standInFade = 1
+                }
             }
         }
     }
@@ -640,8 +656,10 @@ struct BrowserScreen: View {
         standIn = image
         standInTab = neighbor.tab
         // The strip keeps its color until the glide, then fades to the new
-        // tab's (an asleep tab has none yet: it keeps the old one).
-        let newTop = neighbor.tab.page?.topColor
+        // tab's. A page asleep or still loading keeps the old one: before
+        // it has drawn, its color is black (found 2026-11-04), and the
+        // page's own strip takes over as the picture fades.
+        let newTop = neighbor.tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor }
         Task {
             // One frame in its new role before the glide, so it starts
             // where it is.

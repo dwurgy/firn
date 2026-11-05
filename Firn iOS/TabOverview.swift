@@ -47,15 +47,14 @@ struct TabOverview: View {
     /// at in the last day (pinched apart). Remembered across restarts.
     @AppStorage("overviewSlimRows") private var slimRows = false
     /// What the list shows: 0 every tab a slim row, 1 cards, and anything
-    /// between while a pinch moves. Set from `slimRows` as the overview
-    /// opens; saved settings change outside any animation, so the list
-    /// reads this copy, which follows the fingers and glides.
+    /// between while it glides. Set from `slimRows` as the overview opens;
+    /// saved settings change outside any animation, so the list reads this
+    /// copy, which glides.
     @State private var cards: CGFloat = UserDefaults.standard.bool(forKey: "overviewSlimRows") ? 0 : 1
     private var slim: Bool { cards < 0.5 }
-    /// Where a pinch began (`cards` then), and the tab held in place under
-    /// the fingers with its anchor in the list (see `anchor(at:)`).
-    @State private var pinchFrom: CGFloat?
-    @State private var pinchHold: (id: UUID, anchor: UnitPoint)?
+    /// Set once a pinch has switched the list, so the rest of that pinch
+    /// does nothing more.
+    @State private var pinchDone = false
     /// The list fades out and back in around a switch with Reduce Motion.
     @State private var listFade: Double = 1
     /// "Now" and each tab's last-viewed time, taken as the overview opens,
@@ -118,18 +117,20 @@ struct TabOverview: View {
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             // Pinch together for slim rows, apart for cards, as a photo
-            // grid zooms. The list follows the fingers, the tab under them
-            // held in place while the rest reflows; let go past halfway and
-            // it finishes, short of it and it glides back.
+            // grid zooms. Once the pinch clearly goes one way, the whole
+            // change runs as one glide, the tab under the fingers held in
+            // place. (Following the fingers was tried, 2026-11-05: a slow
+            // pinch reports in steps and every step re-lays out the list,
+            // 15 to 20 frames a second on David's iPhone.)
             .simultaneousGesture(
                 MagnifyGesture(minimumScaleDelta: 0.02)
                     .onChanged { m in
                         lastPinch = .now
                         pinchMoved(m, scroller)
                     }
-                    .onEnded { m in
+                    .onEnded { _ in
                         lastPinch = .now
-                        pinchEnded(m, scroller)
+                        pinchEnded()
                     }
             )
             .sensoryFeedback(.selection, trigger: slim)
@@ -173,34 +174,21 @@ struct TabOverview: View {
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
     }
 
-    /// How far a pinch moves the list: 1.6 times apart (or 1/1.6 together)
-    /// is the whole way from rows to cards.
-    private static let pinchSpan = log(1.6)
+    /// How far the fingers move (8% apart or together) before the pinch
+    /// counts: enough to ignore a wobble, soon enough to feel immediate.
+    private static let pinchStart: CGFloat = 1.08
 
     private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
-        if pinchFrom == nil {
-            pinchFrom = cards
-            pinchHold = anchor(at: m.startLocation)
-        }
-        // With Reduce Motion nothing follows; the switch fades on letting go.
-        guard !reduceMotion, let from = pinchFrom else { return }
-        let to = min(max(from + log(max(m.magnification, 0.01)) / Self.pinchSpan, 0), 1)
-        var still = Transaction()
-        still.disablesAnimations = true
-        withTransaction(still) {
-            cards = to
-            if let hold = pinchHold { scroller.scrollTo(hold.id, anchor: hold.anchor) }
-        }
+        guard !pinchDone else { return }
+        let target: CGFloat
+        if slim, m.magnification > Self.pinchStart { target = 1 }
+        else if !slim, m.magnification < 1 / Self.pinchStart { target = 0 }
+        else { return }
+        pinchDone = true
+        setCards(target, scroller, hold: anchor(at: m.startLocation))
     }
 
-    private func pinchEnded(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
-        defer { pinchFrom = nil; pinchHold = nil }
-        let from = pinchFrom ?? cards
-        let to = min(max(from + log(max(m.magnification, 0.01)) / Self.pinchSpan, 0), 1)
-        // Past halfway it finishes; short of it, back where it began.
-        let target: CGFloat = abs(to - from) >= 0.5 ? (from < 0.5 ? 1 : 0) : (from < 0.5 ? 0 : 1)
-        setCards(target, scroller, hold: pinchHold)
-    }
+    private func pinchEnded() { pinchDone = false }
 
     /// The tab under a point in the list (the nearest if it's between
     /// tabs), and the anchor that keeps it where it is: the point at the

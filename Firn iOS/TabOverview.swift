@@ -1,6 +1,7 @@
 import CoreImage
 import FirnCore
 import SwiftUI
+import UIKit.UIGestureRecognizerSubclass
 
 /// The overview behind the page (phase 2, step 2: plain): one column of
 /// slim rows, opening scrolled to the tab on screen, which carries a frost
@@ -291,14 +292,53 @@ struct TabOverview: View {
         let down: (() -> Void)? = index < count - 1 ? { move(tab, to: index + 1) } : nil
         let hidden = gliding == tab.id || drag?.id == tab.id
         return tile(tab, spot: spot, moveUp: up, moveDown: down)
-            // Long-press to lift a tab and drag it to a new place, as in
-            // Safari. Loose tabs only: groups come in phase 3.
+            // Hold, then move, to lift a tab and drag it to a new place, as
+            // in Safari. Loose tabs only: groups come in phase 3.
             .gesture(HoldToDrag(enabled: tab.groupID == nil && gliding == nil,
                                 began: { lift(tab, at: $0) }, moved: follow(to:), ended: letGo))
+            // Holding still opens iOS's own menu beside the tab, the tab
+            // staying where it is, as in Safari.
+            .contentShape(.contextMenuPreview,
+                          RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
+            .contextMenu { menu(for: tab) }
             // Its place stays open while it's held.
             .opacity(hidden ? 0 : 1)
             .id(tab.id)
             .transition(.opacity)
+    }
+
+    /// A tab's menu: short, in the Mac's words. Phase 3 adds Add to
+    /// Basecamp and New group with this tab.
+    @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
+        if let url = tab.url {
+            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
+            Divider()
+        }
+        Button("Close Tab", systemImage: "xmark") { close(tab) }
+        if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
+            Button("Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) }
+        }
+    }
+
+    /// Close Other Tabs: the space's other loose tabs go, and a shake
+    /// brings them all back.
+    private func closeOthers(than tab: FirnCore.Tab) {
+        let ids = store.otherLooseTabs(than: tab).map(\.id)
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
+            store.closeOtherLooseTabs(than: tab)
+        }
+        undoManager?.registerUndo(withTarget: store) { store in
+            MainActor.assumeIsolated {
+                withAnimation(.smooth(duration: 0.25)) {
+                    // Last closed first, as Reopen Closed Tab does.
+                    for id in ids.reversed() {
+                        if let entry = store.recentlyClosed.first(where: { $0.id == id }) { store.reopen(entry) }
+                    }
+                }
+            }
+        }
+        undoManager?.setActionName("Close Other Tabs")
+        closes += 1
     }
 
     // MARK: - Dragging a tab to a new place
@@ -488,18 +528,20 @@ private struct LiftedTile<Content: View>: View {
     }
 }
 
-/// A long press that then follows the finger, for lifting a tab: UIKit's,
-/// so it waits for a still finger and leaves the list's scrolling alone
-/// until it has held (0.35s, a beat before iOS's own long-press menus).
+/// Hold, then move: lifts a tab to drag it. Holding still instead opens
+/// iOS's menu (at about 0.5s), and a quick move with no hold is a scroll
+/// or a swipe, so the drag starts only when the finger moves after a short
+/// hold, before the menu. As in Safari, where hold-and-move drags and
+/// holding still opens the menu. UIKit, because SwiftUI has no gesture
+/// that waits for a hold and then needs movement.
 private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let enabled: Bool
     let began: (CGPoint) -> Void
     let moved: (CGPoint) -> Void
     let ended: () -> Void
 
-    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
-        let hold = UILongPressGestureRecognizer()
-        hold.minimumPressDuration = 0.35
+    func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
+        let hold = HoldThenMove()
         hold.isEnabled = enabled
         hold.delegate = context.coordinator
         return hold
@@ -507,29 +549,82 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
 
-    /// The row's own tap would otherwise outrank the hold and it would never
-    /// begin, so it runs alongside taps (a tap ends ignored during a drag).
-    /// Pans (the list's scroll, a row's sideways swipe) still give way once
-    /// it has held.
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        /// The row's own tap would otherwise outrank it, so it runs
+        /// alongside taps (a tap ends ignored during a drag); never
+        /// alongside pans.
         func gestureRecognizer(_ gesture: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             !(other is UIPanGestureRecognizer)
         }
+
+        /// The list's scroll and a row's sideways swipe wait until it's
+        /// clear this isn't a drag. That's at once for a quick move, so
+        /// scrolling and swiping feel the same as before.
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other is UIPanGestureRecognizer
+        }
     }
 
-    func updateUIGestureRecognizer(_ hold: UILongPressGestureRecognizer, context: Context) {
+    func updateUIGestureRecognizer(_ hold: HoldThenMove, context: Context) {
         hold.isEnabled = enabled
     }
 
-    func handleUIGestureRecognizerAction(_ hold: UILongPressGestureRecognizer, context: Context) {
+    func handleUIGestureRecognizerAction(_ hold: HoldThenMove, context: Context) {
         let point = context.converter.location(in: .global)
         switch hold.state {
-        case .began: began(point)
+        case .began:
+            // Lifted from where the finger first came down, then follows it.
+            began(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
+            moved(point)
         case .changed: moved(point)
         case .ended, .cancelled: ended()
         default: break
         }
+    }
+}
+
+/// One finger held for `hold`, then moved `slop` points: begins. Moved
+/// sooner: fails at once (a scroll or a swipe). Never moved: fails when
+/// lifted, or when iOS's menu takes the touch.
+final class HoldThenMove: UIGestureRecognizer {
+    static let hold: TimeInterval = 0.15
+    static let slop: CGFloat = 8
+    private var start: CGPoint = .zero
+    private var startTime: TimeInterval = 0
+    /// How far the finger had moved when it began.
+    private(set) var moved: CGPoint = .zero
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let touch = touches.first, (event.allTouches?.count ?? 1) == 1 else {
+            if state == .possible { state = .failed }
+            return
+        }
+        start = touch.location(in: nil)
+        startTime = touch.timestamp
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let touch = touches.first else { return }
+        let point = touch.location(in: nil)
+        switch state {
+        case .possible:
+            moved = CGPoint(x: point.x - start.x, y: point.y - start.y)
+            guard hypot(moved.x, moved.y) >= Self.slop else { return }
+            state = touch.timestamp - startTime >= Self.hold ? .began : .failed
+        case .began, .changed:
+            state = .changed
+        default: break
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = (state == .began || state == .changed) ? .ended : .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = (state == .began || state == .changed) ? .cancelled : .failed
     }
 }
 

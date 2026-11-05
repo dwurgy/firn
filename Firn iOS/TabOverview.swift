@@ -553,7 +553,8 @@ struct CardTop: View {
                 }
                 .mask {
                     LinearGradient(stops: [.init(color: .black, location: 0),
-                                           .init(color: .black, location: 0.45),
+                                           // Full blur just past the title's letters, then a long fade (David, 2026-11-05).
+                                           .init(color: .black, location: 0.55),
                                            .init(color: .clear, location: 1)],
                                    startPoint: .top, endPoint: .bottom)
                 }

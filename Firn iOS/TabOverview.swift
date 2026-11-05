@@ -172,7 +172,7 @@ private struct ShakeToUndo: UIViewRepresentable {
 private struct OverviewHaze: View {
     let picture: UIImage?
     let space: String
-    @State private var haze: Haze?
+    @State private var haze: UIImage?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -183,15 +183,16 @@ private struct OverviewHaze: View {
                 // Filling the screen, never sizing the backdrop itself.
                 Color.clear
                     .overlay {
-                        Image(uiImage: haze.image)
+                        Image(uiImage: haze)
                             .resizable()
                             .interpolation(.high)
                             .scaledToFill()
                     }
                     .clipped()
                     .transition(.opacity)
-                Theme.frame.opacity(Theme.overviewWash(
-                    dark: colorScheme == .dark, lightness: haze.lightness, colorfulness: haze.colorfulness))
+                // One level for every page, as honest as the Mac's
+                // window: whatever is behind is what shows.
+                Theme.overviewWash
             }
             Rectangle()
                 .fill(Theme.frameTint(space))
@@ -203,7 +204,7 @@ private struct OverviewHaze: View {
                     .blendMode(colorScheme == .dark ? .softLight : .multiply)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: haze?.image)
+        .animation(.easeOut(duration: 0.2), value: haze)
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -212,18 +213,10 @@ private struct OverviewHaze: View {
         }
     }
 
-    /// The blurred picture, and how light and how colorful the page is
-    /// (each 0 to 1), so the wash can hold back a page that fights the rows.
-    private struct Haze {
-        let image: UIImage
-        let lightness: Double
-        let colorfulness: Double
-    }
-
     /// The picture shrunk to 8 pixels wide, halving step by step so
     /// every part of the page counts, then enlarged once to 8 times that
     /// with smooth interpolation; SwiftUI stretches that the rest of the way.
-    private static func blurred(_ picture: UIImage) -> Haze? {
+    private static func blurred(_ picture: UIImage) -> UIImage? {
         guard var image = picture.cgImage else { return nil }
         let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
         func resized(_ image: CGImage, width: Int) -> CGImage? {
@@ -242,23 +235,8 @@ private struct OverviewHaze: View {
             image = half
         }
         guard let small = resized(image, width: tiny),
-              let soft = resized(small, width: tiny * 8),
-              let bytes = small.dataProvider?.data as Data? else { return nil }
-        // The few pixels' average lightness and colorfulness (sRGB, 0 to 1).
-        var lightness = 0.0, colorfulness = 0.0, count = 0.0
-        for y in 0..<small.height {
-            for x in 0..<small.width {
-                let i = y * small.bytesPerRow + x * 4
-                guard i + 2 < bytes.count else { continue }
-                let r = Double(bytes[i]) / 255, g = Double(bytes[i + 1]) / 255, b = Double(bytes[i + 2]) / 255
-                let high = max(r, g, b), low = min(r, g, b)
-                lightness += 0.2126 * r + 0.7152 * g + 0.0722 * b
-                colorfulness += high > 0 ? (high - low) / high : 0
-                count += 1
-            }
-        }
-        guard count > 0 else { return nil }
-        return Haze(image: UIImage(cgImage: soft), lightness: lightness / count, colorfulness: colorfulness / count)
+              let soft = resized(small, width: tiny * 8) else { return nil }
+        return UIImage(cgImage: soft)
     }
 }
 

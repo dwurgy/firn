@@ -164,16 +164,10 @@ enum Theme {
         return Color(light: hex, dark: hex)
     }
 
-    /// The tab overview's haze (iOS): how strongly the frame's color washes
-    /// over the blurred picture of the page you came from. Enough that the
-    /// rows and the bar read on any page: more when the page fights the
-    /// look (a dark page in light, a bright one in dark) and when it's
-    /// loud; dark stays a dim, warm haze, never black. `lightness` and
-    /// `colorfulness` are the page's averages, 0 to 1.
-    static func overviewWash(dark: Bool, lightness: Double, colorfulness: Double) -> Double {
-        let fights = dark ? lightness : 1 - lightness
-        return min((dark ? 0.65 : 0.6) + 0.3 * fights + 0.2 * colorfulness, 0.92)
-    }
+    /// The tab overview's haze (iOS): the frame's color washed over the
+    /// blurred picture of the page you came from, at one level for every
+    /// page (like the Mac's window, it shows whatever is behind it).
+    static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x3A3734, darkOpacity: 0.7)
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {

@@ -180,7 +180,7 @@ struct BrowserScreen: View {
             // While typing, the page (or the overview) dims a little; a tap
             // on it cancels.
             if editing {
-                Theme.lookoutDim
+                Theme.typingDim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { editing = false }

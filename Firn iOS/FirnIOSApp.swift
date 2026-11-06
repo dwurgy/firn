@@ -55,8 +55,18 @@ final class Browser {
         let store = BrowserStore(
             restoring: session, pagePlaces: placesFile.load(), defaultSpaces: [FirstSpace.make()],
             makePage: BrowserEngine.makePage,
-            removeData: { BrowserEngine.removeData(for: $0) }
+            removeData: { BrowserEngine.removeData(for: $0) },
+            // Visits, one file per data store, on this device only, as the
+            // Mac's (David, 2026-11-06: on before iOS has a History screen).
+            history: HistoryStore.standard
         )
+        // Erase history left by deleted spaces (only after a session really
+        // loaded, so a damaged file erases nothing), and keep a year.
+        if let session, !session.spaces.isEmpty {
+            let inUse = Set(store.spaces.map(\.dataStoreID))
+            Task.detached(priority: .utility) { await HistoryStore.standard.removeUnused(keeping: inUse) }
+        }
+        Task.detached(priority: .utility) { await HistoryStore.standard.removeExpired() }
         let snapshot: @MainActor () -> Session = { store.session(sidebarWidth: 260, sidebarCollapsed: false) }
         // The first space's data store is new: save it at once, so a quit
         // within the first seconds doesn't leave it nameless and forgotten.

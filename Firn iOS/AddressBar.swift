@@ -24,6 +24,8 @@ struct AddressBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What's being typed, for the results above the field (empty at rest).
     @State private var typed = ""
+    /// This space's history pages for what's typed, looked up as you type.
+    @State private var history: [HistoryPage] = []
     /// Just after typing, while the keyboard slides away: the field's glass
     /// rides down with it, so the bar's resting parts (the site, its
     /// buttons, Back, and Tabs) wait until it has landed, then fade in.
@@ -44,7 +46,8 @@ struct AddressBar: View {
     /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
         let rows = editing.wrappedValue
-            ? store.commandRows(for: typed, searchEngine: engine, actions: actions.map(\.action)) : []
+            ? store.commandRows(for: typed, searchEngine: engine, history: history,
+                                actions: actions.map(\.action)) : []
         VStack(spacing: Self.spacing) {
             if !rows.isEmpty {
                 CommandResults(rows: rows, engine: engine, space: space, pick: pick, swipedDown: cancelTyping)
@@ -64,6 +67,13 @@ struct AddressBar: View {
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
+        // History is on this device, so it's read at once; each key cancels
+        // the last lookup.
+        .task(id: typed) {
+            let found = typed.isEmpty ? [] : await store.historyPages(for: typed)
+            guard !Task.isCancelled else { return }
+            history = found
+        }
         .onChange(of: editing.wrappedValue) {
             if editing.wrappedValue {
                 menuOpen = false

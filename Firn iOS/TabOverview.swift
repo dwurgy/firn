@@ -1198,7 +1198,7 @@ private struct SidewaysPan: UIGestureRecognizerRepresentable {
 }
 
 /// A site with no icon yet: its first letter on a calm color of its own.
-private struct LetterMark: View {
+struct LetterMark: View {
     let site: String
 
     var body: some View {

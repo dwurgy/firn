@@ -22,22 +22,70 @@ struct AddressBar: View {
     /// back. The screen closes it on a tap anywhere else.
     @Binding var menuOpen: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// What's being typed, for the results above the field (empty at rest).
+    @State private var typed = ""
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
+    private var engine: SearchEngine { SearchEngine.chosen }
 
     /// The pill and the field each carry their own glass, with no
     /// `GlassEffectContainer`: a container morphs its glass on its own
     /// timing, so the glass trailed Firn's frost and words as a grey ghost
     /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
+        let rows = editing.wrappedValue ? store.commandRows(for: typed, searchEngine: engine) : []
+        VStack(spacing: Self.spacing) {
+            if !rows.isEmpty {
+                CommandResults(rows: rows, engine: engine, space: space, pick: pick)
+                    .transition(.opacity)
+            }
+            buttons
+        }
+        // The card comes and goes with a short fade; its rows change in
+        // place as you type, never gliding on each key.
+        .animation(.easeOut(duration: 0.15), value: rows.isEmpty)
+        .frame(maxWidth: 640)
+        // Larger text grows the bar's words only as far as its 48pt height
+        // holds them, as in Safari's bar.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
+        .padding(.top, 8)
+        .padding(.bottom, editing.wrappedValue ? 8 : 0)
+        .onChange(of: page?.url) { menuOpen = false }
+        .onChange(of: editing.wrappedValue) {
+            if editing.wrappedValue { menuOpen = false } else { typed = "" }
+        }
+    }
+
+    /// A row picked. Go and Search do what Go on the keyboard does (load in
+    /// the tab on screen, or a new tab from +); an open tab is switched to,
+    /// never opened again.
+    private func pick(_ row: CommandRow) {
+        defer { editing.wrappedValue = false }
+        switch row {
+        case let .go(url), let .search(_, url, _):
+            if let page, !typingNewTab { page.load(url) } else { store.openTab(url) }
+        case let .history(visit):
+            if let page, !typingNewTab { page.load(visit.url) } else { store.openTab(visit.url) }
+        case let .tab(tab), let .tidied(tab):
+            store.select(tab)
+        case let .closed(entry):
+            store.reopen(entry)
+        case .action:
+            return
+        }
+        opened()
+    }
+
+    private var buttons: some View {
         HStack(spacing: Self.spacing) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
                 hidesForMenu(toward: .trailing) { NavigationPill(store: store, tab: tab, page: page, space: space) }
                     .transition(.opacity)
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
-                         menuOpen: $menuOpen, opened: opened)
+                         menuOpen: $menuOpen, typed: $typed, opened: opened)
                 // The glass and the menu are laid out with the field itself,
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
@@ -56,15 +104,6 @@ struct AddressBar: View {
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: page?.canGoForward)
-        .frame(maxWidth: 640)
-        // Larger text grows the bar's words only as far as its 48pt height
-        // holds them, as in Safari's bar.
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(.horizontal, editing.wrappedValue ? 16 : Self.sideInset)
-        .padding(.top, 8)
-        .padding(.bottom, editing.wrappedValue ? 8 : 0)
-        .onChange(of: page?.url) { menuOpen = false }
-        .onChange(of: editing.wrappedValue) { if editing.wrappedValue { menuOpen = false } }
     }
 
     /// The menu's spot, in the field's own coordinates: from the field's
@@ -190,8 +229,12 @@ private struct AddressField: View {
     var editing: FocusState<Bool>.Binding
     let typingNewTab: Bool
     @Binding var menuOpen: Bool
+    /// What's typed, passed up for the results (only while typing).
+    @Binding var typed: String
     let opened: () -> Void
     @State private var text = ""
+    /// The address editing started from, so it alone shows no results.
+    @State private var startedWith = ""
     @State private var selection: TextSelection?
 
     private var page: (any PageController)? { store.activeTab?.page }
@@ -229,6 +272,9 @@ private struct AddressField: View {
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
                 .accessibilityLabel("Address")
                 .onSubmit(open)
+                // Only typing counts: the page's own address, put in as
+                // editing starts, shows no results until it's changed.
+                .onChange(of: text) { if isEditing { typed = text == startedWith ? "" : text } }
                 // VoiceOver's scrub cancels, as tapping the page does (the
                 // dimmed page is hidden from VoiceOver).
                 .accessibilityAction(.escape) { editing.wrappedValue = false }
@@ -311,12 +357,13 @@ private struct AddressField: View {
     /// edited or simply typed over.
     private func beginEditing() {
         text = frontURL?.absoluteString ?? ""
+        startedWith = text
         editing.wrappedValue = true
     }
 
     private func startOrEndEditing() {
         guard isEditing else { return showRestingAddress() }
-        if typingNewTab { text = ""; return }
+        if typingNewTab { text = ""; startedWith = ""; return }
         // The field takes focus first, then the selection; set together,
         // UIKit puts the cursor at the end instead.
         Task { @MainActor in

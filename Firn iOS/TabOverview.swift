@@ -81,6 +81,11 @@ struct TabOverview: View {
     @State private var edgeScroll: Task<Void, Never>?
     /// The tab whose menu iOS may hand off to a drag (see HandOffDrop).
     @State private var handOff: HandOff?
+    /// When Firn's own drag last ended with the finger lifting.
+    @State private var ownDragEndedAt = Date.distantPast
+    /// Waits, after iOS's drag took the touch from Firn's, for iOS's drag
+    /// to carry the held tab on (see ownDragCancelled).
+    @State private var takeover: Task<Void, Never>?
     /// A pinch, a drag, or the moment after either: a finger lifting then
     /// would otherwise count as a tap.
     private var busy: Bool {
@@ -330,12 +335,8 @@ struct TabOverview: View {
             // Hold, then move, to lift a tab and drag it to a new place, as
             // in Safari. Loose tabs only: groups come in phase 3.
             .gesture(HoldToDrag(enabled: tab.groupID == nil && gliding == nil,
-                                began: { point in
-                                    // iOS's drag may have started a moment
-                                    // first: Firn's own drag wins (see HandOff).
-                                    handOff?.inert = true
-                                    lift(tab, at: point)
-                                }, moved: follow(to:), ended: letGo))
+                                began: { lift(tab, at: $0) }, moved: follow(to:),
+                                ended: ownDragEnded, cancelled: ownDragCancelled))
             // Holding still opens iOS's own menu beside the tab, the tab
             // staying where it is, as in Safari.
             .contentShape(.contextMenuPreview,
@@ -347,8 +348,8 @@ struct TabOverview: View {
             // is (see HandOffDrop). Its empty item can't be dropped in
             // another app.
             .onDrag {
-                // Started during Firn's own drag: inert (see HandOff).
-                handOff = HandOff(id: tab.id, inert: drag != nil)
+                // Just after Firn's own drag landed: inert (see HandOff).
+                handOff = HandOff(id: tab.id, inert: Date.now.timeIntervalSince(ownDragEndedAt) < 0.5)
                 return NSItemProvider()
             } preview: {
                 Color.clear.frame(width: 1, height: 1)
@@ -415,6 +416,36 @@ struct TabOverview: View {
         keepScrollingAtEdges()
     }
 
+    /// The finger lifted: the held tab lands. A drag of iOS's that starts
+    /// right after is inert, so it can't lift the tab again.
+    private func ownDragEnded() {
+        handOff?.inert = true
+        ownDragEndedAt = .now
+        letGo()
+    }
+
+    /// iOS's own drag took the touch mid-drag (on David's iPhone, with the
+    /// finger still down and moving): the tab used to land there, and then
+    /// iOS's drag lifted it again and carried it back where the finger was
+    /// (his phone's log, 2026-11-05). Now the tab stays held and iOS's drag
+    /// carries it on (handOffMoved), landing only when the finger lifts
+    /// (handOffEnded). If iOS's drag doesn't follow within half a second,
+    /// it lands where it is; and it lands after 10 seconds whatever happens,
+    /// so it can never be left hanging.
+    private func ownDragCancelled() {
+        guard drag?.lifted == true else { return letGo() }
+        takeover?.cancel()
+        takeover = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.5))
+            guard !Task.isCancelled else { return }
+            if handOff == nil || handOff?.inert == true { return letGo() }
+            try? await Task.sleep(for: .seconds(9.5))
+            guard !Task.isCancelled else { return }
+            handOff = nil
+            letGo()
+        }
+    }
+
     /// The tile stays under the finger, straight up and down, and the
     /// other tabs glide aside to show where it will land.
     private func follow(to point: CGPoint) {
@@ -454,6 +485,8 @@ struct TabOverview: View {
     /// Lets go: the tab is saved in its new place and the tile settles
     /// into it (0.25s, no bounce; with Reduce Motion it's simply there).
     private func letGo() {
+        takeover?.cancel()
+        takeover = nil
         edgeScroll?.cancel()
         edgeScroll = nil
         guard var drag else { return }
@@ -484,12 +517,16 @@ struct TabOverview: View {
     /// iOS handed a tab's menu off to a drag and the finger moved: the tab
     /// lifts, its middle under the finger (the finger has left the menu,
     /// often far from the row), then follows it as any drag does.
+    /// Also carries on a drag of Firn's own that iOS's drag took over
+    /// (see ownDragCancelled): the held tab keeps following the finger.
     private func handOffMoved(_ local: CGPoint) {
         guard let handOff, !handOff.inert else { return }
         let id = handOff.id
         let view = spots.viewport
         let point = CGPoint(x: local.x + view.minX, y: local.y + view.minY)
-        if drag == nil {
+        if let drag {
+            guard drag.id == id, drag.lifted else { return }
+        } else {
             guard let tab = store.openTabs.first(where: { $0.id == id }),
                   let frame = spots.frames[id] else { return }
             lift(tab, at: CGPoint(x: point.x, y: frame.midY))
@@ -576,12 +613,10 @@ private struct Drag {
     var lifted = true
 }
 
-/// iOS's drag of a tab, which only matters when a tab's menu hands off to
-/// it. On David's iPhone it could also start alongside Firn's own drag
-/// (holding, then moving, a real finger), and once Firn's tab had landed,
-/// that drag's last moves lifted the tab again and dropped it back where
-/// it began (his recordings, 2026-11-05, twice). So when Firn's own drag
-/// runs in the same touch, iOS's drag is inert: it moves and lands nothing.
+/// iOS's drag of a tab: after a tab's menu hands off to it, or when it
+/// takes the touch from Firn's own drag mid-drag (see ownDragCancelled).
+/// Either way it carries the held tab. One that starts just after Firn's
+/// drag landed is inert: it moves and lands nothing.
 private struct HandOff {
     let id: UUID
     var inert: Bool
@@ -655,6 +690,8 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let began: (CGPoint) -> Void
     let moved: (CGPoint) -> Void
     let ended: () -> Void
+    /// iOS took the touch with the finger still down.
+    let cancelled: () -> Void
 
     func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
         let hold = HoldThenMove()
@@ -695,7 +732,8 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
             began(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
             moved(point)
         case .changed: moved(point)
-        case .ended, .cancelled: ended()
+        case .ended: ended()
+        case .cancelled: cancelled()
         default: break
         }
     }

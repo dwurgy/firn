@@ -20,7 +20,7 @@ public struct PageView: UIViewControllerRepresentable {
     }
 
     public func makeUIViewController(context: Context) -> PageHolder {
-        PageHolder(webView: webKitPage.webView)
+        PageHolder(page: webKitPage)
     }
 
     public func updateUIViewController(_ holder: PageHolder, context: Context) {
@@ -40,6 +40,7 @@ public struct PageView: UIViewControllerRepresentable {
 /// under Firn's bar. `PageFrame` tells WebKit which edges are covered.
 public final class PageHolder: UIViewController {
     let webView: WKWebView
+    private let page: WebKitPageController
 
     /// Where Firn's bar starts, from the screen's top; 0 for no bar.
     var barTop: CGFloat = 0 {
@@ -49,8 +50,9 @@ public final class PageHolder: UIViewController {
         }
     }
 
-    init(webView: WKWebView) {
-        self.webView = webView
+    init(page: WebKitPageController) {
+        self.page = page
+        self.webView = page.webView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -58,7 +60,10 @@ public final class PageHolder: UIViewController {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     public override func loadView() {
-        view = PageFrame(webView: webView)
+        let frame = PageFrame(webView: webView)
+        // Through the page's own reload, which also retries a failed address.
+        frame.onRefresh = { [weak page] in page?.reload() }
+        view = frame
     }
 
     public override func viewDidAppear(_ animated: Bool) {
@@ -100,6 +105,8 @@ public final class PageHolder: UIViewController {
 private final class PageFrame: UIView {
     let webView: WKWebView
     private var colorWatchers: [NSKeyValueObservation] = []
+    /// Pull down past the top to reload, as in Safari.
+    var onRefresh: (() -> Void)?
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -107,6 +114,7 @@ private final class PageFrame: UIView {
         if webView.frame.isEmpty { webView.frame = bounds }
         addSubview(webView)
         updateStripColor()
+        addRefreshControl()
         // KVO hands changes over on the main thread here: WebKit sets both
         // colors from the main thread.
         colorWatchers = [
@@ -116,7 +124,32 @@ private final class PageFrame: UIView {
             webView.observe(\.underPageBackgroundColor) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.updateStripColor() }
             },
+            webView.observe(\.isLoading) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.endRefreshing() }
+            },
         ]
+    }
+
+    /// iOS's own pull-to-refresh. The spinner tucks away as soon as the
+    /// load starts (or at once if there was nothing to load): from then on
+    /// the bar's loading frost shows it, so there's one sign, not two.
+    private func addRefreshControl() {
+        let refresher = UIRefreshControl()
+        refresher.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            onRefresh?()
+            if !webView.isLoading {
+                DispatchQueue.main.async { [weak self] in self?.endRefreshing() }
+            }
+        }, for: .valueChanged)
+        // Shown again (a new holder for the same page) replaces the old one.
+        webView.scrollView.refreshControl = refresher
+    }
+
+    private func endRefreshing() {
+        guard let refresher = webView.scrollView.refreshControl,
+              refresher.isRefreshing else { return }
+        refresher.endRefreshing()
     }
 
     @available(*, unavailable)

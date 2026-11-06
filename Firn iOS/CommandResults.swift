@@ -11,6 +11,10 @@ struct CommandResults: View {
     let engine: SearchEngine
     let space: String
     let pick: (CommandRow) -> Void
+    /// A swipe down on the card ends typing, but only while every row fits:
+    /// when the card scrolls, a swipe down scrolls it, nothing more.
+    let swipedDown: () -> Void
+    @State private var scrolls = false
 
     static let rowHeight: CGFloat = 48
     static let padding: CGFloat = 6
@@ -33,9 +37,18 @@ struct CommandResults: View {
                 }
             }
             .padding(Self.padding)
+            // On the rows themselves: on the scroll view around them, the
+            // swipe never started.
+            .gesture(SwipeDown(enabled: !scrolls, action: swipedDown))
         }
         .defaultScrollAnchor(.bottom)
         .scrollBounceBehavior(.basedOnSize)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentSize.height > $0.containerSize.height + 1 } action: { _, now in
+            scrolls = now
+        }
+        // Rows that fit don't scroll at all, so the scroll view never takes
+        // the swipe down from the card.
+        .scrollDisabled(!scrolls)
         .frame(maxHeight: CGFloat(rows.count) * Self.rowHeight + Self.padding * 2)
         .clipShape(shape)
         // The same glass and tint as the field beneath it: one piece of the
@@ -142,5 +155,53 @@ private struct ResultPress: ButtonStyle {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(configuration.isPressed ? Theme.press : .clear)
             }
+    }
+}
+
+/// A swipe down while typing (on the field or the results card): far
+/// enough, or quick enough, after starting more down than across. Taps and
+/// sideways moves are left to the rows and the field. UIKit's pan, because
+/// SwiftUI's DragGesture never saw the swipe over the card's scroll view,
+/// and the field's own gestures kept it from starting (Simulator,
+/// 2026-11-05).
+struct SwipeDown: UIGestureRecognizerRepresentable {
+    var enabled = true
+    let action: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ pan: UIPanGestureRecognizer, context: Context) {
+        pan.isEnabled = enabled
+    }
+
+    /// Acts while the finger is still moving, so the card (and the row
+    /// under the finger) is gone before it lifts: a row is never picked by
+    /// the end of a swipe.
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        guard pan.state == .changed else { return }
+        let dy = pan.translation(in: pan.view).y
+        let speed = pan.velocity(in: pan.view).y
+        if dy > 44 || (dy > 20 && speed > 500) { action() }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer else { return true }
+            let speed = pan.velocity(in: pan.view)
+            return speed.y > 0 && speed.y > abs(speed.x) * 1.5
+        }
+
+        /// Alongside the text field's own gestures (moving the cursor,
+        /// selecting), which otherwise keep the swipe from ever starting.
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
     }
 }

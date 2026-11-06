@@ -46,10 +46,11 @@ struct AddressBar: View {
         let rows = editing.wrappedValue ? store.commandRows(for: typed, searchEngine: engine) : []
         VStack(spacing: Self.spacing) {
             if !rows.isEmpty {
-                CommandResults(rows: rows, engine: engine, space: space, pick: pick)
+                CommandResults(rows: rows, engine: engine, space: space, pick: pick, swipedDown: cancelTyping)
                     .transition(.opacity)
             }
             buttons
+                .gesture(SwipeDown(enabled: editing.wrappedValue, action: cancelTyping))
         }
         // The card comes and goes with a short fade; its rows change in
         // place as you type, never gliding on each key.
@@ -81,6 +82,13 @@ struct AddressBar: View {
         .environment(\.barSettling, settling)
     }
 
+    /// A swipe down on the field or the results: typing ends and the
+    /// keyboard goes away, as a tap on the dimmed page does.
+    private func cancelTyping() {
+        guard editing.wrappedValue else { return }
+        editing.wrappedValue = false
+    }
+
     /// Typing ended: wait for the keyboard to finish leaving (with a
     /// limit, in case iOS never says so).
     private func settle() {
@@ -102,6 +110,8 @@ struct AddressBar: View {
     /// the tab on screen, or a new tab from +); an open tab is switched to,
     /// never opened again.
     private func pick(_ row: CommandRow) {
+        // A swipe down already ended typing: nothing is picked.
+        guard editing.wrappedValue else { return }
         defer { editing.wrappedValue = false }
         switch row {
         case let .go(url), let .search(_, url, _):

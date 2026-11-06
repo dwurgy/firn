@@ -174,6 +174,9 @@ struct AddressBar: View {
         let radius = open ? PageMenuPanel.cornerRadius : AddressField.height / 2
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
+            // While typing, the page's color under the frost, so the dim
+            // behind doesn't darken the field (it keeps the bar's look).
+            .background(Theme.typingVeil.opacity(editing.wrappedValue ? 1 : 0))
             .clipShape(.rect(cornerRadius: radius, style: .continuous))
             .glassEffect(.regular.tint(Theme.frameTint(space)), in: .rect(cornerRadius: radius, style: .continuous))
             .frame(width: frame.width, height: frame.height)

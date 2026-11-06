@@ -50,6 +50,8 @@ struct CommandResults: View {
         // the swipe down from the card.
         .scrollDisabled(!scrolls)
         .frame(maxHeight: CGFloat(rows.count) * Self.rowHeight + Self.padding * 2)
+        // The field's veil, so the card matches it over the dim.
+        .background(Theme.typingVeil)
         .clipShape(shape)
         // The same glass and tint as the field beneath it: one piece of the
         // bar, not a panel of its own.

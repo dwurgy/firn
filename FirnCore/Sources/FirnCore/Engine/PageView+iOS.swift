@@ -148,6 +148,12 @@ private final class PageFrame: UIView {
             webView.obscuredContentInsets = covered
         }
         let scroller = webView.scrollView
+        // Firn's inset already holds the status bar; left automatic, iOS
+        // added the safe area again (124pt), and a page bounced back to the
+        // top settled 62pt too low (David's recording, 2026-11-05).
+        if scroller.contentInsetAdjustmentBehavior != .never {
+            scroller.contentInsetAdjustmentBehavior = .never
+        }
         if scroller.contentInset != covered {
             scroller.contentInset = covered
             scroller.verticalScrollIndicatorInsets = covered

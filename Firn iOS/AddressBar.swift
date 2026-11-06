@@ -280,7 +280,9 @@ private struct AddressField: View {
                 Text(verbatim: text).foregroundStyle(Theme.ink)
             }
         }
-        .font(.callout)
+        // Medium, as Safari's: regular read thin over the glass (David,
+        // 2026-11-05).
+        .font(.callout.weight(.medium))
         .lineLimit(1)
         .allowsTightening(true)
         .minimumScaleFactor(0.9)

@@ -424,20 +424,28 @@ struct TabOverview: View {
         makeRoom()
     }
 
-    /// Opens a place for the held tab where its middle is: before the
-    /// first tab on screen whose middle is below it. Only tabs on screen
-    /// count (the list is lazy, so others' spots may be old); the ones
-    /// above the screen stay above.
+    /// Opens a place for the held tab as soon as its edge passes a
+    /// neighbor's middle, as iOS's own lists do: its top for a tab above
+    /// it, its bottom for a tab below. (Its middle had to pass instead, so a
+    /// card had to travel a whole card's height, about 170pt, before
+    /// anything moved; a shorter drag landed it back where it was, the
+    /// held card covering its neighbor. David's recordings, 2026-11-05.)
+    /// Only tabs on screen count (the list is lazy, so others' spots may
+    /// be old); the ones above the screen stay above.
     private func makeRoom() {
-        guard let drag, var ids = order else { return }
-        let middle = finger.top + drag.start.height / 2
+        guard let drag, var ids = order, let now = ids.firstIndex(of: drag.id) else { return }
+        let top = finger.top
+        let bottom = finger.top + drag.start.height
         let view = spots.viewport
         ids.removeAll { $0 == drag.id }
         let shown = ids.indices.filter { index in
             spots.frames[ids[index]].map { $0.maxY > view.minY && $0.minY < view.maxY } ?? false
         }
         guard let first = shown.first else { return }
-        let above = shown.filter { spots.frames[ids[$0]].map { $0.midY < middle } ?? false }.count
+        let above = shown.filter { index in
+            guard let frame = spots.frames[ids[index]] else { return false }
+            return frame.midY < (index < now ? top : bottom)
+        }.count
         ids.insert(drag.id, at: first + above)
         guard ids != order else { return }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { order = ids }

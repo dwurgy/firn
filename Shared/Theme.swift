@@ -56,8 +56,10 @@ enum Theme {
     static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)
     /// iOS: the page or overview behind the address field while typing.
     /// Deeper than the Mac's, so the field and its results read clearly
-    /// over a busy page (David, 2026-11-05: 16% was too light).
-    static let typingDim = Color(light: 0x3C2814, lightOpacity: 0.40, dark: 0x000000, darkOpacity: 0.60)
+    /// over a busy page (David, 2026-11-05: 16% was too light). Light is a
+    /// warm near-black, not the brown wash: brown this deep turned white
+    /// pages tan (David, 2026-11-05: wanted a plain dim).
+    static let typingDim = Color(light: 0x14100C, lightOpacity: 0.35, dark: 0x000000, darkOpacity: 0.60)
     /// The page's own color inside the command bar's glass, so the glass
     /// keeps the system's light or dark whatever page is behind it (glass
     /// alone turns mid-grey over a bright page in dark mode, and the ink

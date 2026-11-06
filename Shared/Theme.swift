@@ -61,10 +61,6 @@ enum Theme {
     /// warm near-black, not the brown wash: brown this deep turned white
     /// pages tan (David, 2026-11-05: wanted a plain dim).
     static let typingDim = Color(light: 0x14100C, lightOpacity: 0.35, dark: 0x000000, darkOpacity: 0.60)
-    /// iOS: the page's color inside the address field's and results card's
-    /// glass while typing, so they keep the bar's look at rest instead of
-    /// taking on the dim behind them (David, 2026-11-06). One fixed level.
-    static let typingVeil = Color(light: 0xFBFAF8, lightOpacity: 0.72, dark: 0x2B2826, darkOpacity: 0.72)
     /// The page's own color inside the command bar's glass, so the glass
     /// keeps the system's light or dark whatever page is behind it (glass
     /// alone turns mid-grey over a bright page in dark mode, and the ink

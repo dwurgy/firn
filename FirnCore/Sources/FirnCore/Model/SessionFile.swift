@@ -65,40 +65,93 @@ public struct SessionFile: Sendable {
 
 /// Saves the session about five seconds after anything in it changes, and on
 /// request (at quit). It notices changes through Observation, so nothing
-/// runs while Firn sits idle.
+/// runs while Firn sits idle. With a places file, each tab's page place
+/// (`PagePlacesFile`) is written alongside: whenever the session is, and
+/// always on `saveNow()`, since scrolling alone doesn't change the session.
+/// With a picture store, pictures of tabs no longer in the session (closed
+/// tabs, a deleted space's) are removed after each session save.
 @MainActor
 public final class SessionSaver {
     private let file: SessionFile
     private let delay: Duration
     private let snapshot: @MainActor () -> Session
+    private let placesFile: PagePlacesFile?
+    private let places: @MainActor () -> [UUID: PagePlace]
+    private let pictures: PagePictureStore?
     private var pendingSave: Task<Void, Never>?
     private var lastSaved: Session?
+    private var lastSavedPlaces: [UUID: PagePlace]?
 
-    /// - Parameter snapshot: The session as it is now. Whatever it reads is
-    ///   watched; a change to any of it schedules a save.
-    public init(file: SessionFile, delay: Duration = .seconds(5), snapshot: @escaping @MainActor () -> Session) {
+    /// - Parameters:
+    ///   - snapshot: The session as it is now. Whatever it reads is
+    ///     watched; a change to any of it schedules a save.
+    ///   - placesFile: Where page places go; nil to keep none.
+    ///   - places: The places as they are now (not watched).
+    ///   - pictures: The tabs' saved pictures, pruned to the session's tabs.
+    public init(
+        file: SessionFile, placesFile: PagePlacesFile? = nil, delay: Duration = .seconds(5),
+        snapshot: @escaping @MainActor () -> Session,
+        places: @escaping @MainActor () -> [UUID: PagePlace] = { [:] },
+        pictures: PagePictureStore? = nil
+    ) {
         self.file = file
+        self.placesFile = placesFile
+        self.pictures = pictures
         self.delay = delay
         self.snapshot = snapshot
+        self.places = places
     }
 
     /// Starts watching, without saving: what's on disk is already current.
     public func start() {
-        lastSaved = watchedSnapshot()
+        let session = watchedSnapshot()
+        lastSaved = session
+        prunePictures(session)
     }
 
-    /// Saves right away if anything changed (at quit, say).
+    /// Saves right away (at quit, or when the app leaves the screen): the
+    /// session if it changed, and the page places.
     public func saveNow() {
+        save(placesToo: true)
+    }
+
+    private func save(placesToo: Bool) {
         pendingSave?.cancel()
         pendingSave = nil
         let session = watchedSnapshot()
-        guard session != lastSaved else { return }
-        do {
-            try file.save(session)
-            lastSaved = session
-        } catch {
-            SessionFile.log.error("The session couldn't be saved")
+        if session != lastSaved {
+            do {
+                try file.save(session)
+                lastSaved = session
+                prunePictures(session)
+            } catch {
+                SessionFile.log.error("The session couldn't be saved")
+            }
+            savePlaces()
+        } else if placesToo {
+            savePlaces()
         }
+    }
+
+    /// Writes the places if they differ from the last ones written.
+    private func savePlaces() {
+        guard let placesFile else { return }
+        let now = places()
+        guard now != lastSavedPlaces else { return }
+        do {
+            try placesFile.save(now)
+            lastSavedPlaces = now
+        } catch {
+            PagePlacesFile.log.error("The page places couldn't be saved")
+        }
+    }
+
+    /// Removes pictures of tabs the session no longer has, off the main
+    /// thread (it's a folder listing and a few deletes).
+    private func prunePictures(_ session: Session) {
+        guard let pictures else { return }
+        let keep = Set(session.tabs.map(\.id))
+        Task.detached(priority: .utility) { pictures.prune(keeping: keep) }
     }
 
     private func changed() {
@@ -106,7 +159,7 @@ public final class SessionSaver {
         pendingSave = Task { [delay] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
-            self.saveNow()
+            self.save(placesToo: false)
         }
     }
 

@@ -200,6 +200,25 @@ public final class Tab: Identifiable {
         self.page = nil
     }
 
+    /// Where the page is (awake) or was (sleeping), for the places file;
+    /// nil if there's nothing to keep, or it's too large.
+    var savedPlace: PagePlace? {
+        if let page {
+            guard let data = page.memory()?.data, let url = page.url else { return nil }
+            return PagePlace(url: url, state: data)
+        }
+        guard let data = restingMemory?.data, let restingURL else { return nil }
+        return PagePlace(url: restingURL, state: data)
+    }
+
+    /// Gives a resting tab its place from last time, so it wakes with its
+    /// history. Only if it's still at the same address: otherwise the
+    /// place is from some other moment and the tab loads fresh.
+    func rest(at place: PagePlace) {
+        guard page == nil, place.url == restingURL else { return }
+        restingMemory = PageMemory(data: place.state)
+    }
+
     /// Forgets a sleeping page's history and scroll position, so it wakes
     /// fresh at its address.
     func forgetPlace() {

@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import FirnCore
 import SwiftUI
 
@@ -166,6 +170,7 @@ private struct SnowBand: Shape {
     }
 }
 
+#if os(macOS)
 /// Four small Firn marks drifting very slowly in the sky, away from where
 /// words will sit. AppKit, not SwiftUI: the drift is a Core Animation
 /// animation that the system runs on its own, so Firn doesn't redraw every
@@ -265,3 +270,92 @@ private final class FlakesView: NSView {
         }
     }
 }
+#else
+/// iOS's twin of the Mac's flakes, above: the same four marks and the same
+/// Core Animation drift, placed in UIKit's coordinates (y points down).
+private struct FirstLightFlakes: UIViewRepresentable {
+    let reduceMotion: Bool
+
+    func makeUIView(context: Context) -> FlakesView { FlakesView() }
+
+    func updateUIView(_ view: FlakesView, context: Context) {
+        view.drifts = !reduceMotion
+    }
+}
+
+private final class FlakesView: UIView {
+    private static let flakes: [(left: CGFloat, top: CGFloat, size: CGFloat, turn: CGFloat, start: Double)] = [
+        (0.117, 0.175, 30, -12, 0),
+        (0.859, 0.138, 22, 18, 6),
+        (0.813, 0.413, 14, 0, 12),
+        (0.172, 0.525, 14, 40, 3),
+    ]
+    private static let drift: (seconds: Double, distance: CGFloat) = (20, 6)
+
+    private var flakeLayers: [CALayer] = []
+
+    var drifts = false {
+        didSet { if drifts != oldValue { updateDrift() } }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        let mark = UIImage(named: "FirnMarkSmall")?.cgImage
+        for flake in Self.flakes {
+            let layer = CALayer()
+            layer.backgroundColor = Theme.FirstLight.flake.cgColor
+            layer.opacity = Theme.FirstLight.flakeOpacity
+            layer.mask = CALayer()
+            layer.mask?.contentsGravity = .resizeAspect
+            layer.mask?.contents = mark
+            layer.bounds = CGRect(x: 0, y: 0, width: flake.size, height: flake.size)
+            layer.mask?.frame = layer.bounds
+            layer.transform = Self.turn(flake.turn)
+            self.layer.addSublayer(layer)
+            flakeLayers.append(layer)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (layer, flake) in zip(flakeLayers, Self.flakes) {
+            layer.position = CGPoint(x: flake.left * bounds.width + flake.size / 2,
+                                     y: flake.top * bounds.height + flake.size / 2)
+        }
+        CATransaction.commit()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        let scale = window?.screen.scale ?? 3
+        for layer in flakeLayers { layer.mask?.contentsScale = scale }
+    }
+
+    /// A turn as CSS draws it (clockwise); UIKit's y points down, as CSS's does.
+    private static func turn(_ degrees: CGFloat) -> CATransform3D {
+        CATransform3DMakeRotation(degrees * .pi / 180, 0, 0, 1)
+    }
+
+    private func updateDrift() {
+        for (layer, flake) in zip(flakeLayers, Self.flakes) {
+            layer.removeAnimation(forKey: "drift")
+            guard drifts else { continue }
+            let rest = Self.turn(flake.turn)
+            let drift = CABasicAnimation(keyPath: "transform")
+            drift.fromValue = rest
+            drift.toValue = CATransform3DTranslate(rest, 0, Self.drift.distance, 0)
+            drift.duration = Self.drift.seconds
+            drift.autoreverses = true
+            drift.repeatCount = .infinity
+            drift.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            drift.timeOffset = flake.start
+            layer.add(drift, forKey: "drift")
+        }
+    }
+}
+#endif

@@ -33,6 +33,9 @@ public protocol PageController: AnyObject, Observable {
     /// A small picture of the page as it is now, `width` points wide, or nil
     /// if there's nothing to show. Kept in memory only, never saved.
     func snapshot(width: CGFloat) async -> CGImage?
+    /// The color behind the status bar, above the page on iPhone: the
+    /// page's theme color, else its background. Nil on the Mac.
+    var topColor: CGColor? { get }
     /// Opens the Mac's print sheet for the page, attached to its window.
     /// Does nothing without a loaded page or while another sheet is up.
     func printPage()
@@ -115,6 +118,15 @@ public protocol PageController: AnyObject, Observable {
 /// but the engine that made it.
 public struct PageMemory {
     let state: Any
+
+    init(state: Any) { self.state = state }
+
+    /// Bytes read back from the places file (see `PagePlacesFile`).
+    init(data: Data) { state = data }
+
+    /// The place as bytes, to keep across a restart; nil if the engine's
+    /// state isn't bytes. WebKit's `interactionState` is.
+    var data: Data? { state as? Data }
 }
 
 /// Something a page asks of the browser. Always started by a click: sites
@@ -172,4 +184,5 @@ public enum BrowserEngine {
 
 public extension PageController {
     func declineCookieBanner(waiting seconds: Double) async {}
+    var topColor: CGColor? { nil }
 }

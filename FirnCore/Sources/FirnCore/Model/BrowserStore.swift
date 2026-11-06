@@ -104,9 +104,11 @@ public final class BrowserStore {
 
     /// Picks up where the saved session left off, or starts with
     /// `defaultSpaces` if there's none. Only the tab on screen loads; the
-    /// rest rest until shown.
+    /// rest rest until shown. Tabs with a place in `pagePlaces` (see
+    /// `PagePlacesFile`) come back with their history.
     public convenience init(
         restoring session: Session?,
+        pagePlaces: [UUID: PagePlace] = [:],
         defaultSpaces: [Space],
         makePage: @escaping @MainActor (_ dataStoreID: UUID) -> any PageController,
         removeData: @escaping @MainActor (_ dataStoreID: UUID) -> Void = { _ in },
@@ -127,7 +129,7 @@ public final class BrowserStore {
             spaces: saved.isEmpty ? defaultSpaces : saved, makePage: makePage, removeData: removeData,
             passwords: passwords, history: history, now: now
         )
-        if let session { restore(session) }
+        if let session { restore(session, pagePlaces: pagePlaces) }
     }
 
     public var activeSpace: Space {
@@ -553,6 +555,14 @@ public final class BrowserStore {
     /// tab in this space that was on screen most recently.
     public func close(_ tab: Tab, showing next: Tab? = nil) {
         close(tab, showing: next, remembering: true)
+    }
+
+    /// The everyday tab a link opened `tab` from, if it's still open in the
+    /// same space. On iPhone and iPad, Back on a tab with no page to go back
+    /// to closes it and shows this one, as in Safari.
+    public func opener(of tab: Tab) -> Tab? {
+        guard let id = tab.openerTabID, tab.place == .open else { return nil }
+        return tabs.first { $0.id == id && $0.spaceID == tab.spaceID && $0.place == .open }
     }
 
     /// Close on a tile's menu: it leaves Basecamp altogether, rather than
@@ -1548,11 +1558,29 @@ public final class BrowserStore {
     /// pages holding text typed and not yet sent. The app calls this after the tab on screen changes and when memory
     /// runs short; nothing runs on a timer.
     public func sleepIdleTabs(memoryIsShort: Bool = false) async {
-        for tab in tabs where mayLetSleep(tab, memoryIsShort: memoryIsShort) {
+        await sleepTabs { [unowned self] in mayLetSleep($0, memoryIsShort: memoryIsShort) }
+    }
+
+    /// iPhone and iPad, where memory is much tighter than on the Mac: beyond
+    /// the tab on screen, only the `count` tabs seen most recently stay
+    /// awake, and the rest sleep (keeping their place) however briefly
+    /// they've been out of sight. The same tabs never sleep as in
+    /// `sleepIdleTabs`. The Mac doesn't use this.
+    public func sleepIdleTabs(keepingRecent count: Int) async {
+        let recent = Set(
+            tabs.filter { mayLetSleep($0, memoryIsShort: true) }
+                .sorted { $0.lastActiveAt > $1.lastActiveAt }
+                .prefix(count).map(\.id)
+        )
+        await sleepTabs { [unowned self] in mayLetSleep($0, memoryIsShort: true) && !recent.contains($0.id) }
+    }
+
+    private func sleepTabs(where mayLetSleep: (Tab) -> Bool) async {
+        for tab in tabs where mayLetSleep(tab) {
             guard let page = tab.page, !(await page.isInUse()) else { continue }
             // Things may have changed while the page answered.
             guard tab.page === page, tabs.contains(where: { $0.id == tab.id }),
-                  mayLetSleep(tab, memoryIsShort: memoryIsShort) else { continue }
+                  mayLetSleep(tab) else { continue }
             tab.sleep(keepingPlace: true)
         }
     }
@@ -1678,6 +1706,16 @@ public final class BrowserStore {
 
     // MARK: - Saving and restoring
 
+    /// Where each tab's page is or was, for the places file: only tabs the
+    /// session keeps (not files), and only places small enough to keep.
+    public func pagePlaces() -> [UUID: PagePlace] {
+        var places: [UUID: PagePlace] = [:]
+        for tab in tabs where tab.url?.isFileURL != true {
+            places[tab.id] = tab.savedPlace
+        }
+        return places
+    }
+
     /// The session as it is now, for `SessionSaver`. The window's sidebar
     /// lives in the app, so it's passed in.
     public func session(sidebarWidth: Double, sidebarCollapsed: Bool) -> Session {
@@ -1737,7 +1775,9 @@ public final class BrowserStore {
     /// tabs are put back together where its first one is. A split view
     /// comes back only with exactly two everyday tabs of its own space; they
     /// go side by side where its first one is, in that one's group.
-    private func restore(_ session: Session) {
+    /// Each tab with a place in `pagePlaces` at its own address gets its
+    /// history back, before any page wakes.
+    private func restore(_ session: Session, pagePlaces: [UUID: PagePlace]) {
         let spaceIDs = Set(spaces.map(\.id))
         var seenGroups = Set<UUID>()
         let restoredGroups = session.groups.sorted { $0.order < $1.order }.compactMap { record -> TabGroup? in
@@ -1780,6 +1820,9 @@ public final class BrowserStore {
                 // come) start their 30 days now.
                 driftedAt: place == .drifted ? min(record.driftedAt ?? restoredAt, restoredAt) : nil
             )
+        }
+        for tab in tabs {
+            if let place = pagePlaces[tab.id] { tab.rest(at: place) }
         }
         // Only pairs make a split; both halves go in the first one's group.
         let halves = Dictionary(grouping: tabs.filter { $0.splitID != nil }, by: { $0.splitID! })

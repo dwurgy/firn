@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import FirnCore
 import SwiftUI
 
@@ -47,9 +51,16 @@ enum Theme {
     static let peekEdgeRim = Color(light: 0xFFFFFF, lightOpacity: 0.70, dark: 0xFFFFFF, darkOpacity: 0.16)
     /// The page behind a Lookout: a warm brown veil in light, deeper in dark.
     static let lookoutDim = Color(light: 0x3C2814, lightOpacity: 0.16, dark: 0x000000, darkOpacity: 0.35)
-    /// The page behind the command bar: lighter than a Lookout's, since the
-    /// bar is small and quick.
-    static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)
+    /// The page behind the command bar. Light is a warm near-black, not the
+    /// brown wash, so white pages dim instead of turning tan (David,
+    /// 2026-11-05: wanted a plain dim, as on iOS).
+    static let commandDim = Color(light: 0x14100C, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.45)
+    /// iOS: the page or overview behind the address field while typing.
+    /// Deeper than the Mac's, so the field and its results read clearly
+    /// over a busy page (David, 2026-11-05: 16% was too light). Light is a
+    /// warm near-black, not the brown wash: brown this deep turned white
+    /// pages tan (David, 2026-11-05: wanted a plain dim).
+    static let typingDim = Color(light: 0x14100C, lightOpacity: 0.35, dark: 0x000000, darkOpacity: 0.60)
     /// The page's own color inside the command bar's glass, so the glass
     /// keeps the system's light or dark whatever page is behind it (glass
     /// alone turns mid-grey over a bright page in dark mode, and the ink
@@ -142,6 +153,36 @@ enum Theme {
         return Color(light: mix(hex, 0x241F1B, 0.5), dark: mix(hex, 0xF5F1EC, 0.35))
     }
 
+    /// A livelier version of a space's color, for a filled button with a
+    /// white symbol on it (the overview's check, in place of Safari's blue).
+    /// More saturated than the space color, deepened just enough for the
+    /// white to read (about 3.5:1 or better); the same in light and dark.
+    static func spaceVivid(_ name: String) -> Color {
+        let hex: UInt32 = switch name {
+        case "sand": 0xB87C46
+        case "sage": 0x55994C
+        case "heather": 0xB85C84
+        case "ochre": 0xA1873D
+        case "dusk": 0x5C5EB8
+        case "clay": 0xB86846
+        case "lagoon": 0x3C9994
+        default: 0x5690B8
+        }
+        return Color(light: hex, dark: hex)
+    }
+
+    /// The tab overview's haze (iOS): the frame's color washed over the
+    /// blurred picture of the page you came from, at one level for every
+    /// page (like the Mac's window, it shows whatever is behind it).
+    static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x3A3734, darkOpacity: 0.7)
+
+    /// Under a tall card's title pill and X (iOS): the frame's color, so the
+    /// glass over a page frosts the way a slim row's does over the haze
+    /// (with the space's tint on top), at one level for every page.
+    /// Dark is a lighter warm gray than the frame: slim rows read lighter
+    /// there, since their glass brightens the haze under it.
+    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.72, dark: 0x67635F, darkOpacity: 0.8)
+
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {
         func channel(_ shift: UInt32) -> UInt32 {
@@ -177,7 +218,11 @@ enum Theme {
         static let sun = Color(light: 0xF4C298, lightOpacity: 0.62, dark: 0xD68C60, darkOpacity: 0.32)
         static let sunMid = Color(light: 0xF4C298, lightOpacity: 0.22, dark: 0xD68C60, darkOpacity: 0.10)
         /// The flakes: Firn's small mark in Glacier, faint, in both looks.
+        #if os(macOS)
         static let flake = NSColor(hex: 0x7F9CB0, opacity: 1)
+        #else
+        static let flake = UIColor(hex: 0x7F9CB0, opacity: 1)
+        #endif
         static let flakeOpacity: Float = 0.22
         /// The paper grain: multiplied in light, soft light in dark.
         static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
@@ -326,13 +371,21 @@ private extension Color {
     }
 
     init(light: UInt32, lightOpacity: CGFloat, dark: UInt32, darkOpacity: CGFloat) {
+        #if os(macOS)
         self.init(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark ? NSColor(hex: dark, opacity: darkOpacity) : NSColor(hex: light, opacity: lightOpacity)
         })
+        #else
+        self.init(uiColor: UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            return isDark ? UIColor(hex: dark, opacity: darkOpacity) : UIColor(hex: light, opacity: lightOpacity)
+        })
+        #endif
     }
 }
 
+#if os(macOS)
 private extension NSColor {
     convenience init(hex: UInt32, opacity: CGFloat) {
         self.init(
@@ -343,6 +396,18 @@ private extension NSColor {
         )
     }
 }
+#else
+private extension UIColor {
+    convenience init(hex: UInt32, opacity: CGFloat) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: opacity
+        )
+    }
+}
+#endif
 
 /// Something dragged that wants to stay where it belongs (a Basecamp tile,
 /// a tab row, a group's card): free between its limits, and past them it

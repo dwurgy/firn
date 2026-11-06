@@ -365,6 +365,9 @@ private struct AddressField: View {
                 .opacity(menuOpen ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
                 .accessibilityLabel("Address")
+                // The results card sits above the field, out of the way of
+                // a VoiceOver swipe forward, so the field says it's there.
+                .accessibilityHint("Results appear above as you type")
                 .onSubmit(open)
                 // Only typing counts: the page's own address, put in as
                 // editing starts, shows no results until it's changed.

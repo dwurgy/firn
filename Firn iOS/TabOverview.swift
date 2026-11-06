@@ -44,15 +44,14 @@ struct TabOverview: View {
 
     /// Counts closes, so the shake listener takes focus again after each.
     @State private var closes = 0
-    /// Every tab a slim row (pinched together), or cards for tabs looked
-    /// at in the last day (pinched apart). Remembered across restarts.
-    @AppStorage("overviewSlimRows") private var slimRows = false
-    /// What the list shows: 0 every tab a slim row, 1 cards, and anything
-    /// between while it glides. Set from `slimRows` as the overview opens;
-    /// saved settings change outside any animation, so the list reads this
-    /// copy, which glides.
-    @State private var cards: CGFloat = UserDefaults.standard.bool(forKey: "overviewSlimRows") ? 0 : 1
-    private var slim: Bool { cards < 0.5 }
+    /// When this space's tabs were last pinched together ("tidied"): tabs
+    /// looked at before then are slim rows, and every tab looked at since
+    /// becomes a card again, so there's no mode to remember (David,
+    /// 2026-11-05). Pinching apart undoes it. Saved per space.
+    @State private var tidiedAt: Date?
+    /// How tall the tidied tabs from the last day are: 0 slim rows (tidied),
+    /// 1 cards (not tidied), and anything between while a pinch glides.
+    @State private var cards: CGFloat = 1
     /// Set once a pinch has switched the list, so the rest of that pinch
     /// does nothing more.
     @State private var pinchDone = false
@@ -106,7 +105,9 @@ struct TabOverview: View {
     private func tallness(_ tab: FirnCore.Tab, onScreen: Bool) -> CGFloat {
         if onScreen { return 1 }
         let viewed = lastViewed[tab.id] ?? tab.lastActiveAt
-        return openedAt.timeIntervalSince(viewed) < Self.cardAge ? cards : 0
+        guard openedAt.timeIntervalSince(viewed) < Self.cardAge else { return 0 }
+        if let tidiedAt, viewed > tidiedAt { return 1 }
+        return cards
     }
 
     var body: some View {
@@ -155,10 +156,10 @@ struct TabOverview: View {
                         pinchEnded()
                     }
             )
-            .sensoryFeedback(.selection, trigger: slim)
+            .sensoryFeedback(.selection, trigger: tidiedAt)
             // Pinching can't be found by VoiceOver: the same choice as an action.
-            .accessibilityAction(named: slim ? "Show Cards" : "Show Rows") {
-                setCards(slim ? 1 : 0, scroller)
+            .accessibilityAction(named: tidiedAt != nil ? "Show Cards" : "Show Rows") {
+                setCards(tidiedAt != nil ? 1 : 0, scroller)
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -187,6 +188,7 @@ struct TabOverview: View {
             .onAppear {
                 openedAt = .now
                 lastViewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
+                loadTidied()
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
             }
         }
@@ -203,14 +205,40 @@ struct TabOverview: View {
     private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
         guard !pinchDone, drag == nil else { return }
         let target: CGFloat
-        if slim, m.magnification > Self.pinchStart { target = 1 }
-        else if !slim, m.magnification < 1 / Self.pinchStart { target = 0 }
+        if tidiedAt != nil, m.magnification > Self.pinchStart { target = 1 }
+        else if hasCardsToTidy, m.magnification < 1 / Self.pinchStart { target = 0 }
         else { return }
         pinchDone = true
         setCards(target, scroller, hold: anchor(at: m.startLocation))
     }
 
     private func pinchEnded() { pinchDone = false }
+
+    /// A tall card besides the tab on screen, which pinching together
+    /// would tidy into a row.
+    private var hasCardsToTidy: Bool {
+        store.openTabs.contains { !isOnScreen($0) && tallness($0, onScreen: false) > 0.5 }
+    }
+
+    private static let tidiedKey = "overviewTidiedAt"
+
+    /// This space's tidy, as the overview opens. A tidy older than a day
+    /// has nothing left to hold (those tabs are rows anyway), so it's
+    /// forgotten.
+    private func loadTidied() {
+        UserDefaults.standard.removeObject(forKey: "overviewSlimRows")  // the old mode
+        let saved = UserDefaults.standard.dictionary(forKey: Self.tidiedKey) as? [String: Double] ?? [:]
+        let at = saved[store.activeSpace.id.uuidString].map(Date.init(timeIntervalSince1970:))
+        tidiedAt = at.flatMap { openedAt.timeIntervalSince($0) < Self.cardAge ? $0 : nil }
+        cards = tidiedAt == nil ? 1 : 0
+        if at != nil, tidiedAt == nil { saveTidied() }
+    }
+
+    private func saveTidied() {
+        var saved = UserDefaults.standard.dictionary(forKey: Self.tidiedKey) as? [String: Double] ?? [:]
+        saved[store.activeSpace.id.uuidString] = tidiedAt?.timeIntervalSince1970
+        UserDefaults.standard.set(saved, forKey: Self.tidiedKey)
+    }
 
     /// The tab under a point in the list (the nearest if it's between
     /// tabs), and the anchor that keeps it where it is: the point at the
@@ -233,16 +261,19 @@ struct TabOverview: View {
         y < frame.minY ? frame.minY - y : (y > frame.maxY ? y - frame.maxY : 0)
     }
 
-    /// Switches between slim rows and cards: every row's glass glides into
+    /// Pinched together (0): every tab but the one on screen becomes a slim
+    /// row, until it's looked at again. Pinched apart (1): the tidy is
+    /// undone and the last day's cards come back. Every row's glass glides into
     /// its card's pill (0.3s, ease-out, no bounce), the held tab staying in
     /// place, or the tab on screen held in the middle (VoiceOver's action).
     /// With Reduce Motion, the list fades out, changes, and fades back in.
     private func setCards(_ target: CGFloat, _ scroller: ScrollViewProxy,
                           hold: (id: UUID, anchor: UnitPoint)? = nil) {
-        slimRows = target < 0.5
+        let tidy: Date? = target < 0.5 ? .now : nil
         let held = hold ?? store.activeTab.map { ($0.id, UnitPoint.center) }
+        defer { saveTidied() }
         if reduceMotion {
-            guard cards != target else { return }
+            tidiedAt = tidy
             withAnimation(.easeOut(duration: 0.15)) { listFade = 0 } completion: {
                 cards = target
                 if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
@@ -251,6 +282,7 @@ struct TabOverview: View {
             return
         }
         withAnimation(.easeOut(duration: 0.3)) {
+            tidiedAt = tidy
             cards = target
             if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
         }

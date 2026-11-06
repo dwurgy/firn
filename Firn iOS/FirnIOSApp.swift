@@ -13,12 +13,17 @@ struct FirnIOSApp: App {
     /// waits too.
     @State private var browser: Browser?
     @Environment(\.scenePhase) private var scenePhase
+    /// A link from another app (Firn as the default browser), waiting for
+    /// the screen to open it. Held here because a link that launches Firn
+    /// can arrive before the browser is made, and making it early crashes
+    /// (above).
+    @State private var incoming: URL?
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if let browser {
-                    BrowserScreen(store: browser.store, pictures: browser.pictures)
+                    BrowserScreen(store: browser.store, pictures: browser.pictures, incoming: $incoming)
                 } else {
                     Theme.page.ignoresSafeArea()
                 }
@@ -26,6 +31,7 @@ struct FirnIOSApp: App {
             .onAppear {
                 if browser == nil { browser = Browser() }
             }
+            .onOpenURL { incoming = $0 }
         }
         .onChange(of: scenePhase) {
             guard scenePhase != .active, let browser else { return }

@@ -7,6 +7,8 @@ import SwiftUI
 struct BrowserScreen: View {
     let store: BrowserStore
     let pictures: PagePictures
+    /// A link from another app, opened as a new tab once it arrives.
+    @Binding var incoming: URL?
     @FocusState private var editing: Bool
     /// Whether the overview is there behind (or instead of) the page.
     @State private var showingTabs = false
@@ -213,6 +215,7 @@ struct BrowserScreen: View {
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }
+        .onChange(of: incoming, initial: true) { openIncoming() }
         // The bar's buttons wake once the pull's landing is over, not on a
         // timer: waking them redraws the whole bar, and 150ms after the
         // finger lifted that fell mid-landing and froze a frame (David's
@@ -476,6 +479,18 @@ struct BrowserScreen: View {
                 }
             }
         }
+    }
+
+    /// A link from another app (Firn as the default browser) opens as a new
+    /// tab in the space on screen, the space used last, as on the Mac.
+    /// Anything but http and https is refused (CLAUDE.md, Security).
+    private func openIncoming() {
+        guard let url = incoming else { return }
+        incoming = nil
+        guard WebAddress.isWebURL(url) else { return }
+        editing = false
+        store.openTab(url)
+        if showingTabs { hideTabs() }
     }
 
     /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,

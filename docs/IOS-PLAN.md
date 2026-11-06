@@ -151,7 +151,7 @@ Steps (written down 2026-11-03, David's OK):
    Then the look over (light, dark, Reduce Motion, VoiceOver: each row spoken as on the Mac, "Open tab, Wikipedia") and phase 2's done test.
       *Look over, 2026-11-06:* light and dark checked in the Simulator (rows, hints, and icons legible on a white page in both). Reduce Motion: the card only fades and the bar doesn't wait for the keyboard (read in the code). VoiceOver: rows say the title, then the hint, as on the Mac, the best row first; the field now hints "Results appear above as you type", since the card sits above it, behind a swipe back. Known: the field's glass shows the page's text through it more than the card does (the bar's own glass, as David chose on 2026-11-05). Not yet on David's iPhone with VoiceOver and Reduce Motion.
 
-Paperwork for David during phase 2: request Apple's default-browser entitlement.
+Paperwork for David during phase 2: request Apple's default-browser entitlement (`com.apple.developer.web-browser`, through developer.apple.com/contact/request/default-browser-entitlement/; Apple's rules: "Preparing your app to be the default web browser"). *Readied 2026-11-06:* the iPhone app now has its own `Firn iOS/Info.plist`, merged with the generated one, declaring http and https as the Mac's does, and a link from another app opens as a new tab in the space on screen (`BrowserScreen.openIncoming`; anything but http and https refused). It only arrives once Apple grants the entitlement and David makes the new profile; Firn uses none of the Info.plist keys Apple rejects browsers for. David sent the form the same day.
 
 ### Phase 3: Groups and Basecamp
 

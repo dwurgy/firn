@@ -16,5 +16,11 @@
 			</array>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Sites you allow can use the camera, for video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sites you allow can use the microphone, for calls and voice.</string>
 </dict>
 </plist>

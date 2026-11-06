@@ -133,6 +133,8 @@ struct TabOverview: View {
                     LiftedTile(finger: finger, frame: drag.start, lifted: drag.lifted) {
                         tile(tab, spot: { _ in })
                     }
+                    // There or not, never faded in or out.
+                    .transition(.identity)
                 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
@@ -322,8 +324,15 @@ struct TabOverview: View {
         }
         let up: (() -> Void)? = index > 0 ? { move(tab, to: index - 1) } : nil
         let down: (() -> Void)? = index < count - 1 ? { move(tab, to: index + 1) } : nil
-        let hidden = gliding == tab.id || drag?.id == tab.id
         return tile(tab, spot: spot, moveUp: up, moveDown: down)
+            // Its place stays open while it's held (see EmptyWhileHeld).
+            // Inside the menu's modifier, not after it: holding a tab, iOS's
+            // menu already shows its own picture of it in its place (the
+            // preview it lifts before the menu opens), and that picture is
+            // drawn from what's inside the modifier. Hidden only outside,
+            // the picture lingered as a copy until the menu let it go
+            // (David's recordings, 2026-11-05).
+            .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
             // Hold, then move, to lift a tab and drag it to a new place, as
             // in Safari. Loose tabs only: groups come in phase 3.
             .gesture(HoldToDrag(enabled: tab.groupID == nil && gliding == nil,
@@ -339,14 +348,12 @@ struct TabOverview: View {
             .contentShape(.contextMenuPreview,
                           RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
             .contextMenu { menu(for: tab) }
-            // Its place stays open while it's held. At once, never faded:
-            // on David's iPhone the lift and the list's first glide aside
-            // came in one update, so the glide's animation faded the tab out
-            // slowly and it lingered as a copy (his recording, 2026-11-05).
-            .opacity(hidden ? 0 : 1)
-            .animation(nil, value: hidden)
             .id(tab.id)
-            .transition(.opacity)
+            // A closed tab fades away; while a tab is held, nothing fades,
+            // so the list moving a card can't leave a fading copy of it
+            // behind (David, 2026-11-05: a copy lingered on each tab's
+            // first drag).
+            .transition(drag == nil ? .opacity : .identity)
     }
 
     /// A tab's menu: short, in the Mac's words. Phase 3 adds Add to
@@ -400,6 +407,7 @@ struct TabOverview: View {
         finger.top = frame.minY
         finger.y = point.y
         drag = Drag(id: tab.id, start: frame, grab: point.y - frame.minY)
+        finger.held = tab.id
         lifts += 1
         keepScrollingAtEdges()
     }
@@ -457,6 +465,7 @@ struct TabOverview: View {
         let landing = spots.frames[drag.id]?.minY ?? drag.start.minY
         guard !reduceMotion else {
             self.drag = nil
+            finger.held = nil
             lastDrop = .now
             return
         }
@@ -466,6 +475,7 @@ struct TabOverview: View {
             self.drag = drag
         } completion: {
             self.drag = nil
+            finger.held = nil
             lastDrop = .now
         }
     }
@@ -545,10 +555,30 @@ private struct Drag {
 
 /// Where the held tile is (global points): observed only by the tile.
 @MainActor @Observable private final class DragFinger {
+    /// The held tab, whose place in the list stays empty.
+    var held: UUID?
     /// The tile's top.
     var top: CGFloat = 0
     /// The finger itself.
     var y: CGFloat = 0
+}
+
+/// A tab's place in the list, empty while the tab is held (or its page
+/// glides). It reads which tab is held itself: the list doesn't redraw a
+/// tab's tile when only the held tab changes, so on each tab's first drag
+/// its tile stayed in place, a copy beside the lifted one, until the list
+/// first moved (David's recordings, 2026-11-05). At once, never faded.
+private struct EmptyWhileHeld: ViewModifier {
+    let finger: DragFinger
+    let id: UUID
+    let gliding: Bool
+
+    func body(content: Content) -> some View {
+        let empty = gliding || finger.held == id
+        content
+            .opacity(empty ? 0 : 1)
+            .animation(nil, value: empty)
+    }
 }
 
 /// The held tab, over the list: a little larger with a soft warm shadow

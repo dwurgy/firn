@@ -112,8 +112,23 @@ private struct CommandResultRow: View {
             }
         case .history:
             Image(systemName: "clock")
-        case .action:
-            Image(systemName: "command")
+        case let .action(action):
+            Image(systemName: Self.symbol(for: action.id))
+        }
+    }
+
+    /// Each action's own symbol, as in the page menu (the Mac shows its
+    /// shortcut instead; iOS has none to show).
+    private static func symbol(for id: String) -> String {
+        switch id {
+        case "reload": "arrow.clockwise"
+        case "back": "chevron.backward"
+        case "forward": "chevron.forward"
+        case "copy-link": "link"
+        case "share": "square.and.arrow.up"
+        case "close": "xmark"
+        case "reopen": "arrow.uturn.backward"
+        default: "circle"
         }
     }
 

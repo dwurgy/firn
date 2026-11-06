@@ -43,7 +43,8 @@ struct AddressBar: View {
     /// timing, so the glass trailed Firn's frost and words as a grey ghost
     /// whenever the pill changed width (David's recordings, 2026-11-03).
     var body: some View {
-        let rows = editing.wrappedValue ? store.commandRows(for: typed, searchEngine: engine) : []
+        let rows = editing.wrappedValue
+            ? store.commandRows(for: typed, searchEngine: engine, actions: actions.map(\.action)) : []
         VStack(spacing: Self.spacing) {
             if !rows.isEmpty {
                 CommandResults(rows: rows, engine: engine, space: space, pick: pick, swipedDown: cancelTyping)
@@ -122,10 +123,39 @@ struct AddressBar: View {
             store.select(tab)
         case let .closed(entry):
             store.reopen(entry)
-        case .action:
-            return
+        case let .action(action):
+            guard let run = actions.first(where: { $0.action.id == action.id })?.run else { return }
+            run()
+            // Only from +: the overview closes once a tab is brought back.
+            guard typingNewTab, action.id == "reopen" else { return }
         }
         opened()
+    }
+
+    /// What can be done by name right now, in the Mac's words
+    /// (`Firn/CommandBar.swift`), with no shortcuts shown. Only what would
+    /// do something is offered. From the overview's + there's no page on
+    /// screen, so only Reopen Closed Tab.
+    private var actions: [BarAction] {
+        var list: [BarAction] = []
+        func add(_ id: String, _ name: String, _ keywords: [String] = [], when available: Bool = true,
+                 run: @escaping @MainActor () -> Void) {
+            guard available else { return }
+            list.append(BarAction(action: CommandAction(id: id, name: name, keywords: keywords), run: run))
+        }
+        if !typingNewTab, let tab = store.activeTab, let page {
+            add("reload", "Reload Page", ["refresh"], when: page.url != nil || page.loadError != nil) { page.reload() }
+            add("back", "Back", ["previous", "page"], when: page.canGoBack) { page.goBack() }
+            add("forward", "Forward", ["next", "page"], when: page.canGoForward) { page.goForward() }
+            if let url = page.url {
+                add("copy-link", "Copy Link", ["address", "url"]) { UIPasteboard.general.url = url }
+                add("share", "Share…", ["send", "link"]) { ShareSheet.present(url) }
+            }
+            add("close", "Close Tab", []) { store.close(tab) }
+        }
+        add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
+            ["undo", "restore", "bring back"], when: store.nextToReopen != nil) { store.reopenClosed() }
+        return list
     }
 
     private var buttons: some View {
@@ -505,6 +535,12 @@ private struct MenuRowStyle: ButtonStyle {
             .background(configuration.isPressed ? Theme.press : .clear,
                         in: .rect(cornerRadius: PageMenuPanel.cornerRadius - 6, style: .continuous))
     }
+}
+
+/// An action the bar can run: what FirnCore matches, and what picking it does.
+private struct BarAction {
+    let action: CommandAction
+    let run: @MainActor () -> Void
 }
 
 /// iOS's own share sheet, over whatever's on screen.

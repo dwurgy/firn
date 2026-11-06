@@ -339,8 +339,12 @@ struct TabOverview: View {
             .contentShape(.contextMenuPreview,
                           RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
             .contextMenu { menu(for: tab) }
-            // Its place stays open while it's held.
+            // Its place stays open while it's held. At once, never faded:
+            // on David's iPhone the lift and the list's first glide aside
+            // came in one update, so the glide's animation faded the tab out
+            // slowly and it lingered as a copy (his recording, 2026-11-05).
             .opacity(hidden ? 0 : 1)
+            .animation(nil, value: hidden)
             .id(tab.id)
             .transition(.opacity)
     }

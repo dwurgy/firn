@@ -24,6 +24,15 @@ struct AddressBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What's being typed, for the results above the field (empty at rest).
     @State private var typed = ""
+    /// Just after typing, while the keyboard slides away: the field's glass
+    /// rides down with it, so the bar's resting parts (the site, its
+    /// buttons, Back, and Tabs) wait until it has landed, then fade in.
+    /// Shown at once, they sat at the bottom before the field got there
+    /// (David's recording, 2026-11-05).
+    @State private var settling = false
+    /// Whether iOS's keyboard is on screen (a hardware keyboard shows none,
+    /// so there's nothing to wait for).
+    @State private var keyboardShown = false
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -54,8 +63,39 @@ struct AddressBar: View {
         .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
         .onChange(of: editing.wrappedValue) {
-            if editing.wrappedValue { menuOpen = false } else { typed = "" }
+            if editing.wrappedValue {
+                menuOpen = false
+                settling = false
+            } else {
+                typed = ""
+                settle()
+            }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardShown = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            keyboardShown = false
+            land()
+        }
+        .environment(\.barSettling, settling)
+    }
+
+    /// Typing ended: wait for the keyboard to finish leaving (with a
+    /// limit, in case iOS never says so).
+    private func settle() {
+        guard keyboardShown, !reduceMotion else { return }
+        settling = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.7))
+            land()
+        }
+    }
+
+    /// The field has landed: its resting parts fade in.
+    private func land() {
+        guard settling else { return }
+        withAnimation(.easeOut(duration: 0.18)) { settling = false }
     }
 
     /// A row picked. Go and Search do what Go on the keyboard does (load in
@@ -157,11 +197,12 @@ struct AddressBar: View {
     /// `.opacity`, and both left dark discs behind (David's recordings,
     /// 2026-11-04); a glass view's size it does follow.
     private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
-        content()
-            .scaleEffect(menuOpen && !reduceMotion ? 0.01 : 1, anchor: anchor)
-            .opacity(menuOpen ? 0 : 1)
-            .allowsHitTesting(!menuOpen)
-            .accessibilityHidden(menuOpen)
+        let hidden = menuOpen || settling
+        return content()
+            .scaleEffect(hidden && !reduceMotion ? 0.01 : 1, anchor: anchor)
+            .opacity(hidden ? 0 : 1)
+            .allowsHitTesting(!hidden)
+            .accessibilityHidden(hidden)
     }
 
     /// How far the bar's round buttons sit from the screen's edges, at rest.
@@ -224,6 +265,8 @@ private struct NavigationPill: View {
 
 private struct AddressField: View {
     @Environment(\.barQuiet) private var barQuiet
+    /// The keyboard is still leaving (see `AddressBar.settling`).
+    @Environment(\.barSettling) private var settling
     static let height: CGFloat = 48
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
@@ -251,15 +294,16 @@ private struct AddressField: View {
                     // Safari's icon sits this much further in from the
                     // field's rounded end.
                     .padding(.leading, 3.5)
-                    .opacity(menuOpen ? 0 : 1)
+                    .opacity(menuOpen || settling ? 0 : 1)
                     .animation(.easeOut(duration: 0.1), value: menuOpen)
             }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
                 // At rest the site shows as a label instead (below); the
-                // field itself is only seen while typing.
-                .opacity(isEditing ? 1 : 0)
+                // field itself is only seen while typing, and while it rides
+                // the keyboard down, carrying the site with it.
+                .opacity(isEditing || settling ? 1 : 0)
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(isEditing ? .leading : .center)
                 .keyboardType(.webSearch)
@@ -301,7 +345,7 @@ private struct AddressField: View {
                 // Reload and Stop cross-fade rather than snap (a fade, so
                 // it stays with Reduce Motion).
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
-                .opacity(menuOpen ? 0 : 1)
+                .opacity(menuOpen || (settling && !isEditing) ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
         }
         .frame(height: Self.height)
@@ -334,7 +378,7 @@ private struct AddressField: View {
         .minimumScaleFactor(0.9)
         .truncationMode(.tail)
         .frame(maxWidth: .infinity)
-        .opacity(menuOpen ? 0 : 1)
+        .opacity(menuOpen || settling ? 0 : 1)
         .animation(.easeOut(duration: 0.1), value: menuOpen)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -516,4 +560,7 @@ extension EnvironmentValues {
     /// While the page is pulled up from the bar (and a moment after), the
     /// bar's buttons don't act: the finger lifting over one isn't a tap.
     @Entry var barQuiet = false
+    /// Typing just ended and the keyboard is still leaving: the field rides
+    /// down with it, and its resting parts wait (see `AddressBar.settling`).
+    @Entry var barSettling = false
 }

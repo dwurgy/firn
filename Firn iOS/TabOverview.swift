@@ -702,7 +702,9 @@ final class HoldThenMove: UIGestureRecognizer {
         case .possible:
             moved = CGPoint(x: point.x - start.x, y: point.y - start.y)
             guard hypot(moved.x, moved.y) >= Self.slop else { return }
-            state = touch.timestamp - startTime >= Self.hold ? .began : .failed
+            guard touch.timestamp - startTime >= Self.hold else { state = .failed; return }
+            pauseSystemDrags()
+            state = .began
         case .began, .changed:
             state = .changed
         default: break
@@ -715,6 +717,30 @@ final class HoldThenMove: UIGestureRecognizer {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
         state = (state == .began || state == .changed) ? .cancelled : .failed
+    }
+
+    /// iOS's own drag (there only so a tab's open menu can hand off to a
+    /// drag) is switched off while this one runs: in a slow drag it
+    /// started about 0.7s in and took the touch, the tab jumping to the top
+    /// and snapping back (David's recording, 2026-11-05). On again once the
+    /// finger lifts.
+    private var pausedDrags: [UIDragInteraction] = []
+
+    private func pauseSystemDrags() {
+        var next: UIView? = view
+        while let current = next {
+            for case let drag as UIDragInteraction in current.interactions where drag.isEnabled {
+                drag.isEnabled = false
+                pausedDrags.append(drag)
+            }
+            next = current.superview
+        }
+    }
+
+    override func reset() {
+        super.reset()
+        for drag in pausedDrags { drag.isEnabled = true }
+        pausedDrags = []
     }
 }
 

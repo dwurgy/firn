@@ -51,9 +51,10 @@ enum Theme {
     static let peekEdgeRim = Color(light: 0xFFFFFF, lightOpacity: 0.70, dark: 0xFFFFFF, darkOpacity: 0.16)
     /// The page behind a Lookout: a warm brown veil in light, deeper in dark.
     static let lookoutDim = Color(light: 0x3C2814, lightOpacity: 0.16, dark: 0x000000, darkOpacity: 0.35)
-    /// The page behind the command bar: lighter than a Lookout's, since the
-    /// bar is small and quick.
-    static let commandDim = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)
+    /// The page behind the command bar. Light is a warm near-black, not the
+    /// brown wash, so white pages dim instead of turning tan (David,
+    /// 2026-11-05: wanted a plain dim, as on iOS).
+    static let commandDim = Color(light: 0x14100C, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.45)
     /// iOS: the page or overview behind the address field while typing.
     /// Deeper than the Mac's, so the field and its results read clearly
     /// over a busy page (David, 2026-11-05: 16% was too light). Light is a

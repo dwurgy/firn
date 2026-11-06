@@ -20,6 +20,11 @@ extension BrowserEngine {
     /// erases it at the next launch.
     public static func removeData(for dataStoreID: UUID) {
         Task { @MainActor in
+            #if os(macOS)
+            if #available(macOS 15.4, *), mayUseExtensions {
+                guard await WebExtensionManager.shared.removeData(for: dataStoreID) else { return }
+            }
+            #endif
             try? await Task.sleep(for: .seconds(2))
             wakeWebKit()
             do {
@@ -39,6 +44,10 @@ extension BrowserEngine {
             wakeWebKit()
             let unused = await WKWebsiteDataStore.allDataStoreIdentifiers.filter { !keeping.contains($0) }
             for id in unused {
+                #if os(macOS)
+                if #available(macOS 15.4, *), mayUseExtensions,
+                   !(await WebExtensionManager.shared.removeData(for: id)) { continue }
+                #endif
                 do {
                     try await WKWebsiteDataStore.remove(forIdentifier: id)
                 } catch {

@@ -80,7 +80,32 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
 - **Scam checks**, by macOS's own Safe Browsing service (the same one Safari uses). It keeps a list of known scam sites on your Mac, and when a page might be on it, asks Apple using a short code calculated from the address, never the address itself. If the site is a known scam, you'll see a warning instead of the page.
 - **Update checks**, once a day, if you say yes when Firn asks on its second launch (change it any time in Settings › General, or check now with Firn › Check for Updates…). Firn asks firnbrowser.com whether a new version is out, and only Firn's version number goes along, nothing about your Mac or your browsing. A new version downloads from Firn's GitHub releases, and Firn installs it only if it's signed with Firn's own key.
 
-Nothing else, and no analytics.
+- **Extension downloads**, only when you choose **Install 1Password**. Firn contacts Mozilla Add-ons for
+  the current package and verifies its published checksum. It sends no browsing information with that request.
+
+Firn itself sends nothing else and has no analytics. If you install an extension, it can make additional
+requests and access the websites you allow, according to its own privacy policy. Firn shows its requested
+permissions before installation, and extensions are enabled separately for each set of space sign-ins.
+
+## Extensions
+
+On macOS 15.4 or later, open **Settings › Extensions** to install an extension from a ZIP or Firefox XPI file,
+or choose **Install 1Password** to download its package from the official Mozilla Add-ons listing. Review the
+requested permissions, then install it in the selected space. Spaces that share sign-ins also share extension
+state. Use the extension's button in the sidebar to open it; manage its enablement or remove it in Settings.
+Extension toolbar actions are available in tabs, and are disabled while a Lookout link preview is open.
+Imported archives must contain `manifest.json` at the top level. Extension updates are manual: remove and
+reinstall the extension to get a newer package. Reinstallation starts with a new identity and requires signing
+in again. Removal requests WebKit data cleanup and retries reported failures on the next launch. Complete
+erasure of extension DOM storage has not yet been verified; this remains a release blocker for this feature.
+
+**1Password support is experimental.** Sign in to your 1Password account inside the extension. Connecting to
+the 1Password desktop app, shared unlocking, Touch ID through that connection, and system notifications are not
+supported. Installation and 1Password's setup screens have been tested; authenticated sign-in, save/fill,
+and account state across relaunch still need validation with a test account. Its setup may mention Firefox
+because this integration uses the Firefox package. Other extensions may depend on browser APIs Firn does not implement.
+
+Extensions require macOS 15.4; the rest of Firn still runs on macOS 14.
 
 ## Requirements
 

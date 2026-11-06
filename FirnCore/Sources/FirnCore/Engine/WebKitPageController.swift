@@ -65,11 +65,37 @@ final class WebKitPageController: NSObject, PageController {
     /// A sign-in just sent, held (in memory only) until it seems to have
     /// worked, for at most `SignInScript.pendingLimit` seconds.
     @ObservationIgnored private var pendingSignIn: (login: SubmittedLogin, at: TimeInterval)?
+    #if os(macOS)
+    @ObservationIgnored private var authorizedExtensionURL: URL?
+
+    private func extensionOrigin(of frame: WKFrameInfo) -> URL? {
+        let origin = frame.securityOrigin
+        guard origin.protocol == "webkit-extension", !origin.host.isEmpty else { return nil }
+        var components = URLComponents()
+        components.scheme = origin.protocol
+        components.host = origin.host
+        return components.url
+    }
+
+    @available(macOS 15.4, *)
+    func loadExtensionPage(_ url: URL, in dataStoreID: UUID) {
+        guard webView.configuration.websiteDataStore.identifier == dataStoreID,
+              let manager = webView.configuration.webExtensionController?.delegate as? WebExtensionManager,
+              manager.ownsExtensionURL(url, in: dataStoreID) else { return }
+        authorizedExtensionURL = url
+        webView.load(URLRequest(url: url))
+    }
+    #endif
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
         // Every page uses its space's own store, never .default().
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: dataStoreID)
+        #if os(macOS)
+        if #available(macOS 15.4, *), BrowserEngine.mayUseExtensions {
+            configuration.webExtensionController = WebExtensionManager.shared.controller(for: dataStoreID)
+        }
+        #endif
         // Without a Safari-style version, some sites (Google sign-in among them)
         // treat WKWebView as an embedded app view and serve a lesser page.
         configuration.applicationNameForUserAgent = Self.safariUserAgentSuffix
@@ -81,7 +107,7 @@ final class WebKitPageController: NSObject, PageController {
 
     /// `configuration` is either Firn's own (above) or the one WebKit hands
     /// over for a popup, which is a copy of the opener's.
-    private init(configuration: WKWebViewConfiguration, isPopup: Bool) {
+    init(configuration: WKWebViewConfiguration, isPopup: Bool) {
         self.isPopup = isPopup
         // Ad and tracker blocking, for every page in every space.
         ContentBlocker.shared.attach(configuration.userContentController)
@@ -379,8 +405,29 @@ extension WebKitPageController: WKNavigationDelegate {
         }
         // A web page file macOS handed Firn (see `OpenedFiles`), as the
         // whole page: its own load, a reload, or Back to it.
-        let allows = NavigationPolicy.allows(url, isMainFrame: isMainFrame)
+        let extensionPage: Bool
+        #if os(macOS)
+        if #available(macOS 15.4, *), BrowserEngine.mayUseExtensions,
+           let storeID = webView.configuration.websiteDataStore.identifier,
+           let manager = webView.configuration.webExtensionController?.delegate as? WebExtensionManager {
+            if isMainFrame {
+                extensionPage = (authorizedExtensionURL == url && manager.ownsExtensionURL(url, in: storeID))
+                    || manager.allowsExtensionNavigation(url, from: extensionOrigin(of: navigationAction.sourceFrame), in: storeID)
+            } else {
+                // WebKit's extension scheme handler enforces web_accessible_resources
+                // against the embedding origin. This also permits inline extension UI.
+                extensionPage = manager.ownsExtensionURL(url, in: storeID)
+            }
+            if extensionPage { authorizedExtensionURL = nil }
+        } else { extensionPage = false }
+        #else
+        extensionPage = false
+        #endif
+        let allows = NavigationPolicy.allows(url, isMainFrame: isMainFrame) || extensionPage
             || (isMainFrame && OpenedFiles.contains(url))
+        #if os(macOS)
+        if isMainFrame && allows && !extensionPage { authorizedExtensionURL = nil }
+        #endif
         // Before WebKit goes ahead, so the rules this site wants apply to its
         // load. Redirects ask again, so the site that ends up showing decides.
         if allows, isMainFrame, WebAddress.isWebURL(url) { followBlocking(of: url) }
@@ -1037,7 +1084,18 @@ extension WebKitPageController: WKUIDelegate {
                 }
             }
         }
-        guard let onRequest, Self.mayOpenInNewTab(navigationAction.request.url) else { return nil }
+        let ownExtensionPage: Bool
+        #if os(macOS)
+        if #available(macOS 15.4, *), BrowserEngine.mayUseExtensions,
+           let storeID = webView.configuration.websiteDataStore.identifier,
+           let target = navigationAction.request.url,
+           let manager = webView.configuration.webExtensionController?.delegate as? WebExtensionManager {
+            ownExtensionPage = manager.allowsExtensionNavigation(target, from: extensionOrigin(of: navigationAction.sourceFrame), in: storeID)
+        } else { ownExtensionPage = false }
+        #else
+        ownExtensionPage = false
+        #endif
+        guard let onRequest, Self.mayOpenInNewTab(navigationAction.request.url) || ownExtensionPage else { return nil }
         // The popup must use its opener's store, so it stays in the same space.
         // WebKit's copy does; anything else is refused rather than risk a leak.
         guard let store = configuration.websiteDataStore.identifier,
@@ -1047,6 +1105,11 @@ extension WebKitPageController: WKUIDelegate {
         // the site it came from). Firn's scripts are added to it as for any page.
         configuration.userContentController = WKUserContentController()
         let page = WebKitPageController(configuration: configuration, isPopup: true)
+        #if os(macOS)
+        if ownExtensionPage, let target = navigationAction.request.url {
+            page.authorizedExtensionURL = target
+        }
+        #endif
         onRequest(.openPage(page, inBackground: false))
         // Only a page a tab took in gets listened to. One nobody took (its
         // opener was closing, say) is refused, so it never loads unseen.

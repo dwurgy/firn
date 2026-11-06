@@ -2,6 +2,57 @@
 
 Details and reasoning that don't belong in CLAUDE.md.
 
+## Browser extensions and 1Password (2026-10-31)
+
+Requested: an extension manager, with 1Password first. Separate sign-in inside the extension is acceptable for
+this version; the desktop app's shared unlocking and Touch ID are outside this version's supported behavior.
+
+- **The host.** Apple's `WKWebExtension` APIs require macOS 15.4. Firn retains its macOS 14 deployment target
+  and gates the extension feature. Each website-data identifier gets its own persistent extension controller,
+  background/popup website data store, tab/window view, and extension storage. Spaces that deliberately share
+  sign-ins share that controller. Demo mode disables extensions before constructing any pages.
+- **Installation.** Settings › Extensions offers a local ZIP/XPI import and a 1Password download from its
+  official Mozilla Add-ons listing (add-on 950528). The latter validates the listing's identity, HTTPS download
+  source, download size, and published SHA-256. Archives are copied into Firn's own storage and checked before
+  parsing. Installation presents permissions and website access before anything is enabled, for the named
+  space. Optional new permission requests require a separate decision.
+- **1Password is experimental.** The untouched Firefox package 8.12.41.1 parsed and loaded in a disposable
+  WebKit probe without initial extension errors. That proves loading, not full compatibility. Desktop native
+  messaging is denied explicitly; no external helper bridge or entitlement change was added. Credentials stay
+  in the extension's own account flow. Firn does not implement a substitute password-manager protocol.
+- **Compatibility boundaries.** Notifications report a denied permission and cannot be created. Missing
+  navigation-target notifications are derived from real native tab/opener relationships, without invented
+  frame or process identifiers. Inline extension frames pass through WebKit's own `web_accessible_resources`
+  checks; tests verify that public resources load and private ones remain blocked. Top-level extension
+  navigation checks the actual source frame's security origin. Toolbar actions are disabled in Lookout
+  previews rather than applying an action to the tab behind them.
+- **Cleanup and demos.** Uninstall records pending WebKit data removal in the library index before dropping
+  the installed record, so a later launch can finish interrupted cleanup. Deleting a space clears disabled
+  extensions' records too. Cleanup checks SDK record errors and only matches website records belonging to the
+  extension UUID; unrelated website storage is preserved. This SDK did not expose synthetic extension
+  localStorage/IndexedDB through its public data records, and reported a synchronized-storage deletion error.
+  The journal remains pending on reported failures. Complete DOM-storage erasure is unverified and blocks
+  release of this experimental feature. Demo mode gates both execution and Settings before real library access.
+- **Security review scope.** New input is user-selected extension archives and the explicitly requested
+  Mozilla download. Consented extensions can read/change permitted websites and use supported browser APIs;
+  ordinary web pages gain no new native interface. Package files, permission/enablement metadata, and WebKit's
+  extension state are local; installed extensions can make their own network requests. Invalid packages,
+  unverified downloads, mismatched data stores, and unsupported native messages must fail closed. No browsing
+  addresses or credentials belong in diagnostics. README's privacy description now accounts for extensions.
+- **Manual acceptance still required with a test account.** Install 1Password, review permissions, open its
+  sidebar button, and sign in. Check save/fill on a disposable login, lock/unlock, restart persistence, disabling,
+  and removal. Repeat in a separate space (no extension sign-in should carry over), then in an explicitly shared
+  space (state should carry over). Check extension-owned onboarding/options pages, denied optional permissions,
+  and navigation from those pages back to ordinary websites. Never use a production vault for development tests.
+- **Setup smoke test.** With the untouched official 1Password 8.12.41.1 package in a fresh, isolated store,
+  the managed extension tab renders its welcome screen. Declining all three optional icon/data-collection
+  choices advances to its account setup with a Sign in action. No account details were entered. A separate
+  synthetic test verifies both Promise and callback-style runtime messages preserve structured response data.
+- **Validation.** The full FirnCore suite passed with 431 tests in 49 suites, including validation of the
+  untouched official archive. An unsigned Debug macOS app build passed with Xcode 26.6. The existing pinned
+  Sparkle artifact was downloaded and checksum-verified in the temporary build checkout after its package
+  fetch stalled; repository dependency pins were unchanged.
+
 ## Phase 1: a window that browses (2026-10-17)
 
 - **Project shape.** `Firn.xcodeproj` is a thin app target using Xcode's folder-synced groups (files added to `Firn/` show up without editing the project file). Logic lives in the local package `FirnCore`. No XcodeGen.

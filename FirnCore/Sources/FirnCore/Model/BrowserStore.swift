@@ -521,6 +521,21 @@ public final class BrowserStore {
         return tab
     }
 
+    /// An extension may open a tab only in an explicitly resolved space.
+    /// The active space is never used as a fallback for these requests.
+    func openExtensionTab(_ url: URL, in spaceID: UUID, page: (any PageController)? = nil, inBackground: Bool) -> Tab? {
+        guard spaces.contains(where: { $0.id == spaceID }) else { return nil }
+        let tab = Tab(spaceID: spaceID, url: page == nil ? url : nil, lastActiveAt: now(), page: page)
+        if let page { connect(page, to: tab) }
+        add(tab, below: nil, inBackground: inBackground || spaceID != activeSpaceID)
+        return tab
+    }
+
+    func instantiateExtensionPage(for tab: Tab) {
+        guard tabs.contains(where: { $0 === tab }), spaces.contains(where: { $0.id == tab.spaceID }) else { return }
+        wake(tab)
+    }
+
     /// Links from an everyday tab open right below it, in its group if it
     /// has one (as in Dia), and below its split if it's in one; links from a Basecamp tile open at the top or
     /// bottom of the tab list, as set. Either way, several links from one

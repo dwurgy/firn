@@ -358,7 +358,10 @@ private struct AddressField: View {
                     .accessibilityHidden(true)
             }
             TextField("Address", text: $text, selection: $selection,
-                      prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
+                      // A new tab says so, so it never reads as editing
+                      // the page on screen (David, 2026-11-06).
+                      prompt: Text(typingNewTab ? "Open a new tab" : "Search or enter address")
+                          .foregroundStyle(Theme.muted))
                 .font(.body)
                 // At rest the site shows as a label instead (below); the
                 // field itself is only seen while typing, and while it rides

@@ -371,6 +371,17 @@ struct TabOverview: View {
         }
         .padding(.horizontal, GroupTint.inset)
         .padding(.bottom, closed ? 0 : GroupTint.inset)
+        // Nothing shows below the tint while it changes size: a card
+        // folding away is cut off by the tint closing over it, not left
+        // fading under the row below (David's recording, 2026-11-06). Open
+        // at the sides and top, and a little below, so the ring around the
+        // tab on screen keeps its glow.
+        .mask {
+            Rectangle()
+                .padding(.horizontal, -24)
+                .padding(.top, -24)
+                .padding(.bottom, -2)
+        }
         .background(GroupTint(space: space))
         // Where the group is, so a held loose tab makes room around it.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
@@ -690,7 +701,10 @@ private struct GroupLine: View {
             .frame(minHeight: height)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // Not iOS's plain style: it dims the name and chevron as they're
+        // pressed, then fades them back while the group folds, which read
+        // as a flash (David's recording, 2026-11-06).
+        .buttonStyle(UndimmedPress())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityLabel(group.name)
         .accessibilityValue(group.folded ? "Folded" : "Open")
@@ -721,6 +735,12 @@ private struct GroupMenu: ViewModifier {
                 Button("Close Group", action: close)
             }
     }
+}
+
+/// A button that doesn't dim while it's pressed: what it does (a group
+/// folding) is the answer to the tap.
+private struct UndimmedPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// The flat tint behind a group: the space's color over a little white,

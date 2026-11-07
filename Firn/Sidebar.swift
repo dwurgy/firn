@@ -2100,6 +2100,9 @@ private struct GroupCard<Rows: View>: View {
                         .foregroundStyle(Theme.groupName)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        // The new name swaps in while hidden, so "New
+                        // Group" never fades out over it.
+                        .contentTransition(.identity)
                         .opacity(isNaming ? 0 : 1)
                     if isNaming {
                         NamingDots(color: Theme.groupName)

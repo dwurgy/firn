@@ -358,7 +358,7 @@ struct TabOverview: View {
         let closed = group.folded && tabs.isEmpty
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
-                      naming: store.isNaming(group), toggle: { fold(group) })
+                      closed: closed, naming: store.isNaming(group), toggle: { fold(group) })
                 .modifier(groupMenu(group))
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupTint.inset) {
@@ -672,8 +672,13 @@ private struct GroupLine: View {
     /// The header's 44pt, or a folded group's 48pt: the name and chevron
     /// stay in the middle, so they glide there as it folds.
     let height: CGFloat
+    /// Folded down to its name line.
+    let closed: Bool
     /// New, and its name is on the way from the on-device model.
     let naming: Bool
+    /// How far right a folded group's chevron moves: from 30pt in (the
+    /// tint's 8pt and half its 44pt frame) to a loose row's X, 24pt in.
+    static let foldedShift: CGFloat = GroupTint.inset + 22 - 24
     let toggle: () -> Void
 
     var body: some View {
@@ -687,6 +692,9 @@ private struct GroupLine: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.ink)
                         .lineLimit(1)
+                        // The new name swaps in while hidden, so "New
+                        // Group" never fades out over it.
+                        .contentTransition(.identity)
                         .opacity(naming ? 0 : 1)
                     if naming {
                         NamingDots(color: Theme.ink, size: 5)
@@ -702,6 +710,11 @@ private struct GroupLine: View {
                     .foregroundStyle(Theme.muted)
                     .rotationEffect(.degrees(group.folded ? -90 : 0))
                     .frame(width: 44, height: 44)
+                    // Folded, the group is a row like the loose tabs, so
+                    // its chevron glides right over their X (24pt in);
+                    // open, it stays over the cards' round X (David,
+                    // 2026-11-07).
+                    .offset(x: closed ? GroupLine.foldedShift : 0)
             }
             .frame(minHeight: height)
             .contentShape(Rectangle())

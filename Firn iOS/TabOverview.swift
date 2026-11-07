@@ -726,6 +726,10 @@ private struct GroupLine: View {
         .buttonStyle(UndimmedPress())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityLabel(naming ? "New group, naming" : group.name)
+        // The name arrived: VoiceOver hears it, as the dots fade (step 4's look over).
+        .onChange(of: naming) { was, now in
+            if was, !now { AccessibilityNotification.Announcement("Group named \(group.name)").post() }
+        }
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Folds the group")
         .accessibilityAddTraits(.isHeader)

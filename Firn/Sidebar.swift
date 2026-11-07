@@ -2134,6 +2134,10 @@ private struct GroupCard<Rows: View>: View {
         // While renaming, VoiceOver reaches the name field itself.
         .accessibilityElement(children: isRenaming ? .contain : .ignore)
         .accessibilityLabel(isNaming ? "New group, naming" : group.name)
+        // The name arrived: VoiceOver hears it, as the dots fade (step 4's look over).
+        .onChange(of: isNaming) { was, now in
+            if was, !now { AccessibilityNotification.Announcement("Group named \(group.name)").post() }
+        }
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Hides the group's tabs")

@@ -48,7 +48,7 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 - **The tab on screen is always tall,** even after a weekend away, has a frost ring, and the overview opens scrolled to it.
 - **Nothing changes size while you scroll.** Cards that grow as you scroll were tried and dropped as too busy.
 - **Pinch** switches the whole list between previews and slim rows, as in Photos. Firn remembers the choice.
-- **Groups** are frosted cards with a name and a fold arrow, the same as on the Mac. Tabs inside are always slim rows: grouping a tab means you're keeping it.
+- **Groups** are a name line with a fold arrow, the tabs just below it and closer together than loose tabs; no card around them, so nothing new is glass. Tabs in a group look and age exactly as loose ones, tall cards included (David, 2026-11-06; replaces "always slim rows").
 - **Two columns** (wider windows): items flow in the same order across two columns; tall cards come before slim rows, so neighbours usually match in height.
 - **Bottom bar in the overview:** a glass bar with + on the left (it opens the command bar, which also finds open tabs, so there's no separate search), the space's name in the middle, in its color, with a dot per space under it (the Mac's bottom row), and Done on the right. Swiping sideways on the bar changes space; tapping the name opens the space menu. The Tidied away button sits beside the name, there only while it holds tabs, as on the Mac (David, 2026-11-03).
 

@@ -72,8 +72,14 @@ struct TabOverview: View {
     /// Where the held tile's top is, under the finger: its own observed
     /// object, so following the finger redraws only the lifted tile.
     @State private var finger = DragFinger()
-    /// The list's order while a drag moves tabs aside; saved on letting go.
+    /// The list's order (groups and loose tabs) while a drag moves tabs
+    /// aside; saved on letting go.
     @State private var order: [UUID]?
+    /// The group being named: just made, or Rename from its menu.
+    @State private var naming: TabGroup?
+    @State private var name = ""
+    /// Naming a group just made (not Rename).
+    @State private var namingNew = false
     @State private var lastDrop = Date.distantPast
     @State private var lifts = 0
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
@@ -85,12 +91,28 @@ struct TabOverview: View {
         pinchedRecently || drag != nil || Date.now.timeIntervalSince(lastDrop) < 0.35
     }
 
-    /// The tabs in the order shown: the store's, or the drag's while one moves.
-    private var shownTabs: [FirnCore.Tab] {
-        let tabs = store.openTabs
-        guard let order else { return tabs }
-        let byID = Dictionary(tabs.map { ($0.id, $0) }) { a, _ in a }
+    /// Groups and loose tabs in the order shown: the store's, or the drag's
+    /// while one moves.
+    private var shownItems: [TabListItem] {
+        let items = store.tabListItems
+        guard let order else { return items }
+        let byID = Dictionary(items.map { ($0.id, $0) }) { a, _ in a }
         return order.compactMap { byID[$0] }
+    }
+
+    /// The tabs a group shows: all of them, or only the tab on screen while
+    /// it's folded, so the page always has its card to glide into.
+    private func shownTabs(in group: TabGroup) -> [FirnCore.Tab] {
+        let members = store.tabs(in: group)
+        return group.folded ? members.filter(isOnScreen) : members
+    }
+
+    /// Every tab with a tile in the list.
+    private var visibleTabs: [FirnCore.Tab] {
+        let folded = Set(store.tabGroups.filter(\.folded).map(\.id))
+        return store.openTabs.filter { tab in
+            tab.groupID.map { !folded.contains($0) } ?? true || isOnScreen(tab)
+        }
     }
 
     private var space: String { store.activeSpace.color }
@@ -116,9 +138,12 @@ struct TabOverview: View {
                 // 12pt apart (David, 2026-11-05: 8 felt a little tight),
                 // which also gives the ring around the tab on screen room.
                 LazyVStack(spacing: 12) {
-                    let tabs = shownTabs
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                        listTile(tab, at: index, of: tabs.count)
+                    let items = shownItems
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        switch item {
+                        case let .tab(tab): listTile(tab, at: index, of: items.count)
+                        case let .group(group): groupTiles(group)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -195,6 +220,14 @@ struct TabOverview: View {
             OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
+        .alert(namingNew ? "Name This Group" : "Rename Group",
+               isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) {}
+            Button("Done") {
+                if let naming { store.rename(naming, to: name) }
+            }
+        }
     }
 
     /// How far the fingers move (8% apart or together) before the pinch
@@ -247,7 +280,7 @@ struct TabOverview: View {
         let view = spots.viewport
         guard view.height > 0 else { return nil }
         let y = view.minY + point.y
-        let shown = store.openTabs.compactMap { tab in spots.frames[tab.id].map { (tab.id, $0) } }
+        let shown = visibleTabs.compactMap { tab in spots.frames[tab.id].map { (tab.id, $0) } }
             .filter { $0.1.maxY > view.minY && $0.1.minY < view.maxY }
         guard let (id, frame) = shown.min(by: { distance(y, $0.1) < distance(y, $1.1) }) else { return nil }
         let top = frame.minY - view.minY
@@ -312,8 +345,78 @@ struct TabOverview: View {
         )
     }
 
-    /// A tab's tile in the list, at `index` of `count`.
-    private func listTile(_ tab: FirnCore.Tab, at index: Int, of count: Int) -> some View {
+    /// A group: its name line, then its tabs just below, closer together
+    /// than loose tabs (6pt, not 12) and looking exactly like them, tall
+    /// cards included. No card around them, so nothing new is glass
+    /// (David, 2026-11-06, after three sketches). 6pt rather than the Mac's
+    /// 4 leaves room for the ring around the tab on screen; 20pt around
+    /// the whole group sets where it ends.
+    private func groupTiles(_ group: TabGroup) -> some View {
+        VStack(spacing: 6) {
+            GroupLine(group: group, toggle: { fold(group) })
+                .contentShape(.contextMenuPreview,
+                              RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
+                .contextMenu {
+                    Button("Rename", systemImage: "pencil") { askForName(group) }
+                    Button("Ungroup", systemImage: "folder.badge.minus") {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.ungroup(group) }
+                    }
+                    Divider()
+                    Button("Close Group", systemImage: "xmark") { close(group) }
+                }
+                .accessibilityActions {
+                    Button("Rename") { askForName(group) }
+                    Button("Ungroup") { store.ungroup(group) }
+                    Button("Close Group") { close(group) }
+                }
+            ForEach(shownTabs(in: group)) { tab in
+                listTile(tab, at: nil, of: 0)
+            }
+        }
+        // 20pt from what's around it (the list's 12 and 8 more), the brief's
+        // section spacing, so a group's end reads even with one tab.
+        .padding(.vertical, 8)
+        // Where the group is, so a held loose tab makes room around it.
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
+        .id(group.id)
+        .transition(drag == nil ? .opacity : .identity)
+    }
+
+    /// Folds or unfolds a group (0.25s, no bounce; with Reduce Motion it's
+    /// simply done). Folded tabs forget their spots, so nothing glides to
+    /// a place that's gone.
+    private func fold(_ group: TabGroup) {
+        guard !busy else { return }
+        let folding = !group.folded
+        if folding {
+            for tab in store.tabs(in: group) where !isOnScreen(tab) {
+                spots.frames[tab.id] = nil
+                spots.cards.remove(tab.id)
+            }
+        }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, folding) }
+    }
+
+    private func askForName(_ group: TabGroup) {
+        name = group.name
+        namingNew = false
+        naming = group
+    }
+
+    /// New Group with This Tab: the group starts where the tab is, and asks
+    /// for a name, as on the Mac.
+    private func newGroup(with tab: FirnCore.Tab) {
+        let group = withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.newGroup(with: tab) }
+        if let group {
+            name = ""
+            namingNew = true
+            naming = group
+        }
+    }
+
+    /// A tab's tile in the list, at `index` of `count` (nil inside a group:
+    /// VoiceOver's moves for grouped tabs come with dragging, step 3).
+    private func listTile(_ tab: FirnCore.Tab, at index: Int?, of count: Int) -> some View {
         let spot: (CGRect) -> Void = { frame in
             spots.frames[tab.id] = frame
             if tallness(tab, onScreen: isOnScreen(tab)) == 1 {
@@ -322,8 +425,8 @@ struct TabOverview: View {
                 spots.cards.remove(tab.id)
             }
         }
-        let up: (() -> Void)? = index > 0 ? { move(tab, to: index - 1) } : nil
-        let down: (() -> Void)? = index < count - 1 ? { move(tab, to: index + 1) } : nil
+        let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
+        let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
         return tile(tab, spot: spot, moveUp: up, moveDown: down)
             // Its place stays open while it's held (see EmptyWhileHeld).
             // Inside the menu's modifier, not after it: holding a tab, iOS's
@@ -356,13 +459,21 @@ struct TabOverview: View {
             .transition(drag == nil ? .opacity : .identity)
     }
 
-    /// A tab's menu: short, in the Mac's words. Phase 3 adds Add to
-    /// Basecamp and New group with this tab.
+    /// A tab's menu: short, in the Mac's words. Basecamp's step adds Add
+    /// to Basecamp.
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
         if let url = tab.url {
             Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
             Divider()
         }
+        if tab.groupID == nil {
+            Button("New Group with This Tab", systemImage: "folder.badge.plus") { newGroup(with: tab) }
+        } else {
+            Button("Remove from Group", systemImage: "folder.badge.minus") {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.takeOutOfGroup(tab) }
+            }
+        }
+        Divider()
         Button("Close Tab", systemImage: "xmark") { close(tab) }
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
             Button("Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) }
@@ -403,7 +514,7 @@ struct TabOverview: View {
     /// The long press has held: the tab lifts out of its place.
     private func lift(_ tab: FirnCore.Tab, at point: CGPoint) {
         guard drag == nil, !pinchedRecently, let frame = spots.frames[tab.id] else { return }
-        order = shownTabs.map(\.id)
+        order = shownItems.map(\.id)
         finger.top = frame.minY
         finger.y = point.y
         drag = Drag(id: tab.id, start: frame, grab: point.y - frame.minY)
@@ -456,9 +567,9 @@ struct TabOverview: View {
         guard var drag else { return }
         if let ids = order, let to = ids.firstIndex(of: drag.id),
            let tab = store.openTabs.first(where: { $0.id == drag.id }),
-           store.openTabs.firstIndex(where: { $0.id == drag.id }) != to {
-            // Its place among the other tabs, counted without it. (With
-            // groups, phase 3 counts each group as one, as the store does.)
+           store.tabListItems.firstIndex(where: { $0.id == drag.id }) != to {
+            // Its place in the list, counted without it and each group as
+            // one, as the store counts.
             store.move(tab, to: to)
         }
         order = nil
@@ -526,6 +637,60 @@ struct TabOverview: View {
         }
         undoManager?.setActionName("Close Tab")
         closes += 1
+    }
+
+    /// Closes a group and all its tabs; a shake brings it back whole, as
+    /// ⇧⌘T does on the Mac.
+    private func close(_ group: TabGroup) {
+        let id = group.id
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
+            store.close(group)
+        }
+        undoManager?.registerUndo(withTarget: store) { store in
+            MainActor.assumeIsolated {
+                guard let entry = store.recentlyClosed.first(where: { $0.id == id }) else { return }
+                withAnimation(.smooth(duration: 0.25)) { store.reopen(entry) }
+            }
+        }
+        undoManager?.setActionName("Close Group")
+        closes += 1
+    }
+}
+
+/// A group's name line: the name lined up over its tabs' icons, a fold
+/// arrow just after it, and no count (as on the Mac). Tapping it folds or
+/// unfolds the group; holding it opens its menu.
+private struct GroupLine: View {
+    let group: TabGroup
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 6) {
+                Text(group.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.muted)
+                    .rotationEffect(.degrees(group.folded ? -90 : 0))
+                Spacer(minLength: 0)
+            }
+            // Over the slim rows' icons (their middle is 26pt in).
+            .padding(.leading, 14)
+            // Low in its 36pt (a comfortable tap), so the name sits with
+            // its tabs, not between them and what's above.
+            .padding(.bottom, 2)
+            .frame(minHeight: 36, alignment: .bottom)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .accessibilityLabel(group.name)
+        .accessibilityValue(group.folded ? "Folded" : "Open")
+        .accessibilityHint(group.folded ? "Shows the group's tabs" : "Folds the group")
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

@@ -158,6 +158,15 @@ Paperwork for David during phase 2: request Apple's default-browser entitlement 
 Groups as frosted cards (fold, rename, ungroup, close), made by dragging a tab onto another or from the long-press menu; drag in and out. Basecamp: starts empty and hidden, "Add to Basecamp" from a tab's long-press, up to 12 with the plain-words message on the 13th, balanced rows, scrolls with the list.
 **Done:** make two groups, drag tabs between them and out of them, add five sites to Basecamp (rows read 3 + 2), try a 13th, force-quit and reopen: all of it comes back.
 
+*How a group looks (David, 2026-11-06, from three sketches; he was skeptical of cards in cards):* no card around it. A group is a name line (the name over the tabs' icons, a fold arrow after it) with its tabs just below, closer together than loose tabs (6pt instead of 12pt; 4pt would put the ring of the tab on screen on its neighbor), with 20pt (the section spacing) around the whole group so its end reads. Its tabs look and age exactly as loose ones, tall cards included, so nothing new is glass. This replaces the brief's "tabs inside are always slim rows." If a group reads too loosely, a folded group could become a small stack of its pages later.
+
+Steps (agreed 2026-11-06):
+1. **Groups in the overview:** groups and loose tabs in one order; the name line folds and unfolds (a folded group still shows the tab on screen); "New Group with This Tab" and "Remove from Group" in a tab's menu; Rename, Ungroup, and Close Group in the name line's menu; shake brings a closed group back whole. Loose tabs still drag, past groups as one piece. *Built 2026-11-06:* checked in the Simulator (making and naming a group, folding, the name line's menu, Ungroup, and a relaunch keeping it); groups get 20pt around them so a one-tab group's end reads. Not yet on David's iPhone; Close Group's shake-to-undo and Remove from Group weren't tried in the Simulator.
+2. **Dragging, part 1:** a group by its name line, a tab into a group, between groups, and out of one.
+3. **Dragging, part 2:** hold a tab over another to make a group (a preview name line while held), and VoiceOver's moves.
+4. **Basecamp:** the tiles at the top (hidden while empty), balanced rows up to 4 across, Add to Basecamp, "Basecamp is full" on the 13th, a tile's menu (Go Back to Home, Copy Link, Move to Tabs, Remove from Basecamp), dragging tiles to reorder; a tap opens the tile (ringed, the page shrinks into it). No dragging between Basecamp and the tabs for now.
+5. **A look over:** light, dark, Reduce Motion, VoiceOver, the Mac unchanged, and the done test.
+
 ### Phase 4: Spaces, truly separate
 
 Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways on the overview's bottom bar changes space, with a dot per space under the space's name, and tapping the name opens the space menu (as on the Mac); the tint cross-fades.

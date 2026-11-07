@@ -743,27 +743,26 @@ private struct UndimmedPress: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
-/// The flat tint behind a group: the space's color, over a little warm
-/// brown in light (with a thin edge of the color) or a little warm white in
-/// dark; no blur, shadow, or glass (the tabs on it keep theirs). All of
-/// its numbers live here, to tune by eye.
+/// The flat tint behind a group, one recipe in light and dark (David,
+/// 2026-11-06): a faint base wash, the space's color over it, and a thin
+/// edge of the color. No blur, shadow, or glass (the tabs on it keep
+/// theirs). All of its numbers live here, to tune by eye.
 private struct GroupTint: View {
     let space: String
     @Environment(\.colorScheme) private var scheme
 
-    /// Light: a whisper of warm brown (the hover wash's color) at 4%, so
-    /// the tint sits a touch deeper than the pale haze, then the space's
-    /// color at 22%, and a 1pt edge of it at 35%. White (the first try, at
-    /// 34%, color at 15%) vanished on the light haze (David, 2026-11-06).
+    /// The base wash, the one part that differs by mode: warm brown (the
+    /// hover wash's color) deepens the tint on the pale light haze; warm
+    /// white lifts it off the dark one. (White in light, the first try,
+    /// vanished; David, 2026-11-06.)
     static let lightBase = Color(red: 70 / 255, green: 55 / 255, blue: 40 / 255)
-    static let lightBaseOpacity = 0.04
-    static let lightColorOpacity = 0.22
-    static let lightEdgeOpacity = 0.35
-    static let edgeWidth: CGFloat = 1
-    /// Dark: warm white at 5%, then the space's color at 17% over it.
     static let darkBase = Color(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255)
-    static let darkBaseOpacity = 0.05
-    static let darkColorOpacity = 0.17
+    static let baseOpacity = 0.04
+    /// The space's color over the base.
+    static let colorOpacity = 0.22
+    /// A 1pt edge of the space's color.
+    static let edgeOpacity = 0.35
+    static let edgeWidth: CGFloat = 1
 
     /// The rows' and cards' 14pt corners plus the 8pt inside, so the
     /// corners run evenly around the tabs.
@@ -780,15 +779,9 @@ private struct GroupTint: View {
         let dark = scheme == .dark
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         ZStack {
-            shape.fill((dark ? Self.darkBase : Self.lightBase)
-                .opacity(dark ? Self.darkBaseOpacity : Self.lightBaseOpacity))
-            shape.fill(Theme.spaceColor(space)
-                .opacity(dark ? Self.darkColorOpacity : Self.lightColorOpacity))
-            // Dark needs no edge: the warm white already lifts it.
-            if !dark {
-                shape.strokeBorder(Theme.spaceColor(space).opacity(Self.lightEdgeOpacity),
-                                   lineWidth: Self.edgeWidth)
-            }
+            shape.fill((dark ? Self.darkBase : Self.lightBase).opacity(Self.baseOpacity))
+            shape.fill(Theme.spaceColor(space).opacity(Self.colorOpacity))
+            shape.strokeBorder(Theme.spaceColor(space).opacity(Self.edgeOpacity), lineWidth: Self.edgeWidth)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

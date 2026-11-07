@@ -88,8 +88,6 @@ struct BrowserScreen: View {
     @State private var newTabShift: CGFloat = 0
     /// A swipe past the last tab is under way (instead of a pull).
     @State private var newTabSwipe = false
-    /// The + fades out on its own as typing starts.
-    @State private var newTabHintOpacity: Double = 1
     /// The page menu, grown out of the bar.
     @State private var menuOpen = false
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
@@ -197,11 +195,13 @@ struct BrowserScreen: View {
             // Swiped past the last tab: a frosted + at the edge says a new
             // tab is a let-go away.
             NewTabHint(space: store.activeSpace.color, reach: newTabReach)
-                .opacity(newTabHintOpacity)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                 // Just off the screen's edge at rest, sliding in with the
                 // finger (trailing-aligned, it starts half its width in).
                 .offset(x: newTabShift + BarButton.glassSize)
+                // It stays put as the keyboard comes up (it rode up with
+                // the bar; David, 2026-11-06).
+                .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
@@ -592,7 +592,6 @@ struct BrowserScreen: View {
         if !up, dx < 0, isLast(tab) {
             newTabSwipe = true
             barQuiet = true
-            newTabHintOpacity = 1
             reachedNewTab.prepare()
             return followNewTabSwipe(drag.translation)
         }
@@ -732,7 +731,9 @@ struct BrowserScreen: View {
     }
 
     /// How far the finger goes past the last tab for a new one.
-    private static let newTabDistance: CGFloat = 110
+    /// 90pt: at 110 a quick flick often stopped just short and had to
+    /// travel on before letting go counted (David's recording, 2026-11-06).
+    private static let newTabDistance: CGFloat = 90
     /// How far the + travels for each point the finger does.
     private static let newTabGive: CGFloat = 0.6
 
@@ -758,13 +759,13 @@ struct BrowserScreen: View {
             if !newTabSwipe, pull == nil { barQuiet = false }
         }
         let wants = newTabReach >= 1
-            || (translation.width < -Self.newTabDistance * 0.5 && velocity.width < -600)
+            || (translation.width < -Self.newTabDistance * 0.4 && velocity.width < -400)
         if wants {
             startNewTab()
-            withAnimation(.easeOut(duration: 0.15)) { newTabHintOpacity = 0 } completion: {
+            // Back off the edge it came from, keeping its color, while the
+            // keyboard comes up.
+            withAnimation(.easeIn(duration: 0.2)) { newTabShift = 0 } completion: {
                 newTabReach = 0
-                newTabShift = 0
-                newTabHintOpacity = 1
             }
         } else {
             withAnimation(.smooth(duration: 0.25)) {

@@ -345,14 +345,14 @@ struct TabOverview: View {
         )
     }
 
-    /// A group: its name line, then its tabs just below, closer together
-    /// than loose tabs (6pt, not 12) and looking exactly like them, tall
-    /// cards included. No card around them, so nothing new is glass
-    /// (David, 2026-11-06, after three sketches). 6pt rather than the Mac's
-    /// 4 leaves room for the ring around the tab on screen; 20pt around
-    /// the whole group sets where it ends.
+    /// A group: a flat tint in the space's color behind its name line and
+    /// its tabs, so what's in a group and what's loose reads at a glance
+    /// (David's design, 2026-11-06, after spacing alone didn't). The tabs
+    /// keep their own glass and look exactly as loose ones, tall cards
+    /// included, 8pt apart and 8pt in from the tint's sides and bottom.
+    /// The list's 12pt sets it apart from its neighbors.
     private func groupTiles(_ group: TabGroup) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             GroupLine(group: group, toggle: { fold(group) })
                 .contentShape(.contextMenuPreview,
                               RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
@@ -369,13 +369,15 @@ struct TabOverview: View {
                     Button("Ungroup") { store.ungroup(group) }
                     Button("Close Group") { close(group) }
                 }
-            ForEach(shownTabs(in: group)) { tab in
-                listTile(tab, at: nil, of: 0)
+            // The header's own 44pt sets the room above the first tab.
+            VStack(spacing: GroupTint.inset) {
+                ForEach(shownTabs(in: group)) { tab in
+                    listTile(tab, at: nil, of: 0)
+                }
             }
         }
-        // 20pt from what's around it (the list's 12 and 8 more), the brief's
-        // section spacing, so a group's end reads even with one tab.
-        .padding(.vertical, 8)
+        .padding([.horizontal, .bottom], GroupTint.inset)
+        .background(GroupTint(space: space))
         // Where the group is, so a held loose tab makes room around it.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
         .id(group.id)
@@ -657,32 +659,30 @@ struct TabOverview: View {
     }
 }
 
-/// A group's name line: the name lined up over its tabs' icons, a fold
-/// arrow just after it, and no count (as on the Mac). Tapping it folds or
-/// unfolds the group; holding it opens its menu.
+/// A group's header: the name lined up over its tabs' icons and the fold
+/// chevron at the trailing edge, over the rows' X; no count (as on the
+/// Mac). Tapping it folds or unfolds the group; holding it opens its menu.
 private struct GroupLine: View {
     let group: TabGroup
     let toggle: () -> Void
 
     var body: some View {
         Button(action: toggle) {
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 Text(group.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
+                    // Over the slim rows' icons (24pt, 14pt in from the row).
+                    .padding(.leading, 14)
+                Spacer(minLength: 8)
                 Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.muted)
                     .rotationEffect(.degrees(group.folded ? -90 : 0))
-                Spacer(minLength: 0)
+                    .frame(width: 44, height: 44)
             }
-            // Over the slim rows' icons (their middle is 26pt in).
-            .padding(.leading, 14)
-            // Low in its 36pt (a comfortable tap), so the name sits with
-            // its tabs, not between them and what's above.
-            .padding(.bottom, 2)
-            .frame(minHeight: 36, alignment: .bottom)
+            .frame(minHeight: GroupTint.headerHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -691,6 +691,44 @@ private struct GroupLine: View {
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Folds the group")
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The flat tint behind a group: the space's color over a little white,
+/// no blur, border, shadow, or glass (the tabs on it keep theirs). All of
+/// its numbers live here, to tune by eye.
+private struct GroupTint: View {
+    let space: String
+    @Environment(\.colorScheme) private var scheme
+
+    /// Light: page white at 34%, then the space's color at 15% over it.
+    static let lightBase = Color(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255)
+    static let lightBaseOpacity = 0.34
+    static let lightColorOpacity = 0.15
+    /// Dark: warm white at 5%, then the space's color at 17% over it.
+    static let darkBase = Color(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255)
+    static let darkBaseOpacity = 0.05
+    static let darkColorOpacity = 0.17
+
+    /// The rows' and cards' 14pt corners plus the 8pt inside, so the
+    /// corners run evenly around the tabs.
+    static let cornerRadius: CGFloat = OverviewRow.cornerRadius + inset
+    /// Inside on the left, right, and bottom, and between tabs.
+    static let inset: CGFloat = 8
+    /// The header's height at the default text size (it grows with it).
+    static let headerHeight: CGFloat = 44
+
+    var body: some View {
+        let dark = scheme == .dark
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+        ZStack {
+            shape.fill((dark ? Self.darkBase : Self.lightBase)
+                .opacity(dark ? Self.darkBaseOpacity : Self.lightBaseOpacity))
+            shape.fill(Theme.spaceColor(space)
+                .opacity(dark ? Self.darkColorOpacity : Self.lightColorOpacity))
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

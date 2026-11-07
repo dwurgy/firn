@@ -358,7 +358,7 @@ struct TabOverview: View {
         let closed = group.folded && tabs.isEmpty
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
-                      closed: closed, naming: store.isNaming(group), toggle: { fold(group) })
+                      naming: store.isNaming(group), toggle: { fold(group) })
                 .modifier(groupMenu(group))
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupTint.inset) {
@@ -672,50 +672,46 @@ private struct GroupLine: View {
     /// The header's 44pt, or a folded group's 48pt: the name and chevron
     /// stay in the middle, so they glide there as it folds.
     let height: CGFloat
-    /// Folded down to its name line.
-    let closed: Bool
     /// New, and its name is on the way from the on-device model.
     let naming: Bool
-    /// How far right a folded group's chevron moves: from 30pt in (the
-    /// tint's 8pt and half its 44pt frame) to a loose row's X, 24pt in.
-    static let foldedShift: CGFloat = GroupTint.inset + 22 - 24
     let toggle: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: toggle) {
-            HStack(spacing: 0) {
+            // The chevron sits just after the name, as on the Mac (David,
+            // 2026-11-07): it belongs to the name, and the right edge is
+            // left to the tabs' X. A long name shortens first, so the
+            // chevron always shows.
+            HStack(spacing: 6) {
                 // While the on-device model names a new group, quiet dots
-                // stand where the name will be; the name fades in over them
-                // (a fade, so the same with Reduce Motion).
-                ZStack(alignment: .leading) {
-                    Text(group.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                        // The new name swaps in while hidden, so "New
-                        // Group" never fades out over it.
-                        .contentTransition(.identity)
-                        .opacity(naming ? 0 : 1)
+                // stand where the name will be, the chevron just after
+                // them; then the name fades in and the chevron glides to
+                // its end (a fade and a short glide; Reduce Motion: a swap).
+                Group {
                     if naming {
                         NamingDots(color: Theme.ink, size: 5)
-                            .transition(.opacity)
+                    } else {
+                        Text(group.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                            // The new name swaps in while hidden, so "New
+                            // Group" never fades out over it.
+                            .contentTransition(.identity)
                     }
                 }
-                .animation(.easeOut(duration: 0.3), value: naming)
-                // Over the slim rows' icons (24pt, 14pt in from the row).
-                .padding(.leading, 14)
-                Spacer(minLength: 8)
+                .transition(.opacity)
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.muted)
                     .rotationEffect(.degrees(group.folded ? -90 : 0))
-                    .frame(width: 44, height: 44)
-                    // Folded, the group is a row like the loose tabs, so
-                    // its chevron glides right over their X (24pt in);
-                    // open, it stays over the cards' round X (David,
-                    // 2026-11-07).
-                    .offset(x: closed ? GroupLine.foldedShift : 0)
+                    .fixedSize()
+                Spacer(minLength: 14)
             }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: naming)
+            // Over the slim rows' icons (24pt, 14pt in from the row).
+            .padding(.leading, 14)
             .frame(minHeight: height)
             .contentShape(Rectangle())
         }

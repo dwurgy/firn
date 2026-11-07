@@ -2092,24 +2092,24 @@ private struct GroupCard<Rows: View>: View {
                 nameField
             } else {
                 // While the on-device model names a new group, quiet dots
-                // stand where the name will be; the name fades in over them
-                // (a fade, so the same with Reduce Motion).
-                ZStack(alignment: .leading) {
-                    Text(group.name)
-                        .font(Theme.groupHeaderFont)
-                        .foregroundStyle(Theme.groupName)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        // The new name swaps in while hidden, so "New
-                        // Group" never fades out over it.
-                        .contentTransition(.identity)
-                        .opacity(isNaming ? 0 : 1)
+                // stand where the name will be, the chevron just after
+                // them; then the name fades in and the chevron glides to
+                // its end (a fade and a short glide; Reduce Motion: a swap).
+                Group {
                     if isNaming {
                         NamingDots(color: Theme.groupName)
-                            .transition(.opacity)
+                    } else {
+                        Text(group.name)
+                            .font(Theme.groupHeaderFont)
+                            .foregroundStyle(Theme.groupName)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            // The new name swaps in while hidden, so "New
+                            // Group" never fades out over it.
+                            .contentTransition(.identity)
                     }
                 }
-                .animation(.easeOut(duration: 0.3), value: isNaming)
+                .transition(.opacity)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Theme.faint)
@@ -2126,6 +2126,7 @@ private struct GroupCard<Rows: View>: View {
         }
         .padding(.leading, Theme.rowPadding)
         .padding(.trailing, 4)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: isNaming)
         .frame(height: Theme.groupHeaderHeight)
         .contentShape(Rectangle())
         .onTapGesture { if !isRenaming, !foldLocked { toggleFold() } }

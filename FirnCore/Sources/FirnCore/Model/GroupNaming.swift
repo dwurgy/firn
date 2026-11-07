@@ -18,7 +18,14 @@ public struct GroupNamingTab: Sendable, Hashable {
 /// Names a new group from its tabs (David, 2026-11-06: always on, on the
 /// device only). Returns nil when it can't, and the group keeps "New Group".
 public protocol GroupNamer: Sendable {
+    /// Whether it can name a group right now (Apple Intelligence may be
+    /// off). When it can't, a new group isn't shown as being named.
+    var isAvailable: Bool { get }
     func name(for tabs: [GroupNamingTab]) async -> String?
+}
+
+public extension GroupNamer {
+    var isAvailable: Bool { true }
 }
 
 public enum GroupNaming {
@@ -101,6 +108,8 @@ struct OnDeviceGroupNamer: GroupNamer {
         Reply with a short, plain name for what the pages have in common, one to three words, \
         like "Trip to Lisbon", "Recipes", or "Job Search". If they have nothing in common, name the main topic.
         """
+
+    var isAvailable: Bool { SystemLanguageModel.default.isAvailable }
 
     func name(for tabs: [GroupNamingTab]) async -> String? {
         let model = SystemLanguageModel.default

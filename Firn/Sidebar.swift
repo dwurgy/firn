@@ -2039,6 +2039,8 @@ private struct GroupCard<Rows: View>: View {
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous) }
     private var isRenaming: Bool { renaming == group.id }
+    /// New, and its name is on the way from the on-device model.
+    private var isNaming: Bool { store.isNaming(group) }
 
     var body: some View {
         let inset = thawed ? 0 : Theme.panelRadius - Theme.tabRadius
@@ -2089,16 +2091,22 @@ private struct GroupCard<Rows: View>: View {
             if isRenaming {
                 nameField
             } else {
-                Text(group.name)
-                    .font(Theme.groupHeaderFont)
-                    .foregroundStyle(Theme.groupName)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    // A name the namer gives arrives a moment later: it
-                    // cross-fades in rather than snapping (a fade, so fine
-                    // with Reduce Motion too).
-                    .contentTransition(.opacity)
-                    .animation(.easeOut(duration: 0.3), value: group.name)
+                // While the on-device model names a new group, quiet dots
+                // stand where the name will be; the name fades in over them
+                // (a fade, so the same with Reduce Motion).
+                ZStack(alignment: .leading) {
+                    Text(group.name)
+                        .font(Theme.groupHeaderFont)
+                        .foregroundStyle(Theme.groupName)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .opacity(isNaming ? 0 : 1)
+                    if isNaming {
+                        NamingDots(color: Theme.groupName)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.3), value: isNaming)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Theme.faint)
@@ -2121,7 +2129,7 @@ private struct GroupCard<Rows: View>: View {
         .onHover { hovering = $0 }
         // While renaming, VoiceOver reaches the name field itself.
         .accessibilityElement(children: isRenaming ? .contain : .ignore)
-        .accessibilityLabel(group.name)
+        .accessibilityLabel(isNaming ? "New group, naming" : group.name)
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Hides the group's tabs")

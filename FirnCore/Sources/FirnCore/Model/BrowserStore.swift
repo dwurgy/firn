@@ -75,7 +75,8 @@ public final class BrowserStore {
     @ObservationIgnored var groupNameWait: Duration = .seconds(4)
     /// New groups not named yet, and whether the namer's been asked. Not
     /// saved: a group still waiting at quit keeps its default name.
-    @ObservationIgnored private var unnamedGroups: [UUID: GroupNaming.State] = [:]
+    /// Observed, so the apps can show a group is being named (`isNaming`).
+    private var unnamedGroups: [UUID: GroupNaming.State] = [:]
     @ObservationIgnored private var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.
@@ -948,11 +949,17 @@ public final class BrowserStore {
 
     // MARK: - Naming new groups
 
+    /// The group is new and its name is on the way: the apps show a quiet
+    /// "thinking" mark instead of "New Group" (David, 2026-11-07).
+    public func isNaming(_ group: TabGroup) -> Bool {
+        unnamedGroups[group.id] != nil
+    }
+
     /// A new group gets its name once, from its tabs, after their titles
     /// have loaded (or `groupNameWait`, whichever is first). Waits a turn
     /// first, so a group made by dropping one tab on another has both.
     private func startNaming(_ groupID: UUID) {
-        guard groupNamer != nil else { return }
+        guard groupNamer?.isAvailable == true else { return }
         unnamedGroups[groupID] = .waiting
         let wait = groupNameWait
         Task { @MainActor [weak self] in

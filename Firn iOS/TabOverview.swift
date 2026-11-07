@@ -358,7 +358,7 @@ struct TabOverview: View {
         let closed = group.folded && tabs.isEmpty
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
-                      toggle: { fold(group) })
+                      naming: store.isNaming(group), toggle: { fold(group) })
                 .modifier(groupMenu(group))
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupTint.inset) {
@@ -672,21 +672,30 @@ private struct GroupLine: View {
     /// The header's 44pt, or a folded group's 48pt: the name and chevron
     /// stay in the middle, so they glide there as it folds.
     let height: CGFloat
+    /// New, and its name is on the way from the on-device model.
+    let naming: Bool
     let toggle: () -> Void
 
     var body: some View {
         Button(action: toggle) {
             HStack(spacing: 0) {
-                Text(group.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    // A name the namer gives arrives a moment later: it
-                    // cross-fades in (a fade, so fine with Reduce Motion).
-                    .contentTransition(.opacity)
-                    .animation(.easeOut(duration: 0.3), value: group.name)
-                    // Over the slim rows' icons (24pt, 14pt in from the row).
-                    .padding(.leading, 14)
+                // While the on-device model names a new group, quiet dots
+                // stand where the name will be; the name fades in over them
+                // (a fade, so the same with Reduce Motion).
+                ZStack(alignment: .leading) {
+                    Text(group.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .opacity(naming ? 0 : 1)
+                    if naming {
+                        NamingDots(color: Theme.ink, size: 5)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.3), value: naming)
+                // Over the slim rows' icons (24pt, 14pt in from the row).
+                .padding(.leading, 14)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.semibold))
@@ -702,7 +711,7 @@ private struct GroupLine: View {
         // as a flash (David's recording, 2026-11-06).
         .buttonStyle(UndimmedPress())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .accessibilityLabel(group.name)
+        .accessibilityLabel(naming ? "New group, naming" : group.name)
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Folds the group")
         .accessibilityAddTraits(.isHeader)

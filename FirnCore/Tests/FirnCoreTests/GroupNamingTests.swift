@@ -8,8 +8,12 @@ private final class FakeNamer: GroupNamer, @unchecked Sendable {
     private let lock = NSLock()
     private var _asked: [[GroupNamingTab]] = []
     let answer: String?
+    let isAvailable: Bool
 
-    init(answer: String? = nil) { self.answer = answer }
+    init(answer: String? = nil, available: Bool = true) {
+        self.answer = answer
+        self.isAvailable = available
+    }
 
     var asked: [[GroupNamingTab]] { lock.withLock { _asked } }
 
@@ -133,6 +137,30 @@ struct GroupNamingTests {
             await settle { name(of: group.id, in: store) != "New Group" && name(of: group.id, in: store) != "New Group 2" }
         }
         #expect(ids.map { name(of: $0, in: store) } == ["Recipes", "Recipes 2"])
+    }
+
+    @Test func aGroupShowsItIsBeingNamedUntilItsNameArrives() async throws {
+        let store = makeStore(namer: FakeNamer(answer: "Recipes"))
+        let tab = store.openTab(url("a"))
+        let group = try #require(store.newGroup(with: tab))
+        #expect(store.isNaming(group))
+        try page(of: tab).commit(url("a"), title: "Alpha")
+        await settle(until: { !store.isNaming(group) })
+        #expect(!store.isNaming(group))
+        #expect(name(of: group.id, in: store) == "Recipes")
+    }
+
+    @Test func aRenameEndsTheNaming() throws {
+        let store = makeStore(namer: FakeNamer())
+        let group = try #require(store.newGroup(with: store.openTab(url("a"))))
+        store.rename(group, to: "Mine")
+        #expect(!store.isNaming(group))
+    }
+
+    @Test func aNamerThatIsOffShowsNoNaming() throws {
+        let store = makeStore(namer: FakeNamer(available: false))
+        let group = try #require(store.newGroup(with: store.openTab(url("a"))))
+        #expect(!store.isNaming(group))
     }
 
     @Test func withoutANamerGroupsStayNewGroup() async throws {

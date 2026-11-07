@@ -79,17 +79,66 @@ struct GroupsTests {
         #expect(hosts(store.sidebarTabs) == ["c.example", "a.example", "b.example"])
     }
 
-    @Test func linksNeverLandInsideAGroup() throws {
+    @Test func linksFromAGroupedTabStayInItsGroup() throws {
         let store = makeStore()
         let tabs = open("a", "b", in: store)
         let group = try #require(store.newGroup(with: tabs[1]))
-        let first = store.openTab(url("link1"), opener: tabs[0], inBackground: true)
-        store.move(first, into: group, at: 0)
-        // link1 sits right below a, but in the group; link2 stays out of it.
+        store.openTab(url("link"), opener: tabs[1], inBackground: true)
+        #expect(hosts(store.tabs(in: group)) == ["b.example", "link.example"])
+        #expect(hosts(store.looseTabs) == ["a.example"])
+        #expect(store.tabGroups.count == 1)
+    }
+
+    @Test func aLinkFromALooseTabMakesAGroupOfTheTwo() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        store.openTab(url("link1"), opener: tabs[0], inBackground: true)
         store.openTab(url("link2"), opener: tabs[0], inBackground: true)
-        #expect(hosts(store.tabs(in: group)) == ["link1.example", "b.example"])
-        #expect(store.tabListItems.map(\.id).last == group.id)
-        #expect(hosts(store.looseTabs) == ["a.example", "link2.example"])
+        let group = try #require(store.tabGroups.first)
+        // Where a was, a first, then its links in the order they opened.
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "link1.example", "link2.example"])
+        #expect(store.tabListItems.map(\.id).first == group.id)
+        #expect(hosts(store.looseTabs) == ["b.example"])
+        #expect(group.tidies)
+        #expect(store.tabGroups.count == 1)
+    }
+
+    @Test func aLinkFromATabInASplitMakesNoGroup() {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        _ = store.openSplit(tabs[1], beside: tabs[0])
+        store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        #expect(store.tabGroups.isEmpty)
+    }
+
+    @Test func groupsMadeByHandDontTidy() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let group = try #require(store.newGroup(with: tabs[0]))
+        #expect(!group.tidies)
+        store.group(tabs[1], with: tabs[0])
+        #expect(store.tabGroups.allSatisfy { !$0.tidies })
+    }
+
+    @Test func renamingOrPuttingATabInKeepsALinkMadeGroup() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", "c", in: store)
+        store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.openTab(url("other"), opener: tabs[1], inBackground: true)
+        let groups = store.tabGroups
+        #expect(groups.count == 2 && groups.allSatisfy(\.tidies))
+        store.rename(groups[0], to: "Trip")
+        store.move(tabs[2], into: groups[1], at: 0)
+        #expect(store.tabGroups.allSatisfy { !$0.tidies })
+    }
+
+    @Test func aLinkMadeGroupStillTidiesAfterARelaunch() throws {
+        let store = makeStore()
+        let tabs = open("a", in: store)
+        store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        let restored = makeStore(restoring: save(store))
+        let group = try #require(restored.tabGroups.first)
+        #expect(group.tidies)
     }
 
     @Test func droppingATabOnALooseTabStartsAGroupOfTwo() throws {

@@ -59,14 +59,19 @@ public struct GroupRecord: Codable, Equatable, Sendable {
     /// Its position among all groups (each space's groups keep this order).
     public var order: Int
     public var folded: Bool
+    /// True for a group a link made that isn't kept by hand yet; missing
+    /// (nil) otherwise, and in files from before it.
+    public var tidies: Bool?
     public var lastChangedAt: Date
 
-    public init(id: UUID, spaceID: UUID, name: String, order: Int, folded: Bool, lastChangedAt: Date) {
+    public init(id: UUID, spaceID: UUID, name: String, order: Int, folded: Bool, tidies: Bool? = nil,
+                lastChangedAt: Date) {
         self.id = id
         self.spaceID = spaceID
         self.name = name
         self.order = order
         self.folded = folded
+        self.tidies = tidies
         self.lastChangedAt = lastChangedAt
     }
 

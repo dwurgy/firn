@@ -522,13 +522,22 @@ public final class BrowserStore {
     }
 
     /// Links from an everyday tab open right below it, in its group if it
-    /// has one (as in Dia), and below its split if it's in one; links from a Basecamp tile open at the top or
+    /// has one (as in Dia); from a loose tab, the two become a new group
+    /// that tidies away like loose tabs until it's kept by hand (David,
+    /// 2026-11-06). Below its split if it's in one (no new group then);
+    /// links from a Basecamp tile open at the top or
     /// bottom of the tab list, as set. Either way, several links from one
     /// tab stay in the order they were opened.
     private func add(_ tab: Tab, below opener: Tab?, inBackground: Bool) {
         if let opener, let index = lastIndex(withSplitOf: opener) {
             var position: Int
             if opener.place == .open {
+                if opener.groupID == nil, opener.splitID == nil {
+                    let group = TabGroup(spaceID: opener.spaceID, name: freeGroupName(in: opener.spaceID),
+                                         tidies: true)
+                    groups.append(group)
+                    opener.groupID = group.id
+                }
                 tab.groupID = opener.groupID
                 position = index + 1
             } else {
@@ -723,6 +732,7 @@ public final class BrowserStore {
         if let group {
             tab.groupID = group.id
             insert(tab, at: position, in: Self.rows(tabs(in: group)), fallback: index)
+            keep(group)
         } else {
             insertInTabList([tab], at: position, fallback: index)
         }
@@ -781,8 +791,25 @@ public final class BrowserStore {
             tabs.remove(at: index)
             tab.groupID = group.id
             insert(tab, at: position, in: Self.rows(tabs(in: group), skipping: tab.splitID), fallback: index)
-            if oldGroupID != group.id { endIfEmpty(oldGroupID) }
+            if oldGroupID != group.id {
+                endIfEmpty(oldGroupID)
+                keep(group)
+            }
         }
+    }
+
+    /// A group someone put a tab in, or renamed, is theirs: it no longer
+    /// tidies away.
+    private func keep(_ group: TabGroup) {
+        guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
+        groups[index].tidies = false
+    }
+
+    /// Whether a tab's group (if it's in one) lets it tidy away: none, or
+    /// one a link made that isn't kept yet.
+    private func mayTidy(_ tab: Tab) -> Bool {
+        guard let groupID = tab.groupID else { return true }
+        return groups.first { $0.id == groupID }?.tidies == true
     }
 
     /// Moves an everyday tab to the end of a group (right-click › Move to
@@ -837,6 +864,7 @@ public final class BrowserStore {
         guard let index = groups.firstIndex(where: { $0.id == group.id }),
               let name = TabGroup.cleanName(name) else { return }
         groups[index].name = name
+        groups[index].tidies = false
     }
 
     public func setFolded(_ group: TabGroup, _ folded: Bool) {
@@ -1475,19 +1503,24 @@ public final class BrowserStore {
         deleteExpiredDriftedTabs()
         guard let limit = driftAfter.days else { return [] }
         return tabs.filter { tab in
-            guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID,
+            guard tab.place == .open, mayTidy(tab), tab.splitID == nil, tab.id != activeTabID,
                   tab.sound == .silent else { return false }
             let lastSeen = Self.day(of: tab.lastActiveAt)
             return usedDays.count { $0 > lastSeen } >= limit
         }
     }
 
-    /// Drifts one loose tab away to its space's overflow ("Tidied away"). Its page lets go,
-    /// so it costs nothing; it keeps its address, title, and icon.
+    /// Drifts one loose tab (or one in a group a link made) away to its
+    /// space's overflow ("Tidied away"). Its page lets go, so it costs
+    /// nothing; it keeps its address, title, and icon. A group it was the
+    /// last of ends.
     public func drift(_ tab: Tab) {
-        guard tab.place == .open, tab.groupID == nil, tab.splitID == nil, tab.id != activeTabID,
+        guard tab.place == .open, mayTidy(tab), tab.splitID == nil, tab.id != activeTabID,
               tab.sound == .silent, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
+        let groupID = tab.groupID
+        tab.groupID = nil
+        endIfEmpty(groupID)
         tab.sleep()
         tab.place = .drifted
         tab.driftedAt = now()
@@ -1738,7 +1771,7 @@ public final class BrowserStore {
         let groupRecords = groups.enumerated().map { order, group in
             var record = GroupRecord(
                 id: group.id, spaceID: group.spaceID, name: group.name, order: order,
-                folded: group.folded, lastChangedAt: stamp
+                folded: group.folded, tidies: group.tidies ? true : nil, lastChangedAt: stamp
             )
             if let saved = savedGroupRecords[group.id], saved.sameContent(as: record) {
                 record.lastChangedAt = saved.lastChangedAt
@@ -1784,7 +1817,8 @@ public final class BrowserStore {
             guard spaceIDs.contains(record.spaceID), seenGroups.insert(record.id).inserted else { return nil }
             return TabGroup(
                 id: record.id, spaceID: record.spaceID,
-                name: TabGroup.cleanName(record.name) ?? TabGroup.defaultName, folded: record.folded
+                name: TabGroup.cleanName(record.name) ?? TabGroup.defaultName, folded: record.folded,
+                tidies: record.tidies ?? false
             )
         }
         let groupSpaces = Dictionary(restoredGroups.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })

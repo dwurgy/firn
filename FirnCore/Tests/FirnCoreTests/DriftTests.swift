@@ -92,6 +92,33 @@ struct DriftTests {
         #expect(store.activeTabID == shown.id)
     }
 
+    @Test func aGroupALinkMadeTidiesAwayAndEnds() {
+        let clock = Clock()
+        let store = makeStore(clock)
+        store.driftAfter = .oneDay
+        let a = store.openTab(url("a"))
+        store.openTab(url("link"), opener: a, inBackground: true)
+        let shown = store.openTab(url("shown"))
+        use(store, clock, days: 3)
+        #expect(Set(hosts(store.driftedTabs)) == ["a.example", "link.example"])
+        #expect(store.tabGroups.isEmpty)
+        #expect(store.driftedTabs.allSatisfy { $0.groupID == nil })
+        #expect(store.activeTabID == shown.id)
+    }
+
+    @Test func aRenamedLinkGroupStays() throws {
+        let clock = Clock()
+        let store = makeStore(clock)
+        store.driftAfter = .oneDay
+        let a = store.openTab(url("a"))
+        store.openTab(url("link"), opener: a, inBackground: true)
+        store.rename(try #require(store.tabGroups.first), to: "Keep")
+        store.openTab(url("shown"))
+        use(store, clock, days: 3)
+        #expect(store.driftedTabs.isEmpty)
+        #expect(store.tabGroups.count == 1)
+    }
+
     @Test func neverMeansNever() {
         let clock = Clock()
         let store = makeStore(clock)

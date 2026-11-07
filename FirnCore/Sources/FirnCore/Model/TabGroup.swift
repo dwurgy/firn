@@ -12,12 +12,17 @@ public struct TabGroup: Identifiable, Hashable, Sendable {
     public let spaceID: UUID
     public internal(set) var name: String
     public internal(set) var folded: Bool
+    /// Made by a link from a loose tab and not yet kept by hand (renamed,
+    /// or a tab put in it): its tabs tidy away like loose ones, so groups
+    /// links make don't keep tabs forever (David, 2026-11-06).
+    public internal(set) var tidies: Bool
 
-    init(id: UUID = UUID(), spaceID: UUID, name: String = defaultName, folded: Bool = false) {
+    init(id: UUID = UUID(), spaceID: UUID, name: String = defaultName, folded: Bool = false, tidies: Bool = false) {
         self.id = id
         self.spaceID = spaceID
         self.name = name
         self.folded = folded
+        self.tidies = tidies
     }
 
     /// A name fit to show: one line, trimmed, and not too long; nil if

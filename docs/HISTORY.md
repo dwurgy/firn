@@ -426,3 +426,18 @@ Two reports. **Reddit (MacBook Air M1, macOS 27.0.1):** in full screen a blank b
 - *Stored:* each tab's back and forward addresses, scroll position, and possibly text typed into forms, on the device only, next to the session (which already holds the addresses). Nothing sent, nothing logged.
 - *Spaces:* a place goes back only to its own tab, in its own space's data store. A closed tab or deleted space drops out at the next save (within seconds). Stop Sharing already forgets its tabs' places.
 - *Clear History* keeps open tabs' back and forward lists, as it already says; saved places follow the same rule.
+
+## Plan: links make groups, and groups name themselves (David, 2026-11-06)
+
+Mac and iPhone, both in FirnCore. Decided with David:
+
+- **Links into groups.** A link that opens a new tab from a grouped tab already lands in that group, below its tab. New: a link from a loose tab makes a group of the two, in the loose tab's place; more links from either join it. Basecamp tiles and split view are unchanged.
+- **Tidying.** Grouped tabs never tidy away, so a group a link made would keep tabs forever. Such a group remembers it came from a link, and its tabs tidy away like loose ones until it's renamed or a tab is put in it by hand (dragged in, or a tab's menu). A group ends when its last tab is tidied.
+- **Auto names.** Every new group (from a link, a drag, or New Group with This Tab) is named by Apple's on-device model (Foundation Models, macOS 26 and iOS 26 with Apple Intelligence) from its tabs' titles and sites. Always on, no setting (David: renaming one is no more effort than renaming "New Group"). Named once, after the new tab's title has loaded; a group renamed in the meantime keeps its name. Without the model, "New Group". The "Name This Group" prompt goes; Rename stays. On the device only: no network, no account.
+- **Security.** Page titles are hostile input: they go to the model as data in a fixed prompt, the answer is generated to a short shape, then cut to a few words and cleaned like any group name. Logs never contain titles or addresses.
+
+Steps, each checked by David:
+1. **Links make groups, and those groups tidy away** (FirnCore, tested; both apps get it). *Done 2026-11-06:* `TabGroup.tidies` (saved as `GroupRecord.tidies`, missing in older files), set for a group a link makes, cleared by Rename or a tab moved in (a drag, Move to Group, or a tile dragged in); `idleTabs` and `drift` take those groups' tabs, and a group ends with its last tab. A link from a tab in a split makes no group. 438 tests pass; Mac and iPhone build. Until step 2 these groups are named "New Group" (counting up).
+2. **The namer** (FirnCore): on-device naming behind availability checks, a stand-in for tests, the once-only rule.
+3. **The apps:** no naming prompt on the Mac or iPhone; groups get their names as they're made.
+4. **A look over:** security check, VoiceOver hearing the new name, light and dark, Mac and iPhone.

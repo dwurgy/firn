@@ -75,13 +75,16 @@ struct BrowserScreen: View {
     /// Whether the address being typed opens a new tab (from the overview's
     /// +) rather than replacing the page on screen.
     @State private var typingNewTab = false
-    /// Swiped past the last tab: a blank page covers the screen while the
-    /// address for a new tab is typed. No tab exists until one is picked;
-    /// cancelling fades back to the tab that was on screen.
-    @State private var newPageCover = false
-    /// The tab on screen when the blank page came up, to tell a pick from
-    /// a cancel.
-    @State private var typedFor: UUID?
+    /// A sideways swipe on the last tab, toward where the next would be:
+    /// how close it is to starting a new tab (0 to 1). Let go at 1 and the
+    /// page settles back while typing for a new tab opens over it, as the
+    /// overview's + does: Firn types over the page, never on a blank one.
+    @State private var newTabReach: CGFloat = 0
+    /// Typing for a new tab starts once the page has settled back.
+    @State private var newTabAfterLanding = false
+    /// How far the page has moved left past the last tab; the + rides
+    /// just beyond its edge.
+    @State private var newTabShift: CGFloat = 0
     /// The page menu, grown out of the bar.
     @State private var menuOpen = false
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
@@ -148,13 +151,6 @@ struct BrowserScreen: View {
                                     Image(uiImage: image)
                                         .resizable()
                                         .frame(width: width, height: width * image.size.height / max(image.size.width, 1))
-                                } else if neighbor.tab == nil {
-                                    // Past the last tab: a new tab's blank
-                                    // page, a faint + saying what it is.
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 28, weight: .regular))
-                                        .foregroundStyle(Theme.faint)
-                                        .frame(width: width, height: height)
                                 } else {
                                     // Never pictured: a plain page.
                                     Color.clear.frame(width: width, height: height)
@@ -193,6 +189,16 @@ struct BrowserScreen: View {
                 .accessibilityHidden(true)
             }
 
+            // Swiped past the last tab: a frosted + at the edge says a new
+            // tab is a let-go away.
+            NewTabHint(space: store.activeSpace.color, reach: newTabReach)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                // Its center a 12pt gap and half its width past the page's
+                // edge (trailing-aligned, its center sits 24pt in).
+                .offset(x: newTabShift + 12 + BarButton.glassSize)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
             // While typing, the page (or the overview) dims a little; a tap
             // on it cancels.
             if editing {
@@ -228,19 +234,21 @@ struct BrowserScreen: View {
         .background(Theme.page.ignoresSafeArea())
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
-        .onChange(of: editing) {
-            if !editing {
-                typingNewTab = false
-                liftNewPageCover()
-            }
-        }
+        .onChange(of: editing) { if !editing { typingNewTab = false } }
         .onChange(of: incoming, initial: true) { openIncoming() }
         // The bar's buttons wake once the pull's landing is over, not on a
         // timer: waking them redraws the whole bar, and 150ms after the
         // finger lifted that fell mid-landing and froze a frame (David's
         // recordings, 2026-11-04). Every landing ends with gliding = nil,
         // well past the finger's lift.
-        .onChange(of: gliding) { if gliding == nil, barQuiet { barQuiet = false } }
+        .onChange(of: gliding) {
+            guard gliding == nil else { return }
+            if barQuiet { barQuiet = false }
+            if newTabAfterLanding {
+                newTabAfterLanding = false
+                startNewTab()
+            }
+        }
     }
 
     private var barShown: Bool { arrival < 1 || editing }
@@ -515,9 +523,6 @@ struct BrowserScreen: View {
     /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,
     /// or a card off screen).
     private func hideTabs() {
-        // Typing past the last tab: the blank page lifts on its own once
-        // typing ends (below).
-        guard !newPageCover else { return }
         standIn = nil
         standInTab = nil
         neighbors = []
@@ -548,11 +553,10 @@ struct BrowserScreen: View {
     }
 
     /// A tab beside the one held: -1 just before it in the list (on the
-    /// left), 1 just after it. No tab: the blank page past the last tab,
-    /// which opens typing for a new one, as Safari's swipe does.
+    /// left), 1 just after it.
     private struct Neighbor: Identifiable {
         let id: UUID
-        let tab: FirnCore.Tab?
+        let tab: FirnCore.Tab
         let image: UIImage?
         var place: Int
     }
@@ -565,6 +569,12 @@ struct BrowserScreen: View {
             pull.translation = drag.translation
             self.pull = pull
             if standIn != nil { box = pulledBox(pull); followPull(pull) }
+            if pull.sideways, isLast(pull.tab) {
+                let reach = min(max(-drag.translation.width / Self.newTabDistance, 0), 1)
+                if reach == 1, newTabReach < 1 { reachedNewTab.impactOccurred() }
+                newTabReach = reach
+                newTabShift = min(drag.translation.width, 0) * Self.newTabGive
+            }
             return
         }
         guard !editing, !menuOpen, !showingTabs, gliding == nil, !reduceMotion,
@@ -574,8 +584,10 @@ struct BrowserScreen: View {
         let across = abs(dx) > 8 && abs(dx) > abs(dy)
         guard up || across else { return }
         let beside = neighbors(of: tab)
-        // Sideways with no other tab: nothing to slide to.
-        guard up || !beside.isEmpty else { return }
+        // Sideways with no other tab and not the last: nothing to slide
+        // to. (Past the last, a new tab waits.)
+        guard up || !beside.isEmpty || isLast(tab) else { return }
+        if !up, isLast(tab) { reachedNewTab.prepare() }
         // A tab just opened keeps its picture over the page until the page
         // has loaded (up to 2.5s). Pulled meanwhile, that picture is the
         // pull's own, taken over at once. Left there, the pull's new
@@ -665,7 +677,10 @@ struct BrowserScreen: View {
             : pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height
         // Swiped toward a side with no tab, it gives a little and comes back.
         var dx = pull.translation.width
-        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
+        // Past the last tab it gives more, making room for the + beside it.
+        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) {
+            dx *= dx < 0 && isLast(pull.tab) ? Self.newTabGive : 0.3
+        }
         let finger = CGPoint(x: pull.start.x + dx, y: pull.start.y + dy)
         let anchorX = pull.start.x - page.minX
         let anchorY = pull.start.y - page.minY
@@ -680,6 +695,13 @@ struct BrowserScreen: View {
         guard var pull else { return }
         pull.translation = translation
         self.pull = nil
+        // Far enough past the last tab (or flicked there): a new tab.
+        let wantsNewTab = pull.sideways && isLast(pull.tab)
+            && (newTabReach >= 1 || (translation.width < -Self.newTabDistance * 0.5 && velocity.width < -600))
+        if newTabReach > 0 || newTabShift < 0 {
+            withAnimation(Self.fade) { newTabReach = 0; newTabShift = 0 }
+        }
+        if wantsNewTab { newTabAfterLanding = true }
         let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
         let toTabs = !pull.sideways && (flickedUp || (lift(pull) > 0.22 && up > -300))
@@ -708,6 +730,16 @@ struct BrowserScreen: View {
         }
     }
 
+    /// How far the finger goes past the last tab for a new one.
+    private static let newTabDistance: CGFloat = 110
+    /// How much the page follows the finger past the last tab.
+    private static let newTabGive: CGFloat = 0.55
+    private let reachedNewTab = UIImpactFeedbackGenerator(style: .light)
+
+    private func isLast(_ tab: FirnCore.Tab) -> Bool {
+        store.openTabs.last?.id == tab.id
+    }
+
     /// The tabs just before and after this one in the list, with their
     /// saved pictures.
     private func neighbors(of tab: FirnCore.Tab) -> [Neighbor] {
@@ -715,15 +747,10 @@ struct BrowserScreen: View {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return [] }
         return [-1, 1].compactMap { place in
             let i = index + place
-            guard tabs.indices.contains(i) else {
-                // Past the last tab, a new one waits.
-                return place == 1 ? Neighbor(id: Self.newPageID, tab: nil, image: nil, place: 1) : nil
-            }
+            guard tabs.indices.contains(i) else { return nil }
             return Neighbor(id: tabs[i].id, tab: tabs[i], image: pictures.image(for: tabs[i].id), place: place)
         }
     }
-
-    private static let newPageID = UUID()
 
     /// The gap between the held page and the ones beside it: a little
     /// narrower as they shrink.
@@ -751,7 +778,6 @@ struct BrowserScreen: View {
     /// carrying the finger's speed.
     private func open(_ neighbor: Neighbor, carrying velocity: CGSize) {
         guard let held = standInTab, let heldImage = standIn else { return hideTabs() }
-        guard let next = neighbor.tab else { return openNewPage(beside: heldImage, carrying: velocity) }
         let image = neighbor.image ?? plainPage(like: heldImage)
         let spot = neighborBox(neighbor.place)
         let shift = neighbor.place
@@ -762,80 +788,21 @@ struct BrowserScreen: View {
         // Behind a pull, the overview keeps the held tab's card (hidden,
         // as gliding still names it) so nothing there changes size.
         heldCard = held.id
-        store.select(next)
+        store.select(neighbor.tab)
         box = spot
         standIn = image
-        standInTab = next
+        standInTab = neighbor.tab
         // The strip keeps its color until the glide, then fades to the new
         // tab's. A page asleep or still loading keeps the old one: before
         // it has drawn, its color is black (found 2026-11-04), and the
         // page's own strip takes over as the picture fades.
-        let newTop = next.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor }
+        let newTop = neighbor.tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor }
         Task {
             // One frame in its new role before the glide, so it starts
             // where it is.
             await Task.yield()
             if let newTop { withAnimation(.easeOut(duration: 0.3)) { standInTop = newTop } }
-            land(onPage: next, curve: carrying(velocity, to: pageBox(for: image)), switching: true)
-        }
-    }
-
-    /// Swiped past the last tab: the blank page grows to the full screen
-    /// and the address field opens for a new tab, as + does. It stays over
-    /// the tab that was on screen until typing ends.
-    private func openNewPage(beside heldImage: UIImage, carrying velocity: CGSize) {
-        let image = plainPage(like: heldImage)
-        box = neighborBox(1)
-        var beside = neighbors.filter { $0.tab != nil }
-        for i in beside.indices { beside[i].place -= 1 }
-        neighbors = beside
-        standIn = image
-        standInTab = nil
-        newPageCover = true
-        typedFor = store.activeTab?.id
-        let pageColor = UIColor(Theme.page).resolvedColor(with: UITraitCollection.current).cgColor
-        Task {
-            await Task.yield()
-            withAnimation(.easeOut(duration: 0.3)) { standInTop = pageColor }
-            withAnimation(carrying(velocity, to: pageBox(for: image))) {
-                box = pageBox(for: image)
-                boxRadius = 0
-                stripOpacity = 1
-            } completion: {
-                swiping = false
-                neighbors = []
-                gliding = nil
-                typingNewTab = true
-                editing = true
-            }
-        }
-    }
-
-    /// Typing for the new tab ended: the blank page fades, showing the new
-    /// tab, or the old one again if nothing was picked.
-    private func liftNewPageCover() {
-        guard newPageCover else { return }
-        newPageCover = false
-        guard let cover = standIn else { pageHidden = false; return }
-        pageHidden = false
-        Task {
-            // A new tab's web view is white until WebKit first draws (dark
-            // mode too), so the blank page waits for it, as a woken tab's
-            // picture does (2.5s at most). Cancelled: it fades at once.
-            if typedFor != store.activeTab?.id {
-                for _ in 0..<50 {
-                    if let page = store.activeTab?.page, page.url != nil, !page.isLoading { break }
-                    try? await Task.sleep(for: .milliseconds(50))
-                }
-                try? await Task.sleep(for: .milliseconds(34))
-            }
-            guard standIn === cover, gliding == nil else { return }
-            withAnimation(Self.fade) { standInFade = 0 } completion: {
-                guard standIn === cover else { return }
-                standIn = nil
-                standInTop = nil
-                standInFade = 1
-            }
+            land(onPage: neighbor.tab, curve: carrying(velocity, to: pageBox(for: image)), switching: true)
         }
     }
 
@@ -909,5 +876,26 @@ private struct CardGlide: ViewModifier {
             }
             .scaleEffect(scale, anchor: .topLeading)
             .offset(x: box.minX, y: box.minY)
+    }
+}
+
+/// The frosted + that shows at the right edge as the last tab is swiped
+/// past: it fades in and grows a little with the swipe, and fills with the
+/// space's color once letting go would start a new tab.
+private struct NewTabHint: View {
+    let space: String
+    let reach: CGFloat
+
+    var body: some View {
+        Image(systemName: "plus")
+            .font(BarButton.symbolFont)
+            .foregroundStyle(reach >= 1 ? Color.white : Theme.ink)
+            .frame(width: BarButton.size, height: BarButton.size)
+            .padding(2)
+            // Filled as the overview's check is, once it's a let-go away.
+            .glassEffect(.regular.tint(reach >= 1 ? Theme.spaceVivid(space) : Theme.frameTint(space)), in: .circle)
+            .scaleEffect(0.7 + 0.3 * reach)
+            .opacity(Double(reach))
+            .animation(.smooth(duration: 0.2), value: reach >= 1)
     }
 }

@@ -317,6 +317,7 @@ private struct AddressField: View {
     @Environment(\.barQuiet) private var barQuiet
     /// The keyboard is still leaving (see `AddressBar.settling`).
     @Environment(\.barSettling) private var settling
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let height: CGFloat = 48
     let store: BrowserStore
     var editing: FocusState<Bool>.Binding
@@ -355,6 +356,12 @@ private struct AddressField: View {
                     .font(BarButton.symbolFont)
                     .foregroundStyle(Theme.spaceInk(store.activeSpace.color))
                     .padding(.leading, 18)
+                    // In once the field has widened into Back's place (a
+                    // 0.25s glide); shown at once, it sat outside the glass
+                    // until the glass got there (David, 2026-11-06).
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(.easeOut(duration: 0.15).delay(reduceMotion ? 0 : 0.2)),
+                        removal: .opacity.animation(.easeOut(duration: 0.08))))
                     .accessibilityHidden(true)
             }
             TextField("Address", text: $text, selection: $selection,

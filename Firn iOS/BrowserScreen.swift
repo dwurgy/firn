@@ -80,8 +80,6 @@ struct BrowserScreen: View {
     /// page settles back while typing for a new tab opens over it, as the
     /// overview's + does: Firn types over the page, never on a blank one.
     @State private var newTabReach: CGFloat = 0
-    /// Typing for a new tab starts once the page has settled back.
-    @State private var newTabAfterLanding = false
     /// How far the page has moved left past the last tab; the + rides
     /// just beyond its edge.
     @State private var newTabShift: CGFloat = 0
@@ -244,10 +242,6 @@ struct BrowserScreen: View {
         .onChange(of: gliding) {
             guard gliding == nil else { return }
             if barQuiet { barQuiet = false }
-            if newTabAfterLanding {
-                newTabAfterLanding = false
-                startNewTab()
-            }
         }
     }
 
@@ -701,7 +695,9 @@ struct BrowserScreen: View {
         if newTabReach > 0 || newTabShift < 0 {
             withAnimation(Self.fade) { newTabReach = 0; newTabShift = 0 }
         }
-        if wantsNewTab { newTabAfterLanding = true }
+        // The keyboard comes up at once, while the page settles back:
+        // waiting for the landing felt slow (David, 2026-11-06).
+        if wantsNewTab { startNewTab() }
         let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
         let toTabs = !pull.sideways && (flickedUp || (lift(pull) > 0.22 && up > -300))

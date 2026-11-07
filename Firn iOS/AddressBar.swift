@@ -347,6 +347,16 @@ private struct AddressField: View {
                     .opacity(menuOpen || settling ? 0 : 1)
                     .animation(.easeOut(duration: 0.1), value: menuOpen)
             }
+            // Typing for a new tab (the overview's +, or swiping past the
+            // last tab) starts with a + in the space's color, so it never
+            // looks like editing the page's own address.
+            if isEditing, typingNewTab {
+                Image(systemName: "plus")
+                    .font(BarButton.symbolFont)
+                    .foregroundStyle(Theme.spaceInk(store.activeSpace.color))
+                    .padding(.leading, 18)
+                    .accessibilityHidden(true)
+            }
             TextField("Address", text: $text, selection: $selection,
                       prompt: Text("Search or enter address").foregroundStyle(Theme.muted))
                 .font(.body)
@@ -361,10 +371,10 @@ private struct AddressField: View {
                 .autocorrectionDisabled()
                 .submitLabel(.go)
                 .focused(editing)
-                .padding(.leading, isEditing ? 18 : 0)
+                .padding(.leading, isEditing ? (typingNewTab ? 10 : 18) : 0)
                 .opacity(menuOpen ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
-                .accessibilityLabel("Address")
+                .accessibilityLabel(typingNewTab ? "New Tab Address" : "Address")
                 // The results card sits above the field, out of the way of
                 // a VoiceOver swipe forward, so the field says it's there.
                 .accessibilityHint("Results appear above as you type")

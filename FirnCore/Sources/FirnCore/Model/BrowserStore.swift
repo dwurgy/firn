@@ -67,6 +67,15 @@ public final class BrowserStore {
     @ObservationIgnored let now: () -> Date
     @ObservationIgnored private let passwords: PasswordStore?
     @ObservationIgnored let history: HistoryRecorder?
+    /// Names new groups (see `GroupNaming`); nil leaves them "New Group".
+    /// Set by the app: `GroupNaming.onDevice` (David, 2026-11-06).
+    @ObservationIgnored public var groupNamer: (any GroupNamer)?
+    /// How long a new group waits for its tabs' titles before it's named
+    /// with what it has (a page may never have a title).
+    @ObservationIgnored var groupNameWait: Duration = .seconds(4)
+    /// New groups not named yet, and whether the namer's been asked. Not
+    /// saved: a group still waiting at quit keeps its default name.
+    @ObservationIgnored private var unnamedGroups: [UUID: GroupNaming.State] = [:]
     @ObservationIgnored private var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.
@@ -537,6 +546,7 @@ public final class BrowserStore {
                                          tidies: true)
                     groups.append(group)
                     opener.groupID = group.id
+                    startNaming(group.id)
                 }
                 tab.groupID = opener.groupID
                 position = index + 1
@@ -755,6 +765,7 @@ public final class BrowserStore {
         guard tab.place == .open, let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return nil }
         let group = TabGroup(spaceID: tab.spaceID, name: freeGroupName(in: tab.spaceID))
         groups.append(group)
+        startNaming(group.id)
         movingSplit(of: tab) {
             let oldGroupID = tab.groupID
             tab.groupID = group.id
@@ -865,6 +876,8 @@ public final class BrowserStore {
               let name = TabGroup.cleanName(name) else { return }
         groups[index].name = name
         groups[index].tidies = false
+        // Named by hand: the namer's answer, if one comes, is dropped.
+        unnamedGroups[group.id] = nil
     }
 
     public func setFolded(_ group: TabGroup, _ folded: Bool) {
@@ -920,17 +933,67 @@ public final class BrowserStore {
     }
 
     /// "New Group", or "New Group 2", 3, … if this space already has one,
-    /// so Move to Group never lists two the same (until groups name
-    /// themselves). The lowest number not in use, as Finder does.
-    private func freeGroupName(in spaceID: UUID) -> String {
-        let taken = Set(groups.filter { $0.spaceID == spaceID }.map(\.name))
-        var name = TabGroup.defaultName
+    /// so Move to Group never lists two the same; the same for a name the
+    /// namer gave ("Recipes 2"). The lowest number not in use, as Finder does.
+    private func freeGroupName(in spaceID: UUID, base: String = TabGroup.defaultName, for groupID: UUID? = nil) -> String {
+        let taken = Set(groups.filter { $0.spaceID == spaceID && $0.id != groupID }.map(\.name))
+        var name = base
         var number = 2
         while taken.contains(name) {
-            name = "\(TabGroup.defaultName) \(number)"
+            name = "\(base) \(number)"
             number += 1
         }
         return name
+    }
+
+    // MARK: - Naming new groups
+
+    /// A new group gets its name once, from its tabs, after their titles
+    /// have loaded (or `groupNameWait`, whichever is first). Waits a turn
+    /// first, so a group made by dropping one tab on another has both.
+    private func startNaming(_ groupID: UUID) {
+        guard groupNamer != nil else { return }
+        unnamedGroups[groupID] = .waiting
+        let wait = groupNameWait
+        Task { @MainActor [weak self] in
+            self?.nameIfReady(groupID)
+            try? await Task.sleep(for: wait)
+            self?.nameIfReady(groupID, waitedLongEnough: true)
+        }
+    }
+
+    /// Asks the namer once every tab in the group has its title. A tab with
+    /// no page (a link opened in the background loads only when shown)
+    /// won't have one soon, so it's named from its site.
+    private func nameIfReady(_ groupID: UUID, waitedLongEnough: Bool = false) {
+        guard unnamedGroups[groupID] == .waiting else { return }
+        let members = tabs.filter { $0.groupID == groupID }
+        guard let namer = groupNamer, !members.isEmpty else {
+            unnamedGroups[groupID] = nil
+            return
+        }
+        guard waitedLongEnough || members.allSatisfy({ !$0.savedTitle.isEmpty || $0.page == nil }) else { return }
+        unnamedGroups[groupID] = .asking
+        let named = members.map { GroupNamingTab(title: $0.savedTitle, site: $0.url?.host() ?? "") }
+        Task { @MainActor [weak self] in
+            let name = await namer.name(for: named)
+            self?.finishNaming(groupID, with: name)
+        }
+    }
+
+    /// Takes the namer's answer, unless the group was renamed or ended
+    /// meanwhile. Doesn't count as keeping the group (it still tidies).
+    private func finishNaming(_ groupID: UUID, with answer: String?) {
+        guard unnamedGroups.removeValue(forKey: groupID) == .asking,
+              let answer, let name = GroupNaming.cleaned(answer),
+              let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        groups[index].name = freeGroupName(in: groups[index].spaceID, base: name, for: groupID)
+    }
+
+    /// A tab's title arrived: its group may be ready for a name.
+    private func titleArrived(in tab: Tab) {
+        guard let groupID = tab.groupID, unnamedGroups[groupID] == .waiting else { return }
+        nameIfReady(groupID)
     }
 
     /// A group with no tabs left ends.
@@ -1251,15 +1314,17 @@ public final class BrowserStore {
 
     /// Records the tab's visits in its space's history. Only tabs: a Lookout
     /// is a glance until it's kept, and then this records the page it's on.
+    /// Also tells a new group its tab's title has arrived.
     private func recordVisits(of page: any PageController, in tab: Tab) {
-        guard history != nil else { return }
         let (tabID, spaceID) = (tab.id, tab.spaceID)
-        page.onVisit = { [weak self] url, title in
-            guard let self, let space = self.spaces.first(where: { $0.id == spaceID }) else { return }
+        page.onVisit = { [weak self, weak tab] url, title in
+            guard let self else { return }
+            if !title.isEmpty, let tab { self.titleArrived(in: tab) }
+            guard self.history != nil, let space = self.spaces.first(where: { $0.id == spaceID }) else { return }
             self.history?.visited(url, title: title, tab: tabID, in: space.dataStoreID)
         }
         // A kept Lookout, or a popup already on its page.
-        if let url = page.url { page.onVisit?(url, page.title) }
+        if history != nil, let url = page.url { page.onVisit?(url, page.title) }
     }
 
     // MARK: - Blocking

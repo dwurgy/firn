@@ -80,9 +80,16 @@ struct BrowserScreen: View {
     /// page settles back while typing for a new tab opens over it, as the
     /// overview's + does: Firn types over the page, never on a blank one.
     @State private var newTabReach: CGFloat = 0
-    /// How far the page has moved left past the last tab; the + rides
-    /// just beyond its edge.
+    /// How far the finger has gone left past the last tab (0 or less);
+    /// the + slides in from the edge with it. The page itself stays still:
+    /// moving it needed a picture of the page first, and waiting for
+    /// WebKit made the swipe start late and then jump (David's recording,
+    /// 2026-11-06).
     @State private var newTabShift: CGFloat = 0
+    /// A swipe past the last tab is under way (instead of a pull).
+    @State private var newTabSwipe = false
+    /// The + fades out on its own as typing starts.
+    @State private var newTabHintOpacity: Double = 1
     /// The page menu, grown out of the bar.
     @State private var menuOpen = false
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
@@ -190,10 +197,11 @@ struct BrowserScreen: View {
             // Swiped past the last tab: a frosted + at the edge says a new
             // tab is a let-go away.
             NewTabHint(space: store.activeSpace.color, reach: newTabReach)
+                .opacity(newTabHintOpacity)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                // Its center a 12pt gap and half its width past the page's
-                // edge (trailing-aligned, its center sits 24pt in).
-                .offset(x: newTabShift + 12 + BarButton.glassSize)
+                // Just off the screen's edge at rest, sliding in with the
+                // finger (trailing-aligned, it starts half its width in).
+                .offset(x: newTabShift + BarButton.glassSize)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
@@ -274,6 +282,13 @@ struct BrowserScreen: View {
                     .onEnded { pullEnded(translation: $0.translation, velocity: $0.velocity) }
             )
             .onChange(of: dragging) { _, now in
+                if !now, newTabSwipe {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(50))
+                        if newTabSwipe { newTabSwipeEnded(translation: .zero, velocity: .zero) }
+                    }
+                    return
+                }
                 guard !now, pull != nil else { return }
                 // The drag stopped without ending: the system took the
                 // touch away (David's recording, 2026-11-04: the page's
@@ -563,14 +578,9 @@ struct BrowserScreen: View {
             pull.translation = drag.translation
             self.pull = pull
             if standIn != nil { box = pulledBox(pull); followPull(pull) }
-            if pull.sideways, isLast(pull.tab) {
-                let reach = min(max(-drag.translation.width / Self.newTabDistance, 0), 1)
-                if reach == 1, newTabReach < 1 { reachedNewTab.impactOccurred() }
-                newTabReach = reach
-                newTabShift = min(drag.translation.width, 0) * Self.newTabGive
-            }
             return
         }
+        if newTabSwipe { return followNewTabSwipe(drag.translation) }
         guard !editing, !menuOpen, !showingTabs, gliding == nil, !reduceMotion,
               let tab = store.activeTab else { return }
         let dx = drag.translation.width, dy = drag.translation.height
@@ -578,10 +588,16 @@ struct BrowserScreen: View {
         let across = abs(dx) > 8 && abs(dx) > abs(dy)
         guard up || across else { return }
         let beside = neighbors(of: tab)
-        // Sideways with no other tab and not the last: nothing to slide
-        // to. (Past the last, a new tab waits.)
-        guard up || !beside.isEmpty || isLast(tab) else { return }
-        if !up, isLast(tab) { reachedNewTab.prepare() }
+        // Left on the last tab: a new tab, with the page left where it is.
+        if !up, dx < 0, isLast(tab) {
+            newTabSwipe = true
+            barQuiet = true
+            newTabHintOpacity = 1
+            reachedNewTab.prepare()
+            return followNewTabSwipe(drag.translation)
+        }
+        // Sideways with no other tab: nothing to slide to.
+        guard up || !beside.isEmpty else { return }
         // A tab just opened keeps its picture over the page until the page
         // has loaded (up to 2.5s). Pulled meanwhile, that picture is the
         // pull's own, taken over at once. Left there, the pull's new
@@ -671,10 +687,7 @@ struct BrowserScreen: View {
             : pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height
         // Swiped toward a side with no tab, it gives a little and comes back.
         var dx = pull.translation.width
-        // Past the last tab it gives more, making room for the + beside it.
-        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) {
-            dx *= dx < 0 && isLast(pull.tab) ? Self.newTabGive : 0.3
-        }
+        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
         let finger = CGPoint(x: pull.start.x + dx, y: pull.start.y + dy)
         let anchorX = pull.start.x - page.minX
         let anchorY = pull.start.y - page.minY
@@ -686,18 +699,10 @@ struct BrowserScreen: View {
     /// otherwise (or flicked down) it goes back to being the page. Either
     /// way it starts at the finger's speed.
     private func pullEnded(translation: CGSize, velocity: CGSize) {
+        if newTabSwipe { return newTabSwipeEnded(translation: translation, velocity: velocity) }
         guard var pull else { return }
         pull.translation = translation
         self.pull = nil
-        // Far enough past the last tab (or flicked there): a new tab.
-        let wantsNewTab = pull.sideways && isLast(pull.tab)
-            && (newTabReach >= 1 || (translation.width < -Self.newTabDistance * 0.5 && velocity.width < -600))
-        if newTabReach > 0 || newTabShift < 0 {
-            withAnimation(Self.fade) { newTabReach = 0; newTabShift = 0 }
-        }
-        // The keyboard comes up at once, while the page settles back:
-        // waiting for the landing felt slow (David, 2026-11-06).
-        if wantsNewTab { startNewTab() }
         let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
         let toTabs = !pull.sideways && (flickedUp || (lift(pull) > 0.22 && up > -300))
@@ -728,8 +733,46 @@ struct BrowserScreen: View {
 
     /// How far the finger goes past the last tab for a new one.
     private static let newTabDistance: CGFloat = 110
-    /// How much the page follows the finger past the last tab.
-    private static let newTabGive: CGFloat = 0.55
+    /// How far the + travels for each point the finger does.
+    private static let newTabGive: CGFloat = 0.6
+
+    /// The + follows the finger, 1:1-ish until it's fully in, then with
+    /// resistance; it fills (with a light tap) once letting go would open
+    /// a new tab.
+    private func followNewTabSwipe(_ translation: CGSize) {
+        let dx = min(translation.width, 0)
+        let reach = min(-dx / Self.newTabDistance, 1)
+        if reach == 1, newTabReach < 1 { reachedNewTab.impactOccurred() }
+        newTabReach = reach
+        let past = min(dx + Self.newTabDistance, 0)
+        newTabShift = (max(dx, -Self.newTabDistance) + past * 0.25) * Self.newTabGive
+    }
+
+    /// Let go: far enough (or flicked) starts typing for a new tab at once,
+    /// and the + fades where it is; otherwise it slides back off the edge.
+    private func newTabSwipeEnded(translation: CGSize, velocity: CGSize) {
+        newTabSwipe = false
+        // A beat later, so lifting the finger over a button doesn't tap it.
+        Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            if !newTabSwipe, pull == nil { barQuiet = false }
+        }
+        let wants = newTabReach >= 1
+            || (translation.width < -Self.newTabDistance * 0.5 && velocity.width < -600)
+        if wants {
+            startNewTab()
+            withAnimation(.easeOut(duration: 0.15)) { newTabHintOpacity = 0 } completion: {
+                newTabReach = 0
+                newTabShift = 0
+                newTabHintOpacity = 1
+            }
+        } else {
+            withAnimation(.smooth(duration: 0.25)) {
+                newTabReach = 0
+                newTabShift = 0
+            }
+        }
+    }
     private let reachedNewTab = UIImpactFeedbackGenerator(style: .light)
 
     private func isLast(_ tab: FirnCore.Tab) -> Bool {
@@ -888,8 +931,12 @@ private struct NewTabHint: View {
             .foregroundStyle(reach >= 1 ? Color.white : Theme.ink)
             .frame(width: BarButton.size, height: BarButton.size)
             .padding(2)
-            // Filled as the overview's check is, once it's a let-go away.
-            .glassEffect(.regular.tint(reach >= 1 ? Theme.spaceVivid(space) : Theme.frameTint(space)), in: .circle)
+            // Filled once it's a let-go away. A solid fill under the glass,
+            // not the glass's tint: a tinted glass that moves every frame
+            // drew washed out until it stopped (Simulator recording,
+            // 2026-11-06).
+            .background(Circle().fill(Theme.spaceVivid(space)).opacity(reach >= 1 ? 1 : 0))
+            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .circle)
             .scaleEffect(0.7 + 0.3 * reach)
             .opacity(Double(reach))
             .animation(.smooth(duration: 0.2), value: reach >= 1)

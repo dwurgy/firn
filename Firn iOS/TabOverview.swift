@@ -351,37 +351,43 @@ struct TabOverview: View {
     /// keep their own glass and look exactly as loose ones, tall cards
     /// included, 8pt apart and 8pt in from the tint's sides and bottom.
     /// The list's 12pt sets it apart from its neighbors.
+    /// Folded (and not holding the tab on screen, which keeps its card so
+    /// the page has somewhere to shrink into), the group is one shorter
+    /// tint: its name over its tabs' titles, centered top to bottom.
     private func groupTiles(_ group: TabGroup) -> some View {
-        VStack(spacing: 0) {
-            GroupLine(group: group, toggle: { fold(group) })
-                .contentShape(.contextMenuPreview,
-                              RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
-                .contextMenu {
-                    Button("Rename", systemImage: "pencil") { askForName(group) }
-                    Button("Ungroup", systemImage: "folder.badge.minus") {
-                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.ungroup(group) }
+        let tabs = shownTabs(in: group)
+        return Group {
+            if group.folded && tabs.isEmpty {
+                FoldedGroup(group: group, titles: store.tabs(in: group).map(\.title),
+                            open: { fold(group) })
+                    .modifier(groupMenu(group))
+            } else {
+                VStack(spacing: 0) {
+                    GroupLine(group: group, toggle: { fold(group) })
+                        .modifier(groupMenu(group))
+                    // The header's own 44pt sets the room above the first tab.
+                    VStack(spacing: GroupTint.inset) {
+                        ForEach(tabs) { tab in
+                            listTile(tab, at: nil, of: 0)
+                        }
                     }
-                    Divider()
-                    Button("Close Group", systemImage: "xmark") { close(group) }
                 }
-                .accessibilityActions {
-                    Button("Rename") { askForName(group) }
-                    Button("Ungroup") { store.ungroup(group) }
-                    Button("Close Group") { close(group) }
-                }
-            // The header's own 44pt sets the room above the first tab.
-            VStack(spacing: GroupTint.inset) {
-                ForEach(shownTabs(in: group)) { tab in
-                    listTile(tab, at: nil, of: 0)
-                }
+                .padding([.horizontal, .bottom], GroupTint.inset)
             }
         }
-        .padding([.horizontal, .bottom], GroupTint.inset)
         .background(GroupTint(space: space))
         // Where the group is, so a held loose tab makes room around it.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
         .id(group.id)
         .transition(drag == nil ? .opacity : .identity)
+    }
+
+    /// A group's long-press menu (Rename, Ungroup, Close Group), also
+    /// VoiceOver's actions.
+    private func groupMenu(_ group: TabGroup) -> GroupMenu {
+        GroupMenu(rename: { askForName(group) },
+                  ungroup: { withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.ungroup(group) } },
+                  close: { close(group) })
     }
 
     /// Folds or unfolds a group (0.25s, no bounce; with Reduce Motion it's
@@ -694,6 +700,73 @@ private struct GroupLine: View {
     }
 }
 
+/// A group's long-press menu, and the same three as VoiceOver actions.
+private struct GroupMenu: ViewModifier {
+    let rename: () -> Void
+    let ungroup: () -> Void
+    let close: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(.contextMenuPreview,
+                          RoundedRectangle(cornerRadius: GroupTint.cornerRadius, style: .continuous))
+            .contextMenu {
+                Button("Rename", systemImage: "pencil", action: rename)
+                Button("Ungroup", systemImage: "folder.badge.minus", action: ungroup)
+                Divider()
+                Button("Close Group", systemImage: "xmark", action: close)
+            }
+            .accessibilityActions {
+                Button("Rename", action: rename)
+                Button("Ungroup", action: ungroup)
+                Button("Close Group", action: close)
+            }
+    }
+}
+
+/// A folded group: one tint, its name over its tabs' titles (one line,
+/// cut at the end), and the chevron turned to point right, all centered
+/// top to bottom. The whole tint opens it.
+private struct FoldedGroup: View {
+    let group: TabGroup
+    let titles: [String]
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text(titles.joined(separator: ", "))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.muted)
+                }
+                .lineLimit(1)
+                // Where the open group's name sits: over the rows' icons.
+                .padding(.leading, GroupTint.inset + 14)
+                .padding(.vertical, 10)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.muted)
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 44, height: 44)
+                    .padding(.trailing, GroupTint.inset)
+            }
+            .frame(maxWidth: .infinity, minHeight: GroupTint.foldedHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .accessibilityLabel(group.name)
+        .accessibilityValue("Folded")
+        .accessibilityHint("Shows the group's tabs")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 /// The flat tint behind a group: the space's color over a little white,
 /// no blur, border, shadow, or glass (the tabs on it keep theirs). All of
 /// its numbers live here, to tune by eye.
@@ -717,6 +790,8 @@ private struct GroupTint: View {
     static let inset: CGFloat = 8
     /// The header's height at the default text size (it grows with it).
     static let headerHeight: CGFloat = 44
+    /// A folded group's height at the default text size (it grows too).
+    static let foldedHeight: CGFloat = 64
 
     var body: some View {
         let dark = scheme == .dark

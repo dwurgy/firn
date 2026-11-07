@@ -359,7 +359,7 @@ struct TabOverview: View {
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
                       naming: store.isNaming(group), toggle: { fold(group) })
-                .modifier(groupMenu(group))
+                .modifier(groupMenu(group).actions)
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupTint.inset) {
                 ForEach(tabs) { tab in
@@ -381,6 +381,11 @@ struct TabOverview: View {
                 .padding(.bottom, -2)
         }
         .background(GroupTint(space: space))
+        // Holding the name line opens the group's menu, and the whole
+        // group lifts with it, tint and tabs, as one piece (David,
+        // 2026-11-07: lifting only the name line slid it off its tint).
+        // Holding a tab still opens that tab's own menu.
+        .modifier(groupMenu(group))
         // Where the group is, so a held loose tab makes room around it.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
         .id(group.id)
@@ -727,7 +732,8 @@ private struct GroupLine: View {
     }
 }
 
-/// A group's long-press menu, and the same three as VoiceOver actions.
+/// A group's long-press menu, on the whole group so it lifts as one
+/// piece; `actions` gives the same three to VoiceOver on its name line.
 private struct GroupMenu: ViewModifier {
     let rename: () -> Void
     let ungroup: () -> Void
@@ -743,11 +749,23 @@ private struct GroupMenu: ViewModifier {
                 Divider()
                 Button("Close Group", systemImage: "xmark", action: close)
             }
-            .accessibilityActions {
-                Button("Rename", action: rename)
-                Button("Ungroup", action: ungroup)
-                Button("Close Group", action: close)
-            }
+    }
+
+    var actions: GroupActions { GroupActions(rename: rename, ungroup: ungroup, close: close) }
+}
+
+/// The group menu's three, as VoiceOver actions on the name line.
+private struct GroupActions: ViewModifier {
+    let rename: () -> Void
+    let ungroup: () -> Void
+    let close: () -> Void
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            Button("Rename", action: rename)
+            Button("Ungroup", action: ungroup)
+            Button("Close Group", action: close)
+        }
     }
 }
 

@@ -26,6 +26,9 @@ struct FirnApp: App {
             passwords: DemoMode.passwords,
             history: DemoMode.history
         )
+        // New groups name themselves on this Mac (macOS 26 with Apple
+        // Intelligence; otherwise "New Group"). Always on (David, 2026-11-06).
+        store.groupNamer = GroupNaming.onDevice
         // Erase what's left of deleted spaces: data their open pages still
         // held, passwords the Keychain couldn't be reached for, and history.
         // Only after a session really loaded: a fresh start after a damaged

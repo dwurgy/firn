@@ -2094,6 +2094,11 @@ private struct GroupCard<Rows: View>: View {
                     .foregroundStyle(Theme.groupName)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    // A name the namer gives arrives a moment later: it
+                    // cross-fades in rather than snapping (a fade, so fine
+                    // with Reduce Motion too).
+                    .contentTransition(.opacity)
+                    .animation(.easeOut(duration: 0.3), value: group.name)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Theme.faint)

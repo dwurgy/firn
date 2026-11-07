@@ -66,6 +66,9 @@ final class Browser {
             // Mac's (David, 2026-11-06: on before iOS has a History screen).
             history: HistoryStore.standard
         )
+        // New groups name themselves on this iPhone (iOS 26 with Apple
+        // Intelligence; otherwise "New Group"). Always on (David, 2026-11-06).
+        store.groupNamer = GroupNaming.onDevice
         // Erase history left by deleted spaces (only after a session really
         // loaded, so a damaged file erases nothing), and keep a year.
         if let session, !session.spaces.isEmpty {

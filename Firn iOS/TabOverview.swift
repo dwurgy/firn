@@ -75,11 +75,9 @@ struct TabOverview: View {
     /// The list's order (groups and loose tabs) while a drag moves tabs
     /// aside; saved on letting go.
     @State private var order: [UUID]?
-    /// The group being named: just made, or Rename from its menu.
+    /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
-    /// Naming a group just made (not Rename).
-    @State private var namingNew = false
     @State private var lastDrop = Date.distantPast
     @State private var lifts = 0
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
@@ -220,7 +218,7 @@ struct TabOverview: View {
             OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
-        .alert(namingNew ? "Name This Group" : "Rename Group",
+        .alert("Rename Group",
                isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $name)
             Button("Cancel", role: .cancel) {}
@@ -414,19 +412,13 @@ struct TabOverview: View {
 
     private func askForName(_ group: TabGroup) {
         name = group.name
-        namingNew = false
         naming = group
     }
 
-    /// New Group with This Tab: the group starts where the tab is, and asks
-    /// for a name, as on the Mac.
+    /// New Group with This Tab: the group starts where the tab is and names
+    /// itself (`BrowserStore.groupNamer`), as on the Mac: no prompt.
     private func newGroup(with tab: FirnCore.Tab) {
-        let group = withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.newGroup(with: tab) }
-        if let group {
-            name = ""
-            namingNew = true
-            naming = group
-        }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { _ = store.newGroup(with: tab) }
     }
 
     /// A tab's tile in the list, at `index` of `count` (nil inside a group:
@@ -689,6 +681,10 @@ private struct GroupLine: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
+                    // A name the namer gives arrives a moment later: it
+                    // cross-fades in (a fade, so fine with Reduce Motion).
+                    .contentTransition(.opacity)
+                    .animation(.easeOut(duration: 0.3), value: group.name)
                     // Over the slim rows' icons (24pt, 14pt in from the row).
                     .padding(.leading, 14)
                 Spacer(minLength: 8)

@@ -305,10 +305,10 @@ final class WindowModel {
     /// Starts a group with an everyday tab. The tab doesn't move: its card
     /// appears thawed, in the tab's exact shape, so the change is invisible,
     /// and then the frost forms (`finishForming`). Reduce Motion: a fade.
+    /// It names itself (`BrowserStore.groupNamer`): no prompt (David, 2026-11-06).
     func newGroup(with tab: FirnCore.Tab) {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let group = withAnimation(.easeOut(duration: 0.2)) { store.newGroup(with: tab) }
-            if let group { askForName(group.id) }
+            withAnimation(.easeOut(duration: 0.2)) { _ = store.newGroup(with: tab) }
             return
         }
         var instant = Transaction()
@@ -318,15 +318,9 @@ final class WindowModel {
         }
     }
 
-    /// The frost has formed around a new group: it asks for its name, when
-    /// the sidebar is showing.
+    /// The frost has formed around a new group.
     func finishForming(_ id: UUID) {
         formingGroupID = nil
-        askForName(id)
-    }
-
-    private func askForName(_ id: UUID) {
-        if !sidebarCollapsed || isPeeking { renamingGroupID = id }
     }
 
     /// Closes a tab; if it was on screen, the tab shown next takes keyboard

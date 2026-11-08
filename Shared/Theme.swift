@@ -191,8 +191,11 @@ enum Theme {
     /// The fill of a tall card's title pill and X (iOS), over a real blur of
     /// the page's picture: the group cards' frost, stronger, so the title
     /// reads over any page, at one level for every page. Dark is a lighter
-    /// warm gray than the frame, so the pill lifts off a dark page.
-    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.72, dark: 0x67635F, darkOpacity: 0.8)
+    /// warm gray than the frame, so the pill lifts off a dark page. Light
+    /// always bleeds through, like a frosted cabin window (David,
+    /// 2026-11-08): the blur erases shapes, so the fill can stay light;
+    /// dark a touch stronger, for its light text over a white page.
+    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.58, dark: 0x67635F, darkOpacity: 0.62)
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {

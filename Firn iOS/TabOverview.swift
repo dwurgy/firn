@@ -952,8 +952,9 @@ private struct GroupTint: View {
     static let baseOpacity = 0.04
     /// The space's color over the base.
     static let colorOpacity = 0.22
-    /// A 1pt edge of the space's color.
-    static let edgeOpacity = 0.35
+    /// A 1pt edge of the space's color. 60%: at 35% it vanished in light
+    /// mode over a dark page's haze (David, 2026-11-08).
+    static let edgeOpacity = 0.6
     static let edgeWidth: CGFloat = 1
 
     /// The rows' and cards' 14pt corners plus the 8pt inside, so the

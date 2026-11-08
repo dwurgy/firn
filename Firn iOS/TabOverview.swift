@@ -157,8 +157,8 @@ struct TabOverview: View {
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         switch item {
-                        case let .tab(tab): listTile(tab, at: index, of: items.count)
-                        case let .group(group): groupTiles(group)
+                        case let .tab(tab): listTile(tab, at: index, of: items.count, loose: true)
+                        case let .group(group): groupTiles(group, at: index, of: items.count)
                         }
                     }
                 }
@@ -391,8 +391,12 @@ struct TabOverview: View {
     /// the page has somewhere to shrink into), the group is only its name
     /// line, a slim row's height, the name and chevron gliding to its
     /// middle as the tint closes around them (David, 2026-11-06).
-    private func groupTiles(_ group: TabGroup) -> some View {
-        groupCard(group, lifted: false)
+    private func groupTiles(_ group: TabGroup, at index: Int, of count: Int) -> some View {
+        // VoiceOver's Move Up and Move Down, on the name line: the group's
+        // place in the list, as a drag of its name line.
+        groupCard(group, lifted: false, moves: GroupMoves(
+            up: index > 0 ? { move(group, to: index - 1) } : nil,
+            down: index < count - 1 ? { move(group, to: index + 1) } : nil))
             // Its place stays open while it's held (inside the menu's
             // modifier, for the same reason as a tab's; see listTile).
             .modifier(EmptyWhileHeld(finger: finger, id: group.id, gliding: false))
@@ -410,9 +414,12 @@ struct TabOverview: View {
 
     /// A group's tint, name line, and tabs: in the list, or `lifted` under
     /// the finger (a picture only: no spots, menus, or gestures).
-    private func groupCard(_ group: TabGroup, lifted: Bool) -> some View {
+    private func groupCard(_ group: TabGroup, lifted: Bool, moves: GroupMoves = GroupMoves()) -> some View {
         let tabs = shownTabs(in: group)
         let closed = group.folded && tabs.isEmpty
+        // Grouped tabs move within their group, and only while it shows
+        // them all: folded, the one tab showing would skip past hidden ones.
+        let movable = !lifted && tabs.count == store.tabs(in: group).count
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
                       naming: store.isNaming(group), toggle: { fold(group) })
@@ -420,13 +427,14 @@ struct TabOverview: View {
                 // to a new place, as a tab drags (the list's HoldToDrag);
                 // holding still opens its menu.
                 .modifier(groupMenu(group).actions)
+                .modifier(GroupMoveActions(moves: moves))
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupCard.inset) {
-                ForEach(tabs) { tab in
+                ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     if lifted {
                         tile(tab, spot: { _ in })
                     } else {
-                        listTile(tab, at: nil, of: 0)
+                        listTile(tab, at: movable ? index : nil, of: tabs.count, loose: false)
                     }
                 }
             }
@@ -481,9 +489,9 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { _ = store.newGroup(with: tab) }
     }
 
-    /// A tab's tile in the list, at `index` of `count` (nil inside a group:
-    /// VoiceOver's moves for grouped tabs come with dragging, step 3).
-    private func listTile(_ tab: FirnCore.Tab, at index: Int?, of count: Int) -> some View {
+    /// A tab's tile in the list or in its group (not `loose`), at `index`
+    /// of `count` there, for VoiceOver's Move Up and Move Down (nil: none).
+    private func listTile(_ tab: FirnCore.Tab, at index: Int?, of count: Int, loose: Bool) -> some View {
         let spot: (CGRect) -> Void = { frame in
             spots.frames[tab.id] = frame
             if tallness(tab, onScreen: isOnScreen(tab)) == 1 {
@@ -517,7 +525,7 @@ struct TabOverview: View {
             // forms around it (hold to form). Always here, at rest only
             // zero-height spacers, so the tile never changes identity and
             // glides into its place in the card.
-            .modifier(FormingCard(forming: index != nil && forming?.other == tab.id ? forming : nil,
+            .modifier(FormingCard(forming: loose && forming?.other == tab.id ? forming : nil,
                                   gap: drag?.start.height ?? 0, space: space))
             .id(tab.id)
             // A closed tab fades away; while a tab is held, nothing fades,
@@ -589,6 +597,15 @@ struct TabOverview: View {
         guard drag == nil else { return }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             store.move(tab, to: position)
+        }
+    }
+
+    /// VoiceOver's Move Up and Move Down for a group: the same move as
+    /// dragging its name line.
+    private func move(_ group: TabGroup, to position: Int) {
+        guard drag == nil else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            store.move(group, to: position)
         }
     }
 
@@ -1131,6 +1148,25 @@ private struct GroupActions: ViewModifier {
             Button("Rename", action: rename)
             Button("Ungroup", action: ungroup)
             Button("Close Group", action: close)
+        }
+    }
+}
+
+/// A group's Move Up and Move Down (nil at an end), for its name line,
+/// which is where VoiceOver finds the group.
+private struct GroupMoves {
+    var up: (() -> Void)?
+    var down: (() -> Void)?
+}
+
+/// VoiceOver's Move Up and Move Down on a group's name line.
+private struct GroupMoveActions: ViewModifier {
+    let moves: GroupMoves
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if let up = moves.up { Button("Move Up", action: up) }
+            if let down = moves.down { Button("Move Down", action: down) }
         }
     }
 }

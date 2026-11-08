@@ -174,7 +174,7 @@ struct TabOverview: View {
                 .gesture(HoldToDrag(enabled: gliding == nil,
                                     canBegin: { liftable(at: $0) != nil },
                                     began: lift(at:), moved: follow(to:),
-                                    ended: letGo))
+                                    ended: { letGo(cancelled: $0) }))
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -906,16 +906,21 @@ struct TabOverview: View {
 
     /// Lets go: the tab (or group) is saved in its new place and the tile
     /// settles into it (0.25s, no bounce; with Reduce Motion it's simply
-    /// there).
-    private func letGo() {
+    /// there). `cancelled`: iOS took the touch (a call, the overview
+    /// closing); a forming group thaws instead of being made, since
+    /// nobody let go on it.
+    private func letGo(cancelled: Bool = false) {
         edgeScroll?.cancel()
         edgeScroll = nil
         hoverWait?.cancel()
         hoverWait = nil
         hoverID = nil
+        guard var drag else { finger.solid = false; return }
+        if let forming {
+            if !cancelled { finger.solid = false; return settle(drag, into: forming) }
+            thaw()
+        }
         finger.solid = false
-        guard var drag else { return }
-        if let forming { return settle(drag, into: forming) }
         if let ids = order, let groups = members {
             save(drag, ids, groups)
         }
@@ -1429,7 +1434,8 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let canBegin: (CGPoint) -> Bool
     let began: (CGPoint) -> Void
     let moved: (CGPoint) -> Void
-    let ended: () -> Void
+    /// True when iOS cancelled the touch rather than the finger lifting.
+    let ended: (Bool) -> Void
 
     func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
         let hold = HoldThenMove()
@@ -1479,7 +1485,8 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
             began(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
             moved(point)
         case .changed: moved(point)
-        case .ended, .cancelled: ended()
+        case .ended: ended(false)
+        case .cancelled: ended(true)
         default: break
         }
     }

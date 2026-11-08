@@ -171,7 +171,7 @@ struct BrowserScreen: View {
                         // The card's line, drawn at the card's size and
                         // scaled with the picture (no layout while it moves).
                         if let standInTab {
-                            CardTop(tab: standInTab, space: store.activeSpace.color)
+                            CardTop(tab: standInTab, space: store.activeSpace.color, picture: standIn)
                                 .frame(width: cardWidth)
                                 .clipShape(CardTop.shape(OverviewRow.cornerRadius))
                                 .scaleEffect(box.width / cardWidth, anchor: .topLeading)

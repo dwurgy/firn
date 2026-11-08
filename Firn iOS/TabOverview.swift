@@ -1001,16 +1001,15 @@ private struct GroupCard: View {
 /// the overview (group cards, and a card's title and X pills), so there's
 /// one kind of glass (David, 2026-11-08): a fill, the space's color at
 /// `groupTint`, a 1pt rim lit at the top, a hairline, and a soft shadow.
-/// Flat and fixed, never adapting to what's behind. `blur` adds a real
-/// blur under it, for pills over a page's picture, so their title reads;
-/// the group cards sit on the haze, which is already a blur. Reduce
-/// Transparency: the solid tile color, tinted, with its hairline.
+/// Flat and fixed, never adapting to what's behind. No blur of its own:
+/// the group cards sit on the haze, which is already a blur, and a card's
+/// pills put their page's own picture, blurred, under it (`CardLine`).
+/// Reduce Transparency: the solid tile color, tinted, with its hairline.
 private struct Frost<S: InsettableShape>: View {
     let shape: S
     let space: String
     let fill: Color
     let solid: Bool
-    var blur = false
     var shadow = Theme.shadowSoft
     var shadowRadius: CGFloat = 1
     var shadowY: CGFloat = 0.5
@@ -1024,7 +1023,6 @@ private struct Frost<S: InsettableShape>: View {
                     .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
             } else {
                 shape.fill(fill)
-                    .background { if blur { shape.fill(.ultraThinMaterial) } }
                     .overlay { shape.fill(tint) }
                     .overlay {
                         shape.strokeBorder(
@@ -1457,7 +1455,7 @@ struct OverviewRow: View {
             if let moveDown { Button("Move Down", action: moveDown) }
         }
         .overlay(alignment: .top) {
-            CardTop(tab: tab, close: close, progress: t, space: space)
+            CardTop(tab: tab, close: close, progress: t, space: space, picture: picture)
                 .opacity(lineShown ? 1 : 0)
         }
         .overlay {
@@ -1540,6 +1538,9 @@ struct CardTop: View {
     var progress: CGFloat = 1
     /// The space's color, which tints the pill as it tints the slim rows' haze.
     var space = "glacier"
+    /// The page's picture, drawn as wide as the card from its top: blurred
+    /// under the pills, so the page's light comes through them.
+    var picture: UIImage?
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// The title's own width on one line, so the pill is only as wide as
@@ -1553,7 +1554,7 @@ struct CardTop: View {
 
     var body: some View {
         CardLine(tab: tab, close: close, progress: progress, space: space,
-                 titleWidth: titleWidth, solid: reduceTransparency)
+                 titleWidth: titleWidth, solid: reduceTransparency, picture: picture)
             .background(alignment: .topLeading) {
                 Text(tab.title)
                     .font(CardLine.titleFont)
@@ -1580,6 +1581,7 @@ private struct CardLine: View, Animatable {
     let titleWidth: CGFloat
     /// Reduce Transparency: the card's frost becomes the solid frame color.
     let solid: Bool
+    let picture: UIImage?
 
     nonisolated var animatableData: CGFloat {
         get { progress }
@@ -1630,7 +1632,9 @@ private struct CardLine: View, Animatable {
                         .overlay { glassShape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
                         .shadow(color: solid ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
                         .opacity(1 - t)
-                    pillFrost(glassShape).opacity(t)
+                    pillFrost(glassShape, at: CGPoint(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t)),
+                              size: CGSize(width: glassWidth, height: glassHeight), cardWidth: w)
+                        .opacity(t)
                 }
                 .frame(width: glassWidth, height: glassHeight)
                 .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
@@ -1651,7 +1655,7 @@ private struct CardLine: View, Animatable {
                     // Taps on the icon and title open the tile; only the X is its own.
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
-                closeButton(t)
+                closeButton(t, cardWidth: w, middle: middle)
                     .offset(x: mix(w - 24, w - Self.inset - Self.glassHeight / 2, t) - Self.tapSize / 2,
                             y: middle - Self.tapSize / 2)
             }
@@ -1659,20 +1663,45 @@ private struct CardLine: View, Animatable {
         .frame(height: mix(Self.rowHeight, Self.cardLineHeight, t), alignment: .top)
     }
 
-    /// A pill's frost: the group cards' recipe over a real blur of the
-    /// page's picture, on a stronger fixed fill so the title reads over
-    /// any page.
-    private func pillFrost<S: InsettableShape>(_ shape: S) -> some View {
-        Frost(shape: shape, space: space, fill: Theme.cardPillVeil, solid: solid, blur: true)
+    /// How soft the page is through a pill: enough that no shape can be
+    /// made out, while its light and color still come through.
+    private static let blurRadius: CGFloat = 10
+    private static let noPicture = UIImage()
+
+    /// A pill's frost: the group cards' recipe, light, over the page's own
+    /// picture blurred (David, 2026-11-08: light pouring through frozen
+    /// glass). Firn's own blur, not iOS's material, which laid a grey veil
+    /// and dulled the colors and can't be tuned. `origin` and `size` are
+    /// the pill's spot in the card, so the blur lines up with the picture
+    /// around it. Always drawn, even without a picture (an empty image),
+    /// so nothing is added mid-pinch.
+    private func pillFrost<S: InsettableShape>(_ shape: S, at origin: CGPoint, size: CGSize,
+                                               cardWidth: CGFloat) -> some View {
+        let image = solid ? Self.noPicture : (picture ?? Self.noPicture)
+        let scale = image.size.width > 0 ? cardWidth / image.size.width : 0
+        return Frost(shape: shape, space: space, fill: Theme.cardPillVeil, solid: solid)
+            .background {
+                Image(uiImage: image)
+                    .resizable()
+                    .frame(width: cardWidth, height: image.size.height * scale)
+                    .offset(x: -origin.x, y: -origin.y)
+                    .frame(width: size.width, height: size.height, alignment: .topLeading)
+                    .clipped()
+                    .blur(radius: Self.blurRadius, opaque: true)
+                    .clipShape(shape)
+                    .accessibilityHidden(true)
+            }
     }
 
     /// The row's small X, moving to the card's corner as its round frost
     /// forms around it.
-    @ViewBuilder private func closeButton(_ t: CGFloat) -> some View {
+    @ViewBuilder private func closeButton(_ t: CGFloat, cardWidth w: CGFloat, middle: CGFloat) -> some View {
         let size = mix(28, Self.glassHeight, t)
         let formed = min(max((t - 0.3) / 0.7, 0), 1)
+        let center = CGPoint(x: mix(w - 24, w - Self.inset - Self.glassHeight / 2, t), y: middle)
         let mark = ZStack {
-            pillFrost(Circle())
+            pillFrost(Circle(), at: CGPoint(x: center.x - size / 2, y: center.y - size / 2),
+                      size: CGSize(width: size, height: size), cardWidth: w)
                 .frame(width: size, height: size)
                 .opacity(formed)
             ZStack {

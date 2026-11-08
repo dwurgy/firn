@@ -951,6 +951,10 @@ private struct GroupCard: View {
     static let cornerRadius: CGFloat = OverviewRow.cornerRadius + inset
     /// Inside on the left, right, and bottom, and between tabs.
     static let inset: CGFloat = 8
+
+    /// The shadow's spread: wider than the Mac's 1pt, to lift the card off the haze.
+    static let shadowRadius: CGFloat = 8
+    static let shadowY: CGFloat = 2
     /// The header's height at the default text size (it grows with it).
     static let headerHeight: CGFloat = 44
     /// A folded group's height at the default text size (it grows too):
@@ -966,7 +970,7 @@ private struct GroupCard: View {
                     .overlay { shape.fill(tint) }
                     .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
             } else {
-                shape.fill(Theme.groupFill)
+                shape.fill(Theme.groupCardFill)
                     .overlay { shape.fill(tint) }
                     .overlay {
                         shape.strokeBorder(
@@ -975,7 +979,7 @@ private struct GroupCard: View {
                             lineWidth: 1)
                     }
                     .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-                    .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+                    .shadow(color: Theme.groupCardShadow, radius: Self.shadowRadius, y: Self.shadowY)
             }
         }
         .allowsHitTesting(false)

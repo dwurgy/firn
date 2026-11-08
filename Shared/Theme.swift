@@ -85,6 +85,12 @@ enum Theme {
     /// washed with the space's color.
     static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xF5F1EC, darkOpacity: 0.05)
     static let groupTint = 0.10
+    /// The iPhone's group cards: the same recipe, stronger. The Mac's card
+    /// sits on an even sidebar; the iPhone's sits on a haze that can be any
+    /// mid tone of the page, where the Mac's numbers vanished (David's
+    /// screenshots, 2026-11-08). Fixed levels, never adapting.
+    static let groupCardFill = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xF5F1EC, darkOpacity: 0.11)
+    static let groupCardShadow = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.35)
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
     /// The frost that forms across the address field while a page loads, in

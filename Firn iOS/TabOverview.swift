@@ -1619,8 +1619,10 @@ private struct CardLine: View, Animatable {
                     // A slim row is flat (David, 2026-11-08): only group cards
                     // and a card's pills are frost. As the tile grows, the
                     // row's flat fill shrinks into the pill and gives way to
-                    // its frost, one shape all the way. No frost (and no
-                    // blur to draw) on a row at rest.
+                    // its frost, one shape all the way. The frost is always
+                    // there, only faded: added mid-pinch, SwiftUI gave it a
+                    // glide of its own, and it trailed the title (David's
+                    // recording, 2026-11-08).
                     // A slim row: flat paper, the same loose and grouped,
                     // with a hairline and a faint shadow so it reads as
                     // something to tap (`Theme.slimRowFill`).
@@ -1628,7 +1630,7 @@ private struct CardLine: View, Animatable {
                         .overlay { glassShape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
                         .shadow(color: solid ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
                         .opacity(1 - t)
-                    if t > 0 { pillFrost(glassShape).opacity(t) }
+                    pillFrost(glassShape).opacity(t)
                 }
                 .frame(width: glassWidth, height: glassHeight)
                 .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
@@ -1670,11 +1672,9 @@ private struct CardLine: View, Animatable {
         let size = mix(28, Self.glassHeight, t)
         let formed = min(max((t - 0.3) / 0.7, 0), 1)
         let mark = ZStack {
-            if formed > 0 {
-                pillFrost(Circle())
-                    .frame(width: size, height: size)
-                    .opacity(formed)
-            }
+            pillFrost(Circle())
+                .frame(width: size, height: size)
+                .opacity(formed)
             ZStack {
                 Image(systemName: "xmark").foregroundStyle(Theme.muted)
                 Image(systemName: "xmark").foregroundStyle(Theme.ink).opacity(t)

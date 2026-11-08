@@ -182,11 +182,10 @@ enum Theme {
     /// page (like the Mac's window, it shows whatever is behind it).
     static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x3A3734, darkOpacity: 0.7)
 
-    /// Under a tall card's title pill and X (iOS): the frame's color, so the
-    /// glass over a page frosts the way a slim row's does over the haze
-    /// (with the space's tint on top), at one level for every page.
-    /// Dark is a lighter warm gray than the frame: slim rows read lighter
-    /// there, since their glass brightens the haze under it.
+    /// The fill of a tall card's title pill and X (iOS), over a real blur of
+    /// the page's picture: the group cards' frost, stronger, so the title
+    /// reads over any page, at one level for every page. Dark is a lighter
+    /// warm gray than the frame, so the pill lifts off a dark page.
     static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.72, dark: 0x67635F, darkOpacity: 0.8)
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).

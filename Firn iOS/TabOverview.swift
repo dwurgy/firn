@@ -322,7 +322,7 @@ struct TabOverview: View {
 
     /// Pinched together (0): every tab but the one on screen becomes a slim
     /// row, until it's looked at again. Pinched apart (1): the tidy is
-    /// undone and the last day's cards come back. Every row's glass glides into
+    /// undone and the last day's cards come back. Every row's fill glides into
     /// its card's pill (0.3s, ease-out, no bounce), the held tab staying in
     /// place, or the tab on screen held in the middle (VoiceOver's action).
     /// With Reduce Motion, the list fades out, changes, and fades back in.
@@ -991,15 +991,40 @@ private struct GroupCard: View {
     static let foldedHeight: CGFloat = OverviewRow.rowHeight
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+        Frost(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous),
+              space: space, fill: Theme.groupCardFill, solid: reduceTransparency,
+              shadow: Theme.groupCardShadow, shadowRadius: Self.shadowRadius, shadowY: Self.shadowY)
+    }
+}
+
+/// Firn's frost, the Mac's `FrostGlass` recipe, for every frosted thing in
+/// the overview (group cards, and a card's title and X pills), so there's
+/// one kind of glass (David, 2026-11-08): a fill, the space's color at
+/// `groupTint`, a 1pt rim lit at the top, a hairline, and a soft shadow.
+/// Flat and fixed, never adapting to what's behind. `blur` adds a real
+/// blur under it, for pills over a page's picture, so their title reads;
+/// the group cards sit on the haze, which is already a blur. Reduce
+/// Transparency: the solid tile color, tinted, with its hairline.
+private struct Frost<S: InsettableShape>: View {
+    let shape: S
+    let space: String
+    let fill: Color
+    let solid: Bool
+    var blur = false
+    var shadow = Theme.shadowSoft
+    var shadowRadius: CGFloat = 1
+    var shadowY: CGFloat = 0.5
+
+    var body: some View {
         let tint = Theme.spaceColor(space).opacity(Theme.groupTint)
         Group {
-            if reduceTransparency {
+            if solid {
                 shape.fill(Theme.tileSolid)
                     .overlay { shape.fill(tint) }
                     .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
             } else {
-                shape.fill(Theme.groupCardFill)
+                shape.fill(fill)
+                    .background { if blur { shape.fill(.ultraThinMaterial) } }
                     .overlay { shape.fill(tint) }
                     .overlay {
                         shape.strokeBorder(
@@ -1008,7 +1033,7 @@ private struct GroupCard: View {
                             lineWidth: 1)
                     }
                     .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-                    .shadow(color: Theme.groupCardShadow, radius: Self.shadowRadius, y: Self.shadowY)
+                    .shadow(color: shadow, radius: shadowRadius, y: shadowY)
             }
         }
         .allowsHitTesting(false)
@@ -1403,7 +1428,7 @@ struct OverviewRow: View {
 
     /// A slim row is one line on a flat fill; a tall card is the same line on its
     /// page's picture. One view for both, so a pinch glides between them:
-    /// the row's fill shrinks into the card's glass pill as the tile grows
+    /// the row's fill shrinks into the card's frosted pill as the tile grows
     /// around it, and the picture fades in behind. The tab on screen is ringed
     /// in the space's color just outside the card, with a soft glow of it,
     /// as the Mac's ⌃Tab switcher marks its pick, so it reads at a glance.
@@ -1416,8 +1441,8 @@ struct OverviewRow: View {
         }
         .buttonStyle(.plain)
         .background {
-            // The page fades in behind the glass as the card grows; the
-            // row's glass itself is the line's (it becomes the pill).
+            // The page fades in behind the pill as the card grows; the
+            // row's fill itself is the line's (it becomes the pill).
             Theme.page
                 .overlay(alignment: .top) { pictureView }
                 .clipShape(Self.shape)
@@ -1499,12 +1524,12 @@ struct OverviewRow: View {
 }
 
 /// A tile's title line, from a slim row (0) to a tall card (1). A slim row
-/// and a card's pill are the same piece of glass (David, 2026-11-05): as the
-/// tile grows, the row's glass shrinks into the pill in the card's top-left
-/// corner, the icon and title slide with it as one piece, and the row's X
-/// moves to the top-right as its round glass forms around it. On a card the
-/// glass sits on a fixed veil of the frame's color and the space's tint, so
-/// it reads as the rows' frost over any page (one kind of glass, not three).
+/// and a card's pill are one shape (David, 2026-11-05): as the tile grows,
+/// the row's flat fill shrinks into the pill in the card's top-left corner
+/// and gives way to Firn's frost (the group cards', over a real blur), the
+/// icon and title slide with it as one piece, and the row's X moves to the
+/// top-right as its round frost forms around it (2026-11-08: one kind of
+/// glass in the overview, Firn's own).
 /// Drawn on the card, and on the page's picture as it glides into the card
 /// (there at 1, without a working X), so the two match when they swap.
 struct CardTop: View {
@@ -1582,7 +1607,7 @@ private struct CardLine: View, Animatable {
         let t = min(max(progress, 0), 1)
         GeometryReader { box in
             let w = box.size.width
-            // The glass: the whole row, then the pill.
+            // The fill: the whole row, then the pill.
             let pillWidth = min(max(w - Self.xRoom, 0), 8 + 22 + 7 + titleWidth + 14)
             let glassWidth = mix(w, pillWidth, t)
             let glassHeight = mix(Self.rowHeight, Self.glassHeight, t)
@@ -1595,16 +1620,13 @@ private struct CardLine: View, Animatable {
             ZStack(alignment: .topLeading) {
                 ZStack {
                     // A slim row is flat (David, 2026-11-08): only group cards
-                    // and a card's pills are frost. The fill gives way to the
-                    // pill's glass as the tile grows. The glass is never quite
-                    // 0: iOS rebuilds glass that has faded to nothing, a
-                    // frozen frame mid-pinch. (Step 2 redoes this morph.)
+                    // and a card's pills are frost. As the tile grows, the
+                    // row's flat fill shrinks into the pill and gives way to
+                    // its frost, one shape all the way. No frost (and no
+                    // blur to draw) on a row at rest.
                     glassShape.fill(solid ? Theme.frame : Theme.frame.opacity(Self.rowFill))
                         .opacity(1 - t)
-                    Color.clear
-                        .background { veil(t).clipShape(glassShape) }
-                        .glassEffect(.regular, in: glassShape)
-                        .opacity(max(t, 0.002))
+                    if t > 0 { pillFrost(glassShape).opacity(t) }
                 }
                 .frame(width: glassWidth, height: glassHeight)
                 .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
@@ -1633,33 +1655,24 @@ private struct CardLine: View, Animatable {
         .frame(height: mix(Self.rowHeight, Self.cardLineHeight, t), alignment: .top)
     }
 
-    /// Under the glass on a card, so it reads as the rows' frost over the
-    /// page; nothing on a row (the rows' own glass is over the haze).
-    @ViewBuilder private func veil(_ t: CGFloat) -> some View {
-        if solid {
-            Theme.frame.opacity(t)
-        } else {
-            ZStack {
-                Theme.cardPillVeil
-                Theme.frameTint(space)
-            }
-            .opacity(t)
-        }
+    /// A pill's frost: the group cards' recipe over a real blur of the
+    /// page's picture, on a stronger fixed fill so the title reads over
+    /// any page.
+    private func pillFrost<S: InsettableShape>(_ shape: S) -> some View {
+        Frost(shape: shape, space: space, fill: Theme.cardPillVeil, solid: solid, blur: true)
     }
 
-    /// The row's small X, moving to the card's corner as its round glass
-    /// forms around it. The glass is never quite 0: iOS rebuilds glass that
-    /// has faded to nothing, a frozen frame mid-pinch.
+    /// The row's small X, moving to the card's corner as its round frost
+    /// forms around it.
     @ViewBuilder private func closeButton(_ t: CGFloat) -> some View {
         let size = mix(28, Self.glassHeight, t)
-        let circle = Circle()
         let formed = min(max((t - 0.3) / 0.7, 0), 1)
         let mark = ZStack {
-            Color.clear
-                .frame(width: size, height: size)
-                .background { veil(1).clipShape(circle) }
-                .glassEffect(.regular, in: circle)
-                .opacity(max(formed, 0.002))
+            if formed > 0 {
+                pillFrost(Circle())
+                    .frame(width: size, height: size)
+                    .opacity(formed)
+            }
             ZStack {
                 Image(systemName: "xmark").foregroundStyle(Theme.muted)
                 Image(systemName: "xmark").foregroundStyle(Theme.ink).opacity(t)

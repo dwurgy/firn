@@ -796,7 +796,9 @@ struct TabOverview: View {
               let other = ids.firstIndex(of: id) else { return }
         ids.remove(at: held)
         hoverID = nil
-        finger.solid = false
+        // Still solid on the card: moving within it passes over the other
+        // tab, which showed through (David's recording, 2026-11-08).
+        finger.solid = true
         let lane = lane(in: nil)
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
@@ -833,6 +835,7 @@ struct TabOverview: View {
         guard let forming, var ids = order, let other = ids.firstIndex(of: forming.other),
               let drag else { return }
         ids.insert(drag.id, at: forming.above ? other : other + 1)
+        finger.solid = false
         let lane = lane(in: nil)
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
@@ -1264,6 +1267,9 @@ private struct FormingCard: ViewModifier {
     let gap: CGFloat
     let space: String
     @State private var line = GroupCard.headerHeight
+    /// The last group shown, kept so the name line fades out where it is
+    /// as the card thaws.
+    @State private var shown: TabGroup?
 
     func body(content: Content) -> some View {
         let on = forming != nil
@@ -1272,14 +1278,17 @@ private struct FormingCard: ViewModifier {
             Color.clear
                 .frame(height: on ? line : 0)
                 .overlay(alignment: .bottom) {
-                    if let forming {
-                        GroupLine(group: forming.group, height: GroupCard.headerHeight, naming: false, toggle: {})
+                    // Faded, never removed: a removed view keeps its old
+                    // size while it fades, so the thawing card and its name
+                    // line covered the card below (David's recording,
+                    // 2026-11-08).
+                    if let group = forming?.group ?? shown {
+                        GroupLine(group: group, height: GroupCard.headerHeight, naming: false, toggle: {})
                             .fixedSize(horizontal: false, vertical: true)
                             .onGeometryChange(for: CGFloat.self, of: \.size.height) { line = $0 }
-                            .opacity(0.5)
+                            .opacity(on ? 0.5 : 0)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
-                            .transition(.opacity)
                     }
                 }
             Color.clear.frame(height: on && above ? gap + GroupCard.inset : 0)
@@ -1288,8 +1297,12 @@ private struct FormingCard: ViewModifier {
         }
         .padding(.horizontal, on ? GroupCard.inset : 0)
         .padding(.bottom, on ? GroupCard.inset : 0)
+        // Shrinks with the tile as it fades (see the name line).
         .background {
-            if on { GroupCard(space: space).transition(.opacity) }
+            if on || shown != nil { GroupCard(space: space).opacity(on ? 1 : 0) }
+        }
+        .onChange(of: forming?.group.id) { _, id in
+            if id != nil { shown = forming?.group }
         }
     }
 }
@@ -1888,6 +1901,12 @@ private struct CardLine: View, Animatable {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(width: titleRoom, height: 30, alignment: .leading)
+                    // A change of the row's width (a group forming or
+                    // thawing around it) sets the title's room at once: its
+                    // width gliding made the title wrap and ride up to the
+                    // row's top edge mid-glide (David's recording,
+                    // 2026-11-08). The pinch, which changes `t`, still glides.
+                    .animation(nil, value: w)
                     .offset(x: titleX, y: middle - 15)
                     // Taps on the icon and title open the tile; only the X is its own.
                     .allowsHitTesting(false)

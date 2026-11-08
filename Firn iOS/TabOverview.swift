@@ -393,7 +393,7 @@ struct TabOverview: View {
         let tabs = shownTabs(in: group)
         let closed = group.folded && tabs.isEmpty
         return VStack(spacing: 0) {
-            GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
+            GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
                       naming: store.isNaming(group), toggle: { fold(group) })
                 .modifier(groupMenu(group).actions)
                 // Hold the name line, then move, to drag the whole group
@@ -403,7 +403,7 @@ struct TabOverview: View {
                                     began: { lift(group, at: $0) }, moved: follow(to:),
                                     ended: letGo))
             // The header's own 44pt sets the room above the first tab.
-            VStack(spacing: GroupTint.inset) {
+            VStack(spacing: GroupCard.inset) {
                 ForEach(tabs) { tab in
                     if lifted {
                         tile(tab, spot: { _ in })
@@ -413,8 +413,8 @@ struct TabOverview: View {
                 }
             }
         }
-        .padding(.horizontal, GroupTint.inset)
-        .padding(.bottom, closed ? 0 : GroupTint.inset)
+        .padding(.horizontal, GroupCard.inset)
+        .padding(.bottom, closed ? 0 : GroupCard.inset)
         // Nothing shows below the tint while it changes size: a card
         // folding away is cut off by the tint closing over it, not left
         // fading under the row below (David's recording, 2026-11-06). Open
@@ -426,7 +426,7 @@ struct TabOverview: View {
                 .padding(.top, -24)
                 .padding(.bottom, -2)
         }
-        .background(GroupTint(space: space))
+        .background(GroupCard(space: space))
     }
 
     /// A group's long-press menu (Rename, Ungroup, Close Group), also
@@ -685,7 +685,7 @@ struct TabOverview: View {
     /// the list's full width.
     private func lane(in group: UUID?) -> (minX: CGFloat, width: CGFloat) {
         if let group, let frame = spots.frames[group] {
-            return (frame.minX + GroupTint.inset, frame.width - 2 * GroupTint.inset)
+            return (frame.minX + GroupCard.inset, frame.width - 2 * GroupCard.inset)
         }
         return (spots.viewport.minX + 16, spots.viewport.width - 32)
     }
@@ -902,7 +902,7 @@ private struct GroupMenu: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: GroupTint.cornerRadius, style: .continuous))
+                          RoundedRectangle(cornerRadius: GroupCard.cornerRadius, style: .continuous))
             .contextMenu {
                 Button("Rename", systemImage: "pencil", action: rename)
                 Button("Ungroup", systemImage: "folder.badge.minus", action: ungroup)
@@ -935,27 +935,16 @@ private struct UndimmedPress: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
-/// The flat tint behind a group, one recipe in light and dark (David,
-/// 2026-11-06): a faint base wash, the space's color over it, and a thin
-/// edge of the color. No blur, shadow, or glass (the tabs on it keep
-/// theirs). All of its numbers live here, to tune by eye.
-private struct GroupTint: View {
+/// The card behind a group: the Mac's group frost (`FrostGlass` in
+/// `Firn/Sidebar.swift`), not Liquid Glass (David, 2026-11-08). A frosted
+/// fill with the space's color in it, a 1pt rim lighter at the top, a
+/// hairline, and a soft shadow: an outline that differs from the haze in
+/// lightness, which a space-colored edge couldn't over a haze of the same
+/// color. No blur: the haze behind is already a blur of the page. Reduce
+/// Transparency, the solid tile color. The tabs on it are flat.
+private struct GroupCard: View {
     let space: String
-    @Environment(\.colorScheme) private var scheme
-
-    /// The base wash, the one part that differs by mode: warm brown (the
-    /// hover wash's color) deepens the tint on the pale light haze; warm
-    /// white lifts it off the dark one. (White in light, the first try,
-    /// vanished; David, 2026-11-06.)
-    static let lightBase = Color(red: 70 / 255, green: 55 / 255, blue: 40 / 255)
-    static let darkBase = Color(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255)
-    static let baseOpacity = 0.04
-    /// The space's color over the base.
-    static let colorOpacity = 0.22
-    /// A 1pt edge of the space's color. 60%: at 35% it vanished in light
-    /// mode over a dark page's haze (David, 2026-11-08).
-    static let edgeOpacity = 0.6
-    static let edgeWidth: CGFloat = 1
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     /// The rows' and cards' 14pt corners plus the 8pt inside, so the
     /// corners run evenly around the tabs.
@@ -969,12 +958,25 @@ private struct GroupTint: View {
     static let foldedHeight: CGFloat = OverviewRow.rowHeight
 
     var body: some View {
-        let dark = scheme == .dark
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-        ZStack {
-            shape.fill((dark ? Self.darkBase : Self.lightBase).opacity(Self.baseOpacity))
-            shape.fill(Theme.spaceColor(space).opacity(Self.colorOpacity))
-            shape.strokeBorder(Theme.spaceColor(space).opacity(Self.edgeOpacity), lineWidth: Self.edgeWidth)
+        let tint = Theme.spaceColor(space).opacity(Theme.groupTint)
+        Group {
+            if reduceTransparency {
+                shape.fill(Theme.tileSolid)
+                    .overlay { shape.fill(tint) }
+                    .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+            } else {
+                shape.fill(Theme.groupFill)
+                    .overlay { shape.fill(tint) }
+                    .overlay {
+                        shape.strokeBorder(
+                            LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom],
+                                           startPoint: .top, endPoint: .bottom),
+                            lineWidth: 1)
+                    }
+                    .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                    .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+            }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -1346,9 +1348,9 @@ struct OverviewRow: View {
             .allowsHitTesting(!leaving)
     }
 
-    /// A slim row is one line on glass; a tall card is the same line on its
+    /// A slim row is one line on a flat fill; a tall card is the same line on its
     /// page's picture. One view for both, so a pinch glides between them:
-    /// the row's glass shrinks into the card's pill as the tile grows
+    /// the row's fill shrinks into the card's glass pill as the tile grows
     /// around it, and the picture fades in behind. The tab on screen is ringed
     /// in the space's color just outside the card, with a soft glow of it,
     /// as the Mac's ⌃Tab switcher marks its pick, so it reads at a glance.
@@ -1515,6 +1517,9 @@ private struct CardLine: View, Animatable {
     private static let inset: CGFloat = 10                        // the pill's and X's distance in
     private static let cardLineHeight: CGFloat = inset + glassHeight + 6
     private static let tapSize: CGFloat = 44
+    /// A slim row's flat fill: the frame color, partly see-through, the
+    /// same loose and grouped. To tune by eye.
+    static let rowFill = 0.55
     /// Room on the card's right for the X and a gap before it.
     private static let xRoom: CGFloat = 66
 
@@ -1535,12 +1540,22 @@ private struct CardLine: View, Animatable {
             let titleX = mix(50, Self.inset + 8 + 22 + 7, t)
             let titleRoom = max(mix(w - 96, pillWidth - 51, t), 0)
             ZStack(alignment: .topLeading) {
-                Color.clear
-                    .frame(width: glassWidth, height: glassHeight)
-                    .background { veil(t).clipShape(glassShape) }
-                    .glassEffect(.regular, in: glassShape)
-                    .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
-                    .allowsHitTesting(false)
+                ZStack {
+                    // A slim row is flat (David, 2026-11-08): only group cards
+                    // and a card's pills are frost. The fill gives way to the
+                    // pill's glass as the tile grows. The glass is never quite
+                    // 0: iOS rebuilds glass that has faded to nothing, a
+                    // frozen frame mid-pinch. (Step 2 redoes this morph.)
+                    glassShape.fill(solid ? Theme.frame : Theme.frame.opacity(Self.rowFill))
+                        .opacity(1 - t)
+                    Color.clear
+                        .background { veil(t).clipShape(glassShape) }
+                        .glassEffect(.regular, in: glassShape)
+                        .opacity(max(t, 0.002))
+                }
+                .frame(width: glassWidth, height: glassHeight)
+                .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
+                .allowsHitTesting(false)
                 SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
                     .scaleEffect(mix(1, 22 / 24, t))
                     .frame(width: 24, height: 24)

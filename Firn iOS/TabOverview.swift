@@ -551,9 +551,11 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
             store.closeOtherLooseTabs(than: tab)
         }
+        // Reopened with a shake: no glide with Reduce Motion, as everywhere else here.
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
         undoManager?.registerUndo(withTarget: store) { store in
             MainActor.assumeIsolated {
-                withAnimation(.smooth(duration: 0.25)) {
+                withAnimation(glide) {
                     // Last closed first, as Reopen Closed Tab does.
                     for id in ids.reversed() {
                         if let entry = store.recentlyClosed.first(where: { $0.id == id }) { store.reopen(entry) }
@@ -825,11 +827,13 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
             store.close(tab)
         }
+        // Reopened with a shake: no glide with Reduce Motion, as everywhere else here.
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
         undoManager?.registerUndo(withTarget: store) { store in
             MainActor.assumeIsolated {
                 // This very tab, even if something else closed since.
                 guard let entry = store.recentlyClosed.first(where: { $0.id == id }) else { return }
-                withAnimation(.smooth(duration: 0.25)) { store.reopen(entry) }
+                withAnimation(glide) { store.reopen(entry) }
             }
         }
         undoManager?.setActionName("Close Tab")
@@ -843,10 +847,12 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
             store.close(group)
         }
+        // Reopened with a shake: no glide with Reduce Motion, as everywhere else here.
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
         undoManager?.registerUndo(withTarget: store) { store in
             MainActor.assumeIsolated {
                 guard let entry = store.recentlyClosed.first(where: { $0.id == id }) else { return }
-                withAnimation(.smooth(duration: 0.25)) { store.reopen(entry) }
+                withAnimation(glide) { store.reopen(entry) }
             }
         }
         undoManager?.setActionName("Close Group")

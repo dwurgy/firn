@@ -1595,9 +1595,6 @@ private struct CardLine: View, Animatable {
     private static let inset: CGFloat = 10                        // the pill's and X's distance in
     private static let cardLineHeight: CGFloat = inset + glassHeight + 6
     private static let tapSize: CGFloat = 44
-    /// A slim row's flat fill: the frame color, partly see-through, the
-    /// same loose and grouped. To tune by eye.
-    static let rowFill = 0.55
     /// Room on the card's right for the X and a gap before it.
     private static let xRoom: CGFloat = 66
 
@@ -1624,7 +1621,12 @@ private struct CardLine: View, Animatable {
                     // row's flat fill shrinks into the pill and gives way to
                     // its frost, one shape all the way. No frost (and no
                     // blur to draw) on a row at rest.
-                    glassShape.fill(solid ? Theme.frame : Theme.frame.opacity(Self.rowFill))
+                    // A slim row: flat paper, the same loose and grouped,
+                    // with a hairline and a faint shadow so it reads as
+                    // something to tap (`Theme.slimRowFill`).
+                    glassShape.fill(solid ? Theme.tileSolid : Theme.slimRowFill)
+                        .overlay { glassShape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                        .shadow(color: solid ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
                         .opacity(1 - t)
                     if t > 0 { pillFrost(glassShape).opacity(t) }
                 }

@@ -91,6 +91,12 @@ enum Theme {
     /// screenshots, 2026-11-08). Fixed levels, never adapting.
     static let groupCardFill = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xF5F1EC, darkOpacity: 0.11)
     static let groupCardShadow = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.35)
+    /// The iPhone's slim tab rows: flat, like paper rather than frost (no
+    /// blur, rim, or tint), a step lighter than the haze and the group
+    /// cards so each row reads as something to tap (David, 2026-11-08).
+    /// One recipe for both modes; only the wash differs (page white in
+    /// light, warm white in dark). With a hairline and `shadowSoft`.
+    static let slimRowFill = Color(light: 0xFBFAF8, lightOpacity: 0.72, dark: 0xF5F1EC, darkOpacity: 0.10)
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
     /// The frost that forms across the address field while a page loads, in

@@ -1582,6 +1582,7 @@ private struct CardLine: View, Animatable {
     /// Reduce Transparency: the card's frost becomes the solid frame color.
     let solid: Bool
     let picture: UIImage?
+    @Environment(\.colorScheme) private var colorScheme
 
     nonisolated var animatableData: CGFloat {
         get { progress }
@@ -1666,6 +1667,11 @@ private struct CardLine: View, Animatable {
     /// How soft the page is through a pill: enough that no shape can be
     /// made out, while its light and color still come through.
     private static let blurRadius: CGFloat = 10
+    /// Frost scatters light, so it's brighter than what's behind it: in
+    /// light mode the blurred page is lifted a fixed amount, so a dark
+    /// page's pill turns a lighter grey and its dark title reads (David,
+    /// 2026-11-08). Bright pages barely change. Dark mode reads as is.
+    private static let frostLift: Double = 0.15
     private static let noPicture = UIImage()
 
     /// A pill's frost: the group cards' recipe, light, over the page's own
@@ -1688,6 +1694,7 @@ private struct CardLine: View, Animatable {
                     .frame(width: size.width, height: size.height, alignment: .topLeading)
                     .clipped()
                     .blur(radius: Self.blurRadius, opaque: true)
+                    .brightness(colorScheme == .light ? Self.frostLift : 0)
                     .clipShape(shape)
                     .accessibilityHidden(true)
             }

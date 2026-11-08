@@ -485,6 +485,17 @@ struct TabOverview: View {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.takeOutOfGroup(tab) }
             }
         }
+        // Only this space's groups, so nothing crosses between spaces.
+        let others = store.tabGroups.filter { $0.id != tab.groupID }
+        if !others.isEmpty {
+            Menu("Move to Group", systemImage: "folder") {
+                ForEach(others) { group in
+                    Button(group.name) {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.move(tab, toEndOf: group) }
+                    }
+                }
+            }
+        }
         Divider()
         Button("Close Tab", systemImage: "xmark") { close(tab) }
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {

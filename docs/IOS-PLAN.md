@@ -168,6 +168,13 @@ Steps (agreed 2026-11-06):
    3. **Opening and folding**, plus Reduce Motion; the tint fades in just after the page shrinks into its card, and cross-fades when the space changes.
    4. **The current tab's group opens with the overview**, and folding it there opens it again just before the page grows back, so the page always has a card.
    5. **VoiceOver:** the header a heading (in the rotor) with "Expanded" or "Folded"; tabs "<title>, in <group>" (and "current tab"); a folded group "<name>, folded, button", hint "Double-tap to open."; the menus as custom actions.
+
+   **Groups, everything the Mac's do (David, 2026-11-08):** the rest of groups, in this order, each checked on David's iPhone. It takes in steps 2 and 3 below and the tint's steps 3 to 5.
+   1. **The menus:** Move to Group (a submenu of this space's other groups, the tab going to the group's end) in a tab's hold menu, and New Group with This Tab in the command bar, as on the Mac.
+   2. **Dragging, part 1** (step 2 below).
+   3. **Dragging, part 2** (step 3 below).
+   4. **Folding:** the tint's steps 3 and 4.
+   5. **A look over:** the tint's step 5 (VoiceOver), VoiceOver's moves, light and dark, and the Mac unchanged.
 2. **Dragging, part 1:** a group by its name line, a tab into a group, between groups, and out of one.
 3. **Dragging, part 2:** hold a tab over another to make a group (a preview name line while held), and VoiceOver's moves.
 4. **Basecamp:** the tiles at the top (hidden while empty), balanced rows up to 4 across, Add to Basecamp, "Basecamp is full" on the 13th, a tile's menu (Go Back to Home, Copy Link, Move to Tabs, Remove from Basecamp), dragging tiles to reorder; a tap opens the tile (ringed, the page shrinks into it). No dragging between Basecamp and the tabs for now.

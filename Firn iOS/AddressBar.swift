@@ -161,6 +161,9 @@ struct AddressBar: View {
                 add("copy-link", "Copy Link", ["address", "url"]) { UIPasteboard.general.url = url }
                 add("share", "Share…", ["send", "link"]) { ShareSheet.present(url) }
             }
+            add("new-group", "New Group with This Tab", [], when: tab.groupID == nil) {
+                _ = store.newGroup(with: tab)
+            }
             add("close", "Close Tab", []) { store.close(tab) }
         }
         add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",

@@ -126,6 +126,7 @@ private struct CommandResultRow: View {
         case "forward": "chevron.forward"
         case "copy-link": "link"
         case "share": "square.and.arrow.up"
+        case "new-group": "folder.badge.plus"
         case "close": "xmark"
         case "reopen": "arrow.uturn.backward"
         default: "circle"

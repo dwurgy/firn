@@ -155,6 +155,18 @@ struct TabOverview: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                // Hold, then move, to lift a tab and drag it to a new place,
+                // as in Safari: in the list, into a group, between groups,
+                // or out; or hold a group's name line to move the whole
+                // group. One gesture on the list, not one per tile: a tab
+                // moving into or out of a group is rebuilt in its new place,
+                // and a gesture on its tile went with the old one, ending
+                // the drag under a finger still down (David's recording,
+                // 2026-11-08).
+                .gesture(HoldToDrag(enabled: gliding == nil,
+                                    canBegin: { liftable(at: $0) != nil },
+                                    began: lift(at:), moved: follow(to:),
+                                    ended: letGo))
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -395,13 +407,10 @@ struct TabOverview: View {
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
                       naming: store.isNaming(group), toggle: { fold(group) })
-                .modifier(groupMenu(group).actions)
                 // Hold the name line, then move, to drag the whole group
-                // to a new place, as a tab drags; holding still opens its
-                // menu.
-                .gesture(HoldToDrag(enabled: !lifted && gliding == nil,
-                                    began: { lift(group, at: $0) }, moved: follow(to:),
-                                    ended: letGo))
+                // to a new place, as a tab drags (the list's HoldToDrag);
+                // holding still opens its menu.
+                .modifier(groupMenu(group).actions)
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupCard.inset) {
                 ForEach(tabs) { tab in
@@ -485,12 +494,7 @@ struct TabOverview: View {
             // the picture lingered as a copy until the menu let it go
             // (David's recordings, 2026-11-05).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
-            // Hold, then move, to lift a tab and drag it to a new place, as
-            // in Safari: in the list, into a group, between groups, or out.
-            .gesture(HoldToDrag(enabled: gliding == nil,
-                                began: { lift(tab, at: $0) }, moved: follow(to:),
-                                ended: letGo))
-            // Holding still opens iOS's own menu beside the tab, the tab
+            // Hold, then move, lifts it (the list's HoldToDrag). Holding still opens iOS's own menu beside the tab, the tab
             // staying where it is, as in Safari. (Moving away from the open
             // menu no longer picks the tab up: that needed iOS's own drag,
             // which on David's iPhone also started with every drag of
@@ -568,6 +572,31 @@ struct TabOverview: View {
         guard drag == nil else { return }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             store.move(tab, to: position)
+        }
+    }
+
+    /// What a hold at a point (global) would lift: a tab's tile, or a
+    /// group's name line. Only tiles on screen count.
+    private func liftable(at point: CGPoint) -> Liftable? {
+        guard spots.viewport.contains(point) else { return nil }
+        if let tab = visibleTabs.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
+            return .tab(tab)
+        }
+        for group in store.tabGroups {
+            guard let frame = spots.frames[group.id], frame.contains(point) else { continue }
+            let closed = group.folded && shownTabs(in: group).isEmpty
+            let line = closed ? GroupCard.foldedHeight : GroupCard.headerHeight
+            return point.y < frame.minY + line ? .group(group) : nil
+        }
+        return nil
+    }
+
+    /// The hold has begun: the tab or group under the finger lifts.
+    private func lift(at point: CGPoint) {
+        switch liftable(at: point) {
+        case let .tab(tab): lift(tab, at: point)
+        case let .group(group): lift(group, at: point)
+        case nil: break
         }
     }
 
@@ -1015,6 +1044,12 @@ private struct Drag {
     var lifted = true
 }
 
+/// What a hold in the list lifts.
+private enum Liftable {
+    case tab(FirnCore.Tab)
+    case group(TabGroup)
+}
+
 /// Where the held tile is (global points): observed only by the tile.
 @MainActor @Observable private final class DragFinger {
     /// The held tab, whose place in the list stays empty.
@@ -1081,6 +1116,9 @@ private struct LiftedTile<Content: View>: View {
 /// that waits for a hold and then needs movement.
 private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let enabled: Bool
+    /// Whether there's something to lift where the finger came down
+    /// (global); if not, the touch is left to scrolling.
+    let canBegin: (CGPoint) -> Bool
     let began: (CGPoint) -> Void
     let moved: (CGPoint) -> Void
     let ended: () -> Void
@@ -1089,12 +1127,20 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
         let hold = HoldThenMove()
         hold.isEnabled = enabled
         hold.delegate = context.coordinator
+        context.coordinator.canBegin = canBegin
         return hold
     }
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var canBegin: (CGPoint) -> Bool = { _ in false }
+
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let hold = gesture as? HoldThenMove else { return false }
+            return canBegin(hold.startPoint)
+        }
+
         /// The row's own tap would otherwise outrank it, so it runs
         /// alongside taps (a tap ends ignored during a drag); never
         /// alongside pans.
@@ -1114,6 +1160,7 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
 
     func updateUIGestureRecognizer(_ hold: HoldThenMove, context: Context) {
         hold.isEnabled = enabled
+        context.coordinator.canBegin = canBegin
     }
 
     func handleUIGestureRecognizerAction(_ hold: HoldThenMove, context: Context) {
@@ -1137,6 +1184,8 @@ final class HoldThenMove: UIGestureRecognizer {
     static let hold: TimeInterval = 0.15
     static let slop: CGFloat = 8
     private var start: CGPoint = .zero
+    /// Where the finger came down, in the window.
+    var startPoint: CGPoint { start }
     private var startTime: TimeInterval = 0
     /// How far the finger had moved when it began.
     private(set) var moved: CGPoint = .zero

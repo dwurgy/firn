@@ -194,8 +194,8 @@ enum Theme {
     /// warm gray than the frame, so the pill lifts off a dark page. Light
     /// always bleeds through, like a frosted cabin window (David,
     /// 2026-11-08): the blur erases shapes, so the fill can stay light;
-    /// dark a touch stronger, for its light text over a white page.
-    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.35, dark: 0x67635F, darkOpacity: 0.42)
+    /// one level in both modes (David, 2026-11-08).
+    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.42, dark: 0x67635F, darkOpacity: 0.42)
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {

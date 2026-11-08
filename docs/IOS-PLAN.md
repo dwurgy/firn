@@ -171,7 +171,7 @@ Steps (agreed 2026-11-06):
 
    **Groups, everything the Mac's do (David, 2026-11-08):** the rest of groups, in this order, each checked on David's iPhone. It takes in steps 2 and 3 below and the tint's steps 3 to 5.
    1. **The menus:** Move to Group (a submenu of this space's other groups, the tab going to the group's end) in a tab's hold menu, and New Group with This Tab in the command bar, as on the Mac. *Done 2026-11-08:* David checked it on his iPhone.
-   2. **Dragging, part 1** (step 2 below).
+   2. **Dragging, part 1** (step 2 below). *Built 2026-11-08:* a held tab goes into an open group while the finger is over it (the tile narrows to the group's width) and back into the list once the finger leaves; between groups the same way; a folded group's tab on screen can go back where it was. Hold a group's name line, then move, to drag the whole group (tint and tabs); holding still still opens its menu. The store's existing moves save it (`move(_:toGroup:at:)`, `move(_ group:to:)`), so a group a tab leaves empty ends and a group given a tab by hand stops tidying away. Simulator touches close the overview, so it wasn't tried there; installed on David's iPhone.
    3. **Dragging, part 2** (step 3 below).
    4. **Folding:** the tint's steps 3 and 4.
    5. **A look over:** the tint's step 5 (VoiceOver), VoiceOver's moves, light and dark, and the Mac unchanged.

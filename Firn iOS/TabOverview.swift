@@ -75,6 +75,9 @@ struct TabOverview: View {
     /// The list's order (groups and loose tabs) while a drag moves tabs
     /// aside; saved on letting go.
     @State private var order: [UUID]?
+    /// Each group's tabs, in order, while a drag moves a tab into, out
+    /// of, or between groups; saved on letting go.
+    @State private var members: [UUID: [UUID]]?
     /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
@@ -94,13 +97,20 @@ struct TabOverview: View {
     private var shownItems: [TabListItem] {
         let items = store.tabListItems
         guard let order else { return items }
-        let byID = Dictionary(items.map { ($0.id, $0) }) { a, _ in a }
+        var byID = Dictionary(items.map { ($0.id, $0) }) { a, _ in a }
+        // A grouped tab dragged out into the list.
+        for tab in store.openTabs where byID[tab.id] == nil { byID[tab.id] = .tab(tab) }
         return order.compactMap { byID[$0] }
     }
 
     /// The tabs a group shows: all of them, or only the tab on screen while
-    /// it's folded, so the page always has its card to glide into.
+    /// it's folded, so the page always has its card to glide into. During a
+    /// drag, the drag's (a held tab may be on its way in or out).
     private func shownTabs(in group: TabGroup) -> [FirnCore.Tab] {
+        if let ids = members?[group.id] {
+            let byID = Dictionary(store.openTabs.map { ($0.id, $0) }) { a, _ in a }
+            return ids.compactMap { byID[$0] }
+        }
         let members = store.tabs(in: group)
         return group.folded ? members.filter(isOnScreen) : members
     }
@@ -152,12 +162,19 @@ struct TabOverview: View {
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
             // The held tab, lifted over the list and following the finger.
             .overlay {
-                if let drag, let tab = store.openTabs.first(where: { $0.id == drag.id }) {
-                    LiftedTile(finger: finger, frame: drag.start, lifted: drag.lifted) {
-                        tile(tab, spot: { _ in })
+                if let drag {
+                    if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
+                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                            tile(tab, spot: { _ in })
+                        }
+                        // There or not, never faded in or out.
+                        .transition(.identity)
+                    } else if let group = store.tabGroups.first(where: { $0.id == drag.id }) {
+                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                            groupCard(group, lifted: true)
+                        }
+                        .transition(.identity)
                     }
-                    // There or not, never faded in or out.
-                    .transition(.identity)
                 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
@@ -354,16 +371,45 @@ struct TabOverview: View {
     /// line, a slim row's height, the name and chevron gliding to its
     /// middle as the tint closes around them (David, 2026-11-06).
     private func groupTiles(_ group: TabGroup) -> some View {
+        groupCard(group, lifted: false)
+            // Its place stays open while it's held (inside the menu's
+            // modifier, for the same reason as a tab's; see listTile).
+            .modifier(EmptyWhileHeld(finger: finger, id: group.id, gliding: false))
+            // Holding the name line opens the group's menu, and the whole
+            // group lifts with it, tint and tabs, as one piece (David,
+            // 2026-11-07: lifting only the name line slid it off its tint).
+            // Holding a tab still opens that tab's own menu.
+            .modifier(groupMenu(group))
+            // Where the group is, so a held tab makes room around it or
+            // goes in it.
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
+            .id(group.id)
+            .transition(drag == nil ? .opacity : .identity)
+    }
+
+    /// A group's tint, name line, and tabs: in the list, or `lifted` under
+    /// the finger (a picture only: no spots, menus, or gestures).
+    private func groupCard(_ group: TabGroup, lifted: Bool) -> some View {
         let tabs = shownTabs(in: group)
         let closed = group.folded && tabs.isEmpty
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupTint.foldedHeight : GroupTint.headerHeight,
                       naming: store.isNaming(group), toggle: { fold(group) })
                 .modifier(groupMenu(group).actions)
+                // Hold the name line, then move, to drag the whole group
+                // to a new place, as a tab drags; holding still opens its
+                // menu.
+                .gesture(HoldToDrag(enabled: !lifted && gliding == nil,
+                                    began: { lift(group, at: $0) }, moved: follow(to:),
+                                    ended: letGo))
             // The header's own 44pt sets the room above the first tab.
             VStack(spacing: GroupTint.inset) {
                 ForEach(tabs) { tab in
-                    listTile(tab, at: nil, of: 0)
+                    if lifted {
+                        tile(tab, spot: { _ in })
+                    } else {
+                        listTile(tab, at: nil, of: 0)
+                    }
                 }
             }
         }
@@ -381,15 +427,6 @@ struct TabOverview: View {
                 .padding(.bottom, -2)
         }
         .background(GroupTint(space: space))
-        // Holding the name line opens the group's menu, and the whole
-        // group lifts with it, tint and tabs, as one piece (David,
-        // 2026-11-07: lifting only the name line slid it off its tint).
-        // Holding a tab still opens that tab's own menu.
-        .modifier(groupMenu(group))
-        // Where the group is, so a held loose tab makes room around it.
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
-        .id(group.id)
-        .transition(drag == nil ? .opacity : .identity)
     }
 
     /// A group's long-press menu (Rename, Ungroup, Close Group), also
@@ -449,8 +486,8 @@ struct TabOverview: View {
             // (David's recordings, 2026-11-05).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
             // Hold, then move, to lift a tab and drag it to a new place, as
-            // in Safari. Loose tabs only: groups come in phase 3.
-            .gesture(HoldToDrag(enabled: tab.groupID == nil && gliding == nil,
+            // in Safari: in the list, into a group, between groups, or out.
+            .gesture(HoldToDrag(enabled: gliding == nil,
                                 began: { lift(tab, at: $0) }, moved: follow(to:),
                                 ended: letGo))
             // Holding still opens iOS's own menu beside the tab, the tab
@@ -536,12 +573,28 @@ struct TabOverview: View {
 
     /// The long press has held: the tab lifts out of its place.
     private func lift(_ tab: FirnCore.Tab, at point: CGPoint) {
-        guard drag == nil, !pinchedRecently, let frame = spots.frames[tab.id] else { return }
+        guard let frame = spots.frames[tab.id] else { return }
+        startDrag(Drag(id: tab.id, start: frame, grab: point.y - frame.minY, group: false,
+                       from: tab.groupID), at: point)
+    }
+
+    /// The name line was held, then moved: the whole group lifts.
+    private func lift(_ group: TabGroup, at point: CGPoint) {
+        guard let frame = spots.frames[group.id] else { return }
+        startDrag(Drag(id: group.id, start: frame, grab: point.y - frame.minY, group: true,
+                       from: nil), at: point)
+    }
+
+    private func startDrag(_ new: Drag, at point: CGPoint) {
+        guard drag == nil, !pinchedRecently else { return }
         order = shownItems.map(\.id)
-        finger.top = frame.minY
+        members = Dictionary(store.tabGroups.map { ($0.id, shownTabs(in: $0).map(\.id)) }) { a, _ in a }
+        finger.top = new.start.minY
+        finger.left = new.start.minX
+        finger.width = new.start.width
         finger.y = point.y
-        drag = Drag(id: tab.id, start: frame, grab: point.y - frame.minY)
-        finger.held = tab.id
+        drag = new
+        finger.held = new.id
         lifts += 1
         keepScrollingAtEdges()
     }
@@ -561,42 +614,95 @@ struct TabOverview: View {
     /// card had to travel a whole card's height, about 170pt, before
     /// anything moved; a shorter drag landed it back where it was, the
     /// held card covering its neighbor. David's recordings, 2026-11-05.)
+    /// A held tab goes into an open group while the finger is over it, and
+    /// back into the list once the finger leaves it, narrowing and widening
+    /// to fit. A held group moves only in the list: groups never nest.
     /// Only tabs on screen count (the list is lazy, so others' spots may
     /// be old); the ones above the screen stay above.
     private func makeRoom() {
-        guard let drag, var ids = order, let now = ids.firstIndex(of: drag.id) else { return }
+        guard let drag, var ids = order, var groups = members else { return }
         let top = finger.top
         let bottom = finger.top + drag.start.height
+        let middle = (top + bottom) / 2
         let view = spots.viewport
-        ids.removeAll { $0 == drag.id }
-        let shown = ids.indices.filter { index in
-            spots.frames[ids[index]].map { $0.maxY > view.minY && $0.minY < view.maxY } ?? false
+        func shownFrame(_ id: UUID) -> CGRect? {
+            spots.frames[id].flatMap { $0.maxY > view.minY && $0.minY < view.maxY ? $0 : nil }
         }
-        guard let first = shown.first else { return }
-        let above = shown.filter { index in
-            guard let frame = spots.frames[ids[index]] else { return false }
-            return frame.midY < (index < now ? top : bottom)
-        }.count
-        ids.insert(drag.id, at: first + above)
-        guard ids != order else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { order = ids }
+        // Groups a held tab may go into: open ones, and the folded one it
+        // came from (where it can go back).
+        let open = Set(store.tabGroups.filter { !$0.folded || $0.id == drag.from }.map(\.id))
+        let now = groups.first { $0.value.contains(drag.id) }?.key
+        let into: UUID? = drag.group ? nil : ids.first { id in
+            open.contains(id) && (shownFrame(id).map { $0.minY <= finger.y && finger.y < $0.maxY } ?? false)
+        }
+
+        // Where among its new neighbors: `was` is its place among them if
+        // it's already there, nil if it's just arriving (then its middle
+        // decides). Next to a held tab, an open group is above once the
+        // finger is past its middle (the finger is in it otherwise).
+        func place(among others: [UUID], was: Int?) -> Int? {
+            let shown = others.indices.filter { shownFrame(others[$0]) != nil }
+            guard let first = shown.first else { return others.isEmpty ? 0 : nil }
+            let above = shown.filter { index in
+                guard let frame = shownFrame(others[index]) else { return false }
+                if !drag.group, open.contains(others[index]) { return frame.midY < finger.y }
+                guard let was else { return frame.midY < middle }
+                return frame.midY < (index < was ? top : bottom)
+            }.count
+            return first + above
+        }
+
+        if let into, var others = groups[into] {
+            let was = now == into ? others.firstIndex(of: drag.id) : nil
+            others.removeAll { $0 == drag.id }
+            guard let at = place(among: others, was: was) else { return }
+            others.insert(drag.id, at: at)
+            if let now, now != into { groups[now]?.removeAll { $0 == drag.id } }
+            ids.removeAll { $0 == drag.id }
+            groups[into] = others
+        } else {
+            let was = now == nil ? ids.firstIndex(of: drag.id) : nil
+            var others = ids.filter { $0 != drag.id }
+            guard let at = place(among: others, was: was) else { return }
+            others.insert(drag.id, at: at)
+            if let now { groups[now]?.removeAll { $0 == drag.id } }
+            ids = others
+        }
+        guard ids != order || groups != members else { return }
+        let lane = into != now ? lane(in: into) : nil
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            order = ids
+            members = groups
+            // Narrower in a group, the width of the list out of one.
+            if let lane {
+                finger.left = lane.minX
+                finger.width = lane.width
+            }
+        }
     }
 
-    /// Lets go: the tab is saved in its new place and the tile settles
-    /// into it (0.25s, no bounce; with Reduce Motion it's simply there).
+    /// Where a tab's tile sits across the list: inside a group's tint, or
+    /// the list's full width.
+    private func lane(in group: UUID?) -> (minX: CGFloat, width: CGFloat) {
+        if let group, let frame = spots.frames[group] {
+            return (frame.minX + GroupTint.inset, frame.width - 2 * GroupTint.inset)
+        }
+        return (spots.viewport.minX + 16, spots.viewport.width - 32)
+    }
+
+    /// Lets go: the tab (or group) is saved in its new place and the tile
+    /// settles into it (0.25s, no bounce; with Reduce Motion it's simply
+    /// there).
     private func letGo() {
         edgeScroll?.cancel()
         edgeScroll = nil
         guard var drag else { return }
-        if let ids = order, let to = ids.firstIndex(of: drag.id),
-           let tab = store.openTabs.first(where: { $0.id == drag.id }),
-           store.tabListItems.firstIndex(where: { $0.id == drag.id }) != to {
-            // Its place in the list, counted without it and each group as
-            // one, as the store counts.
-            store.move(tab, to: to)
+        if let ids = order, let groups = members {
+            save(drag, ids, groups)
         }
         order = nil
-        let landing = spots.frames[drag.id]?.minY ?? drag.start.minY
+        members = nil
+        let landing = spots.frames[drag.id] ?? drag.start
         guard !reduceMotion else {
             self.drag = nil
             finger.held = nil
@@ -605,12 +711,51 @@ struct TabOverview: View {
         }
         drag.lifted = false
         withAnimation(.smooth(duration: 0.25)) {
-            finger.top = landing
+            finger.top = landing.minY
+            finger.left = landing.minX
+            finger.width = landing.width
             self.drag = drag
         } completion: {
             self.drag = nil
             finger.held = nil
             lastDrop = .now
+        }
+    }
+
+    /// Saves where the drag left a tab or group. Places are counted as the
+    /// store counts them: without the held one, and each group as one.
+    private func save(_ drag: Drag, _ ids: [UUID], _ groups: [UUID: [UUID]]) {
+        if drag.group {
+            guard let group = store.tabGroups.first(where: { $0.id == drag.id }),
+                  let to = ids.firstIndex(of: drag.id),
+                  store.tabListItems.firstIndex(where: { $0.id == drag.id }) != to else { return }
+            store.move(group, to: to)
+            return
+        }
+        guard let tab = store.openTabs.first(where: { $0.id == drag.id }) else { return }
+        if let into = groups.first(where: { $0.value.contains(drag.id) }),
+           let group = store.tabGroups.first(where: { $0.id == into.key }),
+           let at = into.value.firstIndex(of: drag.id) {
+            if group.id == tab.groupID {
+                // Back in a folded group: where it was (only it shows).
+                guard !group.folded,
+                      store.tabs(in: group).firstIndex(where: { $0.id == tab.id }) != at else { return }
+                store.move(tab, to: at)
+            } else {
+                store.move(tab, toGroup: group, at: at)
+            }
+            return
+        }
+        // In the list. A group the tab leaves empty ends, so it doesn't count.
+        let counted = ids.filter { id in
+            guard let group = store.tabGroups.first(where: { $0.id == id }) else { return true }
+            return store.tabs(in: group).contains { $0.id != drag.id }
+        }
+        guard let to = counted.firstIndex(of: drag.id) else { return }
+        if tab.groupID != nil {
+            store.move(tab, toGroup: nil, at: to)
+        } else if store.tabListItems.firstIndex(where: { $0.id == drag.id }) != to {
+            store.move(tab, to: to)
         }
     }
 
@@ -849,12 +994,16 @@ private struct GroupTint: View {
     var scroll: ScrollGeometry?
 }
 
-/// A tab being dragged: which, where its tile was when it lifted, and
-/// where on the tile the finger holds it.
+/// A tab or group being dragged: which, where its tile was when it
+/// lifted, and where on the tile the finger holds it.
 private struct Drag {
     let id: UUID
     let start: CGRect
     let grab: CGFloat
+    /// A whole group, held by its name line.
+    let group: Bool
+    /// The group a held tab was in when it lifted.
+    let from: UUID?
     /// False once let go, as the tile settles into its place.
     var lifted = true
 }
@@ -865,6 +1014,9 @@ private struct Drag {
     var held: UUID?
     /// The tile's top.
     var top: CGFloat = 0
+    /// The tile's left edge and width: a tab narrows inside a group.
+    var left: CGFloat = 0
+    var width: CGFloat = 0
     /// The finger itself.
     var y: CGFloat = 0
 }
@@ -891,7 +1043,7 @@ private struct EmptyWhileHeld: ViewModifier {
 /// while held, settling back to its own size as it lands.
 private struct LiftedTile<Content: View>: View {
     let finger: DragFinger
-    let frame: CGRect
+    let height: CGFloat
     let lifted: Bool
     @ViewBuilder let content: Content
 
@@ -903,10 +1055,10 @@ private struct LiftedTile<Content: View>: View {
         GeometryReader { box in
             let origin = box.frame(in: .global).origin
             content
-                .frame(width: frame.width, height: frame.height)
+                .frame(width: finger.width, height: height)
                 .scaleEffect(raised ? 1.03 : 1)
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
-                .offset(x: frame.minX - origin.x, y: finger.top - origin.y)
+                .offset(x: finger.left - origin.x, y: finger.top - origin.y)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

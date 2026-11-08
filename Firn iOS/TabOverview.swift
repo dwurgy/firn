@@ -78,6 +78,14 @@ struct TabOverview: View {
     /// Each group's tabs, in order, while a drag moves a tab into, out
     /// of, or between groups; saved on letting go.
     @State private var members: [UUID: [UUID]]?
+    /// A held tab resting over a loose tab, and the wait before their
+    /// group starts forming around it (hold to form).
+    @State private var hoverID: UUID?
+    @State private var hoverWait: Task<Void, Never>?
+    /// The group a held tab and the loose tab under it would make, shown
+    /// while held; saved only on letting go there.
+    @State private var forming: Forming?
+    @State private var forms = 0
     /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
@@ -190,6 +198,7 @@ struct TabOverview: View {
                 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
+            .sensoryFeedback(.impact(weight: .light), trigger: forms)
             // Pinch together for slim rows, apart for cards, as a photo
             // grid zooms. Once the pinch clearly goes one way, the whole
             // change runs as one glide, the tab under the fingers held in
@@ -504,6 +513,12 @@ struct TabOverview: View {
             .contentShape(.contextMenuPreview,
                           RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
             .contextMenu { menu(for: tab) }
+            // A held tab resting on this loose one: the group they'd make
+            // forms around it (hold to form). Always here, at rest only
+            // zero-height spacers, so the tile never changes identity and
+            // glides into its place in the card.
+            .modifier(FormingCard(forming: index != nil && forming?.other == tab.id ? forming : nil,
+                                  gap: drag?.start.height ?? 0, space: space))
             .id(tab.id)
             // A closed tab fades away; while a tab is held, nothing fades,
             // so the list moving a card can't leave a fading copy of it
@@ -652,6 +667,7 @@ struct TabOverview: View {
     /// be old); the ones above the screen stay above.
     private func makeRoom() {
         guard let drag, var ids = order, var groups = members else { return }
+        if forming != nil, holdForming() { return }
         let top = finger.top
         let bottom = finger.top + drag.start.height
         let middle = (top + bottom) / 2
@@ -667,10 +683,24 @@ struct TabOverview: View {
             open.contains(id) && (shownFrame(id).map { $0.minY <= finger.y && finger.y < $0.maxY } ?? false)
         }
 
+        // Loose tabs a held tab could rest on to make a group with.
+        let loose: Set<UUID> = drag.group ? [] : Set(ids.filter { id in
+            id != drag.id && store.openTabs.contains { $0.id == id && $0.groupID == nil }
+        })
+        // The held tile's edge that leads toward `index` among `others`
+        // (`was` is its own place there, nil if arriving: then its middle).
+        func edge(toward index: Int, was: Int?) -> CGFloat {
+            guard let was else { return middle }
+            return index < was ? top : bottom
+        }
+
         // Where among its new neighbors: `was` is its place among them if
         // it's already there, nil if it's just arriving (then its middle
         // decides). Next to a held tab, an open group is above once the
-        // finger is past its middle (the finger is in it otherwise).
+        // finger is past its middle (the finger is in it otherwise). Past
+        // a loose tab, its edge has to pass three quarters of it, not half,
+        // leaving its middle half to rest on and make a group (David,
+        // 2026-11-08).
         func place(among others: [UUID], was: Int?) -> Int? {
             let shown = others.indices.filter { shownFrame(others[$0]) != nil }
             guard let first = shown.first else { return others.isEmpty ? 0 : nil }
@@ -678,9 +708,29 @@ struct TabOverview: View {
                 guard let frame = shownFrame(others[index]) else { return false }
                 if !drag.group, open.contains(others[index]) { return frame.midY < finger.y }
                 guard let was else { return frame.midY < middle }
-                return frame.midY < (index < was ? top : bottom)
+                let rest = loose.contains(others[index]) ? frame.height / 4 : 0
+                return index < was ? frame.midY - rest < top : frame.midY + rest < bottom
             }.count
             return first + above
+        }
+
+        // Resting on a loose tab's middle half: the list holds still, and
+        // after a moment their group starts forming (`form`).
+        func restingOn(_ others: [UUID], was: Int?) -> UUID? {
+            others.indices.first { index in
+                guard loose.contains(others[index]), let frame = shownFrame(others[index]) else { return false }
+                let at = edge(toward: index, was: was)
+                return at > frame.minY + frame.height / 4 && at < frame.maxY - frame.height / 4
+            }.map { others[$0] }
+        }
+
+        if into == nil {
+            let others = ids.filter { $0 != drag.id }
+            let resting = restingOn(others, was: now == nil ? ids.firstIndex(of: drag.id) : nil)
+            waitToForm(over: resting)
+            if resting != nil { return }
+        } else {
+            waitToForm(over: nil)
         }
 
         if let into, var others = groups[into] {
@@ -721,13 +771,131 @@ struct TabOverview: View {
         return (spots.viewport.minX + 16, spots.viewport.width - 32)
     }
 
+    // MARK: Hold to form
+
+    /// The held tab rests on a loose tab (or no longer does): after about
+    /// 0.5s still there, their group starts forming, as on the Mac.
+    private func waitToForm(over id: UUID?) {
+        guard id != hoverID else { return }
+        hoverWait?.cancel()
+        hoverID = id
+        finger.solid = id != nil
+        guard let id else { return }
+        hoverWait = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.5))
+            guard !Task.isCancelled, hoverID == id, drag?.lifted == true else { return }
+            form(around: id)
+        }
+    }
+
+    /// The group the two would make forms around the loose tab: the held
+    /// tab's place in the list moves into the card, as a gap beside it on
+    /// the side it came from. Nothing is saved until it's let go there.
+    private func form(around id: UUID) {
+        guard let drag, var ids = order, let held = ids.firstIndex(of: drag.id),
+              let other = ids.firstIndex(of: id) else { return }
+        ids.remove(at: held)
+        hoverID = nil
+        finger.solid = false
+        let lane = lane(in: nil)
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            order = ids
+            forming = Forming(other: id, group: store.previewGroup(), above: held < other)
+            finger.left = lane.minX + GroupCard.inset
+            finger.width = lane.width - 2 * GroupCard.inset
+        }
+        forms += 1
+    }
+
+    /// While a group is forming, it holds as long as the finger is on its
+    /// card, so the tabs moving under the finger don't undo it; the gap
+    /// follows the finger past the other tab's middle. Off the card, it
+    /// thaws back. True while it holds.
+    private func holdForming() -> Bool {
+        guard let forming, let frame = spots.frames[forming.other], let drag else { return false }
+        let gap = drag.start.height + GroupCard.inset
+        let cardTop = frame.minY - (forming.above ? gap : 0) - GroupCard.headerHeight
+        let cardBottom = frame.maxY + (forming.above ? 0 : gap) + GroupCard.inset
+        if finger.y > cardTop, finger.y < cardBottom {
+            let above = finger.y < frame.midY
+            if above != forming.above {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { self.forming?.above = above }
+            }
+            return true
+        }
+        thaw()
+        return true
+    }
+
+    /// Moved off before letting go: the card thaws away and the held tab's
+    /// place comes back beside the other, where the list was.
+    private func thaw() {
+        guard let forming, var ids = order, let other = ids.firstIndex(of: forming.other),
+              let drag else { return }
+        ids.insert(drag.id, at: forming.above ? other : other + 1)
+        let lane = lane(in: nil)
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            order = ids
+            self.forming = nil
+            finger.left = lane.minX
+            finger.width = lane.width
+        }
+    }
+
+    /// Let go on a forming group: the tab settles into its gap, then the
+    /// store makes the group in its place, where the card already is, and
+    /// it names itself (`BrowserStore.groupNamer`).
+    private func settle(_ drag: Drag, into forming: Forming) {
+        var landing = drag.start
+        if let frame = spots.frames[forming.other] {
+            let lane = lane(in: nil)
+            let y = forming.above ? frame.minY - GroupCard.inset - drag.start.height
+                                  : frame.maxY + GroupCard.inset
+            landing = CGRect(x: lane.minX + GroupCard.inset, y: y,
+                             width: lane.width - 2 * GroupCard.inset, height: drag.start.height)
+        }
+        func make() {
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) {
+                if let tab = store.openTabs.first(where: { $0.id == drag.id }),
+                   let other = store.openTabs.first(where: { $0.id == forming.other }),
+                   let group = store.newGroup(with: other) {
+                    store.move(tab, into: group, at: forming.above ? 0 : 1)
+                }
+                self.forming = nil
+                order = nil
+                members = nil
+                self.drag = nil
+                finger.held = nil
+            }
+            lastDrop = .now
+        }
+        guard !reduceMotion else { return make() }
+        var settling = drag
+        settling.lifted = false
+        withAnimation(.smooth(duration: 0.25)) {
+            finger.top = landing.minY
+            finger.left = landing.minX
+            finger.width = landing.width
+            self.drag = settling
+        } completion: {
+            make()
+        }
+    }
+
     /// Lets go: the tab (or group) is saved in its new place and the tile
     /// settles into it (0.25s, no bounce; with Reduce Motion it's simply
     /// there).
     private func letGo() {
         edgeScroll?.cancel()
         edgeScroll = nil
+        hoverWait?.cancel()
+        hoverWait = nil
+        hoverID = nil
+        finger.solid = false
         guard var drag else { return }
+        if let forming { return settle(drag, into: forming) }
         if let ids = order, let groups = members {
             save(drag, ids, groups)
         }
@@ -1073,6 +1241,59 @@ private struct Drag {
     var lifted = true
 }
 
+/// A group forming while a held tab rests on a loose one: the loose tab,
+/// the group as the store would make it (not saved), and whether the
+/// held tab's gap is above the other.
+private struct Forming {
+    let other: UUID
+    let group: TabGroup
+    var above: Bool
+}
+
+/// A loose tab's tile, with room for the group forming around it: at rest,
+/// zero-height spacers and nothing else, so the tile keeps its identity
+/// and glides to its place in the card. Forming, it's laid out exactly as
+/// the group will be (`groupCard`): the name line, the held tab's gap and
+/// this tab 8pt apart, 8pt in from the card's sides and bottom, so making
+/// the group on letting go changes nothing on screen. The card fades in
+/// as it grows out from the tile (the frost forming); the name line is
+/// faint, as on the Mac, until the group is made and names itself.
+private struct FormingCard: ViewModifier {
+    let forming: Forming?
+    /// The held tab's height, for its gap.
+    let gap: CGFloat
+    let space: String
+    @State private var line = GroupCard.headerHeight
+
+    func body(content: Content) -> some View {
+        let on = forming != nil
+        let above = forming?.above ?? true
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: on ? line : 0)
+                .overlay(alignment: .bottom) {
+                    if let forming {
+                        GroupLine(group: forming.group, height: GroupCard.headerHeight, naming: false, toggle: {})
+                            .fixedSize(horizontal: false, vertical: true)
+                            .onGeometryChange(for: CGFloat.self, of: \.size.height) { line = $0 }
+                            .opacity(0.5)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                            .transition(.opacity)
+                    }
+                }
+            Color.clear.frame(height: on && above ? gap + GroupCard.inset : 0)
+            content
+            Color.clear.frame(height: on && !above ? gap + GroupCard.inset : 0)
+        }
+        .padding(.horizontal, on ? GroupCard.inset : 0)
+        .padding(.bottom, on ? GroupCard.inset : 0)
+        .background {
+            if on { GroupCard(space: space).transition(.opacity) }
+        }
+    }
+}
+
 /// What a hold in the list lifts.
 private enum Liftable {
     case tab(FirnCore.Tab)
@@ -1090,6 +1311,9 @@ private enum Liftable {
     var width: CGFloat = 0
     /// The finger itself.
     var y: CGFloat = 0
+    /// Resting on another tab, waiting for their group to form: the held
+    /// tile turns solid so the one under it doesn't show through.
+    var solid = false
 }
 
 /// A tab's place in the list, empty while the tab is held (or its page
@@ -1127,6 +1351,12 @@ private struct LiftedTile<Content: View>: View {
             let origin = box.frame(in: .global).origin
             content
                 .frame(width: finger.width, height: height)
+                .background {
+                    RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
+                        .fill(Theme.tileSolid)
+                        .opacity(finger.solid ? 1 : 0)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: finger.solid)
+                }
                 .scaleEffect(raised ? 1.03 : 1)
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
                 .offset(x: finger.left - origin.x, y: finger.top - origin.y)

@@ -377,7 +377,8 @@ struct TabOverview: View {
             close: { if !busy { close(tab) } },
             spot: spot,
             moveUp: moveUp,
-            moveDown: moveDown
+            moveDown: moveDown,
+            groupName: tab.groupID.flatMap { id in store.tabGroups.first(where: { $0.id == id })?.name }
         )
     }
 
@@ -1744,6 +1745,8 @@ struct OverviewRow: View {
     /// VoiceOver's way to reorder (a drag can't be found by it); nil at an end.
     var moveUp: (() -> Void)?
     var moveDown: (() -> Void)?
+    /// The group it's in, for VoiceOver ("<title>, in <group>"); nil when loose.
+    var groupName: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far the finger has pulled the row left (0 or less).
@@ -1795,7 +1798,7 @@ struct OverviewRow: View {
                 .opacity(t)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
-        .accessibilityLabel(tab.title)
+        .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .accessibilityActions {

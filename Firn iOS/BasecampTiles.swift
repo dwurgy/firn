@@ -14,6 +14,9 @@ struct BasecampTiles: View {
     var gliding: UUID?
     /// The tab on screen (or still held as it while a picked tab grows).
     let onScreen: UUID?
+    /// How far the gliding tile shows: it fades in as the page's picture
+    /// lands in it, and out as the picture grows from it.
+    var reveal: Double = 1
     let open: (FirnCore.Tab) -> Void
 
     @State private var width: CGFloat = 0
@@ -23,6 +26,11 @@ struct BasecampTiles: View {
     /// Tiles never get narrower than this (the brief's "about 56pt").
     static let minimumWidth: Double = 56
     static let maximumColumns = 4
+    /// The iPhone's rows' 14pt corners, not the Mac's 9pt: on the Mac a
+    /// tile is about as round as a tab, and so it is here (David, 2026-11-08).
+    static let cornerRadius: CGFloat = 14
+    /// Thicker than the Mac's 2.5pt: the iPhone's tile is much bigger.
+    static let ringWidth: CGFloat = 3.5
 
     private var space: String { store.activeSpace.color }
 
@@ -70,7 +78,7 @@ struct BasecampTiles: View {
         BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen) {
             open(tab)
         }
-        .opacity(gliding == tab.id ? 0 : 1)
+        .opacity(gliding == tab.id ? reveal : 1)
         // Where it is, so the page can glide into it as the overview opens.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
             spots.frames[tab.id] = frame
@@ -140,7 +148,7 @@ private struct TileButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: BasecampTiles.cornerRadius, style: .continuous)
     }
 
     private var dark: Bool { colorScheme == .dark }
@@ -170,7 +178,7 @@ private struct TileButtonStyle: ButtonStyle {
                 // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
                 shape.strokeBorder(
                     AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
-                    lineWidth: Theme.tileRingWidth)
+                    lineWidth: BasecampTiles.ringWidth)
                     .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
             }
             .overlay {
@@ -190,7 +198,7 @@ private struct TileGlass: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: BasecampTiles.cornerRadius, style: .continuous)
     }
 
     var body: some View {

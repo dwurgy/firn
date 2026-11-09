@@ -30,6 +30,10 @@ struct BrowserScreen: View {
     /// The picture and its strip fading off a woken page. Its own value:
     /// removing them inside an animation swapped in one frame.
     @State private var standInFade: Double = 1
+    /// A Basecamp tile and the page's picture cross-fade where they meet:
+    /// 1 shows the tile, 0 the picture. A tile has no title pill, so the
+    /// picture can't land as a card does.
+    @State private var tileReveal: Double = 1
     /// The tab the picture is of, for the card's line riding on it.
     @State private var standInTab: FirnCore.Tab?
     /// Where the shown part of the picture sits on screen: the page's own
@@ -98,7 +102,7 @@ struct BrowserScreen: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if showingTabs {
-                TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding,
+                TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
                             lineShown: lineShown, heldCard: heldCard, arrival: arrival, open: openTab,
                             done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
                             newTab: startNewTab, typing: editing)
@@ -168,9 +172,11 @@ struct BrowserScreen: View {
                             .resizable()
                             .frame(width: width, height: height)
                             .modifier(CardGlide(width: width, box: box, radius: boxRadius))
+                            .opacity(standInTab?.place == .basecamp ? 1 - tileReveal : 1)
                         // The card's line, drawn at the card's size and
                         // scaled with the picture (no layout while it moves).
-                        if let standInTab {
+                        // A tile has no line: only cards get it.
+                        if let standInTab, standInTab.place != .basecamp {
                             CardTop(tab: standInTab, space: store.activeSpace.color, picture: standIn)
                                 .frame(width: cardWidth)
                                 .clipShape(CardTop.shape(OverviewRow.cornerRadius))
@@ -415,9 +421,11 @@ struct BrowserScreen: View {
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation) {
         Task {
             guard let spot = await spot(of: tab.id) else { return fadeToTabs() }
+            let tile = tab.place == .basecamp
+            if tile { tileReveal = 0 }
             withAnimation(curve) {
                 box = spot
-                boxRadius = OverviewRow.cornerRadius
+                boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 stripOpacity = 0
                 arrival = 1
                 neighborsOpacity = 0
@@ -434,12 +442,20 @@ struct BrowserScreen: View {
             // eases in, so it's mostly seen over the second half. Started
             // 0.12s in, it froze a frame there (David's recordings,
             // 2026-11-04).
-            withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
+            if tile {
+                // Into a tile: the picture becomes the tile's glass over
+                // the glide's second half, ring and all, rather than
+                // landing with a card's line it doesn't have.
+                withAnimation(.easeInOut(duration: 0.2).delay(0.12)) { tileReveal = 1 }
+            } else {
+                withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
+            }
         }
     }
 
     /// No picture or no card to aim at: the overview fades in.
     private func fadeToTabs() {
+        tileReveal = 1
         standIn = nil
         standInTab = nil
         neighbors = []
@@ -470,13 +486,19 @@ struct BrowserScreen: View {
             hideTabs()
             return
         }
-        putStandIn(image, of: tab, at: spot, radius: OverviewRow.cornerRadius)
+        let tile = tab.place == .basecamp
+        // Out of a tile: the tile shows at first, and the picture comes up
+        // over it as it starts to grow.
+        tileReveal = tile ? 1 : 0
+        putStandIn(image, of: tab, at: spot,
+                   radius: tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius)
         // A card's line leaves first; a slim row has none on its picture.
         lineOnPicture = fromCard ? 1 : 0
         gliding = tab.id
         Task {
             await Task.yield()
             withAnimation(.easeOut(duration: 0.1)) { lineOnPicture = 0 }
+            if tile { withAnimation(.easeOut(duration: 0.14)) { tileReveal = 0 } }
             land(onPage: tab, curve: Self.glide, switching: switching)
         }
     }

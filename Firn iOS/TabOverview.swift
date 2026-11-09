@@ -20,6 +20,8 @@ struct TabOverview: View {
     /// The tab whose card the page is gliding into or out of: hidden, so
     /// the page is the only one of it on screen.
     var gliding: UUID?
+    /// How far a gliding Basecamp tile shows (`BasecampTiles.reveal`).
+    var tileReveal: Double = 1
     /// The tab on screen's title line, faded in once the page has landed.
     var lineShown = true
     /// Which tab has the tall card while a picked tab grows to the full
@@ -160,6 +162,7 @@ struct TabOverview: View {
                     // while empty); 12pt below it, as between any items.
                     BasecampTiles(store: store, spots: spots, gliding: gliding,
                                   onScreen: heldCard ?? store.activeTab?.id,
+                                  reveal: tileReveal,
                                   open: { tab in if !busy { open(tab) } })
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in

@@ -71,6 +71,9 @@ struct TabOverview: View {
 
     /// A tab held and being dragged to a new place (phase 2, step 5).
     @State private var drag: Drag?
+    /// Where the finger was as it moved off an open menu, while Firn's
+    /// tile still follows it sideways (see `DragFinger.dx`).
+    @State private var handOffOrigin: CGPoint?
     /// Where the held tile's top is, under the finger: its own observed
     /// object, so following the finger redraws only the lifted tile.
     @State private var finger = DragFinger()
@@ -199,7 +202,8 @@ struct TabOverview: View {
                 // lifting solid (see `listHoldMenu`).
                 .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
                               frame: heldFrame(of:), held: { finger.menu = $0 },
-                              handOff: handOffMoved, handOffEnded: handOffEnded)
+                              handOff: handOffMoved, handOffEnded: handOffEnded,
+                              handOffLanded: handOffLanded, handOffAlone: handOffAlone)
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -207,7 +211,7 @@ struct TabOverview: View {
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
             // The held tab, lifted over the list and following the finger.
             .overlay {
-                if let drag {
+                if let drag, !drag.carried {
                     if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
                         LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
                             BasecampTiles.lifted(tab, space: space,
@@ -814,9 +818,11 @@ struct TabOverview: View {
         finger.left = new.start.minX
         finger.width = new.start.width
         finger.y = point.y
+        finger.dx = 0
+        handOffOrigin = nil
         drag = new
         finger.held = new.id
-        lifts += 1
+        if !new.carried { lifts += 1 }
         keepScrollingAtEdges()
     }
 
@@ -827,6 +833,27 @@ struct TabOverview: View {
     private func handOffMoved(_ id: UUID, _ point: CGPoint) {
         if let drag {
             guard drag.id == id, drag.lifted else { return }
+            if let handOffOrigin { finger.dx = point.x - handOffOrigin.x }
+        } else if HandOffTrial.number == 2, let frame = spots.frames[id],
+                  visibleTabs.contains(where: { $0.id == id }) || store.tabGroups.contains(where: { $0.id == id }) {
+            // Trial 2: iOS's drag shows the tile; Firn only makes room.
+            let tab = visibleTabs.first { $0.id == id }
+            // iOS keeps its picture where it was under the finger, even if
+            // the finger has already left it.
+            var new = Drag(id: id, start: frame, grab: point.y - frame.minY,
+                           group: tab == nil, from: tab?.groupID)
+            new.carried = true
+            startDrag(new, at: point)
+        } else if HandOffTrial.number == 6, let tab = visibleTabs.first(where: { $0.id == id }),
+                  spots.frames[id] != nil {
+            // Trial 6: Firn's tile lifts right where it is, under iOS's
+            // picture of it, which stays where it was under the finger.
+            lift(tab, at: point)
+            handOffOrigin = point
+        } else if HandOffTrial.number == 6, let group = store.tabGroups.first(where: { $0.id == id }),
+                  spots.frames[id] != nil {
+            lift(group, at: point)
+            handOffOrigin = point
         } else if let tab = visibleTabs.first(where: { $0.id == id }), let frame = spots.frames[id] {
             lift(tab, at: CGPoint(x: point.x, y: frame.midY))
         } else if let group = store.tabGroups.first(where: { $0.id == id }), let frame = spots.frames[id] {
@@ -838,10 +865,74 @@ struct TabOverview: View {
         follow(to: point)
     }
 
+    /// iOS's own picture of the tile has gone: Firn's tile glides back to
+    /// its lane and moves straight up and down from here, as any drag.
+    private func handOffAlone() {
+        guard handOffOrigin != nil else { return }
+        handOffOrigin = nil
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { finger.dx = 0 }
+    }
+
     /// iOS's drag ended (the finger lifted, or iOS cancelled it): it lands.
-    private func handOffEnded() {
-        guard drag?.lifted == true else { return }
-        letGo()
+    private func handOffEnded() -> CGRect? {
+        guard let drag, drag.lifted else { return nil }
+        guard drag.carried else { letGo(); return nil }
+        // Carried by iOS's drag: saved now, and iOS lands its preview in
+        // the gap; the tile shows again in `handOffLanded`.
+        edgeScroll?.cancel()
+        edgeScroll = nil
+        hoverWait?.cancel()
+        hoverWait = nil
+        hoverID = nil
+        // Nothing changes on screen at let-go: only where the gap is.
+        if let forming { return formingLanding(drag, forming) }
+        return spots.frames[drag.id] ?? drag.start
+    }
+
+    /// iOS's picture is in the gap: saved, and the tile shows under it.
+    private func handOffLanded() {
+        guard let drag, drag.carried else { return }
+        if let forming { return makeFormed(drag, forming) }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            if let ids = order, let groups = members { save(drag, ids, groups) }
+            order = nil
+            members = nil
+            finger.solid = false
+            self.drag = nil
+            finger.held = nil
+        }
+        lastDrop = .now
+    }
+
+    /// Where a tab let go on a forming group settles: its gap in the card.
+    private func formingLanding(_ drag: Drag, _ forming: Forming) -> CGRect {
+        guard let frame = spots.frames[forming.other] else { return drag.start }
+        let lane = lane(in: nil)
+        let y = forming.above ? frame.minY - GroupCard.inset - drag.start.height
+                              : frame.maxY + GroupCard.inset
+        return CGRect(x: lane.minX + GroupCard.inset, y: y,
+                      width: lane.width - 2 * GroupCard.inset, height: drag.start.height)
+    }
+
+    /// The store makes the forming group, where its card already is.
+    private func makeFormed(_ drag: Drag, _ forming: Forming) {
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            if let tab = store.openTabs.first(where: { $0.id == drag.id }),
+               let other = store.openTabs.first(where: { $0.id == forming.other }),
+               let group = store.newGroup(with: other) {
+                store.move(tab, into: group, at: forming.above ? 0 : 1)
+            }
+            self.forming = nil
+            order = nil
+            members = nil
+            self.drag = nil
+            finger.held = nil
+        }
+        lastDrop = .now
     }
 
     /// The tile stays under the finger, straight up and down, and the
@@ -978,6 +1069,9 @@ struct TabOverview: View {
         }
         guard ids != order || groups != members else { return }
         let lane = into != now ? lane(in: into) : nil
+        #if DEBUG
+        FrameWatch.mark("makeRoom: order changed\(into != now ? ", crossed a group's edge" : "")")
+        #endif
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
             members = groups
@@ -1076,37 +1170,15 @@ struct TabOverview: View {
     /// store makes the group in its place, where the card already is, and
     /// it names itself (`BrowserStore.groupNamer`).
     private func settle(_ drag: Drag, into forming: Forming) {
-        var landing = drag.start
-        if let frame = spots.frames[forming.other] {
-            let lane = lane(in: nil)
-            let y = forming.above ? frame.minY - GroupCard.inset - drag.start.height
-                                  : frame.maxY + GroupCard.inset
-            landing = CGRect(x: lane.minX + GroupCard.inset, y: y,
-                             width: lane.width - 2 * GroupCard.inset, height: drag.start.height)
-        }
-        func make() {
-            var instant = Transaction()
-            instant.disablesAnimations = true
-            withTransaction(instant) {
-                if let tab = store.openTabs.first(where: { $0.id == drag.id }),
-                   let other = store.openTabs.first(where: { $0.id == forming.other }),
-                   let group = store.newGroup(with: other) {
-                    store.move(tab, into: group, at: forming.above ? 0 : 1)
-                }
-                self.forming = nil
-                order = nil
-                members = nil
-                self.drag = nil
-                finger.held = nil
-            }
-            lastDrop = .now
-        }
+        let landing = formingLanding(drag, forming)
+        func make() { makeFormed(drag, forming) }
         guard !reduceMotion else { return make() }
         var settling = drag
         settling.lifted = false
         withAnimation(.smooth(duration: 0.25)) {
             finger.top = landing.minY
             finger.left = landing.minX
+            finger.dx = 0
             finger.width = landing.width
             self.drag = settling
         } completion: {
@@ -1120,6 +1192,7 @@ struct TabOverview: View {
     /// closing); a forming group thaws instead of being made, since
     /// nobody let go on it.
     private func letGo(cancelled: Bool = false) {
+        handOffOrigin = nil
         edgeScroll?.cancel()
         edgeScroll = nil
         hoverWait?.cancel()
@@ -1161,6 +1234,7 @@ struct TabOverview: View {
         withAnimation(.smooth(duration: 0.25)) {
             finger.top = landing.minY
             finger.left = landing.minX
+            finger.dx = 0
             finger.width = landing.width
             self.drag = drag
         } completion: {
@@ -1517,6 +1591,9 @@ private struct Drag {
     let from: UUID?
     /// False once let go, as the tile settles into its place.
     var lifted = true
+    /// Carried by iOS's own drag (moved off an open menu): iOS shows the
+    /// tile, so Firn draws no lifted one.
+    var carried = false
     /// Where across the tile the finger holds it (Basecamp tiles move both ways).
     var grabX: CGFloat = 0
     /// A Basecamp tile, moving only within Basecamp.
@@ -1602,6 +1679,10 @@ private enum Liftable {
     /// The tile's left edge and width: a tab narrows inside a group.
     var left: CGFloat = 0
     var width: CGFloat = 0
+    /// Sideways, with the finger: only just after moving off an open menu,
+    /// while iOS's own picture of the tile (which moves freely) is still
+    /// over Firn's, so the two stay one.
+    var dx: CGFloat = 0
     /// The finger itself.
     var y: CGFloat = 0
     /// Resting on another tab, waiting for their group to form: the held
@@ -1655,7 +1736,7 @@ private struct LiftedTile<Content: View>: View {
                 }
                 .scaleEffect(raised ? 1.03 : 1)
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
-                .offset(x: finger.left - origin.x, y: finger.top - origin.y)
+                .offset(x: finger.left + finger.dx - origin.x, y: finger.top - origin.y)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

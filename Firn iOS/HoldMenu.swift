@@ -193,10 +193,13 @@ extension View {
                       frame: @escaping @MainActor (UUID) -> CGRect?,
                       held: @escaping @MainActor (UUID?) -> Void,
                       handOff: @escaping @MainActor (UUID, CGPoint) -> Void,
-                      handOffEnded: @escaping @MainActor () -> Void) -> some View {
+                      handOffEnded: @escaping @MainActor () -> CGRect?,
+                      handOffLanded: @escaping @MainActor () -> Void,
+                      handOffAlone: @escaping @MainActor () -> Void) -> some View {
         background(ListHoldMenu(dragging: dragging, target: target,
                                 frame: frame, held: held,
-                                handOff: handOff, handOffEnded: handOffEnded))
+                                handOff: handOff, handOffEnded: handOffEnded,
+                                handOffLanded: handOffLanded, handOffAlone: handOffAlone))
     }
 }
 
@@ -206,7 +209,9 @@ private struct ListHoldMenu: UIViewRepresentable {
     let frame: @MainActor (UUID) -> CGRect?
     let held: @MainActor (UUID?) -> Void
     let handOff: @MainActor (UUID, CGPoint) -> Void
-    let handOffEnded: @MainActor () -> Void
+    let handOffEnded: @MainActor () -> CGRect?
+    let handOffLanded: @MainActor () -> Void
+    let handOffAlone: @MainActor () -> Void
 
     func makeCoordinator() -> ListHoldMenuDelegate { ListHoldMenuDelegate() }
 
@@ -228,6 +233,8 @@ private struct ListHoldMenu: UIViewRepresentable {
         delegate.held = held
         delegate.handOffs.moved = handOff
         delegate.handOffs.ended = handOffEnded
+        delegate.handOffs.landed = handOffLanded
+        delegate.handOffs.alone = handOffAlone
         if dragging { delegate.cancel() }
     }
 }
@@ -239,13 +246,16 @@ private struct ListHoldMenu: UIViewRepresentable {
     private weak var host: UIView?
     private var interaction: UIContextMenuInteraction?
     private var drag: UIDragInteraction?
+    private var drop: UIDropInteraction?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if let interaction { host?.removeInteraction(interaction) }
         if let drag { host?.removeInteraction(drag) }
+        if let drop { host?.removeInteraction(drop) }
         interaction = nil
         drag = nil
+        drop = nil
         host = nil
         guard window != nil, let delegate else { return }
         var view = superview
@@ -256,6 +266,17 @@ private struct ListHoldMenu: UIViewRepresentable {
         // On the same view as the menu: iOS hands a menu off only to a drag there.
         let handOff = delegate.handOffs.interaction()
         scroll.addInteraction(handOff)
+        let probe = TouchProbe()
+        probe.cancelsTouchesInView = false
+        probe.delaysTouchesBegan = false
+        probe.delaysTouchesEnded = false
+        scroll.addGestureRecognizer(probe)
+        if HandOffTrial.number == 2 { HandOffTrial.show(in: scroll) }
+        if HandOffTrial.number == 2 {
+            let landing = UIDropInteraction(delegate: delegate.handOffs)
+            scroll.addInteraction(landing)
+            drop = landing
+        }
         host = scroll
         interaction = new
         drag = handOff
@@ -281,6 +302,15 @@ private struct ListHoldMenu: UIViewRepresentable {
         handOffs.started = { [weak self] in
             self?.handingOff = true
             self?.picture?.alpha = 0
+        }
+        handOffs.endMenu = { [weak self] in
+            guard let self, let interaction, let view = interaction.view else { return }
+            view.removeInteraction(interaction)
+            view.addInteraction(interaction)
+        }
+        handOffs.lift = { [weak self] in
+            guard let self, let picture, let current else { return nil }
+            return HandOffLift(view: picture, cornerRadius: current.cornerRadius + outset, outset: outset)
         }
     }
 
@@ -321,7 +351,9 @@ private struct ListHoldMenu: UIViewRepresentable {
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 configuration: UIContextMenuConfiguration,
                                 dismissalPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? {
-        preview(in: interaction)
+        FrameWatch.mark("menu dismissal preview asked, handing off: \(handingOff)")
+        if handingOff, HandOffTrial.number == 2, HandOffTrial.variant == 3 { return nil }
+        return preview(in: interaction)
     }
 
     // Only now may iOS's drag start: the menu is showing (see MenuHandOff).
@@ -329,12 +361,19 @@ private struct ListHoldMenu: UIViewRepresentable {
                                 willDisplayMenuFor configuration: UIContextMenuConfiguration,
                                 animator: (any UIContextMenuInteractionAnimating)?) {
         handOffs.showing = current?.id
+        #if DEBUG
+        FrameWatch.mark("menu willDisplay")
+        #endif
     }
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 willEndFor configuration: UIContextMenuConfiguration,
                                 animator: (any UIContextMenuInteractionAnimating)?) {
         handOffs.showing = nil
+        #if DEBUG
+        FrameWatch.mark("menu willEnd")
+        animator?.addCompletion { FrameWatch.mark("menu ended") }
+        #endif
         let done = { [weak self] in self?.land(); return }
         if let animator { animator.addCompletion(done) } else { done() }
     }
@@ -343,10 +382,12 @@ private struct ListHoldMenu: UIViewRepresentable {
     /// later, once the tile has been drawn, so nothing blinks or shifts.
     private func land() {
         handingOff = false
+        handOffs.menuEnded()
         guard current != nil else { return }
         held(nil)
         current = nil
-        let landed = picture
+        // Carried by iOS's drag (trial 2): the hand-off keeps the picture.
+        let landed = handOffs.running ? nil : picture
         picture = nil
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
@@ -416,11 +457,174 @@ private struct ListHoldMenu: UIViewRepresentable {
 /// And it lands as the finger lifts (`willEndWith`), not once iOS's own
 /// (invisible) cancel animation has run, which froze the card in place for
 /// a moment first (David's recording, 2026-11-08).
-@MainActor final class MenuHandOff: NSObject, UIDragInteractionDelegate {
+struct HandOffLift {
+    let view: UIImageView
+    let cornerRadius: CGFloat
+    let outset: CGFloat
+}
+
+@MainActor final class MenuHandOff: NSObject, UIDragInteractionDelegate, UIDropInteractionDelegate {
+    // Trial 2: iOS's drag shows the menu's picture of the tile the whole
+    // way, and iOS's own drop animation lands it in the gap.
+    var lift: @MainActor () -> HandOffLift? = { nil }
+    var landed: @MainActor () -> Void = {}
+    var endMenu: @MainActor () -> Void = {}
+    /// iOS's own picture has gone (trial 6): only Firn's tile is left.
+    var alone: @MainActor () -> Void = {}
+
+    /// The menu has finished closing. Until now iOS's drag showed the
+    /// menu's own lifted copy, whatever preview it was given; now it takes
+    /// the item's provider, which hides it.
+    func menuEnded() {
+        guard hybrid, carrying != nil else { return }
+        FrameWatch.mark("handoff menu ended while carrying")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            self?.alone()
+        }
+    }
+    private var lifted: HandOffLift?
+    /// Where the tile lands (global), once let go.
+    private var landing: CGRect??
+    /// iOS said it will animate the landing.
+    private var animating = false
+    private var safety: Task<Void, Never>?
+    private var shows: Bool { HandOffTrial.number == 2 }
+    /// Trial 6: iOS's drag lifts the menu's picture at full size, so the
+    /// menu's copy becomes the dragged tile with nothing to shrink into;
+    /// then iOS's preview is hidden and Firn's own lifted tile, already
+    /// under it, carries on as in any drag of Firn's, and lands as one.
+    private var hybrid: Bool { HandOffTrial.number == 6 }
+
+    private func parameters(_ lift: HandOffLift) -> UIDragPreviewParameters {
+        let parameters = UIDragPreviewParameters()
+        parameters.visiblePath = UIBezierPath(roundedRect: lift.view.bounds, cornerRadius: lift.cornerRadius)
+        parameters.backgroundColor = .clear
+        return parameters
+    }
+
+    /// Let go: Firn saves the new place and says where the tile lands.
+    private func land() -> CGRect? {
+        if let landing { return landing }
+        ticker?.invalidate()
+        ticker = nil
+        let rect = ended()
+        FrameWatch.mark("handoff land \(rect.map { "\(Int($0.minY))" } ?? "nil")")
+        landing = .some(rect)
+        safety = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled { self?.settled() }
+        }
+        return rect
+    }
+
+    /// iOS's preview, aimed at the gap.
+    private func retarget(_ preview: UITargetedDragPreview, in view: UIView?) -> UITargetedDragPreview? {
+        guard let view, let lifted, let rect = land() else { return nil }
+        let area = rect.insetBy(dx: -lifted.outset, dy: -lifted.outset)
+        let size = lifted.view.bounds.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let center = view.convert(CGPoint(x: area.midX, y: area.midY), from: nil)
+        let scale = CGAffineTransform(scaleX: area.width / size.width, y: area.height / size.height)
+        return preview.retargetedPreview(with: UIDragPreviewTarget(container: view, center: center, transform: scale))
+    }
+
+    /// iOS's preview reaches the gap in about 0.2s and stays there, solid,
+    /// until its animation reports done (about 0.85s): the real tile is
+    /// saved and shown under it once it has arrived, so the let-go frame
+    /// itself does no work (a save there left the screen without the tile
+    /// for one frame; David's recording, 2026-11-09).
+    private var reveal: Task<Void, Never>?
+    private var revealed = false
+
+    private func revealSoon() {
+        reveal?.cancel()
+        reveal = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, let self, carrying != nil, !revealed else { return }
+            FrameWatch.mark("handoff reveal")
+            revealed = true
+            landed()
+        }
+    }
+
+    /// iOS's preview has landed and gone: the picture covers the gap for a
+    /// moment more, over the real tile.
+    private func settled() {
+        guard carrying != nil else { return }
+        FrameWatch.mark("handoff settled")
+        reveal?.cancel()
+        reveal = nil
+        safety?.cancel()
+        safety = nil
+        let cover = lifted?.view
+        if let cover, let view = cover.superview, case let .some(.some(rect)) = landing, let lifted {
+            cover.transform = .identity
+            cover.frame = view.convert(rect.insetBy(dx: -lifted.outset, dy: -lifted.outset), from: nil)
+            cover.alpha = 1
+        }
+        carrying = nil
+        offered = nil
+        session = nil
+        lifted = nil
+        landing = nil
+        animating = false
+        HandOffTrial.drags += 1
+        HandOffTrial.show(in: cover?.superview)
+        if !revealed { landed() }
+        revealed = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            cover?.removeFromSuperview()
+        }
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: any UIDropSession) -> Bool {
+        carrying != nil && session.localDragSession != nil
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: any UIDropSession) -> UIDropProposal {
+        let proposal = UIDropProposal(operation: carrying != nil ? .move : .cancel)
+        // Full size on the drop's side too, or iOS rescales the preview
+        // (a cross-fade to a slightly smaller copy) partway through.
+        proposal.prefersFullSizePreview = true
+        return proposal
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidEnter session: any UIDropSession) {
+        FrameWatch.mark("handoff drop session entered")
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidExit session: any UIDropSession) {
+        FrameWatch.mark("handoff drop session exited")
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: any UIDropSession) {
+        FrameWatch.mark("handoff performDrop")
+        _ = land()
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, previewForDropping item: UIDragItem,
+                         withDefault defaultPreview: UITargetedDragPreview) -> UITargetedDragPreview? {
+        FrameWatch.mark("handoff previewForDropping")
+        return retarget(defaultPreview, in: interaction.view)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, item: UIDragItem,
+                         willAnimateDropWith animator: any UIDragAnimating) {
+        FrameWatch.mark("handoff willAnimateDrop")
+        animating = true
+        revealSoon()
+        animator.addCompletion { [weak self] _ in
+            FrameWatch.mark("handoff drop animation done")
+            self?.settled()
+        }
+    }
+
     /// The tile whose menu is showing now; nil: no drag may start.
     var showing: UUID?
     var moved: @MainActor (UUID, CGPoint) -> Void = { _, _ in }
-    var ended: @MainActor () -> Void = {}
+    var ended: @MainActor () -> CGRect? = { nil }
     /// The hand-off has started (the menu's lifted copy should go).
     var started: @MainActor () -> Void = {}
     /// The tile iOS's drag was offered, until its lift starts.
@@ -446,8 +650,23 @@ private struct ListHoldMenu: UIViewRepresentable {
         #if DEBUG
         print("[handoff] itemsForBeginning, menu showing: \(showing != nil)")
         #endif
-        guard let id = showing, let view = interaction.view else { return [] }
+        guard carrying == nil, let id = showing, let view = interaction.view else { return [] }
         offered = id
+        #if DEBUG
+        FrameWatch.mark("handoff itemsForBeginning, trial \(HandOffTrial.number)")
+        if shows || hybrid {
+            guard let lift = lift() else { return [] }
+            lifted = lift
+            return [UIDragItem(itemProvider: NSItemProvider())]
+        }
+        if HandOffTrial.number == 1 {
+            // Trial 1: the documented invisible drag (no lift preview, a
+            // provider that returns nil), instead of a 1pt view.
+            let item = UIDragItem(itemProvider: NSItemProvider())
+            item.previewProvider = { nil }
+            return [item]
+        }
+        #endif
         nothing.backgroundColor = .clear
         nothing.isUserInteractionEnabled = false
         nothing.center = session.location(in: view)
@@ -457,12 +676,24 @@ private struct ListHoldMenu: UIViewRepresentable {
         return [item]
     }
 
+    // Full size, as when reordering: iOS otherwise shrinks a large preview
+    // to a thumbnail under the finger (the "small grey box" of the first
+    // tries was that shrink, aimed at a 1pt view).
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         prefersFullSizePreviewsFor session: any UIDragSession) -> Bool { true }
+
     // Never offered to another app.
     func dragInteraction(_ interaction: UIDragInteraction,
                          sessionIsRestrictedToDraggingApplication session: any UIDragSession) -> Bool { true }
 
     func dragInteraction(_ interaction: UIDragInteraction,
                          previewForLifting item: UIDragItem, session: any UIDragSession) -> UITargetedDragPreview? {
+        #if DEBUG
+        if HandOffTrial.number == 1 { return nil }
+        #endif
+        if shows || hybrid, let lifted {
+            return UITargetedDragPreview(view: lifted.view, parameters: parameters(lifted))
+        }
         let parameters = UIDragPreviewParameters()
         parameters.backgroundColor = .clear
         // No shadow of its own either.
@@ -472,22 +703,50 @@ private struct ListHoldMenu: UIViewRepresentable {
 
     func dragInteraction(_ interaction: UIDragInteraction,
                          previewForCancelling item: UIDragItem, withDefault defaultPreview: UITargetedDragPreview) -> UITargetedDragPreview? {
-        nil
+        if shows {
+            FrameWatch.mark("handoff previewForCancelling")
+            return retarget(defaultPreview, in: interaction.view)
+        }
+        return nil
     }
 
     // The lift starts: Firn's tile lifts at once and follows from here.
     func dragInteraction(_ interaction: UIDragInteraction,
                          willAnimateLiftWith animator: any UIDragAnimating, session: any UIDragSession) {
+        #if DEBUG
+        FrameWatch.mark("handoff willAnimateLift")
+        #endif
         start(session, in: interaction)
+        if shows, HandOffTrial.variant == 5 { endMenu() }
         // Lifted, then dropped back before a drag began: it lands.
         animator.addCompletion { [weak self] position in
-            if position == .start { self?.finish() }
+            FrameWatch.mark("handoff lift animation done, at start: \(position == .start)")
+            guard position == .start, let self else { return }
+            if shows { _ = land(); settled() } else { finish() }
         }
     }
 
     func dragInteraction(_ interaction: UIDragInteraction, sessionWillBegin session: any UIDragSession) {
         #if DEBUG
         print("[handoff] iOS drag began")
+        FrameWatch.mark("handoff sessionWillBegin, try \(HandOffTrial.variant)")
+        if hybrid {
+            // iOS's own preview goes; Firn's tile is already under it.
+            for item in session.items { item.previewProvider = { nil } }
+        }
+        if shows, HandOffTrial.variant == 4, let lifted {
+            let image = lifted.view.image
+            let size = lifted.view.bounds.size
+            let radius = lifted.cornerRadius
+            session.items.first?.previewProvider = {
+                let copy = UIImageView(image: image)
+                copy.frame = CGRect(origin: .zero, size: size)
+                let parameters = UIDragPreviewParameters()
+                parameters.visiblePath = UIBezierPath(roundedRect: copy.bounds, cornerRadius: radius)
+                parameters.backgroundColor = .clear
+                return UIDragPreview(view: copy, parameters: parameters)
+            }
+        }
         #endif
         start(session, in: interaction)
     }
@@ -497,8 +756,9 @@ private struct ListHoldMenu: UIViewRepresentable {
                          willEndWith operation: UIDropOperation) {
         #if DEBUG
         print("[handoff] iOS drag ending")
-        FrameWatch.mark("handoff willEndWith")
+        FrameWatch.mark("handoff willEndWith \(operation.rawValue)")
         #endif
+        if shows { _ = land(); return }
         finish()
     }
 
@@ -507,8 +767,22 @@ private struct ListHoldMenu: UIViewRepresentable {
         #if DEBUG
         FrameWatch.mark("handoff didEndWith")
         #endif
+        if shows {
+            if !animating { settled() }
+            return
+        }
         finish()
         nothing.removeFromSuperview()
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction, item: UIDragItem,
+                         willAnimateCancelWith animator: any UIDragAnimating) {
+        FrameWatch.mark("handoff willAnimateCancel")
+        if shows { animating = true; revealSoon() }
+        animator.addCompletion { [weak self] _ in
+            FrameWatch.mark("handoff cancel animation done")
+            if self?.shows == true { self?.settled() }
+        }
     }
 
     private func start(_ session: any UIDragSession, in interaction: UIDragInteraction) {
@@ -535,17 +809,74 @@ private struct ListHoldMenu: UIViewRepresentable {
     }
 
     private func finish() {
+        if hybrid {
+            lifted?.view.removeFromSuperview()
+            lifted = nil
+        }
         ticker?.invalidate()
         ticker = nil
         session = nil
         offered = nil
         guard carrying != nil else { return }
         carrying = nil
-        ended()
+        _ = ended()
+    }
+}
+
+/// Step 3b's trials: which hand-off is tried. Trial 2 unless the app is
+/// launched with `-handoff 0` (as before) or `-handoff 1`. Remove when done.
+@MainActor enum HandOffTrial {
+    static let number = UserDefaults.standard.object(forKey: "handoff") == nil
+        ? 6 : UserDefaults.standard.integer(forKey: "handoff")
+    /// Within trial 2, three tries at the preview iOS rebuilds when the
+    /// menu's own ending finishes; each gets two drags, then the next:
+    /// 3: the menu is given no dismissal preview during a hand-off;
+    /// 4: the drag is given its final preview as it begins;
+    /// 5: the menu is ended at once as the lift starts.
+    static var drags = 0
+    // Try 5 crashed UIKit (taking the menu's interaction off mid hand-off);
+    // it's out of the rotation.
+    static var variant: Int { [3, 4][(drags / 2) % 2] }
+    private static let label = UILabel()
+
+    static func show(in view: UIView?) {
+        guard let window = view?.window else { return }
+        label.text = " try \(variant) "
+        label.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .white
+        label.backgroundColor = .systemRed
+        label.sizeToFit()
+        label.frame.origin = CGPoint(x: 8, y: window.safeAreaInsets.top + 2)
+        if label.superview !== window { window.addSubview(label) }
+    }
+}
+
+/// Step 3b, route B's question: does a plain recognizer still hear the
+/// finger once iOS's menu is open? Logs only; never recognizes.
+final class TouchProbe: UIGestureRecognizer {
+    private var moves = 0
+    override func canPrevent(_ other: UIGestureRecognizer) -> Bool { false }
+    override func canBePrevented(by other: UIGestureRecognizer) -> Bool { false }
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        moves = 0
+        FrameWatch.mark("probe began")
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        moves += 1
+        if moves % 15 == 1 { FrameWatch.mark("probe moved \(moves)") }
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        FrameWatch.mark("probe ended after \(moves) moves")
+        state = .failed
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        FrameWatch.mark("probe cancelled after \(moves) moves")
+        state = .failed
     }
 }
 
 #if DEBUG
+
 /// Debug only, for step 3b's landing: logs frames that came late (more
 /// than 25ms apart) for 0.6s after a let-go. Remove when the step is done.
 @MainActor final class FrameWatch: NSObject {
@@ -582,4 +913,6 @@ private struct ListHoldMenu: UIViewRepresentable {
         }
     }
 }
+#else
+enum FrameWatch { static func mark(_ text: String) {} }
 #endif

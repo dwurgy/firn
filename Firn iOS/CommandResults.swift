@@ -127,6 +127,7 @@ private struct CommandResultRow: View {
         case "copy-link": "link"
         case "share": "square.and.arrow.up"
         case "new-group": "folder.badge.plus"
+        case "add-basecamp": "mountain.2"
         case "close": "xmark"
         case "reopen": "arrow.uturn.backward"
         default: "circle"

@@ -86,6 +86,8 @@ struct TabOverview: View {
     /// while held; saved only on letting go there.
     @State private var forming: Forming?
     @State private var forms = 0
+    /// Add to Basecamp was picked with 12 tiles already there.
+    @State private var basecampFull = false
     /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
@@ -154,6 +156,11 @@ struct TabOverview: View {
                 // 12pt apart (David, 2026-11-05: 8 felt a little tight),
                 // which also gives the ring around the tab on screen room.
                 LazyVStack(spacing: 12) {
+                    // Basecamp first, scrolling away with the list (hidden
+                    // while empty); 12pt below it, as between any items.
+                    BasecampTiles(store: store, spots: spots, gliding: gliding,
+                                  onScreen: heldCard ?? store.activeTab?.id,
+                                  open: { tab in if !busy { open(tab) } })
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         switch item {
@@ -256,6 +263,7 @@ struct TabOverview: View {
             OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
+        .basecampFullAlert(isPresented: $basecampFull)
         .alert("Rename Group",
                isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $name)
@@ -577,12 +585,12 @@ struct TabOverview: View {
                            removal: .opacity.animation(.easeOut(duration: 0.125)))
     }
 
-    /// A tab's menu: short, in the Mac's words. Basecamp's step adds Add
-    /// to Basecamp.
+    /// A tab's menu: short, in the Mac's words.
     @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
         if let url = tab.url {
             Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
             Divider()
+            Button("Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) }
         }
         if tab.groupID == nil {
             Button("New Group with This Tab", systemImage: "folder.badge.plus") { newGroup(with: tab) }
@@ -607,6 +615,16 @@ struct TabOverview: View {
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
             Button("Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) }
         }
+    }
+
+    /// Add to Basecamp: the tab leaves the list (and its group) and becomes
+    /// the last tile, its address its home. A 13th says Basecamp is full.
+    private func addToBasecamp(_ tab: FirnCore.Tab) {
+        guard store.canAddToBasecamp else {
+            basecampFull = true
+            return
+        }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { _ = store.addToBasecamp(tab) }
     }
 
     /// Close Other Tabs: the space's other loose tabs go, and a shake
@@ -1280,7 +1298,7 @@ private struct ArrivalFade: ViewModifier, Animatable {
 /// the group cards sit on the haze, which is already a blur, and a card's
 /// pills put their page's own picture, blurred, under it (`CardLine`).
 /// Reduce Transparency: the solid tile color, tinted, with its hairline.
-private struct Frost<S: InsettableShape>: View {
+struct Frost<S: InsettableShape>: View {
     let shape: S
     let space: String
     let fill: Color

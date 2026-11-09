@@ -35,6 +35,8 @@ struct AddressBar: View {
     /// Whether iOS's keyboard is on screen (a hardware keyboard shows none,
     /// so there's nothing to wait for).
     @State private var keyboardShown = false
+    /// Add to Basecamp was picked with 12 tiles already there.
+    @State private var basecampFull = false
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -67,6 +69,7 @@ struct AddressBar: View {
         .padding(.top, 8)
         .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
+        .basecampFullAlert(isPresented: $basecampFull)
         // History is on this device, so it's read at once; each key cancels
         // the last lookup.
         .task(id: typed) {
@@ -161,8 +164,13 @@ struct AddressBar: View {
                 add("copy-link", "Copy Link", ["address", "url"]) { UIPasteboard.general.url = url }
                 add("share", "Share…", ["send", "link"]) { ShareSheet.present(url) }
             }
-            add("new-group", "New Group with This Tab", [], when: tab.groupID == nil) {
+            add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)
+            }
+            if tab.place != .basecamp, tab.url != nil {
+                add("add-basecamp", "Add to Basecamp", ["tile", "favorite", "keep"]) {
+                    if store.canAddToBasecamp { _ = store.addToBasecamp(tab) } else { basecampFull = true }
+                }
             }
             add("close", "Close Tab", []) { store.close(tab) }
         }

@@ -185,12 +185,10 @@ struct BrowserScreen: View {
                             .modifier(CardGlide(width: width, box: box, radius: boxRadius))
                             .opacity(standInTab?.place == .basecamp ? 1 - tileReveal : 1)
                         if ringOnGlide, let standInTab, standInTab.place != .basecamp {
-                            // The card's ring (`OverviewRow`), just outside the picture.
-                            RoundedRectangle(cornerRadius: boxRadius + 3.5, style: .continuous)
-                                .strokeBorder(Theme.spaceColor(store.activeSpace.color), lineWidth: 3)
-                                .shadow(color: Theme.spaceColor(store.activeSpace.color).opacity(0.55), radius: 6)
-                                .frame(width: box.width + 7, height: box.height + 7)
-                                .offset(x: box.minX - 3.5, y: box.minY - 3.5)
+                            // The card's ring (`CardRing`), on the picture's inside edge.
+                            CardRing(color: Theme.spaceColor(store.activeSpace.color), radius: boxRadius)
+                                .frame(width: box.width, height: box.height)
+                                .offset(x: box.minX, y: box.minY)
                                 .modifier(RingFade(arrival: arrival))
                         }
                         // The card's line, drawn at the card's size and

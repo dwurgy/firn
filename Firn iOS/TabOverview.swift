@@ -1860,8 +1860,8 @@ struct OverviewRow: View {
     /// page's picture. One view for both, so a pinch glides between them:
     /// the row's fill shrinks into the card's frosted pill as the tile grows
     /// around it, and the picture fades in behind. The tab on screen is ringed
-    /// in the space's color just outside the card, with a soft glow of it,
-    /// as the Mac's ⌃Tab switcher marks its pick, so it reads at a glance.
+    /// in the space's color on the card's inside edge, as Basecamp's tile on
+    /// screen is (`CardRing`), so it reads at a glance.
     private var tile: some View {
         Button(action: open) {
             Color.clear
@@ -1892,9 +1892,7 @@ struct OverviewRow: View {
         }
         .overlay {
             if isOnScreen {
-                Self.shape.inset(by: -3.5)
-                    .strokeBorder(ring, lineWidth: 3)
-                    .shadow(color: ring.opacity(0.55), radius: 6)
+                CardRing(color: ring, radius: Self.cornerRadius)
                     .allowsHitTesting(false)
             }
         }
@@ -2036,6 +2034,9 @@ private struct CardLine: View, Animatable {
     private static let iconGap: CGFloat = 6                       // icon to title, in the pill
     private static let cardLineHeight: CGFloat = inset + glassHeight + 6
     private static let tapSize: CGFloat = 44
+    /// The X's middle, this far in from the right in a row and on a card
+    /// alike, so it only moves up and down as the tile grows (David, 2026-11-08).
+    private static let xCenterIn: CGFloat = 24
     /// Room on the card's right for the X and a gap before it.
     private static let xRoom: CGFloat = 52
 
@@ -2103,7 +2104,7 @@ private struct CardLine: View, Animatable {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
                 closeButton(t, cardWidth: w, middle: middle)
-                    .offset(x: mix(w - 24, w - Self.inset - Self.glassHeight / 2, t) - Self.tapSize / 2,
+                    .offset(x: (w - Self.xCenterIn) - Self.tapSize / 2,
                             y: middle - Self.tapSize / 2)
             }
         }
@@ -2151,7 +2152,7 @@ private struct CardLine: View, Animatable {
     @ViewBuilder private func closeButton(_ t: CGFloat, cardWidth w: CGFloat, middle: CGFloat) -> some View {
         let size = mix(28, Self.glassHeight, t)
         let formed = min(max((t - 0.3) / 0.7, 0), 1)
-        let center = CGPoint(x: mix(w - 24, w - Self.inset - Self.glassHeight / 2, t), y: middle)
+        let center = CGPoint(x: (w - Self.xCenterIn), y: middle)
         let mark = ZStack {
             pillFrost(Circle(), at: CGPoint(x: center.x - size / 2, y: center.y - size / 2),
                       size: CGSize(width: size, height: size), cardWidth: w)
@@ -2209,6 +2210,32 @@ private struct SidewaysPan: UIGestureRecognizerRepresentable {
             let speed = pan.velocity(in: pan.view)
             return abs(speed.x) > abs(speed.y)
         }
+    }
+}
+
+/// The ring around the tab on screen's card: Basecamp's ring on the tile on
+/// screen (`BasecampTiles`), on the card's inside edge with light on its top
+/// and a faint glow, but always the space's color, never the page's (David,
+/// 2026-11-08). Drawn on the card and on the page's picture gliding into it.
+struct CardRing: View {
+    let color: Color
+    let radius: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let dark = colorScheme == .dark
+        shape.strokeBorder(color, lineWidth: BasecampTiles.ringWidth)
+            .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
+            .overlay {
+                // Light catching the ring's outer edge along the top, gone by the middle.
+                shape.strokeBorder(
+                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
+                                   startPoint: .top, endPoint: .center),
+                    lineWidth: 1)
+            }
+            .shadow(color: color.opacity(dark ? 0.18 : 0.28), radius: 5)
     }
 }
 

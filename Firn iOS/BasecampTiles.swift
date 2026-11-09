@@ -107,10 +107,18 @@ struct BasecampTiles: View {
 
     /// A tile as it lifts out of the grid to follow the finger: the same
     /// tile, on the solid base (as while its menu is open), so the list
-    /// doesn't show through the glass as it passes over it.
-    static func lifted(_ tab: FirnCore.Tab, space: String, onScreen: Bool) -> some View {
+    /// doesn't show through the glass as it passes over it. `solid` goes
+    /// false as it's let go, and the base fades over the glide home, so it
+    /// lands as the glass tile it was (it stayed solid in its spot for half
+    /// a second, then switched; David's recording, 2026-11-08).
+    static func lifted(_ tab: FirnCore.Tab, space: String, onScreen: Bool, solid: Bool) -> some View {
         BasecampTile(tab: tab, space: space, isOnScreen: onScreen, open: {})
-            .background(Theme.tileSolid, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Theme.tileSolid)
+                    .opacity(solid ? 1 : 0)
+                    .animation(.easeOut(duration: 0.2), value: solid)
+            }
     }
 
     /// Every tile the same width: the longest row fills the list's width.

@@ -210,7 +210,8 @@ struct TabOverview: View {
                     if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
                         LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
                             BasecampTiles.lifted(tab, space: space,
-                                                 onScreen: tab.id == (heldCard ?? store.activeTab?.id))
+                                                 onScreen: tab.id == (heldCard ?? store.activeTab?.id),
+                                                 solid: drag.lifted)
                         }
                         .transition(.identity)
                     } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {

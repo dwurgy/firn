@@ -186,6 +186,10 @@ struct TabOverview: View {
                                     canBegin: { liftable(at: $0) != nil },
                                     began: lift(at:), moved: follow(to:),
                                     ended: { letGo(cancelled: $0) }))
+                // Holding still opens a tab's or group's menu, lifted on a
+                // solid base (see `listHoldMenu`).
+                .listHoldMenu(base: Theme.tileSolid, target: holdMenuTarget(at:),
+                              frame: heldFrame(of:), held: { finger.menu = $0 })
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -409,14 +413,12 @@ struct TabOverview: View {
         groupCard(group, lifted: false, moves: GroupMoves(
             up: index > 0 ? { move(group, to: index - 1) } : nil,
             down: index < count - 1 ? { move(group, to: index + 1) } : nil))
-            // Its place stays open while it's held (inside the menu's
-            // modifier, for the same reason as a tab's; see listTile).
+            // Its place stays open while it's held or its menu is open.
+            // Holding the card (not a tab) opens the group's menu, and the
+            // whole group lifts with it, tint and tabs, as one piece (David,
+            // 2026-11-07: lifting only the name line slid it off its tint);
+            // see `holdMenuTarget`. Holding a tab opens that tab's own menu.
             .modifier(EmptyWhileHeld(finger: finger, id: group.id, gliding: false))
-            // Holding the name line opens the group's menu, and the whole
-            // group lifts with it, tint and tabs, as one piece (David,
-            // 2026-11-07: lifting only the name line slid it off its tint).
-            // Holding a tab still opens that tab's own menu.
-            .modifier(groupMenu(group))
             // Where the group is, so a held tab makes room around it or
             // goes in it.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
@@ -485,6 +487,26 @@ struct TabOverview: View {
                   close: { close(group) })
     }
 
+    /// What a hold at a point (global) opens a menu on: a tab's tile, or
+    /// else the group card around the point. Only what's on screen counts.
+    private func holdMenuTarget(at point: CGPoint) -> HoldMenuTarget? {
+        guard drag == nil, gliding == nil, spots.viewport.contains(point) else { return nil }
+        if let tab = visibleTabs.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
+            return HoldMenuTarget(id: tab.id, cornerRadius: OverviewRow.cornerRadius, sections: menu(for: tab))
+        }
+        if let group = store.tabGroups.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
+            return HoldMenuTarget(id: group.id, cornerRadius: GroupCard.cornerRadius,
+                                  sections: groupMenu(group).sections)
+        }
+        return nil
+    }
+
+    /// Where a held tab or group is now (global), if it's still in the list.
+    private func heldFrame(of id: UUID) -> CGRect? {
+        let there = visibleTabs.contains { $0.id == id } || store.tabGroups.contains { $0.id == id }
+        return there ? spots.frames[id] : nil
+    }
+
     /// Folds or unfolds a group: the card glides to its new size (0.25s, no
     /// bounce) and its tabs fade over the second half (`FoldFade`); with
     /// Reduce Motion the size changes at once and the tabs cross-fade.
@@ -546,24 +568,17 @@ struct TabOverview: View {
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
         return tile(tab, spot: spot, moveUp: up, moveDown: down)
-            // Its place stays open while it's held (see EmptyWhileHeld).
-            // Inside the menu's modifier, not after it: holding a tab, iOS's
-            // menu already shows its own picture of it in its place (the
-            // preview it lifts before the menu opens), and that picture is
-            // drawn from what's inside the modifier. Hidden only outside,
-            // the picture lingered as a copy until the menu let it go
-            // (David's recordings, 2026-11-05).
+            // Its place stays open while it's held or its menu is open
+            // (see EmptyWhileHeld).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
-            // Hold, then move, lifts it (the list's HoldToDrag). Holding still opens iOS's own menu beside the tab, the tab
-            // staying where it is, as in Safari. (Moving away from the open
+            // Hold, then move, lifts it (the list's HoldToDrag). Holding
+            // still opens iOS's own menu beside the tab (the list's
+            // `listHoldMenu`), as in Safari. (Moving away from the open
             // menu no longer picks the tab up: that needed iOS's own drag,
             // which on David's iPhone also started with every drag of
             // Firn's, left a copy of the tab behind, and pulled the held tab
             // between two places. David's recordings and phone log,
             // 2026-11-05.)
-            .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous))
-            .contextMenu { menu(for: tab) }
             // A held tab resting on this loose one: the group they'd make
             // forms around it (hold to form). Always here, at rest only
             // zero-height spacers, so the tile never changes identity and
@@ -590,35 +605,37 @@ struct TabOverview: View {
     }
 
     /// A tab's menu: short, in the Mac's words.
-    @ViewBuilder private func menu(for tab: FirnCore.Tab) -> some View {
+    private func menu(for tab: FirnCore.Tab) -> [[HoldMenuItem]] {
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
+        var link: [HoldMenuItem] = []
+        var keep: [HoldMenuItem] = []
         if let url = tab.url {
-            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
-            Divider()
-            Button("Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) }
+            link.append(HoldMenuItem(title: "Copy Link", systemImage: "link") { UIPasteboard.general.url = url })
+            keep.append(HoldMenuItem(title: "Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) })
         }
         if tab.groupID == nil {
-            Button("New Group with This Tab", systemImage: "folder.badge.plus") { newGroup(with: tab) }
+            keep.append(HoldMenuItem(title: "New Group with This Tab", systemImage: "folder.badge.plus") {
+                newGroup(with: tab)
+            })
         } else {
-            Button("Remove from Group", systemImage: "folder.badge.minus") {
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.takeOutOfGroup(tab) }
-            }
+            keep.append(HoldMenuItem(title: "Remove from Group", systemImage: "folder.badge.minus") {
+                withAnimation(glide) { store.takeOutOfGroup(tab) }
+            })
         }
         // Only this space's groups, so nothing crosses between spaces.
         let others = store.tabGroups.filter { $0.id != tab.groupID }
         if !others.isEmpty {
-            Menu("Move to Group", systemImage: "folder") {
-                ForEach(others) { group in
-                    Button(group.name) {
-                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.move(tab, toEndOf: group) }
-                    }
+            keep.append(HoldMenuItem(title: "Move to Group", systemImage: "folder", children: others.map { group in
+                HoldMenuItem(title: group.name, systemImage: nil) {
+                    withAnimation(glide) { store.move(tab, toEndOf: group) }
                 }
-            }
+            }))
         }
-        Divider()
-        Button("Close Tab", systemImage: "xmark") { close(tab) }
+        var close = [HoldMenuItem(title: "Close Tab", systemImage: "xmark") { self.close(tab) }]
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
-            Button("Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) }
+            close.append(HoldMenuItem(title: "Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) })
         }
+        return [link, keep, close]
     }
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
@@ -1229,32 +1246,27 @@ private struct GroupLine: View {
 }
 
 /// A group's long-press menu, on the whole group so it lifts as one
-/// piece; `actions` gives the same three to VoiceOver on its name line.
-private struct GroupMenu: ViewModifier {
-    let rename: () -> Void
-    let ungroup: () -> Void
-    let close: () -> Void
+/// piece (the list's `listHoldMenu`); `actions` gives the same three to
+/// VoiceOver on its name line.
+@MainActor private struct GroupMenu {
+    let rename: @MainActor () -> Void
+    let ungroup: @MainActor () -> Void
+    let close: @MainActor () -> Void
 
-    func body(content: Content) -> some View {
-        content
-            .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: GroupCard.cornerRadius, style: .continuous))
-            .contextMenu {
-                Button("Rename", systemImage: "pencil", action: rename)
-                Button("Ungroup", systemImage: "folder.badge.minus", action: ungroup)
-                Divider()
-                Button("Close Group", systemImage: "xmark", action: close)
-            }
+    var sections: [[HoldMenuItem]] {
+        [[HoldMenuItem(title: "Rename", systemImage: "pencil", action: rename),
+          HoldMenuItem(title: "Ungroup", systemImage: "folder.badge.minus", action: ungroup)],
+         [HoldMenuItem(title: "Close Group", systemImage: "xmark", action: close)]]
     }
 
     var actions: GroupActions { GroupActions(rename: rename, ungroup: ungroup, close: close) }
 }
 
 /// The group menu's three, as VoiceOver actions on the name line.
-private struct GroupActions: ViewModifier {
-    let rename: () -> Void
-    let ungroup: () -> Void
-    let close: () -> Void
+@MainActor private struct GroupActions: ViewModifier {
+    let rename: @MainActor () -> Void
+    let ungroup: @MainActor () -> Void
+    let close: @MainActor () -> Void
 
     func body(content: Content) -> some View {
         content.accessibilityActions {
@@ -1491,6 +1503,9 @@ private enum Liftable {
     /// Resting on another tab, waiting for their group to form: the held
     /// tile turns solid so the one under it doesn't show through.
     var solid = false
+    /// The tab or group whose hold menu is open: iOS lifts a picture of it,
+    /// so its place stays empty.
+    var menu: UUID?
 }
 
 /// A tab's place in the list, empty while the tab is held (or its page
@@ -1504,7 +1519,7 @@ private struct EmptyWhileHeld: ViewModifier {
     let gliding: Bool
 
     func body(content: Content) -> some View {
-        let empty = gliding || finger.held == id
+        let empty = gliding || finger.held == id || finger.menu == id
         content
             .opacity(empty ? 0 : 1)
             .animation(nil, value: empty)

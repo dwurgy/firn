@@ -1,0 +1,330 @@
+<!doctype html>
+<!-- Firn's own hold menu on the iPhone's overview: the look, as a mockup
+     (docs/IOS-PLAN.md, phase 3, step 3c, step 1). Approved (David, 2026-11-09): the see-through frost (a blur under a 42%
+     veil, as the tall cards' pills) and Close rows in terracotta. This page
+     is the reference for the build.
+     Self-contained: no scripts or fonts from the network. Symbols are
+     stand-ins drawn here; the app uses SF Symbols. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firn for iPhone: the hold menu</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 40px 24px 80px; background: #F3EFE9; color: #241F1B;
+  font: 15px/1.5 -apple-system, system-ui, sans-serif;
+}
+main { max-width: 860px; margin: 0 auto; }
+h1 { font: 600 28px/1.2 ui-serif, Georgia, serif; margin: 0 0 8px; }
+h2 { font: 600 19px/1.3 ui-serif, Georgia, serif; margin: 56px 0 4px; }
+p { margin: 0 0 12px; color: #5E564E; max-width: 62ch; }
+.controls {
+  position: sticky; top: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 20px; align-items: center;
+  margin: 24px 0 0; padding: 12px 16px; border-radius: 14px;
+  background: rgba(251,250,248,.86); backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(60,40,20,.08), 0 8px 24px rgba(60,40,20,.08);
+}
+.controls fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 6px; align-items: center; }
+.controls legend { float: left; margin-right: 8px; color: #5E564E; font-size: 13px; }
+.controls label {
+  padding: 5px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  background: rgba(70,55,40,.07);
+}
+.controls input { position: absolute; opacity: 0; }
+.controls input:checked + span { font-weight: 600; }
+.controls label:has(input:checked) { background: #241F1B; color: #FBFAF8; }
+.controls label:has(input:focus-visible) { outline: 3px solid rgba(130,168,190,.7); }
+.controls button {
+  margin-left: auto; font: inherit; font-size: 13px; padding: 5px 14px; border-radius: 8px;
+  border: 0; background: rgba(70,55,40,.07); color: inherit; cursor: pointer;
+}
+.pair { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+
+/* ---- The phone crop ---- */
+.phone {
+  --frame: #E9E3DA; --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --group-name: #3B342E;
+  --slim: rgba(251,250,248,.72); --hair: rgba(60,40,20,.07); --shadow-soft: rgba(60,40,20,.08);
+  --group-fill: rgba(255,255,255,.55); --group-shadow: rgba(60,40,20,.14);
+  --tile-fill: rgba(255,255,255,.42); --rim-top: rgba(255,255,255,.85); --tile-solid: #F4F0EA;
+  --pill-veil: rgba(233,227,218,.62); --shadow-peek: rgba(60,40,20,.22);
+  --dim: rgba(20,16,12,.18);
+  --menu-veil: rgba(251,250,248,.44); --menu-edge: rgba(255,255,255,.6);
+  --menu-shadow: rgba(60,40,20,.24); --press: rgba(70,55,40,.13); --danger: #B0503A;
+  --haze: radial-gradient(60% 40% at 15% 20%, rgba(157,183,200,.55), transparent 70%),
+          radial-gradient(55% 35% at 90% 55%, rgba(201,162,126,.35), transparent 70%),
+          radial-gradient(60% 40% at 30% 95%, rgba(143,174,139,.30), transparent 70%),
+          linear-gradient(rgba(127,156,176,.16), rgba(127,156,176,.16)), #E9E3DA;
+  position: relative; width: 390px; flex: none; overflow: hidden; border-radius: 34px;
+  background: var(--haze); color: var(--ink);
+  font: 13px/1.2 -apple-system, system-ui, sans-serif;
+  box-shadow: 0 0 0 1px rgba(60,40,20,.10), 0 16px 40px rgba(60,40,20,.14);
+  user-select: none; -webkit-user-select: none;
+}
+.phone[data-theme="dark"] {
+  --frame: #3A3734; --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --group-name: #F5F1EC;
+  --slim: rgba(245,241,236,.10); --hair: rgba(0,0,0,.30); --shadow-soft: rgba(0,0,0,.15);
+  --group-fill: rgba(245,241,236,.11); --group-shadow: rgba(0,0,0,.35);
+  --tile-fill: rgba(245,241,236,.08); --rim-top: rgba(255,255,255,.16); --tile-solid: #45413D;
+  --pill-veil: rgba(103,99,95,.62); --shadow-peek: rgba(0,0,0,.45);
+  --dim: rgba(0,0,0,.40);
+  --menu-veil: rgba(103,99,95,.42); --menu-edge: rgba(200,220,230,.16);
+  --menu-shadow: rgba(0,0,0,.5); --menu-lift: 1; --press: rgba(245,241,236,.13); --danger: #E3907A;
+  --haze: radial-gradient(60% 40% at 15% 20%, rgba(110,152,178,.30), transparent 70%),
+          radial-gradient(55% 35% at 90% 55%, rgba(176,127,106,.20), transparent 70%),
+          radial-gradient(60% 40% at 30% 95%, rgba(143,174,139,.14), transparent 70%),
+          linear-gradient(rgba(127,156,176,.14), rgba(127,156,176,.14)), #3A3734;
+}
+.clock { position: absolute; top: 20px; left: 44px; font-size: 16px; font-weight: 600; }
+.list { padding: 62px 16px 28px; display: flex; flex-direction: column; gap: 8px; }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }
+.tile {
+  height: 56px; border-radius: 14px; background: var(--tile-fill);
+  box-shadow: inset 0 1px 0 var(--rim-top), 0 0 0 1px var(--hair);
+  display: flex; align-items: center; justify-content: center;
+}
+.ico {
+  flex: none; width: 20px; height: 20px; border-radius: 5px; color: #FBFAF8;
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.tile .ico { width: 24px; height: 24px; border-radius: 6px; font-size: 13px; }
+.row {
+  height: 44px; border-radius: 14px; background: var(--slim);
+  box-shadow: 0 0 0 1px var(--hair), 0 1px 2px var(--shadow-soft);
+  display: flex; align-items: center; gap: 10px; padding: 0 12px;
+}
+.row .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .x { color: var(--faint); display: flex; }
+.card {
+  height: 160px; border-radius: 14px; position: relative; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--hair), 0 1px 2px var(--shadow-soft);
+}
+.card .pic { position: absolute; inset: 0; }
+.card .pill, .card .cx {
+  position: absolute; top: 8px; height: 30px; border-radius: 15px;
+  background: var(--pill-veil); backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 var(--rim-top);
+  display: flex; align-items: center;
+}
+.card .pill { left: 8px; max-width: 250px; padding: 0 12px 0 8px; gap: 6px; }
+.card .pill .ico { width: 18px; height: 18px; }
+.card .cx { right: 8px; width: 30px; justify-content: center; color: var(--ink); }
+.group {
+  border-radius: 22px; padding: 0 8px 8px;
+  background: linear-gradient(rgba(127,156,176,.10), rgba(127,156,176,.10)), var(--group-fill);
+  box-shadow: inset 0 1px 0 var(--rim-top), 0 0 0 1px var(--hair), 0 2px 8px var(--group-shadow);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.group .name {
+  height: 44px; margin-bottom: -6px; padding: 0 6px; display: flex; align-items: center; gap: 6px;
+  font-size: 15px; font-weight: 600; color: var(--group-name);
+}
+.group .name svg { color: var(--faint); }
+
+/* ---- Held: the dim, the lift, the menu ---- */
+.dim { position: absolute; inset: 0; background: var(--dim); z-index: 2; }
+.held { position: relative; z-index: 3; }
+.held > .lift {
+  transform: scale(1.03); background-color: var(--tile-solid);
+  box-shadow: 0 8px 18px var(--shadow-peek);
+}
+.held > .lift.group { background: linear-gradient(rgba(127,156,176,.10), rgba(127,156,176,.10)), var(--tile-solid); }
+.menu {
+  position: absolute; width: 250px; border-radius: 14px; overflow: hidden;
+  background: var(--menu-veil); backdrop-filter: blur(18px) saturate(1.5) brightness(var(--menu-lift, 1.08));
+  box-shadow: inset 0 1px 0 var(--rim-top), 0 0 0 1px var(--menu-edge),
+              0 2px 6px var(--shadow-soft), 0 14px 34px var(--menu-shadow);
+  font-size: 16px; color: var(--ink);
+  transition: height .2s cubic-bezier(.2,.8,.2,1);
+}
+.menu.below { top: calc(100% + 10px); transform-origin: var(--ox, 20%) 0; }
+.menu.above { bottom: calc(100% + 10px); transform-origin: var(--ox, 20%) 100%; }
+.menu.left { left: 0; } .menu.right { right: 0; --ox: 80%; }
+.menu.form { animation: form .22s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes form { from { opacity: 0; transform: scale(.86); filter: blur(6px); } }
+.pane { padding: 4px; }
+.pane[hidden] { display: none; }
+.pane.in { animation: pane .2s ease-out both; }
+@keyframes pane { from { opacity: 0; } }
+.item {
+  width: 100%; height: 44px; border: 0; border-radius: 10px; background: transparent; color: inherit;
+  font: inherit; text-align: left; display: flex; align-items: center; gap: 12px; padding: 0 12px;
+  cursor: pointer;
+}
+.item:active { background: var(--press); }
+.item:focus-visible { outline: 3px solid rgba(130,168,190,.7); outline-offset: -3px; }
+.item svg { flex: none; color: var(--muted); }
+.item .w { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .more { color: var(--faint); }
+.item.back { color: var(--muted); font-size: 13px; font-weight: 600; }
+.item .dot { width: 22px; display: flex; justify-content: center; }
+.item .dot i { width: 8px; height: 8px; border-radius: 4px; background: #7F9CB0; }
+.sep { height: 1px; margin: 4px 12px; background: var(--hair); }
+.phone[data-theme="dark"] .sep { background: rgba(245,241,236,.10); }
+body[data-close="terracotta"] .item.close, body[data-close="terracotta"] .item.close svg { color: var(--danger); }
+@media (prefers-reduced-motion: reduce) {
+  .menu { transition: none; }
+  @keyframes form { from { opacity: 0; } }
+}
+</style>
+</head>
+<body data-close="terracotta">
+<main>
+<h1>The hold menu</h1>
+<p>Hold a tab, a group's name, or a Basecamp tile still for half a second. The tile lifts on its solid base, everything else dims softly, and the menu forms beside it like frost. Each scene is shown in light and dark.</p>
+<p>The menus work: tap <b>Move to Group</b> to see its list glide into the same card.</p>
+
+<div class="controls">
+  <fieldset>
+    <legend>Close rows</legend>
+    <label><input type="radio" name="close" value="ink"><span>Ink</span></label>
+    <label><input type="radio" name="close" value="terracotta" checked><span>Terracotta</span></label>
+  </fieldset>
+  <button type="button" id="replay">Play the opening again</button>
+</div>
+
+<h2>1. A slim row</h2>
+<p>Low in the list, so the menu opens above it. It lines up with the row's left side, where the finger usually is.</p>
+<div class="pair" data-scene="row"></div>
+
+<h2>2. A tall card</h2>
+<p>The same menu, below the card because there's room. The card keeps its picture while lifted.</p>
+<div class="pair" data-scene="card"></div>
+
+<h2>3. A group</h2>
+<p>Holding the name lifts the whole group. A short menu.</p>
+<div class="pair" data-scene="group"></div>
+
+<h2>4. A Basecamp tile</h2>
+<p>A tile on the right, so the menu lines up with its right edge and stays inside the screen.</p>
+<div class="pair" data-scene="tile"></div>
+
+<h2>5. Move to Group's list</h2>
+<p>The same card, glided to a new height, with a back row at the top. Never a second card.</p>
+<div class="pair" data-scene="move"></div>
+</main>
+
+<script>
+// Stand-in symbols (the app uses SF Symbols of the same names).
+const S = (d, w = 22) => `<svg aria-hidden="true" width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const sym = {
+  link: S('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
+  mountain: S('<path d="M2.5 19l6-10 3.5 5.5L14.5 11l7 8z"/>'),
+  folderPlus: S('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>'),
+  folderMinus: S('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 13.5h5"/>'),
+  folder: S('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  x: S('<path d="M7 7l10 10M17 7L7 17"/>'),
+  xSquare: S('<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>'),
+  house: S('<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>'),
+  down: S('<path d="M12 4v11M7.5 10.5L12 15l4.500-4.500M5 20h14"/>'),
+  pencil: S('<path d="M4 20l1-4L16 5l3 3L8 19z"/>'),
+  more: S('<path d="M9 6l6 6-6 6"/>', 16),
+  back: S('<path d="M15 6l-6 6 6 6"/>', 16),
+  fold: S('<path d="M6 9l6 6 6-6"/>', 14),
+  smallX: S('<path d="M7 7l10 10M17 7L7 17"/>', 14),
+};
+
+const item = (s, words, o = {}) =>
+  `<button type="button" class="item${o.close ? ' close' : ''}"${o.go ? ` data-go="${o.go}"` : ''}>${s}<span class="w">${words}</span>${o.go ? `<span class="more">${sym.more}</span>` : ''}</button>`;
+const sep = '<div class="sep"></div>';
+const groupsPane = `<div class="pane" data-pane="groups" hidden>
+  <button type="button" class="item back" data-go="main">${sym.back}<span class="w">Move to Group</span></button>${sep}
+  ${['Weekend cooking', 'Cabin trip', 'Reading'].map(n => `<button type="button" class="item"><span class="dot"><i></i></span><span class="w">${n}</span></button>`).join('')}
+</div>`;
+const tabMenu = `<div class="pane" data-pane="main">
+  ${item(sym.link, 'Copy Link')}${sep}
+  ${item(sym.mountain, 'Add to Basecamp')}
+  ${item(sym.folderPlus, 'New Group with This Tab')}
+  ${item(sym.folder, 'Move to Group', { go: 'groups' })}${sep}
+  ${item(sym.x, 'Close Tab', { close: true })}
+  ${item(sym.xSquare, 'Close Other Tabs', { close: true })}
+</div>${groupsPane}`;
+const groupMenu = `<div class="pane" data-pane="main">
+  ${item(sym.pencil, 'Rename')}${item(sym.folderMinus, 'Ungroup')}${sep}
+  ${item(sym.x, 'Close Group', { close: true })}
+</div>`;
+const tileMenu = `<div class="pane" data-pane="main">
+  ${item(sym.house, 'Go Back to Home')}${item(sym.link, 'Copy Link')}${sep}
+  ${item(sym.down, 'Move to Tabs')}${item(sym.x, 'Remove from Basecamp', { close: true })}
+</div>`;
+const menu = (body, where) => `<div class="menu form ${where}" role="menu">${body}</div>`;
+
+const ico = (l, c) => `<span class="ico" style="background:${c}">${l}</span>`;
+const row = (l, c, t) => `<div class="row">${ico(l, c)}<span class="t">${t}</span><span class="x">${sym.smallX}</span></div>`;
+const tile = (l, c) => `<div class="tile">${ico(l, c)}</div>`;
+const pic = {
+  weather: 'linear-gradient(180deg, #C9DCE8 0%, #EEF2F5 55%, #FBFAF8 100%)',
+  trail: 'linear-gradient(160deg, #9FB29A 0%, #7F957B 45%, #F6F3EE 46%, #F6F3EE 100%)',
+};
+const card = (l, c, t, p) => `<div class="card"><div class="pic" style="background:${p}"></div>
+  <div class="pill">${ico(l, c)}<span>${t}</span></div><div class="cx">${sym.smallX}</div></div>`;
+const group = (cls = '') => `<div class="group ${cls}"><div class="name">Weekend cooking ${sym.fold}</div>
+  ${row('C', '#A8905A', 'Cast-iron cornbread')}${row('S', '#7D8C79', 'Smoked trout dip')}</div>`;
+const tiles = held => {
+  const t = [['M', '#B07F6A'], ['C', '#7F9CB0'], ['N', '#8FAE8B'], ['R', '#B88A9E'], ['W', '#C4A95B']];
+  return `<div class="grid">${t.map(([l, c], i) => i === held
+    ? `<div class="held">${tile(l, c).replace('class="tile"', 'class="tile lift"')}${menu(tileMenu, 'below right')}</div>`
+    : tile(l, c)).join('')}</div>`;
+};
+const hold = (inner, m) => `<div class="held">${inner.replace(/class="(row|card|group )/, 'class="lift $1')}${m}</div>`;
+const R = {
+  forecast: row('W', '#6F8496', 'Sisters, OR: 10-day forecast'),
+  notes: row('R', '#857A90', 'Release notes, draft'),
+  outback: row('O', '#93786A', 'Used Outback listings'),
+  hinge: row('H', '#6F7D86', 'How to fix a squeaky door hinge'),
+};
+const scenes = {
+  row: () => tiles(-1) + group() + R.forecast + R.notes + R.outback + hold(R.hinge, menu(tabMenu, 'above left')),
+  card: () => tiles(-1) + hold(card('T', '#8A7564', 'Tumalo Falls trail guide', pic.trail), menu(tabMenu, 'below left'))
+    + card('W', '#6F8496', 'Sisters, OR: 10-day forecast', pic.weather) + R.notes + R.outback + R.hinge,
+  group: () => tiles(-1) + hold(group(), menu(groupMenu, 'below left')) + R.forecast + R.notes + R.outback + R.hinge,
+  tile: () => tiles(3) + group() + R.forecast + R.notes + R.outback,
+  move: () => tiles(-1) + R.forecast + hold(R.notes, menu(tabMenu, 'below left')) + R.outback + R.hinge
+    + `<div style="height:150px"></div>`,
+};
+
+for (const pair of document.querySelectorAll('.pair')) {
+  const name = pair.dataset.scene;
+  for (const theme of ['light', 'dark']) {
+    const phone = document.createElement('div');
+    phone.className = 'phone'; phone.dataset.theme = theme;
+    phone.setAttribute('aria-label', `${theme} mode`);
+    phone.innerHTML = `<div class="clock">9:41</div><div class="list">${scenes[name]()}</div><div class="dim"></div>`;
+    pair.append(phone);
+    if (name === 'move') show(phone.querySelector('.menu'), 'groups', false);
+  }
+}
+
+// Move to Group: one card, glided to the new pane's height.
+function show(menu, name, glide = true) {
+  const from = menu.offsetHeight;
+  for (const p of menu.querySelectorAll('.pane')) {
+    p.hidden = p.dataset.pane !== name;
+    p.classList.toggle('in', glide && !p.hidden);
+  }
+  if (!glide) return;
+  menu.style.height = 'auto';
+  const to = menu.offsetHeight;
+  menu.style.height = from + 'px';
+  menu.offsetHeight;
+  menu.style.height = to + 'px';
+  menu.addEventListener('transitionend', () => { menu.style.height = ''; }, { once: true });
+}
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go) show(go.closest('.menu'), go.dataset.go);
+});
+for (const r of document.querySelectorAll('input[name="close"]'))
+  r.addEventListener('change', () => { document.body.dataset.close = r.value; });
+document.getElementById('replay').addEventListener('click', () => {
+  for (const m of document.querySelectorAll('.menu')) {
+    m.classList.remove('form'); m.offsetHeight; m.classList.add('form');
+  }
+});
+</script>
+</body>
+</html>

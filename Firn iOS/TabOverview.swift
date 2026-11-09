@@ -1906,7 +1906,7 @@ struct OverviewRow: View {
     }
 
     /// A slim row's height.
-    static let rowHeight: CGFloat = 48
+    static let rowHeight: CGFloat = 44
 
     @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
@@ -2021,17 +2021,23 @@ private struct CardLine: View, Animatable {
         set { progress = newValue }
     }
 
-    /// One weight for both sizes (the row's semibold), so the text can't jump.
-    static let titleFont = Font.subheadline.weight(.semibold)
+    /// One font for both sizes (the row's semibold), so the text can't jump.
+    /// 13pt, as Safari's tab titles (David, 2026-11-08): smaller pills, more
+    /// of the picture.
+    static let titleFont = Font.footnote.weight(.semibold)
 
     // The row's measures, then the card's.
-    private static let rowHeight = OverviewRow.rowHeight          // 48
-    private static let glassHeight: CGFloat = 38                  // the pill and round X
-    private static let inset: CGFloat = 10                        // the pill's and X's distance in
+    private static let rowHeight = OverviewRow.rowHeight          // 44
+    private static let glassHeight: CGFloat = 30                  // the pill and round X
+    private static let inset: CGFloat = 8                         // the pill's and X's distance in
+    private static let rowIcon: CGFloat = 20                      // the site icon, row then pill
+    private static let pillIcon: CGFloat = 18
+    private static let pillPad: CGFloat = 8                       // pill edge to icon
+    private static let iconGap: CGFloat = 6                       // icon to title, in the pill
     private static let cardLineHeight: CGFloat = inset + glassHeight + 6
     private static let tapSize: CGFloat = 44
     /// Room on the card's right for the X and a gap before it.
-    private static let xRoom: CGFloat = 66
+    private static let xRoom: CGFloat = 52
 
     private var site: String { WebAddress.site(of: tab.url) }
 
@@ -2040,15 +2046,16 @@ private struct CardLine: View, Animatable {
         GeometryReader { box in
             let w = box.size.width
             // The fill: the whole row, then the pill.
-            let pillWidth = min(max(w - Self.xRoom, 0), 8 + 22 + 7 + titleWidth + 14)
+            let pillLead = Self.pillPad + Self.pillIcon + Self.iconGap
+            let pillWidth = min(max(w - Self.xRoom, 0), pillLead + titleWidth + 12)
             let glassWidth = mix(w, pillWidth, t)
             let glassHeight = mix(Self.rowHeight, Self.glassHeight, t)
             let glassShape = RoundedRectangle(cornerRadius: mix(OverviewRow.cornerRadius, Self.glassHeight / 2, t),
                                               style: .continuous)
             // The line's middle: the row's, then the pill's.
             let middle = mix(Self.rowHeight / 2, Self.inset + Self.glassHeight / 2, t)
-            let titleX = mix(50, Self.inset + 8 + 22 + 7, t)
-            let titleRoom = max(mix(w - 96, pillWidth - 51, t), 0)
+            let titleX = mix(46, Self.inset + pillLead, t)
+            let titleRoom = max(mix(w - 92, pillWidth - pillLead - 12, t), 0)
             ZStack(alignment: .topLeading) {
                 ZStack {
                     // A slim row is flat (David, 2026-11-08): only group cards
@@ -2072,10 +2079,11 @@ private struct CardLine: View, Animatable {
                 .frame(width: glassWidth, height: glassHeight)
                 .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
                 .allowsHitTesting(false)
-                SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: site) }
-                    .scaleEffect(mix(1, 22 / 24, t))
-                    .frame(width: 24, height: 24)
-                    .offset(x: mix(26, Self.inset + 8 + 11, t) - 12, y: middle - 12)
+                SiteIconView(icon: tab.icon, size: Self.rowIcon) { LetterMark(site: site, size: Self.rowIcon) }
+                    .scaleEffect(mix(1, Self.pillIcon / Self.rowIcon, t))
+                    .frame(width: Self.rowIcon, height: Self.rowIcon)
+                    .offset(x: mix(24, Self.inset + Self.pillPad + Self.pillIcon / 2, t) - Self.rowIcon / 2,
+                            y: middle - Self.rowIcon / 2)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
                 Text(tab.title)
@@ -2153,8 +2161,8 @@ private struct CardLine: View, Animatable {
                 Image(systemName: "xmark").foregroundStyle(Theme.muted)
                 Image(systemName: "xmark").foregroundStyle(Theme.ink).opacity(t)
             }
-            .font(.system(size: 14, weight: .semibold))
-            .scaleEffect(mix(12 / 14, 1, t))
+            .font(.system(size: 12, weight: .semibold))
+            .scaleEffect(mix(11 / 12, 1, t))
         }
         .frame(width: Self.tapSize, height: Self.tapSize)
         .contentShape(.circle)
@@ -2207,13 +2215,14 @@ private struct SidewaysPan: UIGestureRecognizerRepresentable {
 /// A site with no icon yet: its first letter on a calm color of its own.
 struct LetterMark: View {
     let site: String
+    var size: CGFloat = 24
 
     var body: some View {
         Text(site.first.map { String($0).uppercased() } ?? "")
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: size * 13 / 24, weight: .semibold))
             .foregroundStyle(Theme.page)
-            .frame(width: 24, height: 24)
-            .background(Theme.siteColor(for: site), in: .rect(cornerRadius: 6))
+            .frame(width: size, height: size)
+            .background(Theme.siteColor(for: site), in: .rect(cornerRadius: size / 4))
             .accessibilityHidden(true)
     }
 }

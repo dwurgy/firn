@@ -186,9 +186,9 @@ struct TabOverview: View {
                                     canBegin: { liftable(at: $0) != nil },
                                     began: lift(at:), moved: follow(to:),
                                     ended: { letGo(cancelled: $0) }))
-                // Holding still opens a tab's or group's menu, lifted on a
-                // solid base (see `listHoldMenu`).
-                .listHoldMenu(base: Theme.tileSolid, target: holdMenuTarget(at:),
+                // Holding still opens a tab's or group's menu, the tile
+                // lifting solid (see `listHoldMenu`).
+                .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
                               frame: heldFrame(of:), held: { finger.menu = $0 })
                 .opacity(listFade)
             }

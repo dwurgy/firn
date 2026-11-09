@@ -151,31 +151,35 @@ struct HoldMenuTarget {
 }
 
 extension View {
-    /// iOS's hold menu for the tiles in a scrolling list, each lifted on a
-    /// solid base, as `holdMenu` does for one view.
+    /// iOS's hold menu for the tiles in a scrolling list, each lifting
+    /// solid, never darkened, as `holdMenu` does for one view.
     ///
     /// Why not `holdMenu` on each tile: it hosts the tile in UIKit, and
     /// SwiftUI's glides inside (a card shrinking to a row, a group folding)
     /// don't reliably cross into a separate host. Instead one interaction
     /// sits on the list's scroll view, as SwiftUI's own `.contextMenu` does
     /// underneath, and lifts a picture of the tile taken from the screen at
-    /// the start of the hold: exactly what was there, glass and all, on a
-    /// solid base so iOS's shadow can't darken it. `held` hides the real
-    /// tile while the menu is open (the lifted picture may move to make
-    /// room for the menu) and shows it again once the picture has landed.
+    /// the start of the hold: exactly what was there, glass and all, as
+    /// solid pixels, so iOS's shadow can't darken it. `held` hides the real
+    /// tile from the moment the picture lifts (it may move to make room for
+    /// the menu, and both showed at once; David's recording, 2026-11-08)
+    /// and shows it again just before the landed picture leaves.
     ///
     /// `target` finds what's under a point and `frame` where a target is
-    /// now (both in global points, nil: nothing there).
-    func listHoldMenu(base: Color,
+    /// now (both in global points, nil: nothing there). `dragging`: a hold
+    /// that moved became a drag, so the menu's lift stops at once (its
+    /// solid base stayed behind in the tab's place; same recording).
+    func listHoldMenu(dragging: Bool,
                       target: @escaping @MainActor (CGPoint) -> HoldMenuTarget?,
                       frame: @escaping @MainActor (UUID) -> CGRect?,
                       held: @escaping @MainActor (UUID?) -> Void) -> some View {
-        background(ListHoldMenu(base: UIColor(base), target: target, frame: frame, held: held))
+        background(ListHoldMenu(dragging: dragging, target: target,
+                                frame: frame, held: held))
     }
 }
 
 private struct ListHoldMenu: UIViewRepresentable {
-    let base: UIColor
+    let dragging: Bool
     let target: @MainActor (CGPoint) -> HoldMenuTarget?
     let frame: @MainActor (UUID) -> CGRect?
     let held: @MainActor (UUID?) -> Void
@@ -195,10 +199,10 @@ private struct ListHoldMenu: UIViewRepresentable {
     }
 
     private func update(_ delegate: ListHoldMenuDelegate) {
-        delegate.base = base
         delegate.target = target
         delegate.frame = frame
         delegate.held = held
+        if dragging { delegate.cancel() }
     }
 }
 
@@ -222,14 +226,15 @@ private struct ListHoldMenu: UIViewRepresentable {
         scroll.addInteraction(new)
         host = scroll
         interaction = new
+        delegate.interaction = new
     }
 }
 
 @MainActor final class ListHoldMenuDelegate: NSObject, UIContextMenuInteractionDelegate {
-    var base: UIColor = .clear
     var target: @MainActor (CGPoint) -> HoldMenuTarget? = { _ in nil }
     var frame: @MainActor (UUID) -> CGRect? = { _ in nil }
     var held: @MainActor (UUID?) -> Void = { _ in }
+    weak var interaction: UIContextMenuInteraction?
 
     /// The tile the open menu is for, and its picture from the hold's start.
     private var current: HoldMenuTarget?
@@ -255,10 +260,13 @@ private struct ListHoldMenu: UIViewRepresentable {
         return holdMenuConfiguration(found.sections)
     }
 
+    // The picture covers the tile exactly, so the tile can hide at once.
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 configuration: UIContextMenuConfiguration,
                                 highlightPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? {
-        preview(in: interaction)
+        let preview = preview(in: interaction)
+        if preview != nil { held(current?.id) }
+        return preview
     }
 
     // Back to where the tile is now; nil (a fade) if it's gone, as after Close Tab.
@@ -269,22 +277,39 @@ private struct ListHoldMenu: UIViewRepresentable {
     }
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
-                                willDisplayMenuFor configuration: UIContextMenuConfiguration,
-                                animator: (any UIContextMenuInteractionAnimating)?) {
-        held(current?.id)
-    }
-
-    func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 willEndFor configuration: UIContextMenuConfiguration,
                                 animator: (any UIContextMenuInteractionAnimating)?) {
-        let done = { [weak self] in
-            guard let self else { return }
-            self.picture?.removeFromSuperview()
-            self.picture = nil
-            self.current = nil
-            self.held(nil)
-        }
+        let done = { [weak self] in self?.land(); return }
         if let animator { animator.addCompletion(done) } else { done() }
+    }
+
+    /// The tile shows again first; the picture over it leaves a moment
+    /// later, once the tile has been drawn, so nothing blinks or shifts.
+    private func land() {
+        guard current != nil else { return }
+        held(nil)
+        current = nil
+        let landed = picture
+        picture = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            landed?.removeFromSuperview()
+        }
+    }
+
+    /// A drag took over the hold: the lift stops and its picture goes.
+    func cancel() {
+        guard current != nil else { return }
+        current = nil
+        held(nil)
+        picture?.removeFromSuperview()
+        picture = nil
+        // iOS keeps its lift until the finger lifts, even once Firn's drag
+        // has the touch; taking the interaction off and back on ends it.
+        if let interaction, let view = interaction.view {
+            view.removeInteraction(interaction)
+            view.addInteraction(interaction)
+        }
     }
 
     /// iOS lifts only a view that's on screen: the picture goes into the
@@ -301,8 +326,10 @@ private struct ListHoldMenu: UIViewRepresentable {
         let parameters = UIPreviewParameters()
         parameters.visiblePath = UIBezierPath(roundedRect: picture.bounds,
                                               cornerRadius: current.cornerRadius + outset)
-        // Solid, so iOS's shadow can't show through the glass.
-        parameters.backgroundColor = base.resolvedColor(with: view.traitCollection)
+        // No base of its own: the picture is the screen's own pixels, already
+        // solid, so iOS's shadow can't show through it (a base stayed behind
+        // as a solid slot when a hold became a drag; David's recording).
+        parameters.backgroundColor = .clear
         return UITargetedPreview(view: picture, parameters: parameters)
     }
 }

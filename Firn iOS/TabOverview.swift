@@ -97,8 +97,10 @@ struct TabOverview: View {
     /// A pinch, a drag, or the moment after either: a finger lifting then
     /// would otherwise count as a tap.
     private var busy: Bool {
-        pinchedRecently || drag != nil || Date.now.timeIntervalSince(lastDrop) < 0.35
+        pinchedRecently || drag != nil || finishing || Date.now.timeIntervalSince(lastDrop) < 0.35
     }
+    /// Done was tapped and the tab on screen's group is opening first.
+    @State private var finishing = false
 
     /// Groups and loose tabs in the order shown: the store's, or the drag's
     /// while one moves.
@@ -111,24 +113,22 @@ struct TabOverview: View {
         return order.compactMap { byID[$0] }
     }
 
-    /// The tabs a group shows: all of them, or only the tab on screen while
-    /// it's folded, so the page always has its card to glide into. During a
-    /// drag, the drag's (a held tab may be on its way in or out).
+    /// The tabs a group shows: all of them, or none while it's folded. The
+    /// tab on screen's group opens with the overview, and again just before
+    /// the page grows back (`finish`), so the page always has its card.
+    /// During a drag, the drag's (a held tab may be on its way in or out).
     private func shownTabs(in group: TabGroup) -> [FirnCore.Tab] {
         if let ids = members?[group.id] {
             let byID = Dictionary(store.openTabs.map { ($0.id, $0) }) { a, _ in a }
             return ids.compactMap { byID[$0] }
         }
-        let members = store.tabs(in: group)
-        return group.folded ? members.filter(isOnScreen) : members
+        return group.folded ? [] : store.tabs(in: group)
     }
 
     /// Every tab with a tile in the list.
     private var visibleTabs: [FirnCore.Tab] {
         let folded = Set(store.tabGroups.filter(\.folded).map(\.id))
-        return store.openTabs.filter { tab in
-            tab.groupID.map { !folded.contains($0) } ?? true || isOnScreen(tab)
-        }
+        return store.openTabs.filter { tab in tab.groupID.map { !folded.contains($0) } ?? true }
     }
 
     private var space: String { store.activeSpace.color }
@@ -239,7 +239,7 @@ struct TabOverview: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                OverviewBar(space: store.activeSpace, newTab: newTab, done: done)
+                OverviewBar(space: store.activeSpace, newTab: newTab, done: finish)
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
@@ -387,10 +387,9 @@ struct TabOverview: View {
     /// keep their own glass and look exactly as loose ones, tall cards
     /// included, 8pt apart and 8pt in from the tint's sides and bottom.
     /// The list's 12pt sets it apart from its neighbors.
-    /// Folded (and not holding the tab on screen, which keeps its card so
-    /// the page has somewhere to shrink into), the group is only its name
-    /// line, a slim row's height, the name and chevron gliding to its
-    /// middle as the tint closes around them (David, 2026-11-06).
+    /// Folded, the group is only its name line, a slim row's height, the
+    /// name and chevron gliding to its middle as the card closes around
+    /// them (David, 2026-11-06).
     private func groupTiles(_ group: TabGroup, at index: Int, of count: Int) -> some View {
         // VoiceOver's Move Up and Move Down, on the name line: the group's
         // place in the list, as a drag of its name line.
@@ -452,7 +451,16 @@ struct TabOverview: View {
                 .padding(.top, -24)
                 .padding(.bottom, -2)
         }
-        .background(GroupCard(space: space))
+        .background {
+            GroupCard(space: space)
+                // The card around the tab on screen fades in just after the
+                // page has shrunk into its card (the line shows then), so
+                // the page lands, then its group gathers around it.
+                .opacity(!lifted && !lineShown && tabs.contains(where: isOnScreen) ? 0 : 1)
+                .animation(.easeOut(duration: 0.2), value: lineShown)
+                // A new space's color cross-fades in, as the Mac's tint.
+                .animation(.easeInOut(duration: 0.4), value: space)
+        }
     }
 
     /// A group's long-press menu (Rename, Ungroup, Close Group), also
@@ -463,19 +471,40 @@ struct TabOverview: View {
                   close: { close(group) })
     }
 
-    /// Folds or unfolds a group (0.25s, no bounce; with Reduce Motion it's
-    /// simply done). Folded tabs forget their spots, so nothing glides to
-    /// a place that's gone.
+    /// Folds or unfolds a group: the card glides to its new size (0.25s, no
+    /// bounce) and its tabs fade over the second half (`FoldFade`); with
+    /// Reduce Motion the size changes at once and the tabs cross-fade.
+    /// Folded tabs forget their spots, so nothing glides to a place that's
+    /// gone; folding the tab on screen's group is fine, since `finish`
+    /// opens it again before the page grows back.
     private func fold(_ group: TabGroup) {
         guard !busy else { return }
         let folding = !group.folded
         if folding {
-            for tab in store.tabs(in: group) where !isOnScreen(tab) {
+            for tab in store.tabs(in: group) {
                 spots.frames[tab.id] = nil
                 spots.cards.remove(tab.id)
             }
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, folding) }
+    }
+
+    /// Done: back to the tab on screen. If its group was folded here, it
+    /// opens again first (the same glide as tapping it), and the page grows
+    /// out of its card once the card is there, so the page always has a
+    /// card to come from.
+    private func finish() {
+        guard !finishing else { return }
+        guard let id = store.activeTab?.groupID,
+              let group = store.tabGroups.first(where: { $0.id == id }), group.folded
+        else { return done() }
+        finishing = true
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, false) }
+        Task {
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 250))
+            finishing = false
+            done()
+        }
     }
 
     private func askForName(_ group: TabGroup) {
@@ -532,7 +561,18 @@ struct TabOverview: View {
             // so the list moving a card can't leave a fading copy of it
             // behind (David, 2026-11-05: a copy lingered on each tab's
             // first drag).
-            .transition(drag == nil ? .opacity : .identity)
+            .transition(drag != nil ? .identity : loose ? .opacity : foldFade)
+    }
+
+    /// A grouped tab coming and going as its group unfolds and folds. In:
+    /// once the card has opened half its room (the glide's second half), so
+    /// it fades into space rather than over its neighbors. Out: over the
+    /// first half, gone before the closing card reaches it. Reduce Motion:
+    /// a plain 0.15s cross-fade, the size changing at once.
+    private var foldFade: AnyTransition {
+        if reduceMotion { return .opacity.animation(.easeOut(duration: 0.15)) }
+        return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.125).delay(0.125)),
+                           removal: .opacity.animation(.easeOut(duration: 0.125)))
     }
 
     /// A tab's menu: short, in the Mac's words. Basecamp's step adds Add

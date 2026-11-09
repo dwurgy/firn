@@ -330,6 +330,7 @@ struct BrowserScreen: View {
     /// or no tab: a cross-fade.
     private func showTabs() {
         guard !showingTabs else { return }
+        openActiveGroup()
         let tab = store.activeTab
         editing = false
         menuOpen = false
@@ -373,10 +374,20 @@ struct BrowserScreen: View {
 
     /// The overview, laid out behind the page with the tab's card hidden.
     private func beginGlide(of tab: FirnCore.Tab) {
+        openActiveGroup()
         gliding = tab.id
         lineShown = false
         lineOnPicture = 0
         showingTabs = true
+    }
+
+    /// The tab on screen's group opens with the overview, before it lays
+    /// out, so the page has its card to shrink into (a folded group shows
+    /// only its name). It stays open after.
+    private func openActiveGroup() {
+        guard let id = store.activeTab?.groupID,
+              let group = store.tabGroups.first(where: { $0.id == id }), group.folded else { return }
+        store.setFolded(group, false)
     }
 
     /// The picture takes the page's place (or a card's), and the page hides.

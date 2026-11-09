@@ -185,12 +185,18 @@ extension View {
     /// now (both in global points, nil: nothing there). `dragging`: a hold
     /// that moved became a drag, so the menu's lift stops at once (its
     /// solid base stayed behind in the tab's place; same recording).
+    ///
+    /// `handOff` and `handOffEnded`: with the menu open, moving the finger
+    /// away from it picks the tile up, as in Safari (see `MenuHandOff`).
     func listHoldMenu(dragging: Bool,
                       target: @escaping @MainActor (CGPoint) -> HoldMenuTarget?,
                       frame: @escaping @MainActor (UUID) -> CGRect?,
-                      held: @escaping @MainActor (UUID?) -> Void) -> some View {
+                      held: @escaping @MainActor (UUID?) -> Void,
+                      handOff: @escaping @MainActor (UUID, CGPoint) -> Void,
+                      handOffEnded: @escaping @MainActor () -> Void) -> some View {
         background(ListHoldMenu(dragging: dragging, target: target,
-                                frame: frame, held: held))
+                                frame: frame, held: held,
+                                handOff: handOff, handOffEnded: handOffEnded))
     }
 }
 
@@ -199,6 +205,8 @@ private struct ListHoldMenu: UIViewRepresentable {
     let target: @MainActor (CGPoint) -> HoldMenuTarget?
     let frame: @MainActor (UUID) -> CGRect?
     let held: @MainActor (UUID?) -> Void
+    let handOff: @MainActor (UUID, CGPoint) -> Void
+    let handOffEnded: @MainActor () -> Void
 
     func makeCoordinator() -> ListHoldMenuDelegate { ListHoldMenuDelegate() }
 
@@ -218,6 +226,8 @@ private struct ListHoldMenu: UIViewRepresentable {
         delegate.target = target
         delegate.frame = frame
         delegate.held = held
+        delegate.handOffs.moved = handOff
+        delegate.handOffs.ended = handOffEnded
         if dragging { delegate.cancel() }
     }
 }
@@ -228,11 +238,14 @@ private struct ListHoldMenu: UIViewRepresentable {
     weak var delegate: ListHoldMenuDelegate?
     private weak var host: UIView?
     private var interaction: UIContextMenuInteraction?
+    private var drag: UIDragInteraction?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if let interaction { host?.removeInteraction(interaction) }
+        if let drag { host?.removeInteraction(drag) }
         interaction = nil
+        drag = nil
         host = nil
         guard window != nil, let delegate else { return }
         var view = superview
@@ -240,8 +253,12 @@ private struct ListHoldMenu: UIViewRepresentable {
         guard let scroll = view else { return }
         let new = UIContextMenuInteraction(delegate: delegate)
         scroll.addInteraction(new)
+        // On the same view as the menu: iOS hands a menu off only to a drag there.
+        let handOff = delegate.handOffs.interaction()
+        scroll.addInteraction(handOff)
         host = scroll
         interaction = new
+        drag = handOff
         delegate.interaction = new
     }
 }
@@ -251,6 +268,21 @@ private struct ListHoldMenu: UIViewRepresentable {
     var frame: @MainActor (UUID) -> CGRect? = { _ in nil }
     var held: @MainActor (UUID?) -> Void = { _ in }
     weak var interaction: UIContextMenuInteraction?
+    /// Moving off the open menu picks its tile up.
+    let handOffs = MenuHandOff()
+    /// A hand-off started: iOS's copy of the tile goes at once, shadow and
+    /// all, so only Firn's own lifted tile shows. (It faded out over Firn's
+    /// for a few frames, see-through, with a dark shadow box; David's
+    /// recording, 2026-11-08.)
+    private var handingOff = false
+
+    override init() {
+        super.init()
+        handOffs.started = { [weak self] in
+            self?.handingOff = true
+            self?.picture?.alpha = 0
+        }
+    }
 
     /// The tile the open menu is for, and its picture from the hold's start.
     private var current: HoldMenuTarget?
@@ -292,9 +324,17 @@ private struct ListHoldMenu: UIViewRepresentable {
         preview(in: interaction)
     }
 
+    // Only now may iOS's drag start: the menu is showing (see MenuHandOff).
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                willDisplayMenuFor configuration: UIContextMenuConfiguration,
+                                animator: (any UIContextMenuInteractionAnimating)?) {
+        handOffs.showing = current?.id
+    }
+
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 willEndFor configuration: UIContextMenuConfiguration,
                                 animator: (any UIContextMenuInteractionAnimating)?) {
+        handOffs.showing = nil
         let done = { [weak self] in self?.land(); return }
         if let animator { animator.addCompletion(done) } else { done() }
     }
@@ -302,6 +342,7 @@ private struct ListHoldMenu: UIViewRepresentable {
     /// The tile shows again first; the picture over it leaves a moment
     /// later, once the tile has been drawn, so nothing blinks or shifts.
     private func land() {
+        handingOff = false
         guard current != nil else { return }
         held(nil)
         current = nil
@@ -315,7 +356,8 @@ private struct ListHoldMenu: UIViewRepresentable {
 
     /// A drag took over the hold: the lift stops and its picture goes.
     func cancel() {
-        guard current != nil else { return }
+        // A hand-off is Firn's drag carried by iOS's: nothing to stop.
+        guard current != nil, !handOffs.running else { return }
         current = nil
         held(nil)
         picture?.removeFromSuperview()
@@ -346,6 +388,155 @@ private struct ListHoldMenu: UIViewRepresentable {
         // solid, so iOS's shadow can't show through it (a base stayed behind
         // as a solid slot when a hold became a drag; David's recording).
         parameters.backgroundColor = .clear
+        if handingOff {
+            picture.alpha = 0
+            parameters.shadowPath = UIBezierPath()
+        }
         return UITargetedPreview(view: picture, parameters: parameters)
+    }
+}
+
+// MARK: - Moving off an open menu
+
+/// With a hold menu open, moving the finger away from it closes the menu
+/// and picks its tile up, as in Safari. iOS hands a menu off only to its
+/// own drag, on the same view, so there is one; but it may start only
+/// while a menu is showing (`showing`), never otherwise. (SwiftUI's
+/// `.onDrag` couldn't be told that, and iOS's drag started with nearly
+/// every drag of Firn's, copying and snapping tabs back; David's phone's
+/// log, 2026-11-05. With this, his log showed it refused 60 times and
+/// starting only the 4 times a menu was open.) It carries an empty item
+/// kept inside Firn and shows nothing of its own: it only tells Firn's own
+/// drag where the finger is (`moved`), which lifts its own tile, and lands
+/// it as the finger lifts (`ended`).
+///
+/// The finger is read every frame while carrying (a display link), from
+/// the moment the lift starts: iOS reports moves only now and then during
+/// its lift, and the card stalled for about 0.4s after the menu closed.
+/// And it lands as the finger lifts (`willEndWith`), not once iOS's own
+/// (invisible) cancel animation has run, which froze the card in place for
+/// a moment first (David's recording, 2026-11-08).
+@MainActor final class MenuHandOff: NSObject, UIDragInteractionDelegate {
+    /// The tile whose menu is showing now; nil: no drag may start.
+    var showing: UUID?
+    var moved: @MainActor (UUID, CGPoint) -> Void = { _, _ in }
+    var ended: @MainActor () -> Void = {}
+    /// The hand-off has started (the menu's lifted copy should go).
+    var started: @MainActor () -> Void = {}
+    /// The tile iOS's drag was offered, until its lift starts.
+    private var offered: UUID?
+    /// The tile a running hand-off carries.
+    private var carrying: UUID?
+    var running: Bool { carrying != nil }
+    private var session: (any UIDragSession)?
+    private weak var view: UIView?
+    private var ticker: CADisplayLink?
+    /// The invisible view iOS's drag lifts and returns to.
+    private let nothing = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+
+    func interaction() -> UIDragInteraction {
+        let drag = UIDragInteraction(delegate: self)
+        // Off by default on the iPhone.
+        drag.isEnabled = true
+        return drag
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         itemsForBeginning session: any UIDragSession) -> [UIDragItem] {
+        #if DEBUG
+        print("[handoff] itemsForBeginning, menu showing: \(showing != nil)")
+        #endif
+        guard let id = showing, let view = interaction.view else { return [] }
+        offered = id
+        nothing.backgroundColor = .clear
+        nothing.isUserInteractionEnabled = false
+        nothing.center = session.location(in: view)
+        view.addSubview(nothing)
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.previewProvider = { [nothing] in UIDragPreview(view: nothing) }
+        return [item]
+    }
+
+    // Never offered to another app.
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         sessionIsRestrictedToDraggingApplication session: any UIDragSession) -> Bool { true }
+
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         previewForLifting item: UIDragItem, session: any UIDragSession) -> UITargetedDragPreview? {
+        let parameters = UIDragPreviewParameters()
+        parameters.backgroundColor = .clear
+        // No shadow of its own either.
+        parameters.shadowPath = UIBezierPath()
+        return UITargetedDragPreview(view: nothing, parameters: parameters)
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         previewForCancelling item: UIDragItem, withDefault defaultPreview: UITargetedDragPreview) -> UITargetedDragPreview? {
+        nil
+    }
+
+    // The lift starts: Firn's tile lifts at once and follows from here.
+    func dragInteraction(_ interaction: UIDragInteraction,
+                         willAnimateLiftWith animator: any UIDragAnimating, session: any UIDragSession) {
+        start(session, in: interaction)
+        // Lifted, then dropped back before a drag began: it lands.
+        animator.addCompletion { [weak self] position in
+            if position == .start { self?.finish() }
+        }
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction, sessionWillBegin session: any UIDragSession) {
+        #if DEBUG
+        print("[handoff] iOS drag began")
+        #endif
+        start(session, in: interaction)
+    }
+
+    // The finger lifted (or iOS cancelled): it lands now.
+    func dragInteraction(_ interaction: UIDragInteraction, session: any UIDragSession,
+                         willEndWith operation: UIDropOperation) {
+        #if DEBUG
+        print("[handoff] iOS drag ending")
+        #endif
+        finish()
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction, session: any UIDragSession,
+                         didEndWith operation: UIDropOperation) {
+        finish()
+        nothing.removeFromSuperview()
+    }
+
+    private func start(_ session: any UIDragSession, in interaction: UIDragInteraction) {
+        if carrying == nil {
+            guard let id = offered else { return }
+            carrying = id
+            offered = nil
+            started()
+        }
+        self.session = session
+        view = interaction.view
+        if ticker == nil {
+            let ticker = CADisplayLink(target: self, selector: #selector(tick))
+            ticker.add(to: .main, forMode: .common)
+            self.ticker = ticker
+        }
+        tick()
+    }
+
+    /// Where the finger is, in the window, for Firn's own drag.
+    @objc private func tick() {
+        guard let id = carrying, let session, let view else { return }
+        moved(id, view.convert(session.location(in: view), to: nil))
+    }
+
+    private func finish() {
+        ticker?.invalidate()
+        ticker = nil
+        session = nil
+        offered = nil
+        guard carrying != nil else { return }
+        carrying = nil
+        ended()
     }
 }

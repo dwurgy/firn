@@ -198,7 +198,8 @@ struct TabOverview: View {
                 // Holding still opens a tab's or group's menu, the tile
                 // lifting solid (see `listHoldMenu`).
                 .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
-                              frame: heldFrame(of:), held: { finger.menu = $0 })
+                              frame: heldFrame(of:), held: { finger.menu = $0 },
+                              handOff: handOffMoved, handOffEnded: handOffEnded)
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -817,6 +818,30 @@ struct TabOverview: View {
         finger.held = new.id
         lifts += 1
         keepScrollingAtEdges()
+    }
+
+    /// The finger moved off an open menu, and iOS's drag tells where it
+    /// is: the tab or group lifts, its middle under the finger (which has
+    /// left the menu, often far from the tile), then follows it as any
+    /// drag does. Its own drag, so it lands as one too.
+    private func handOffMoved(_ id: UUID, _ point: CGPoint) {
+        if let drag {
+            guard drag.id == id, drag.lifted else { return }
+        } else if let tab = visibleTabs.first(where: { $0.id == id }), let frame = spots.frames[id] {
+            lift(tab, at: CGPoint(x: point.x, y: frame.midY))
+        } else if let group = store.tabGroups.first(where: { $0.id == id }), let frame = spots.frames[id] {
+            // Held by its name line, as a group always is.
+            lift(group, at: CGPoint(x: point.x, y: frame.minY + GroupCard.headerHeight / 2))
+        } else {
+            return
+        }
+        follow(to: point)
+    }
+
+    /// iOS's drag ended (the finger lifted, or iOS cancelled it): it lands.
+    private func handOffEnded() {
+        guard drag?.lifted == true else { return }
+        letGo()
     }
 
     /// The tile stays under the finger, straight up and down, and the

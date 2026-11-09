@@ -453,11 +453,12 @@ struct TabOverview: View {
         }
         .background {
             GroupCard(space: space)
-                // The card around the tab on screen fades in just after the
-                // page has shrunk into its card (the line shows then), so
-                // the page lands, then its group gathers around it.
-                .opacity(!lifted && !lineShown && tabs.contains(where: isOnScreen) ? 0 : 1)
-                .animation(.easeOut(duration: 0.2), value: lineShown)
+                // The card around the tab on screen gathers as the page
+                // shrinks into its card, fully there as it lands. Fading in
+                // only after it landed lagged (David, 2026-11-08: "could be
+                // a little snappier").
+                .modifier(ArrivalFade(arrival: !lifted && !lineShown && tabs.contains(where: isOnScreen)
+                                      ? arrival : 1))
                 // A new space's color cross-fades in, as the Mac's tint.
                 .animation(.easeInOut(duration: 0.4), value: space)
         }
@@ -1252,6 +1253,21 @@ private struct GroupCard: View {
         Frost(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous),
               space: space, fill: Theme.groupCardFill, solid: reduceTransparency,
               shadow: Theme.groupCardShadow, shadowRadius: Self.shadowRadius, shadowY: Self.shadowY)
+    }
+}
+
+/// Fades a group's card in over the last stretch of the page's glide into
+/// its card (arrival 0.6 to 1), following the glide frame by frame: an
+/// opacity animated on its own would spread over the whole glide.
+private struct ArrivalFade: ViewModifier, Animatable {
+    var arrival: CGFloat
+    nonisolated var animatableData: CGFloat {
+        get { arrival }
+        set { arrival = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.opacity(min(max((arrival - 0.6) / 0.4, 0), 1))
     }
 }
 

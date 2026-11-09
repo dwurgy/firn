@@ -497,12 +497,16 @@ private struct ListHoldMenu: UIViewRepresentable {
                          willEndWith operation: UIDropOperation) {
         #if DEBUG
         print("[handoff] iOS drag ending")
+        FrameWatch.mark("handoff willEndWith")
         #endif
         finish()
     }
 
     func dragInteraction(_ interaction: UIDragInteraction, session: any UIDragSession,
                          didEndWith operation: UIDropOperation) {
+        #if DEBUG
+        FrameWatch.mark("handoff didEndWith")
+        #endif
         finish()
         nothing.removeFromSuperview()
     }
@@ -540,3 +544,42 @@ private struct ListHoldMenu: UIViewRepresentable {
         ended()
     }
 }
+
+#if DEBUG
+/// Debug only, for step 3b's landing: logs frames that came late (more
+/// than 25ms apart) for 0.6s after a let-go. Remove when the step is done.
+@MainActor final class FrameWatch: NSObject {
+    static let shared = FrameWatch()
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval = 0
+    private var until: CFTimeInterval = 0
+    private var label = ""
+
+    static func mark(_ text: String) {
+        print("[landing] \(String(format: "%.3f", CACurrentMediaTime())) \(text)")
+    }
+
+    func watch(_ label: String) {
+        self.label = label
+        last = CACurrentMediaTime()
+        until = last + 0.6
+        link?.invalidate()
+        let link = CADisplayLink(target: self, selector: #selector(tick))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let now = CACurrentMediaTime()
+        if now - last > 0.025 {
+            Self.mark("\(label): frame gap \(Int((now - last) * 1000))ms")
+        }
+        last = now
+        if now > until {
+            Self.mark("\(label): watch done")
+            link.invalidate()
+            self.link = nil
+        }
+    }
+}
+#endif

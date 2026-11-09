@@ -1131,9 +1131,16 @@ struct TabOverview: View {
             thaw()
         }
         finger.solid = false
+        #if DEBUG
+        FrameWatch.shared.watch("letGo")
+        FrameWatch.mark("letGo start")
+        #endif
         if let ids = order, let groups = members {
             save(drag, ids, groups)
         }
+        #if DEBUG
+        FrameWatch.mark("letGo saved")
+        #endif
         if let ids = tileOrder, let to = ids.firstIndex(of: drag.id),
            let tile = store.basecampTabs.first(where: { $0.id == drag.id }),
            store.basecampTabs.firstIndex(where: { $0.id == drag.id }) != to {

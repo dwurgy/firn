@@ -36,6 +36,17 @@ struct BrowserScreen: View {
     @State private var tileReveal: Double = 1
     /// The tab the picture is of, for the card's line riding on it.
     @State private var standInTab: FirnCore.Tab?
+    /// The page is gliding into its own card as the overview opens: the
+    /// picture wears the card's ring, fading in over the glide's second
+    /// half, so it's there when the card swaps in (David, 2026-11-08: it
+    /// came in only after landing).
+    @State private var ringOnGlide = false
+    /// The width of the card the picture glides into or out of. A tab in a
+    /// group is narrower than a loose one (the group card's padding); the
+    /// line riding on the picture is laid out at this width, so it matches
+    /// the card's own and nothing jumps as they swap (David, 2026-11-08: the
+    /// title pill jittered and resized, only in groups).
+    @State private var standInCardWidth: CGFloat?
     /// Where the shown part of the picture sits on screen: the page's own
     /// place, a card, a row, or wherever the finger has pulled it. Its
     /// corners, and how much the card's line on it has faded in.
@@ -147,7 +158,7 @@ struct BrowserScreen: View {
                 // layer's own corner isn't the screen's).
                 let width = pageFrame.width
                 let height = width * standIn.size.height / standIn.size.width
-                let cardWidth = max(width - 32, 1)
+                let cardWidth = max(standInCardWidth ?? width - 32, 1)
                 GeometryReader { layer in
                     let corner = layer.frame(in: .global).origin
                     ZStack(alignment: .topLeading) {
@@ -173,6 +184,15 @@ struct BrowserScreen: View {
                             .frame(width: width, height: height)
                             .modifier(CardGlide(width: width, box: box, radius: boxRadius))
                             .opacity(standInTab?.place == .basecamp ? 1 - tileReveal : 1)
+                        if ringOnGlide, let standInTab, standInTab.place != .basecamp {
+                            // The card's ring (`OverviewRow`), just outside the picture.
+                            RoundedRectangle(cornerRadius: boxRadius + 3.5, style: .continuous)
+                                .strokeBorder(Theme.spaceColor(store.activeSpace.color), lineWidth: 3)
+                                .shadow(color: Theme.spaceColor(store.activeSpace.color).opacity(0.55), radius: 6)
+                                .frame(width: box.width + 7, height: box.height + 7)
+                                .offset(x: box.minX - 3.5, y: box.minY - 3.5)
+                                .modifier(RingFade(arrival: arrival))
+                        }
                         // The card's line, drawn at the card's size and
                         // scaled with the picture (no layout while it moves).
                         // A tile has no line: only cards get it.
@@ -382,6 +402,8 @@ struct BrowserScreen: View {
     private func beginGlide(of tab: FirnCore.Tab) {
         openActiveGroup()
         gliding = tab.id
+        ringOnGlide = true
+        standInCardWidth = spots.frames[tab.id]?.width
         lineShown = false
         lineOnPicture = 0
         showingTabs = true
@@ -423,6 +445,7 @@ struct BrowserScreen: View {
             guard let spot = await spot(of: tab.id) else { return fadeToTabs() }
             let tile = tab.place == .basecamp
             if tile { tileReveal = 0 }
+            standInCardWidth = spot.width
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
@@ -434,6 +457,7 @@ struct BrowserScreen: View {
                 neighbors = []
                 lineShown = true
                 gliding = nil
+                ringOnGlide = false
                 standIn = nil
                 standInTab = nil
             }
@@ -465,6 +489,7 @@ struct BrowserScreen: View {
             pageHidden = true
         } completion: {
             gliding = nil
+            ringOnGlide = false
         }
         lineShown = true
     }
@@ -490,10 +515,12 @@ struct BrowserScreen: View {
         // Out of a tile: the tile shows at first, and the picture comes up
         // over it as it starts to grow.
         tileReveal = tile ? 1 : 0
+        standInCardWidth = spot.width
         putStandIn(image, of: tab, at: spot,
                    radius: tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius)
         // A card's line leaves first; a slim row has none on its picture.
         lineOnPicture = fromCard ? 1 : 0
+        ringOnGlide = false
         gliding = tab.id
         Task {
             await Task.yield()
@@ -518,6 +545,7 @@ struct BrowserScreen: View {
             swiping = false
             neighbors = []
             gliding = nil
+            ringOnGlide = false
             heldCard = nil
             lineShown = true
             standInTab = nil
@@ -575,6 +603,7 @@ struct BrowserScreen: View {
             showingTabs = false
         } completion: {
             gliding = nil
+            ringOnGlide = false
             lineShown = true
         }
     }
@@ -974,5 +1003,20 @@ private struct NewTabHint: View {
             .scaleEffect(0.7 + 0.3 * reach)
             .opacity(Double(reach))
             .animation(.smooth(duration: 0.2), value: reach >= 1)
+    }
+}
+
+/// The gliding card's ring: nothing over the glide's first half, then in
+/// with the page's arrival, full as it lands (as `ArrivalFade` does for the
+/// rest of the overview).
+private struct RingFade: ViewModifier, Animatable {
+    var arrival: CGFloat
+    nonisolated var animatableData: CGFloat {
+        get { arrival }
+        set { arrival = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.opacity(min(max((arrival - 0.5) / 0.5, 0), 1))
     }
 }

@@ -163,7 +163,8 @@ struct TabOverview: View {
                     BasecampTiles(store: store, spots: spots, gliding: gliding,
                                   onScreen: heldCard ?? store.activeTab?.id,
                                   reveal: tileReveal,
-                                  open: { tab in if !busy { open(tab) } })
+                                  open: { tab in if !busy { open(tab) } },
+                                  menu: { AnyView(tileMenu(for: $0)) })
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         switch item {
@@ -618,6 +619,46 @@ struct TabOverview: View {
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
             Button("Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) }
         }
+    }
+
+    /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
+    /// place for (split view, sound). Close becomes Remove from Basecamp,
+    /// plainer words for the same thing.
+    @ViewBuilder private func tileMenu(for tab: FirnCore.Tab) -> some View {
+        if tab.isAwayFromHome {
+            Button("Go Back to Home", systemImage: "house") {
+                store.goHome(tab)
+                if !busy { open(tab) }
+            }
+        }
+        if let url = tab.url {
+            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
+        }
+        Divider()
+        // Not removed: it stays, as an everyday tab where new tabs go.
+        Button("Move to Tabs", systemImage: "arrow.down.to.line") {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.removeFromBasecamp(tab) }
+        }
+        Button("Remove from Basecamp", systemImage: "xmark") { removeTile(tab) }
+    }
+
+    /// Remove from Basecamp: the tile goes altogether, and a shake brings it
+    /// back to its place among the tiles (as ⇧⌘T does on the Mac).
+    private func removeTile(_ tab: FirnCore.Tab) {
+        let id = tab.id
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
+            store.closeTile(tab)
+        }
+        // Reopened with a shake: no glide with Reduce Motion, as everywhere else here.
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
+        undoManager?.registerUndo(withTarget: store) { store in
+            MainActor.assumeIsolated {
+                guard let entry = store.recentlyClosed.first(where: { $0.id == id }) else { return }
+                withAnimation(glide) { store.reopen(entry) }
+            }
+        }
+        undoManager?.setActionName("Remove from Basecamp")
+        closes += 1
     }
 
     /// Add to Basecamp: the tab leaves the list (and its group) and becomes

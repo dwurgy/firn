@@ -5,7 +5,8 @@ import SwiftUI
 /// the top of the overview, scrolling away with the list. Hidden while
 /// empty. Icon only (the menu and VoiceOver name the site), 56pt tall so a
 /// tile is easy to tap, rows balanced up to 4 across (`BasecampLayout`).
-/// Shows only this space's own tiles.
+/// Shows only this space's own tiles. Holding a tile opens its menu, which
+/// the overview gives (it owns the glides and the shake's undo).
 struct BasecampTiles: View {
     let store: BrowserStore
     let spots: OverviewSpots
@@ -18,6 +19,8 @@ struct BasecampTiles: View {
     /// lands in it, and out as the picture grows from it.
     var reveal: Double = 1
     let open: (FirnCore.Tab) -> Void
+    /// Type-erased so the tiles' sizes stay plain statics others can read.
+    let menu: (FirnCore.Tab) -> AnyView
 
     @State private var width: CGFloat = 0
 
@@ -78,6 +81,10 @@ struct BasecampTiles: View {
         BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen) {
             open(tab)
         }
+        // Holding opens iOS's own menu beside the tile, its shape lifting.
+        .contentShape(.contextMenuPreview,
+                      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .contextMenu { menu(tab) }
         .opacity(gliding == tab.id ? reveal : 1)
         // Where it is, so the page can glide into it as the overview opens.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in

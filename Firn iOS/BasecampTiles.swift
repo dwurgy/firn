@@ -82,8 +82,12 @@ struct BasecampTiles: View {
             open(tab)
         }
         // Holding opens iOS's own menu beside the tile, its shape lifting.
+        // 1pt wider than the tile, so the lifted copy keeps the hairline and
+        // shadow just outside it; cut to the tile's own shape, the edge
+        // popped in late, once iOS put the real tile back (David's
+        // recording, 2026-11-08).
         .contentShape(.contextMenuPreview,
-                      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+                      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).inset(by: -1))
         .contextMenu { menu(tab) }
         .opacity(gliding == tab.id ? reveal : 1)
         // Where it is, so the page can glide into it as the overview opens.
@@ -146,7 +150,10 @@ private struct TileMark: View {
 }
 
 /// The Mac's `TileButtonStyle`, without hover or lifting (those come with
-/// dragging, step 3).
+/// dragging, step 3), and without the press shrink: a hold opens iOS's
+/// menu, which copies the tile while it's shrunk, and the copy and the
+/// tile springing back drew the icon twice as the menu closed (David's
+/// recording, 2026-11-08). The overview's rows don't shrink either.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let accent: Theme.TileAccent
@@ -166,8 +173,6 @@ private struct TileButtonStyle: ButtonStyle {
                 if isActive { chosen } else { TileGlass() }
             }
             .contentShape(shape)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: configuration.isPressed)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
     }

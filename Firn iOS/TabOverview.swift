@@ -80,6 +80,8 @@ struct TabOverview: View {
     /// Each group's tabs, in order, while a drag moves a tab into, out
     /// of, or between groups; saved on letting go.
     @State private var members: [UUID: [UUID]]?
+    /// Basecamp's tiles in order while one is dragged; saved on letting go.
+    @State private var tileOrder: [UUID]?
     /// A held tab resting over a loose tab, and the wait before their
     /// group starts forming around it (hold to form).
     @State private var hoverID: UUID?
@@ -162,9 +164,16 @@ struct TabOverview: View {
                     // while empty); 12pt below it, as between any items.
                     BasecampTiles(store: store, spots: spots, gliding: gliding,
                                   onScreen: heldCard ?? store.activeTab?.id,
-                                  reveal: tileReveal,
+                                  reveal: tileReveal, order: tileOrder,
+                                  held: drag?.tile == true ? drag?.id : nil,
+                                  dragging: drag != nil,
                                   open: { tab in if !busy { open(tab) } },
-                                  menu: { tileMenu(for: $0) })
+                                  menu: { tileMenu(for: $0) },
+                                  move: { tab, to in
+                                      withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                                          store.move(tab, to: to)
+                                      }
+                                  })
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         switch item {
@@ -198,7 +207,13 @@ struct TabOverview: View {
             // The held tab, lifted over the list and following the finger.
             .overlay {
                 if let drag {
-                    if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
+                    if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
+                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                            BasecampTiles.lifted(tab, space: space,
+                                                 onScreen: tab.id == (heldCard ?? store.activeTab?.id))
+                        }
+                        .transition(.identity)
+                    } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
                         LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
                             tile(tab, spot: { _ in })
                         }
@@ -738,6 +753,9 @@ struct TabOverview: View {
     /// group's name line. Only tiles on screen count.
     private func liftable(at point: CGPoint) -> Liftable? {
         guard spots.viewport.contains(point) else { return nil }
+        if let tile = store.basecampTabs.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
+            return .tile(tile)
+        }
         if let tab = visibleTabs.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
             return .tab(tab)
         }
@@ -755,6 +773,7 @@ struct TabOverview: View {
         switch liftable(at: point) {
         case let .tab(tab): lift(tab, at: point)
         case let .group(group): lift(group, at: point)
+        case let .tile(tile): lift(tile: tile, at: point)
         case nil: break
         }
     }
@@ -766,6 +785,14 @@ struct TabOverview: View {
                        from: tab.groupID), at: point)
     }
 
+    /// A Basecamp tile was held, then moved: it lifts and follows the
+    /// finger both ways, within Basecamp.
+    private func lift(tile: FirnCore.Tab, at point: CGPoint) {
+        guard let frame = spots.frames[tile.id] else { return }
+        startDrag(Drag(id: tile.id, start: frame, grab: point.y - frame.minY, group: false,
+                       from: nil, grabX: point.x - frame.minX, tile: true), at: point)
+    }
+
     /// The name line was held, then moved: the whole group lifts.
     private func lift(_ group: TabGroup, at point: CGPoint) {
         guard let frame = spots.frames[group.id] else { return }
@@ -775,8 +802,12 @@ struct TabOverview: View {
 
     private func startDrag(_ new: Drag, at point: CGPoint) {
         guard drag == nil, !pinchedRecently else { return }
-        order = shownItems.map(\.id)
-        members = Dictionary(store.tabGroups.map { ($0.id, shownTabs(in: $0).map(\.id)) }) { a, _ in a }
+        if new.tile {
+            tileOrder = store.basecampTabs.map(\.id)
+        } else {
+            order = shownItems.map(\.id)
+            members = Dictionary(store.tabGroups.map { ($0.id, shownTabs(in: $0).map(\.id)) }) { a, _ in a }
+        }
         finger.top = new.start.minY
         finger.left = new.start.minX
         finger.width = new.start.width
@@ -793,7 +824,35 @@ struct TabOverview: View {
         guard let drag, drag.lifted else { return }
         finger.top = point.y - drag.grab
         finger.y = point.y
+        if drag.tile {
+            // Kept inside the list's sides, so it never slides off screen.
+            let view = spots.viewport
+            finger.left = min(max(point.x - drag.grabX, view.minX), view.maxX - drag.start.width)
+            return makeRoomForTile()
+        }
         makeRoom()
+    }
+
+    /// The other tiles glide aside (0.25s, no bounce; at once with Reduce
+    /// Motion) to show where the held tile will land: the spot whose middle
+    /// is nearest the tile's middle. Spots are the grid's own, which never
+    /// move while one tile is held (the count stays the same, so the rows
+    /// stay balanced), so it never flickers between two. Held below or
+    /// beside the grid, it lands in the nearest spot; never in the tabs.
+    private func makeRoomForTile() {
+        guard let drag, var ids = tileOrder, let from = ids.firstIndex(of: drag.id) else { return }
+        let middle = CGPoint(x: finger.left + drag.start.width / 2, y: finger.top + drag.start.height / 2)
+        var nearest = from
+        var best = CGFloat.infinity
+        for (index, id) in ids.enumerated() {
+            guard let frame = spots.frames[id] else { continue }
+            let distance = hypot(frame.midX - middle.x, frame.midY - middle.y)
+            if distance < best { best = distance; nearest = index }
+        }
+        guard nearest != from else { return }
+        ids.remove(at: from)
+        ids.insert(drag.id, at: nearest)
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { tileOrder = ids }
     }
 
     /// Opens a place for the held tab as soon as its edge passes a
@@ -1049,8 +1108,15 @@ struct TabOverview: View {
         if let ids = order, let groups = members {
             save(drag, ids, groups)
         }
+        if let ids = tileOrder, let to = ids.firstIndex(of: drag.id),
+           let tile = store.basecampTabs.first(where: { $0.id == drag.id }),
+           store.basecampTabs.firstIndex(where: { $0.id == drag.id }) != to {
+            // The grid already shows this order, so nothing moves on screen.
+            store.move(tile, to: to)
+        }
         order = nil
         members = nil
+        tileOrder = nil
         let landing = spots.frames[drag.id] ?? drag.start
         guard !reduceMotion else {
             self.drag = nil
@@ -1133,7 +1199,7 @@ struct TabOverview: View {
                 let y = min(max(scroll.contentOffset.y + speed, lowest), highest)
                 guard abs(y - scroll.contentOffset.y) > 0.5 else { continue }
                 scrollPosition.scrollTo(y: y)
-                makeRoom()
+                if drag?.tile == true { makeRoomForTile() } else { makeRoom() }
             }
         }
     }
@@ -1418,6 +1484,10 @@ private struct Drag {
     let from: UUID?
     /// False once let go, as the tile settles into its place.
     var lifted = true
+    /// Where across the tile the finger holds it (Basecamp tiles move both ways).
+    var grabX: CGFloat = 0
+    /// A Basecamp tile, moving only within Basecamp.
+    var tile = false
 }
 
 /// A group forming while a held tab rests on a loose one: the loose tab,
@@ -1487,6 +1557,7 @@ private struct FormingCard: ViewModifier {
 private enum Liftable {
     case tab(FirnCore.Tab)
     case group(TabGroup)
+    case tile(FirnCore.Tab)
 }
 
 /// Where the held tile is (global points): observed only by the tile.

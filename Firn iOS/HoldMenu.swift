@@ -55,11 +55,12 @@ extension View {
     ///
     /// `sections` are split by iOS's dividers. `outset` widens the lifted
     /// shape past the view, so a hairline and shadow just outside it come
-    /// along.
-    func holdMenu(cornerRadius: CGFloat, outset: CGFloat = 0, base: Color,
+    /// along. `dragging`: a hold that moved became a drag, so the menu's
+    /// lift stops at once.
+    func holdMenu(cornerRadius: CGFloat, outset: CGFloat = 0, base: Color, dragging: Bool = false,
                   sections: @escaping @MainActor () -> [[HoldMenuItem]]) -> some View {
         HoldMenuHost(content: self, cornerRadius: cornerRadius, outset: outset,
-                     base: UIColor(base), sections: sections)
+                     base: UIColor(base), dragging: dragging, sections: sections)
     }
 }
 
@@ -70,6 +71,7 @@ private struct HoldMenuHost<Content: View>: UIViewControllerRepresentable {
     let cornerRadius: CGFloat
     let outset: CGFloat
     let base: UIColor
+    let dragging: Bool
     let sections: @MainActor () -> [[HoldMenuItem]]
 
     func makeUIViewController(context: Context) -> HoldMenuController<Content> {
@@ -88,6 +90,7 @@ private struct HoldMenuHost<Content: View>: UIViewControllerRepresentable {
         controller.outset = outset
         controller.base = base
         controller.sections = sections
+        controller.dragging = dragging
     }
 }
 
@@ -97,6 +100,17 @@ private final class HoldMenuController<Content: View>: UIHostingController<Conte
     var outset: CGFloat = 0
     var base: UIColor = .clear
     var sections: @MainActor () -> [[HoldMenuItem]] = { [] }
+    private var interaction: UIContextMenuInteraction?
+    /// iOS keeps its lift until the finger lifts, even once Firn's drag has
+    /// the touch; taking the interaction off and back on ends it (as the
+    /// list's menu does).
+    var dragging = false {
+        didSet {
+            guard dragging, !oldValue, let interaction else { return }
+            view.removeInteraction(interaction)
+            view.addInteraction(interaction)
+        }
+    }
 
     override init(rootView: Content) {
         super.init(rootView: rootView)
@@ -110,7 +124,9 @@ private final class HoldMenuController<Content: View>: UIHostingController<Conte
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
-        view.addInteraction(UIContextMenuInteraction(delegate: self))
+        let interaction = UIContextMenuInteraction(delegate: self)
+        view.addInteraction(interaction)
+        self.interaction = interaction
     }
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,

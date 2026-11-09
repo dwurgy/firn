@@ -1298,7 +1298,7 @@ private struct ArrivalFade: ViewModifier, Animatable {
 /// the group cards sit on the haze, which is already a blur, and a card's
 /// pills put their page's own picture, blurred, under it (`CardLine`).
 /// Reduce Transparency: the solid tile color, tinted, with its hairline.
-struct Frost<S: InsettableShape>: View {
+private struct Frost<S: InsettableShape>: View {
     let shape: S
     let space: String
     let fill: Color

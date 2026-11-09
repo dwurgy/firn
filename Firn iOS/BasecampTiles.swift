@@ -19,9 +19,6 @@ struct BasecampTiles: View {
     @State private var width: CGFloat = 0
 
     static let tileHeight: CGFloat = 56
-    /// A touch crisper than the rows' 14pt, as the Mac's tiles are to its
-    /// rows, so the glass reads as ice.
-    static let cornerRadius: CGFloat = 12
     static let gap: CGFloat = 8
     /// Tiles never get narrower than this (the brief's "about 56pt").
     static let minimumWidth: Double = 56
@@ -84,40 +81,132 @@ struct BasecampTiles: View {
     }
 }
 
-/// One tile: the site's icon on Firn's frost, ringed in the space's color
-/// while it's the tab on screen.
+/// One tile, exactly the Mac's (`Firn/Basecamp.swift`: `BasecampTile`,
+/// `TileButtonStyle`, `TileGlass`, `SiteMark`), at the iPhone's size: the
+/// Mac's frosted ice at rest, and the tile on screen washed in its icon's
+/// main color, ringed in the icon's own colors (each where it sits in the
+/// icon), with light on the ring's top edge and a faint glow. No hover.
 private struct BasecampTile: View {
     let tab: FirnCore.Tab
     let space: String
     let isOnScreen: Bool
     let open: () -> Void
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    private static let shape = RoundedRectangle(cornerRadius: BasecampTiles.cornerRadius, style: .continuous)
+    private var site: String { WebAddress.site(of: tab.homeURL ?? tab.url) }
 
     var body: some View {
         Button(action: open) {
-            SiteIconView(icon: tab.icon, size: 24) { LetterMark(site: WebAddress.site(of: tab.homeURL ?? tab.url)) }
+            TileMark(site: site, icon: tab.icon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background {
-                    Frost(shape: Self.shape, space: space, fill: Theme.groupCardFill,
-                          solid: reduceTransparency, shadow: Theme.groupCardShadow,
-                          shadowRadius: 8, shadowY: 2)
-                }
-                .contentShape(Self.shape)
         }
-        .buttonStyle(.plain)
-        .overlay {
-            if isOnScreen {
-                Self.shape.inset(by: -3.5)
-                    .strokeBorder(Theme.spaceColor(space), lineWidth: 3)
-                    .shadow(color: Theme.spaceColor(space).opacity(0.55), radius: 6)
-                    .allowsHitTesting(false)
-            }
-        }
-        .accessibilityLabel("\(tab.title.isEmpty ? WebAddress.site(of: tab.homeURL ?? tab.url) : tab.title), Basecamp")
+        .buttonStyle(TileButtonStyle(isActive: isOnScreen, accent: Theme.tileAccent(site: site, icon: tab.icon)))
+        .accessibilityLabel("\(site.isEmpty ? tab.title : site), Basecamp")
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+    }
+}
+
+/// The Mac's `SiteMark`, scaled from its 18pt to the iPhone tile's 24pt:
+/// the icon, or the site's first letter on a rounded square of its color.
+private struct TileMark: View {
+    let site: String
+    let icon: Data?
+    static let size: CGFloat = 24
+
+    var body: some View {
+        SiteIconView(icon: icon, size: Self.size) { letterMark }
+    }
+
+    private var letterMark: some View {
+        RoundedRectangle(cornerRadius: Self.size * 5 / 18, style: .continuous)
+            .fill(Theme.siteColor(for: site).gradient)
+            .frame(width: Self.size, height: Self.size)
+            .overlay {
+                Text(site.first.map { String($0).uppercased() } ?? "")
+                    .font(.system(size: Self.size * 11 / 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// The Mac's `TileButtonStyle`, without hover or lifting (those come with
+/// dragging, step 3).
+private struct TileButtonStyle: ButtonStyle {
+    let isActive: Bool
+    let accent: Theme.TileAccent
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+    }
+
+    private var dark: Bool { colorScheme == .dark }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                if isActive { chosen } else { TileGlass() }
+            }
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
+    }
+
+    /// The page on screen: the same glass, washed in the icon's main color
+    /// (stronger at the top, like light through ice), ringed in its colors.
+    private var chosen: some View {
+        TileGlass()
+            .overlay {
+                shape.fill(LinearGradient(
+                    colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+            .overlay {
+                // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
+                shape.strokeBorder(
+                    AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
+                    lineWidth: Theme.tileRingWidth)
+                    .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
+            }
+            .overlay {
+                // Light catching the ring's outer edge along the top, gone by
+                // the middle: a thin line, so the color underneath stays full.
+                shape.strokeBorder(
+                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
+                                   startPoint: .top, endPoint: .center),
+                    lineWidth: 1)
+            }
+            .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
+    }
+}
+
+/// The Mac's `TileGlass`: frosted ice with a lit rim and a hairline.
+private struct TileGlass: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+    }
+
+    var body: some View {
+        if reduceTransparency {
+            shape.fill(Theme.tileSolid)
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else {
+            shape.fill(Theme.tileFill)
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                }
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(-0.5) }
+                .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+        }
     }
 }
 

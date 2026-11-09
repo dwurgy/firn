@@ -164,7 +164,7 @@ struct TabOverview: View {
                                   onScreen: heldCard ?? store.activeTab?.id,
                                   reveal: tileReveal,
                                   open: { tab in if !busy { open(tab) } },
-                                  menu: { AnyView(tileMenu(for: $0)) })
+                                  menu: { tileMenu(for: $0) })
                     let items = shownItems
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         switch item {
@@ -623,23 +623,27 @@ struct TabOverview: View {
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
     /// place for (split view, sound). Close becomes Remove from Basecamp,
-    /// plainer words for the same thing.
-    @ViewBuilder private func tileMenu(for tab: FirnCore.Tab) -> some View {
+    /// plainer words for the same thing. UIKit's menu (`holdMenu`), so the
+    /// held tile lifts on a solid base.
+    private func tileMenu(for tab: FirnCore.Tab) -> [[HoldMenuItem]] {
+        var first: [HoldMenuItem] = []
         if tab.isAwayFromHome {
-            Button("Go Back to Home", systemImage: "house") {
+            first.append(HoldMenuItem(title: "Go Back to Home", systemImage: "house") {
                 store.goHome(tab)
                 if !busy { open(tab) }
-            }
+            })
         }
         if let url = tab.url {
-            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = url }
+            first.append(HoldMenuItem(title: "Copy Link", systemImage: "link") { UIPasteboard.general.url = url })
         }
-        Divider()
-        // Not removed: it stays, as an everyday tab where new tabs go.
-        Button("Move to Tabs", systemImage: "arrow.down.to.line") {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.removeFromBasecamp(tab) }
-        }
-        Button("Remove from Basecamp", systemImage: "xmark") { removeTile(tab) }
+        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
+        return [first, [
+            // Not removed: it stays, as an everyday tab where new tabs go.
+            HoldMenuItem(title: "Move to Tabs", systemImage: "arrow.down.to.line") {
+                withAnimation(glide) { store.removeFromBasecamp(tab) }
+            },
+            HoldMenuItem(title: "Remove from Basecamp", systemImage: "xmark") { removeTile(tab) },
+        ]]
     }
 
     /// Remove from Basecamp: the tile goes altogether, and a shake brings it

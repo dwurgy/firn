@@ -19,8 +19,8 @@ struct BasecampTiles: View {
     /// lands in it, and out as the picture grows from it.
     var reveal: Double = 1
     let open: (FirnCore.Tab) -> Void
-    /// Type-erased so the tiles' sizes stay plain statics others can read.
-    let menu: (FirnCore.Tab) -> AnyView
+    /// The tile's hold menu, in sections split by dividers.
+    let menu: @MainActor (FirnCore.Tab) -> [[HoldMenuItem]]
 
     @State private var width: CGFloat = 0
 
@@ -81,14 +81,13 @@ struct BasecampTiles: View {
         BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen) {
             open(tab)
         }
-        // Holding opens iOS's own menu beside the tile, its shape lifting.
-        // 1pt wider than the tile, so the lifted copy keeps the hairline and
-        // shadow just outside it; cut to the tile's own shape, the edge
-        // popped in late, once iOS put the real tile back (David's
-        // recording, 2026-11-08).
-        .contentShape(.contextMenuPreview,
-                      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).inset(by: -1))
-        .contextMenu { menu(tab) }
+        // Holding opens iOS's own menu beside the tile, its shape lifting on
+        // a solid base (the Reduce Transparency look), so the glass doesn't
+        // darken as iOS's shadow shows through it. 1pt wider than the tile,
+        // so the lifted copy keeps the hairline and shadow just outside it;
+        // cut to the tile's own shape, the edge popped in late, once iOS put
+        // the real tile back (David's recording, 2026-11-08).
+        .holdMenu(cornerRadius: Self.cornerRadius, outset: 1, base: Theme.tileSolid) { menu(tab) }
         .opacity(gliding == tab.id ? reveal : 1)
         // Where it is, so the page can glide into it as the overview opens.
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in

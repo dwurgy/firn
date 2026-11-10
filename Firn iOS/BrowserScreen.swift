@@ -25,8 +25,10 @@ struct BrowserScreen: View {
     /// The stand-in's size.
     private var standInSize: CGSize? { standIn?.size }
     /// The page's color behind the status bar, which the picture leaves
-    /// out: it fades as the picture shrinks and back as it grows, so the
-    /// swap with the page shows nothing.
+    /// out. Never faded: it goes the moment the page starts to move and is
+    /// back the moment it's the page again. Fading, it read as a separate
+    /// band of color hanging behind the clock (David's recording,
+    /// 2026-11-09).
     @State private var standInTop: CGColor?
     @State private var stripOpacity: Double = 1
     /// The picture and its strip fading off a woken page. Its own value:
@@ -472,6 +474,7 @@ struct BrowserScreen: View {
                 tileCrop = (from: box, to: spot.size)
             }
             standInCardWidth = spot.width
+            withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
             withAnimation(curve) {
                 box = spot
                 // Into a tile: on the glide's own curve, so the picture and
@@ -479,7 +482,6 @@ struct BrowserScreen: View {
                 // (`BasecampTiles.glideSwap`).
                 if tile { tileReveal = 1 }
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
-                stripOpacity = 0
                 arrival = 1
                 neighborsOpacity = 0
             } completion: {
@@ -565,9 +567,9 @@ struct BrowserScreen: View {
         withAnimation(curve) {
             box = pageBox(size: standInSize)
             boxRadius = 0
-            stripOpacity = 1
             arrival = 0
         } completion: {
+            stripOpacity = 1
             pageHidden = false
             showingTabs = false
             swiping = false
@@ -757,7 +759,10 @@ struct BrowserScreen: View {
         }
         let progress = min(lift(pull), 1)
         arrival = progress * 0.85
-        stripOpacity = Double(max(0, 1 - progress * 4))
+        // Gone at once, never faded, even inside the picture's catch-up glide.
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { stripOpacity = progress > 0 ? 0 : 1 }
         boxRadius = min(progress * 4, 1) * 34
     }
 

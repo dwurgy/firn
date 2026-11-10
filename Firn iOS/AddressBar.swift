@@ -582,7 +582,9 @@ private struct AddressField: View {
                 .accessibilityHidden(text.isEmpty)
         } else if let page, page.isLoading {
             BarButton(symbol: "xmark", label: "Stop", action: page.stopLoading)
-        } else if let page, page.url != nil {
+        } else if let page, page.url != nil || page.loadError != nil {
+            // After a failed load too (a new tab's first page, say), so it
+            // can be tried again: Reload loads the address that failed.
             BarButton(symbol: "arrow.clockwise", label: "Reload", action: page.reload)
         }
     }

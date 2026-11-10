@@ -360,7 +360,7 @@ extension WebKitPageController: WKNavigationDelegate {
         // A link marked `download`: saved, never shown, so a file the page
         // made itself (blob: or data:) is fine here.
         if navigationAction.shouldPerformDownload {
-            return decisionHandler(DownloadPolicy.allows(url) ? .download : .cancel)
+            return decisionHandler(Self.downloadsAllowed && DownloadPolicy.allows(url) ? .download : .cancel)
         }
         if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url) {
             if let click = specialClick(for: navigationAction) {
@@ -411,8 +411,26 @@ extension WebKitPageController: WKNavigationDelegate {
             .value(forHTTPHeaderField: "Content-Disposition")
         let isAttachment = disposition?.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment") ?? false
         let cantShow = navigationResponse.isForMainFrame && !navigationResponse.canShowMIMEType
-        decisionHandler(isAttachment || cantShow ? .download : .allow)
+        guard isAttachment || cantShow else { return decisionHandler(.allow) }
+        if Self.downloadsAllowed { return decisionHandler(.download) }
+        // No downloads here (iOS, until "downloads to Files"): a page the
+        // phone can show is shown, as the whole page only; anything else
+        // is refused, and the page still showing keeps its own blocking.
+        if navigationResponse.isForMainFrame, navigationResponse.canShowMIMEType {
+            return decisionHandler(.allow)
+        }
+        if navigationResponse.isForMainFrame { followBlockingOfShownPage() }
+        decisionHandler(.cancel)
     }
+
+    /// Whether pages may save files. Not yet on iOS: with no Downloads
+    /// button there, a page could fill the phone's storage with files no
+    /// one sees or can remove (docs/IOS-PLAN.md, "downloads to Files").
+    #if os(iOS)
+    private static let downloadsAllowed = false
+    #else
+    private static let downloadsAllowed = true
+    #endif
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
         startedDownload(download)
@@ -424,7 +442,7 @@ extension WebKitPageController: WKNavigationDelegate {
     }
 
     private func startedDownload(_ download: WKDownload) {
-        guard let store = webView.configuration.websiteDataStore.identifier else {
+        guard Self.downloadsAllowed, let store = webView.configuration.websiteDataStore.identifier else {
             // Every page has its space's store; without one, nothing is saved.
             return download.cancel { _ in }
         }

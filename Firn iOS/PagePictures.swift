@@ -11,9 +11,16 @@ import UIKit
 @MainActor @Observable
 final class PagePictures {
     @ObservationIgnored private let store: PagePictureStore
-    /// Pictures read or taken since launch. Dropped when memory is short;
-    /// they come back from disk when next asked for.
+    /// Pictures read or taken since launch, at most `memoryLimit` of them:
+    /// the least recently shown go first, and all of them when memory is
+    /// short. They come back from disk when next asked for.
     private var images: [UUID: UIImage] = [:]
+    /// The tabs in `images`, least recently shown first.
+    @ObservationIgnored private var recent: [UUID] = []
+    /// About 5MB each once drawn (a page twice its width in pixels), so
+    /// two dozen stay near 120MB however many tabs are open; far more than
+    /// the overview shows at once, so cards in view are never dropped.
+    static let memoryLimit = 24
     /// How wide the page is on screen, in points (set by the screen).
     @ObservationIgnored var pageWidth: CGFloat = 0
     /// The status bar's height, in points (set by the screen): where the
@@ -26,22 +33,45 @@ final class PagePictures {
         warning = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.images.removeAll() }
+            MainActor.assumeIsolated {
+                self?.images.removeAll()
+                self?.recent.removeAll()
+            }
         }
     }
 
     /// The tab's picture: from memory, else from disk, else nil.
     func image(for tabID: UUID) -> UIImage? {
-        if let image = images[tabID] { return image }
+        if let image = cachedImage(for: tabID) { return image }
         guard let picture = store.load(for: tabID) else { return nil }
         let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
-        images[tabID] = image
+        keep(image, for: tabID)
         return image
     }
 
     /// The tab's picture if it's already in memory; never reads the disk,
     /// so a list of cards can ask while it draws.
-    func cachedImage(for tabID: UUID) -> UIImage? { images[tabID] }
+    func cachedImage(for tabID: UUID) -> UIImage? {
+        guard let image = images[tabID] else { return nil }
+        markShown(tabID)
+        return image
+    }
+
+    /// Keeps `image` in memory as the tab's, letting the least recently
+    /// shown picture go once there are more than `memoryLimit`.
+    private func keep(_ image: UIImage, for tabID: UUID) {
+        images[tabID] = image
+        markShown(tabID)
+        while recent.count > Self.memoryLimit {
+            images[recent.removeFirst()] = nil
+        }
+    }
+
+    private func markShown(_ tabID: UUID) {
+        if recent.last == tabID { return }
+        recent.removeAll { $0 == tabID }
+        recent.append(tabID)
+    }
 
     /// Reads the tab's picture from disk and decodes it off the main thread
     /// (for the overview's older cards, as they come into view), so
@@ -53,7 +83,7 @@ final class PagePictures {
             guard let picture = store.load(for: tabID) else { return nil }
             return UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
         }.value
-        if let image, images[tabID] == nil { images[tabID] = image }
+        if let image, images[tabID] == nil { keep(image, for: tabID) }
     }
 
     /// Takes a picture of the tab's page as it is now and saves it. A
@@ -73,7 +103,7 @@ final class PagePictures {
         return Task {
             guard let picture = await page.snapshot(width: width) else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
-            images[id] = image
+            keep(image, for: id)
             // Encoding and writing happen off the main thread.
             Task.detached(priority: .utility) {
                 do {

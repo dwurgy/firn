@@ -182,6 +182,7 @@ struct FrostMenu: View {
     @State private var rows: [String: CGRect] = [:]
     /// Resting on a row with a list: it opens after a moment, as iOS's do.
     @State private var opening: Task<Void, Never>?
+    @Namespace private var highlight
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -226,6 +227,8 @@ struct FrostMenu: View {
                 .transition(.opacity)
             }
         }
+        // The highlight's glide: quick, no bounce; none with Reduce Motion.
+        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: lit)
         .padding(Self.padding)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { pointer.card = $0 }
         // A tick each time the pointing finger reaches another row.
@@ -266,10 +269,20 @@ struct FrostMenu: View {
     }
 
     /// A row: a tap runs it, and it tells where it is for a pointing finger.
+    /// The pointing finger's highlight is one shape per section, gliding
+    /// from row to row as in Safari's menus; across a line it starts anew.
     private func menuButton(_ key: String, lit: String?,
                             @ViewBuilder label: () -> MenuRow) -> some View {
-        Button { run(key) } label: { label() }
-            .buttonStyle(MenuRowStyle(lit: lit == key))
+        let section = key.hasPrefix("child ") ? "list" : String(key.split(separator: " ").first ?? "")
+        return Button { run(key) } label: { label() }
+            .buttonStyle(MenuRowStyle())
+            .background {
+                if lit == key {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Theme.press)
+                        .matchedGeometryEffect(id: section, in: highlight)
+                }
+            }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { rows[key] = $0 }
             .onDisappear { rows[key] = nil }
     }
@@ -389,15 +402,13 @@ private struct MenuRow: View {
     }
 }
 
-/// A warm wash under the finger: pressed, or a held finger pointing at it.
+/// A warm wash under a tapping finger.
 private struct MenuRowStyle: ButtonStyle {
-    var lit = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(configuration.isPressed || lit ? Theme.press : .clear)
+                    .fill(configuration.isPressed ? Theme.press : .clear)
             }
     }
 }

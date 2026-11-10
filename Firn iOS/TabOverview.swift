@@ -696,7 +696,9 @@ struct TabOverview: View {
                 closeOthers(than: tab)
             })
         }
-        return [link, keep, close]
+        // No line under Copy Link, so a pointing finger's highlight glides
+        // through every row down to the Close rows (David, 2026-11-09).
+        return [link + keep, close]
     }
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
@@ -1926,7 +1928,7 @@ private struct LiftedTile<Content: View>: View {
         GeometryReader { box in
             let origin = box.frame(in: .global).origin
             content
-                .frame(width: finger.width, height: height)
+                .modifier(LaneWidth(width: finger.width, height: height))
                 .background {
                     RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
                         .fill(slim ? Theme.heldRowBase : Theme.tileSolid)
@@ -1937,16 +1939,45 @@ private struct LiftedTile<Content: View>: View {
                 // and the lift are one motion.
                 .scaleEffect(raised ? 1.03 : (up ? 1 : finger.liftFrom))
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
-                // Two offsets, not one: `top` changes with every move, at
-                // once, and as one offset that cut short the glide across,
-                // so the left edge jumped while the width glided (David,
-                // 2026-11-09).
-                .offset(x: finger.left + finger.dx - origin.x)
+                .modifier(LaneLeft(x: finger.left + finger.dx - origin.x))
                 .offset(y: finger.top - origin.y)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onAppear { withAnimation(.smooth(duration: 0.2)) { up = true } }
+    }
+}
+
+/// The held tile's width, worked out afresh on every frame of a glide. A
+/// plain `.frame` lays the row out at its new width at once and only
+/// eases the picture, and the row's left edge jumped as it moved into or
+/// out of a group while its right edge glided (David's recordings,
+/// 2026-11-09). With these two, both edges move together, frame by frame.
+private struct LaneWidth: ViewModifier, Animatable {
+    var width: CGFloat
+    let height: CGFloat
+
+    nonisolated var animatableData: CGFloat {
+        get { width }
+        set { width = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.frame(width: width, height: height)
+    }
+}
+
+/// The held tile's left edge (from its overlay's origin), frame by frame.
+private struct LaneLeft: ViewModifier, Animatable {
+    var x: CGFloat
+
+    nonisolated var animatableData: CGFloat {
+        get { x }
+        set { x = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.offset(x: x)
     }
 }
 

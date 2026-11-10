@@ -43,6 +43,7 @@ struct TabOverview: View {
 
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Counts closes, so the shake listener takes focus again after each.
     @State private var closes = 0
@@ -80,9 +81,6 @@ struct TabOverview: View {
     /// until it lifts, and drags nothing.
     @State private var pointing = false
     @State private var pointer = MenuPointer()
-    /// Where the finger was as it moved off an open menu, while Firn's
-    /// tile still follows it sideways (see `DragFinger.dx`).
-    @State private var handOffOrigin: CGPoint?
     /// Where the held tile's top is, under the finger: its own observed
     /// object, so following the finger redraws only the lifted tile.
     @State private var finger = DragFinger()
@@ -214,12 +212,6 @@ struct TabOverview: View {
                                     menu: openMenu(at:),
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
                                     leaveMenu: leaveMenu(to:from:)))
-                // Holding still opens a tab's or group's menu, the tile
-                // lifting solid (see `listHoldMenu`).
-                .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
-                              frame: heldFrame(of:), held: { finger.menu = $0 },
-                              handOff: handOffMoved, handOffEnded: handOffEnded,
-                              handOffLanded: handOffLanded, handOffAlone: handOffAlone)
                 .opacity(listFade)
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -303,6 +295,9 @@ struct TabOverview: View {
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
         .basecampFullAlert(isPresented: $basecampFull)
+        // Firn leaving the screen closes an open hold menu, as iOS's do;
+        // its frost is a picture of the screen as it opened.
+        .onChange(of: scenePhase) { _, now in if now != .active { closeMenu() } }
         .alert("Rename Group",
                isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $name)
@@ -316,7 +311,7 @@ struct TabOverview: View {
     /// The held tab, lifted over the list and following the finger.
     @ViewBuilder private var liftedTile: some View {
         ZStack {
-            if let drag, !drag.carried {
+            if let drag {
                 if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
                     LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
                         BasecampTiles.lifted(tab, space: space,
@@ -474,10 +469,10 @@ struct TabOverview: View {
             up: index > 0 ? { move(group, to: index - 1) } : nil,
             down: index < count - 1 ? { move(group, to: index + 1) } : nil))
             // Its place stays open while it's held or its menu is open.
-            // Holding the card (not a tab) opens the group's menu, and the
-            // whole group lifts with it, tint and tabs, as one piece (David,
+            // Holding the name line opens the group's menu, and the whole
+            // group lifts with it, tint and tabs, as one piece (David,
             // 2026-11-07: lifting only the name line slid it off its tint);
-            // see `holdMenuTarget`. Holding a tab opens that tab's own menu.
+            // see `menuTarget`. Holding a tab opens that tab's own menu.
             .modifier(EmptyWhileHeld(finger: finger, id: group.id, gliding: false))
             // Where the group is, so a held tab makes room around it or
             // goes in it.
@@ -547,20 +542,6 @@ struct TabOverview: View {
                   close: { close(group) })
     }
 
-    /// What a hold at a point (global) opens a menu on: a tab's tile, or
-    /// else the group card around the point. Only what's on screen counts.
-    private func holdMenuTarget(at point: CGPoint) -> HoldMenuTarget? {
-        // Tabs', groups', and tiles' menus are all Firn's own now
-        // (`openMenu`); iOS's goes in step 3c's step 5.
-        nil
-    }
-
-    /// Where a held tab or group is now (global), if it's still in the list.
-    private func heldFrame(of id: UUID) -> CGRect? {
-        let there = visibleTabs.contains { $0.id == id } || store.tabGroups.contains { $0.id == id }
-        return there ? spots.frames[id] : nil
-    }
-
     /// Folds or unfolds a group: the card glides to its new size (0.25s, no
     /// bounce) and its tabs fade over the second half (`FoldFade`); with
     /// Reduce Motion the size changes at once and the tabs cross-fade.
@@ -626,13 +607,8 @@ struct TabOverview: View {
             // (see EmptyWhileHeld).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
             // Hold, then move, lifts it (the list's HoldToDrag). Holding
-            // still opens iOS's own menu beside the tab (the list's
-            // `listHoldMenu`), as in Safari. (Moving away from the open
-            // menu no longer picks the tab up: that needed iOS's own drag,
-            // which on David's iPhone also started with every drag of
-            // Firn's, left a copy of the tab behind, and pulled the held tab
-            // between two places. David's recordings and phone log,
-            // 2026-11-05.)
+            // still opens Firn's own menu beside the tab (`openMenu`);
+            // moving away from it drags the tab on.
             // A held tab resting on this loose one: the group they'd make
             // forms around it (hold to form). Always here, at rest only
             // zero-height spacers, so the tile never changes identity and
@@ -698,8 +674,7 @@ struct TabOverview: View {
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
     /// place for (split view, sound). Close becomes Remove from Basecamp,
-    /// plainer words for the same thing. UIKit's menu (`holdMenu`), so the
-    /// held tile lifts on a solid base.
+    /// plainer words for the same thing. Firn's own menu (`openMenu`).
     private func tileMenu(for tab: FirnCore.Tab) -> [[HoldMenuItem]] {
         var first: [HoldMenuItem] = []
         if tab.isAwayFromHome {
@@ -1004,93 +979,11 @@ struct TabOverview: View {
         finger.left = new.start.minX
         finger.width = new.start.width
         finger.y = point.y
-        finger.dx = 0
         finger.liftFrom = 1
-        handOffOrigin = nil
         drag = new
         finger.held = new.id
-        if !new.carried { lifts += 1 }
+        lifts += 1
         keepScrollingAtEdges()
-    }
-
-    /// The finger moved off an open menu, and iOS's drag tells where it
-    /// is: the tab or group lifts, its middle under the finger (which has
-    /// left the menu, often far from the tile), then follows it as any
-    /// drag does. Its own drag, so it lands as one too.
-    private func handOffMoved(_ id: UUID, _ point: CGPoint) {
-        if let drag {
-            guard drag.id == id, drag.lifted else { return }
-            if let handOffOrigin { finger.dx = point.x - handOffOrigin.x }
-        } else if HandOffTrial.number == 2, let frame = spots.frames[id],
-                  visibleTabs.contains(where: { $0.id == id }) || store.tabGroups.contains(where: { $0.id == id }) {
-            // Trial 2: iOS's drag shows the tile; Firn only makes room.
-            let tab = visibleTabs.first { $0.id == id }
-            // iOS keeps its picture where it was under the finger, even if
-            // the finger has already left it.
-            var new = Drag(id: id, start: frame, grab: point.y - frame.minY,
-                           group: tab == nil, from: tab?.groupID)
-            new.carried = true
-            startDrag(new, at: point)
-        } else if HandOffTrial.number == 6, let tab = visibleTabs.first(where: { $0.id == id }),
-                  spots.frames[id] != nil {
-            // Trial 6: Firn's tile lifts right where it is, under iOS's
-            // picture of it, which stays where it was under the finger.
-            lift(tab, at: point)
-            handOffOrigin = point
-        } else if HandOffTrial.number == 6, let group = store.tabGroups.first(where: { $0.id == id }),
-                  spots.frames[id] != nil {
-            lift(group, at: point)
-            handOffOrigin = point
-        } else if let tab = visibleTabs.first(where: { $0.id == id }), let frame = spots.frames[id] {
-            lift(tab, at: CGPoint(x: point.x, y: frame.midY))
-        } else if let group = store.tabGroups.first(where: { $0.id == id }), let frame = spots.frames[id] {
-            // Held by its name line, as a group always is.
-            lift(group, at: CGPoint(x: point.x, y: frame.minY + GroupCard.headerHeight / 2))
-        } else {
-            return
-        }
-        follow(to: point)
-    }
-
-    /// iOS's own picture of the tile has gone: Firn's tile glides back to
-    /// its lane and moves straight up and down from here, as any drag.
-    private func handOffAlone() {
-        guard handOffOrigin != nil else { return }
-        handOffOrigin = nil
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { finger.dx = 0 }
-    }
-
-    /// iOS's drag ended (the finger lifted, or iOS cancelled it): it lands.
-    private func handOffEnded() -> CGRect? {
-        guard let drag, drag.lifted else { return nil }
-        guard drag.carried else { letGo(); return nil }
-        // Carried by iOS's drag: saved now, and iOS lands its preview in
-        // the gap; the tile shows again in `handOffLanded`.
-        edgeScroll?.cancel()
-        edgeScroll = nil
-        hoverWait?.cancel()
-        hoverWait = nil
-        hoverID = nil
-        // Nothing changes on screen at let-go: only where the gap is.
-        if let forming { return formingLanding(drag, forming) }
-        return spots.frames[drag.id] ?? drag.start
-    }
-
-    /// iOS's picture is in the gap: saved, and the tile shows under it.
-    private func handOffLanded() {
-        guard let drag, drag.carried else { return }
-        if let forming { return makeFormed(drag, forming) }
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        withTransaction(instant) {
-            if let ids = order, let groups = members { save(drag, ids, groups) }
-            order = nil
-            members = nil
-            finger.solid = false
-            self.drag = nil
-            finger.held = nil
-        }
-        lastDrop = .now
     }
 
     /// Where a tab let go on a forming group settles: its gap in the card.
@@ -1257,9 +1150,6 @@ struct TabOverview: View {
         }
         guard ids != order || groups != members else { return }
         let lane = into != now ? lane(in: into) : nil
-        #if DEBUG
-        FrameWatch.mark("makeRoom: order changed\(into != now ? ", crossed a group's edge" : "")")
-        #endif
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
             members = groups
@@ -1370,7 +1260,6 @@ struct TabOverview: View {
         withAnimation(.smooth(duration: 0.25)) {
             finger.top = landing.minY
             finger.left = landing.minX
-            finger.dx = 0
             finger.width = landing.width
             self.drag = settling
         } completion: {
@@ -1385,7 +1274,6 @@ struct TabOverview: View {
     /// nobody let go on it.
     private func letGo(cancelled: Bool = false) {
         if pointing { return stopPointing(cancelled: cancelled) }
-        handOffOrigin = nil
         edgeScroll?.cancel()
         edgeScroll = nil
         hoverWait?.cancel()
@@ -1397,16 +1285,9 @@ struct TabOverview: View {
             thaw()
         }
         finger.solid = false
-        #if DEBUG
-        FrameWatch.shared.watch("letGo")
-        FrameWatch.mark("letGo start")
-        #endif
         if let ids = order, let groups = members {
             save(drag, ids, groups)
         }
-        #if DEBUG
-        FrameWatch.mark("letGo saved")
-        #endif
         if let ids = tileOrder, let to = ids.firstIndex(of: drag.id),
            let tile = store.basecampTabs.first(where: { $0.id == drag.id }),
            store.basecampTabs.firstIndex(where: { $0.id == drag.id }) != to {
@@ -1427,7 +1308,6 @@ struct TabOverview: View {
         withAnimation(.smooth(duration: 0.25)) {
             finger.top = landing.minY
             finger.left = landing.minX
-            finger.dx = 0
             finger.width = landing.width
             self.drag = drag
         } completion: {
@@ -1611,9 +1491,9 @@ private struct GroupLine: View {
     }
 }
 
-/// A group's long-press menu, on the whole group so it lifts as one
-/// piece (the list's `listHoldMenu`); `actions` gives the same three to
-/// VoiceOver on its name line.
+/// A group's hold menu (Firn's own, by its name line; the whole group
+/// lifts as one piece); `actions` gives the same three to VoiceOver on its
+/// name line.
 @MainActor private struct GroupMenu {
     let rename: @MainActor () -> Void
     let ungroup: @MainActor () -> Void
@@ -1785,9 +1665,6 @@ private struct Drag {
     let from: UUID?
     /// False once let go, as the tile settles into its place.
     var lifted = true
-    /// Carried by iOS's own drag (moved off an open menu): iOS shows the
-    /// tile, so Firn draws no lifted one.
-    var carried = false
     /// Where across the tile the finger holds it (Basecamp tiles move both ways).
     var grabX: CGFloat = 0
     /// A Basecamp tile, moving only within Basecamp.
@@ -1880,18 +1757,11 @@ private enum Liftable {
     /// The tile's left edge and width: a tab narrows inside a group.
     var left: CGFloat = 0
     var width: CGFloat = 0
-    /// Sideways, with the finger: only just after moving off an open menu,
-    /// while iOS's own picture of the tile (which moves freely) is still
-    /// over Firn's, so the two stay one.
-    var dx: CGFloat = 0
     /// The finger itself.
     var y: CGFloat = 0
     /// Resting on another tab, waiting for their group to form: the held
     /// tile turns solid so the one under it doesn't show through.
     var solid = false
-    /// The tab or group whose hold menu is open: iOS lifts a picture of it,
-    /// so its place stays empty.
-    var menu: UUID?
     /// A tab held still, sinking a little until its menu opens.
     var pressed: UUID?
     /// The size the lifted tile rises from: a pressed tab's, sunk.
@@ -1912,7 +1782,7 @@ private struct EmptyWhileHeld: ViewModifier {
     let gliding: Bool
 
     func body(content: Content) -> some View {
-        let empty = gliding || finger.held == id || finger.menu == id
+        let empty = gliding || finger.held == id
         let pressed = finger.pressed == id
         content
             // Held still, it sinks a little over the rest of the hold, so
@@ -1960,7 +1830,7 @@ private struct LiftedTile<Content: View>: View {
                 // and the lift are one motion.
                 .scaleEffect(raised ? 1.03 : (up ? 1 : finger.liftFrom))
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
-                .modifier(LaneLeft(x: finger.left + finger.dx - origin.x))
+                .modifier(LaneLeft(x: finger.left - origin.x))
                 .offset(y: finger.top - origin.y)
         }
         .allowsHitTesting(false)
@@ -2003,7 +1873,7 @@ private struct LaneLeft: ViewModifier, Animatable {
 }
 
 /// Hold, then move: lifts a tab to drag it. Holding still instead opens
-/// iOS's menu (at about 0.5s), and a quick move with no hold is a scroll
+/// Firn's menu (at about 0.5s), and a quick move with no hold is a scroll
 /// or a swipe, so the drag starts only when the finger moves after a short
 /// hold, before the menu. As in Safari, where hold-and-move drags and
 /// holding still opens the menu. UIKit, because SwiftUI has no gesture
@@ -2099,8 +1969,7 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
 /// One finger held for `hold`, then moved `slop` points: begins. Moved
 /// sooner: fails at once (a scroll or a swipe). Held still for `menuHold`
 /// where `wantsMenu` says there's a menu: begins too, `heldStill`, for
-/// Firn's hold menu. Otherwise never moved: fails when lifted, or when
-/// iOS's menu takes the touch.
+/// Firn's hold menu. Otherwise never moved: fails when lifted.
 final class HoldThenMove: UIGestureRecognizer {
     static let hold: TimeInterval = 0.15
     static let menuHold: TimeInterval = 0.5

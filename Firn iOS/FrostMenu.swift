@@ -270,6 +270,8 @@ struct FrostMenu: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+        // VoiceOver moves to the menu as it opens.
+        .onAppear { AccessibilityNotification.ScreenChanged(nil).post() }
     }
 
     /// A row: a tap runs it, and it tells where it is for a pointing finger.
@@ -394,9 +396,10 @@ private struct MenuRow: View {
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
             if more {
+                // Muted, as the symbols: faint read too pale on the frost.
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.faint)
+                    .foregroundStyle(Theme.muted)
                     .accessibilityHidden(true)
             }
         }

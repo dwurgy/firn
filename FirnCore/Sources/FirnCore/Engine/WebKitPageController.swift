@@ -552,7 +552,7 @@ extension WebKitPageController {
     /// swaps in its dark icon by script after loading). Looks again a second
     /// later, so a busy page can't make Firn fetch over and over; `findIcon`
     /// only fetches if the list really changed.
-    fileprivate func iconLinksMayHaveChanged(from origin: WKSecurityOrigin) {
+    func iconLinksMayHaveChanged(from origin: WKSecurityOrigin) {
         guard let url, origin.protocol == url.scheme?.lowercased(),
               origin.host.lowercased() == url.host()?.lowercased(), !iconRecheckPending else { return }
         iconRecheckPending = true
@@ -570,7 +570,7 @@ extension WebKitPageController {
 extension WebKitPageController {
     /// A frame's report from `PageSoundScript`. A frame seen for the first
     /// time while muted is muted too, so sound can't slip in through a new one.
-    fileprivate func heard(_ report: PageSoundScript.Report, in frame: WKFrameInfo) {
+    func heard(_ report: PageSoundScript.Report, in frame: WKFrameInfo) {
         let isNew = soundFrames[report.frame] == nil
         // A page that keeps making frames (ads, say) lets go of the quiet ones first.
         if isNew && soundFrames.count >= PageSoundScript.frameLimit {
@@ -599,7 +599,7 @@ extension WebKitPageController {
 
 extension WebKitPageController {
     /// A frame's report from `PageDraftScript`.
-    fileprivate func noticed(_ report: PageDraftScript.Report) {
+    func noticed(_ report: PageDraftScript.Report) {
         if !report.draft {
             draftFrames.remove(report.frame)
         } else if draftFrames.count < PageDraftScript.frameLimit {
@@ -614,7 +614,7 @@ extension WebKitPageController {
     /// What `SignInScript` heard. A sign-in counts only from an https page
     /// that's the very site on screen, by WebKit's own origin for the frame,
     /// never anything the page says; it's held until it seems to have worked.
-    fileprivate func heard(_ message: SignInScript.Message, from origin: WKSecurityOrigin) {
+    func heard(_ message: SignInScript.Message, from origin: WKSecurityOrigin) {
         switch message {
         case let .submitted(username, password):
             guard let url, let site = PasswordSite(url), Self.origin(origin, is: site) else { return }
@@ -861,151 +861,6 @@ private final class FirnWebView: WKWebView {
 /// Lets Firn ask WebKit for the selection, as the Services menu does.
 extension FirnWebView: NSServicesMenuRequestor {}
 #endif
-
-/// Tells pages when their icon links change. Its script and message channel
-/// live only in Firn's content world, so the page can't post to it; even so,
-/// a message counts only from the main frame, from the page's real origin
-/// (WebKit's, not anything claimed), and only as the exact word "changed".
-/// One watcher serves every page: popups share their opener's content
-/// controller, and a handler can't be added to it twice.
-@MainActor
-private final class IconChangeWatcher: NSObject, WKScriptMessageHandler {
-    static let shared = IconChangeWatcher()
-    private static let name = "firnIconsChanged"
-    private static let script = """
-        (function () {
-            var timer = null;
-            function changed() {
-                clearTimeout(timer);
-                timer = setTimeout(function () {
-                    window.webkit.messageHandlers.firnIconsChanged.postMessage('changed');
-                }, 300);
-            }
-            if (document.head) {
-                new MutationObserver(changed).observe(document.head, {
-                    childList: true, subtree: true,
-                    attributes: true, attributeFilter: ['href', 'rel', 'media', 'sizes', 'type']
-                });
-            }
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', changed);
-        })();
-        """
-
-    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
-    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
-
-    func watch(_ webView: WKWebView, for page: WebKitPageController) {
-        pages.setObject(page, forKey: webView)
-        let controller = webView.configuration.userContentController
-        guard !controllers.contains(controller) else { return }
-        controllers.add(controller)
-        let world = WebKitPageController.firnWorld
-        controller.add(self, contentWorld: world, name: Self.name)
-        controller.addUserScript(WKUserScript(
-            source: Self.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world
-        ))
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, message.world.name == WebKitPageController.firnWorld.name,
-              message.body as? String == "changed",
-              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
-        page.iconLinksMayHaveChanged(from: message.frameInfo.securityOrigin)
-    }
-}
-
-/// Hears pages' sound (see `PageSoundScript`). Like `IconChangeWatcher`,
-/// its script and handler live only in Firn's content world, so a page
-/// can't post to it; a message counts only in its exact shape. It runs in
-/// every frame, since sound often plays in an embedded one.
-@MainActor
-private final class SoundWatcher: NSObject, WKScriptMessageHandler {
-    static let shared = SoundWatcher()
-
-    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
-    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
-
-    func watch(_ webView: WKWebView, for page: WebKitPageController) {
-        pages.setObject(page, forKey: webView)
-        let controller = webView.configuration.userContentController
-        guard !controllers.contains(controller) else { return }
-        controllers.add(controller)
-        let world = WebKitPageController.firnWorld
-        controller.add(self, contentWorld: world, name: PageSoundScript.handlerName)
-        controller.addUserScript(WKUserScript(
-            source: PageSoundScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world
-        ))
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.world.name == WebKitPageController.firnWorld.name,
-              let report = PageSoundScript.parse(message.body),
-              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
-        page.heard(report, in: message.frameInfo)
-    }
-}
-
-/// Notices text typed into pages and not yet sent (see `PageDraftScript`).
-/// Like `SoundWatcher`, its script and handler live only in Firn's content
-/// world, so a page can't post to it; a message counts only in its exact
-/// shape. It runs in every frame, since editors often live in an embedded one.
-@MainActor
-private final class DraftWatcher: NSObject, WKScriptMessageHandler {
-    static let shared = DraftWatcher()
-
-    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
-    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
-
-    func watch(_ webView: WKWebView, for page: WebKitPageController) {
-        pages.setObject(page, forKey: webView)
-        let controller = webView.configuration.userContentController
-        guard !controllers.contains(controller) else { return }
-        controllers.add(controller)
-        let world = WebKitPageController.firnWorld
-        controller.add(self, contentWorld: world, name: PageDraftScript.handlerName)
-        controller.addUserScript(WKUserScript(
-            source: PageDraftScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world
-        ))
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.world.name == WebKitPageController.firnWorld.name,
-              let report = PageDraftScript.parse(message.body),
-              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
-        page.noticed(report)
-    }
-}
-
-/// Hears sign-ins (see `SignInScript`). Like the watchers above, its script
-/// and handler live only in Firn's content world, so a page can't post to
-/// it; even so, a message counts only from the main frame, in its exact
-/// shape, and the page checks the frame's real origin.
-@MainActor
-private final class SignInWatcher: NSObject, WKScriptMessageHandler {
-    static let shared = SignInWatcher()
-
-    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
-    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
-
-    func watch(_ webView: WKWebView, for page: WebKitPageController) {
-        pages.setObject(page, forKey: webView)
-        let controller = webView.configuration.userContentController
-        guard !controllers.contains(controller) else { return }
-        controllers.add(controller)
-        let world = WebKitPageController.firnWorld
-        controller.add(self, contentWorld: world, name: SignInScript.handlerName)
-        controller.addUserScript(WKUserScript(
-            source: SignInScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world
-        ))
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, message.world.name == WebKitPageController.firnWorld.name,
-              let heard = SignInScript.parse(message.body),
-              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
-        page.heard(heard, from: message.frameInfo.securityOrigin)
-    }
-}
 
 // MARK: - New windows
 

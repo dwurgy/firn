@@ -21,6 +21,9 @@ struct AddressBar: View {
     /// the bar slips into the field, as in Safari; closing is the same move
     /// back. The screen closes it on a tap anywhere else.
     @Binding var menuOpen: Bool
+    /// Scrolling down to read has shrunk the bar (phase 5); a tap on the
+    /// small pill grows it back.
+    @Binding var shrunk: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What's being typed, for the results above the field (empty at rest).
     @State private var typed = ""
@@ -41,6 +44,9 @@ struct AddressBar: View {
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
     private var engine: SearchEngine { SearchEngine.chosen }
+    /// The small pill shows only at rest: typing and the page menu always
+    /// have the whole bar.
+    private var compact: Bool { shrunk && !editing.wrappedValue && !menuOpen && store.activeTab?.page != nil }
 
     /// The pill, the field, and the tabs button each carry their own frost
     /// (`BarFrost`, Firn's own, not Liquid Glass; David, 2026-11-09), drawn
@@ -181,11 +187,14 @@ struct AddressBar: View {
     private var buttons: some View {
         HStack(spacing: Self.spacing) {
             if let tab = store.activeTab, let page, !editing.wrappedValue {
-                hidesForMenu(toward: .trailing) { NavigationPill(store: store, tab: tab, page: page, space: space) }
+                hidesForMenu(toward: .trailing) {
+                    NavigationPill(store: store, tab: tab, page: page, space: space, compact: compact)
+                }
                     .transition(.opacity)
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
-                         menuOpen: $menuOpen, typed: $typed, opened: opened)
+                         menuOpen: $menuOpen, typed: $typed, compact: compact,
+                         grow: { shrunk = false }, opened: opened)
                 // The glass and the menu are laid out with the field itself,
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
@@ -204,7 +213,24 @@ struct AddressBar: View {
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: page?.canGoForward)
+        // Shrinking and growing: one bounce-free glide, on its own rather
+        // than following the finger, as Safari's on iOS 26 (David,
+        // 2026-11-09).
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : Self.shrinkGlide, value: compact)
     }
+
+    static let shrinkGlide = Animation.spring(duration: 0.32, bounce: 0)
+    /// The small pill: shorter than the bar, and lower, nearer the home
+    /// indicator, as Safari's. The bar keeps its own 48pt spot, so the page
+    /// doesn't lay out again as it shrinks.
+    static let compactHeight: CGFloat = 36
+    static let compactDrop: CGFloat = 8
+    /// The site's name in the small pill, against its 16pt at rest.
+    static let compactTextScale: CGFloat = 0.8
+    static let compactPadding: CGFloat = 16
+    /// A long site's name is cut short with "…" in a pill no wider than
+    /// this, so it stays small.
+    static let compactMaxWidth: CGFloat = 240
 
     /// The menu's spot, in the field's own coordinates: from the field's
     /// left edge up, its bottom on the field's, kept inside the bar's right
@@ -220,8 +246,11 @@ struct AddressBar: View {
     /// and the same frost as the bar, because it is the bar.
     @ViewBuilder private func fieldGlass(fieldSize: CGSize) -> some View {
         let open = menuOpen && fieldSize != .zero
-        let frame = open ? menuFrame(fieldSize: fieldSize) : CGRect(origin: .zero, size: fieldSize)
-        let radius = open ? PageMenuPanel.cornerRadius : AddressField.height / 2
+        let small = CGRect(x: 0, y: fieldSize.height - Self.compactHeight + Self.compactDrop,
+                           width: fieldSize.width, height: Self.compactHeight)
+        let frame = open ? menuFrame(fieldSize: fieldSize)
+            : compact ? small : CGRect(origin: .zero, size: fieldSize)
+        let radius = open ? PageMenuPanel.cornerRadius : frame.height / 2
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
@@ -257,7 +286,7 @@ struct AddressBar: View {
     /// the field as it fades (Liquid Glass once left dark discs behind a
     /// plain fade, David's recordings, 2026-11-04; kept as the move).
     private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
-        let hidden = menuOpen || settling
+        let hidden = menuOpen || settling || compact
         return content()
             .scaleEffect(hidden && !reduceMotion ? 0.01 : 1, anchor: anchor)
             .opacity(hidden ? 0 : 1)
@@ -284,6 +313,10 @@ private struct NavigationPill: View {
     let tab: FirnCore.Tab
     let page: any PageController
     let space: String
+    /// Hidden in the small pill: round, so Back and Tabs balance and the
+    /// pill sits centered on the screen.
+    let compact: Bool
+    private var wide: Bool { page.canGoForward && !compact }
 
     /// On a tab a link opened, with no page to go back to, Back closes it
     /// and shows the tab it came from, as in Safari.
@@ -311,12 +344,12 @@ private struct NavigationPill: View {
                 .disabled(!page.canGoBack && opener == nil)
                 .accessibilityHint(opener != nil ? "Closes this tab and goes back to the one it came from" : "")
             BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
-                .opacity(page.canGoForward ? 1 : 0)
-                .disabled(!page.canGoForward)
-                .accessibilityHidden(!page.canGoForward)
+                .opacity(wide ? 1 : 0)
+                .disabled(!wide)
+                .accessibilityHidden(!wide)
         }
         .padding(.horizontal, Self.padding)
-        .frame(width: page.canGoForward ? Self.wideWidth : Self.roundWidth,
+        .frame(width: wide ? Self.wideWidth : Self.roundWidth,
                height: AddressField.height, alignment: .leading)
         .clipShape(.capsule)
         .background { BarFrost(shape: Capsule(), space: space) }
@@ -335,8 +368,14 @@ private struct AddressField: View {
     @Binding var menuOpen: Bool
     /// What's typed, passed up for the results (only while typing).
     @Binding var typed: String
+    /// The small pill (phase 5): only the site, smaller, and a tap grows
+    /// the bar back rather than starting to type.
+    let compact: Bool
+    let grow: () -> Void
     let opened: () -> Void
     @State private var text = ""
+    /// The site's name at its resting size, so the small pill fits it.
+    @State private var labelWidth: CGFloat = 0
     /// The address editing started from, so it alone shows no results.
     @State private var startedWith = ""
     @State private var selection: TextSelection?
@@ -349,7 +388,7 @@ private struct AddressField: View {
         HStack(spacing: 0) {
             // The page menu also balances the button on the right, so the
             // site sits centered.
-            if !isEditing, frontURL != nil {
+            if !isEditing, !compact, frontURL != nil {
                 BarButton(symbol: "ellipsis", label: "Page Menu") { menuOpen.toggle() }
                     .accessibilityHint("Share or copy this page's link")
                     // Safari's icon sits this much further in from the
@@ -416,7 +455,7 @@ private struct AddressField: View {
                     }
                 }
                 .overlay {
-                    if !isEditing {
+                    if !isEditing, !compact {
                         Button { if !barQuiet { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
@@ -424,14 +463,34 @@ private struct AddressField: View {
                             .accessibilityHint("Edit the address or search")
                     }
                 }
-            trailingButton
+            if !compact {
+                trailingButton
                 // Reload and Stop cross-fade rather than snap (a fade, so
                 // it stays with Reduce Motion).
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
                 .opacity(menuOpen || (settling && !isEditing) ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
+            }
         }
         .frame(height: Self.height)
+        .frame(maxWidth: compact ? compactWidth : .infinity)
+        // The page menu and reload fade inside the field as it narrows or
+        // widens; unclipped, they lingered outside the glass (Simulator
+        // recording, 2026-11-09).
+        .clipped()
+        // The small pill: a tap anywhere on the field's 48pt spot (the
+        // pill is drawn in its lower part) grows the bar back. Over the
+        // whole field, not the text field: an overlay there only took taps
+        // inside the text's own height (Simulator, 2026-11-09).
+        .overlay {
+            if compact {
+                Button { if !barQuiet { grow() } } label: { Color.clear.contentShape(.rect) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Address")
+                    .accessibilityValue(text)
+                    .accessibilityHint("Shows the address bar")
+            }
+        }
         // The field's glass is the bar's (`AddressBar.fieldGlass`), so it
         // can grow into the page menu.
         .allowsHitTesting(!menuOpen)
@@ -460,11 +519,41 @@ private struct AddressField: View {
         .allowsTightening(true)
         .minimumScaleFactor(0.9)
         .truncationMode(.tail)
+        // Laid out at its resting size and then scaled down, so the words
+        // glide smaller rather than jumping to a new font size.
+        .frame(width: compact ? compactTextWidth : nil)
         .frame(maxWidth: .infinity)
+        .scaleEffect(compact ? AddressBar.compactTextScale : 1)
+        .offset(y: compact ? compactDrop : 0)
+        .background {
+            Text(verbatim: text.isEmpty ? "Search or enter address" : text)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .fixedSize()
+                .hidden()
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labelWidth = $0 }
+        }
         .opacity(menuOpen || settling ? 0 : 1)
         .animation(.easeOut(duration: 0.1), value: menuOpen)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// How far the small pill's middle sits below the field's.
+    private var compactDrop: CGFloat {
+        (Self.height - AddressBar.compactHeight) / 2 + AddressBar.compactDrop
+    }
+
+    /// The small pill's width: the site's name, scaled, with room either
+    /// side.
+    private var compactWidth: CGFloat {
+        min(labelWidth * AddressBar.compactTextScale + AddressBar.compactPadding * 2,
+            AddressBar.compactMaxWidth)
+    }
+
+    /// The name's width before it's scaled into the small pill.
+    private var compactTextWidth: CGFloat {
+        max(compactWidth - AddressBar.compactPadding * 2, 0) / AddressBar.compactTextScale
     }
 
     @ViewBuilder private var trailingButton: some View {

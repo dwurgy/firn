@@ -116,7 +116,7 @@ struct BasecampTiles: View {
         BasecampTile(tab: tab, space: space, isOnScreen: onScreen, open: {})
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Theme.tileSolid)
+                    .fill(Theme.heldRowBase)
                     .opacity(solid ? 1 : 0)
                     .animation(.easeOut(duration: 0.2), value: solid)
             }

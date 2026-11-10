@@ -72,9 +72,10 @@ enum Theme {
     static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// With Reduce Transparency: the same tile, solid.
     static let tileSolid = Color(light: 0xF4F0EA, dark: 0x45413D)
-    /// Under a slim row while it's held or dragged on the iPhone: the solid
-    /// tile, a little see-through, one level the whole way (David, 2026-11-09).
-    static let heldRowBase = Color(light: 0xF4F0EA, lightOpacity: 0.85, dark: 0x45413D, darkOpacity: 0.85)
+    /// Under anything lifted on the iPhone (a tab, a group, a Basecamp
+    /// tile), held or dragged: the solid tile, see-through, one level the
+    /// whole way (David, 2026-11-09: 85% read too dark; 60%).
+    static let heldRowBase = Color(light: 0xF4F0EA, lightOpacity: 0.6, dark: 0x45413D, darkOpacity: 0.6)
     /// A tile's edge: lit along the top, a warm hairline around.
     static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
     static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)

@@ -1952,7 +1952,7 @@ private struct LiftedTile<Content: View>: View {
                 .modifier(LaneWidth(width: finger.width, height: height))
                 .background {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(steady ? Theme.heldRowBase : Theme.tileSolid)
+                        .fill(Theme.heldRowBase)
                         .opacity(based ? 1 : 0)
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: based)
                 }

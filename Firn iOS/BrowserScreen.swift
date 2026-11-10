@@ -118,6 +118,9 @@ struct BrowserScreen: View {
     /// Scrolling down to read has shrunk the bar to a small pill (phase 5).
     @State private var barShrunk = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// VoiceOver always has the whole bar (phase 5): its buttons stay where
+    /// a swipe through them finds them.
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -316,6 +319,7 @@ struct BrowserScreen: View {
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
+            .onChange(of: voiceOver) { if voiceOver { barShrunk = false } }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
                 // Only the bar at rest counts: while it rides the keyboard,
                 // the page underneath shouldn't lay out again.
@@ -360,7 +364,7 @@ struct BrowserScreen: View {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
             PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) { scroll in
-                let shrink = scroll == .shrink
+                let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }
             }
                 // A new tab gets a new web view, not the last one's.

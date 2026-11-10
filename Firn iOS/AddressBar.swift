@@ -186,11 +186,15 @@ struct AddressBar: View {
 
     private var buttons: some View {
         HStack(spacing: Self.spacing) {
-            if let tab = store.activeTab, let page, !editing.wrappedValue {
+            // Reduce Motion: Back and Tabs leave while the small pill shows,
+            // so each fades where it stands; kept in place, they jumped
+            // beside the narrowed field as they faded (Simulator recording,
+            // 2026-11-10).
+            if let tab = store.activeTab, let page, !editing.wrappedValue, !(reduceMotion && compact) {
                 hidesForMenu(toward: .trailing) {
                     NavigationPill(store: store, tab: tab, page: page, space: space, compact: compact)
                 }
-                    .transition(.opacity)
+                    .transition(reduceMotion ? Self.shrinkFade : .opacity)
             }
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
                          menuOpen: $menuOpen, typed: $typed, compact: compact,
@@ -201,9 +205,9 @@ struct AddressBar: View {
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
                 .zIndex(1)
-            if !editing.wrappedValue {
+            if !editing.wrappedValue, !(reduceMotion && compact) {
                 hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
-                    .transition(.opacity)
+                    .transition(reduceMotion ? Self.shrinkFade : .opacity)
             }
         }
         // One glide, no bounce: Safari's move, made calm. Reduce Motion: the
@@ -215,11 +219,15 @@ struct AddressBar: View {
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: page?.canGoForward)
         // Shrinking and growing: one bounce-free glide, on its own rather
         // than following the finger, as Safari's on iOS 26 (David,
-        // 2026-11-09).
-        .animation(reduceMotion ? .easeOut(duration: 0.2) : Self.shrinkGlide, value: compact)
+        // 2026-11-09). Reduce Motion: nothing moves; the full bar and the
+        // small pill cross-fade in place (`shrinkFade`, on each piece).
+        .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
     }
 
     static let shrinkGlide = Animation.spring(duration: 0.32, bounce: 0)
+    /// Reduce Motion's shrink and grow: a plain fade, carried by the
+    /// pieces themselves, since the bar's own change isn't animated then.
+    static let shrinkFade = AnyTransition.opacity.animation(.easeOut(duration: 0.2))
     /// The small pill: shorter than the bar, and lower, nearer the home
     /// indicator, as Safari's. The bar keeps its own 48pt spot, so the page
     /// doesn't lay out again as it shrinks.
@@ -262,9 +270,9 @@ struct AddressBar: View {
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY)
         if reduceMotion {
-            // Reduce Motion: no growing; the bar's glass and the menu's
-            // swap with a fade.
-            glass.id(open).transition(.opacity)
+            // Reduce Motion: no growing or shrinking; the bar's glass, the
+            // small pill's, and the menu's swap with a fade.
+            glass.id(open ? 2 : compact ? 1 : 0).transition(Self.shrinkFade)
         } else {
             glass
         }
@@ -399,6 +407,7 @@ private struct AddressField: View {
                     .padding(.leading, 3.5)
                     .opacity(menuOpen || settling ? 0 : 1)
                     .animation(.easeOut(duration: 0.1), value: menuOpen)
+                    .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
             }
             // Typing for a new tab (the overview's +, or swiping past the
             // last tab) starts with a + in the space's color, so it never
@@ -454,7 +463,11 @@ private struct AddressField: View {
                 .accessibilityHidden(!isEditing)
                 .overlay {
                     if !isEditing {
+                        // Reduce Motion: the full-size name and the small
+                        // pill's cross-fade rather than gliding.
                         restingLabel
+                            .id(reduceMotion && compact)
+                            .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
                     }
                 }
                 .overlay {
@@ -473,14 +486,16 @@ private struct AddressField: View {
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
                 .opacity(menuOpen || (settling && !isEditing) ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
+                .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
             }
         }
         .frame(height: Self.height)
         .frame(maxWidth: compact ? compactWidth : .infinity)
         // The page menu and reload fade inside the field as it narrows or
         // widens; unclipped, they lingered outside the glass (Simulator
-        // recording, 2026-11-09).
-        .clipped()
+        // recording, 2026-11-09). Reduce Motion: no narrowing to see, and
+        // clipped, they vanished rather than fading (2026-11-10).
+        .clipShape(reduceMotion ? AnyShape(Rectangle().inset(by: -200)) : AnyShape(Rectangle()))
         // The small pill: a tap anywhere on the field's 48pt spot (the
         // pill is drawn in its lower part) grows the bar back. Over the
         // whole field, not the text field: an overlay there only took taps

@@ -1651,7 +1651,9 @@ private struct Frost<S: InsettableShape>: View {
 /// in global points. Not observed: rows write it as they move, and only the
 /// glide reads it, so scrolling redraws nothing else.
 @MainActor final class OverviewSpots {
-    var frames: [UUID: CGRect] = [:]
+    var frames: [UUID: CGRect] = [:] {
+        didSet { SwipeTiming.sawSpots(frames) }
+    }
     /// The list's own frame, to find the tab under a pinch.
     var viewport: CGRect = .zero
     /// The tabs shown as tall cards (the rest are slim rows): a card's

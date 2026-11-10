@@ -404,6 +404,7 @@ struct BrowserScreen: View {
         // The overview lays out behind the page, scrolled to its card, with
         // the card hidden and its line out until the picture lands; the
         // page's picture is taken meanwhile.
+        SwipeTiming.begin("tabs button", tab: tab.id)
         let picture = pictures.capture(tab)
         beginGlide(of: tab)
         // WebKit may never answer (a busy page). Waited on with no limit,
@@ -413,18 +414,22 @@ struct BrowserScreen: View {
         let glide = UUID()
         pullAwaitingPicture = glide
         Task {
-            guard let image = await picture?.value, pullAwaitingPicture == glide else {
+            let image = await picture?.value
+            SwipeTiming.mark(image == nil ? "no picture" : "picture arrived")
+            guard let image, pullAwaitingPicture == glide else {
                 if pullAwaitingPicture == glide { pullAwaitingPicture = nil; fadeToTabs() }
                 return
             }
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
+            SwipeTiming.mark("picture set")
             land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.glide)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard pullAwaitingPicture == glide else { return }
             pullAwaitingPicture = nil
+            SwipeTiming.mark("gave up waiting, faded")
             fadeToTabs()
         }
     }
@@ -712,6 +717,8 @@ struct BrowserScreen: View {
         // either: the page is likely still blank.
         let lingering = standIn
         let lingeringTop = standInTop
+        SwipeTiming.begin(up ? "swipe up" : "sideways swipe", tab: tab.id)
+        if lingering != nil { SwipeTiming.mark("used the picture already up") }
         let picture = lingering == nil ? pictures.capture(tab) : nil
         let started = Pull(tab: tab, start: drag.startLocation, picture: picture,
                            translation: drag.translation, sideways: !up)
@@ -736,12 +743,15 @@ struct BrowserScreen: View {
             return
         }
         Task {
-            guard let image = await picture?.value ?? pictures.image(for: tab.id) else { return }
+            let fresh = await picture?.value
+            SwipeTiming.mark(fresh == nil ? "no new picture" : "picture arrived")
+            guard let image = fresh ?? pictures.image(for: tab.id) else { return }
             // Still held (or let go but not landed yet): the picture comes
             // in under the finger, a short glide from the page's place.
             guard pullAwaitingPicture == started.id, standIn == nil, gliding == tab.id else { return }
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
+            SwipeTiming.mark("picture set")
             if let pull {
                 withAnimation(.easeOut(duration: 0.1)) {
                     box = pulledBox(pull)
@@ -809,6 +819,7 @@ struct BrowserScreen: View {
     private func pullEnded(translation: CGSize, velocity: CGSize) {
         if newTabSwipe { return newTabSwipeEnded(translation: translation, velocity: velocity) }
         guard var pull else { return }
+        SwipeTiming.mark("finger lifted")
         pull.translation = translation
         self.pull = nil
         let up = -velocity.height

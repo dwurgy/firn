@@ -42,10 +42,9 @@ struct AddressBar: View {
     private var space: String { store.activeSpace.color }
     private var engine: SearchEngine { SearchEngine.chosen }
 
-    /// The pill and the field each carry their own glass, with no
-    /// `GlassEffectContainer`: a container morphs its glass on its own
-    /// timing, so the glass trailed Firn's frost and words as a grey ghost
-    /// whenever the pill changed width (David's recordings, 2026-11-03).
+    /// The pill, the field, and the tabs button each carry their own frost
+    /// (`BarFrost`, Firn's own, not Liquid Glass; David, 2026-11-09), drawn
+    /// with them, so it glides frame by frame with their words.
     var body: some View {
         let rows = editing.wrappedValue
             ? store.commandRows(for: typed, searchEngine: engine, history: history,
@@ -217,16 +216,17 @@ struct AddressBar: View {
         return CGRect(x: x, y: fieldSize.height - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
     }
 
-    /// The field's glass, as one piece that becomes the menu: the same tint
-    /// and the same glass as the bar, because it is the bar.
+    /// The field's frost, as one piece that becomes the menu: the same tint
+    /// and the same frost as the bar, because it is the bar.
     @ViewBuilder private func fieldGlass(fieldSize: CGSize) -> some View {
         let open = menuOpen && fieldSize != .zero
         let frame = open ? menuFrame(fieldSize: fieldSize) : CGRect(origin: .zero, size: fieldSize)
         let radius = open ? PageMenuPanel.cornerRadius : AddressField.height / 2
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
-            .clipShape(.rect(cornerRadius: radius, style: .continuous))
-            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .rect(cornerRadius: radius, style: .continuous))
+            .clipShape(shape)
+            .background { BarFrost(shape: shape, space: space) }
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY)
         if reduceMotion {
@@ -253,10 +253,9 @@ struct AddressBar: View {
     }
 
     /// Slips into the field while the page menu is open and comes back
-    /// out after, keeping its place so nothing else moves. Shrunk rather
-    /// than removed or faded: Liquid Glass follows neither a removal nor
-    /// `.opacity`, and both left dark discs behind (David's recordings,
-    /// 2026-11-04); a glass view's size it does follow.
+    /// out after, keeping its place so nothing else moves: shrinking toward
+    /// the field as it fades (Liquid Glass once left dark discs behind a
+    /// plain fade, David's recordings, 2026-11-04; kept as the move).
     private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
         let hidden = menuOpen || settling
         return content()
@@ -320,7 +319,7 @@ private struct NavigationPill: View {
         .frame(width: page.canGoForward ? Self.wideWidth : Self.roundWidth,
                height: AddressField.height, alignment: .leading)
         .clipShape(.capsule)
-        .glassEffect(.regular.tint(Theme.frameTint(space)), in: .capsule)
+        .background { BarFrost(shape: Capsule(), space: space) }
     }
 }
 
@@ -603,7 +602,7 @@ private struct BarAction {
     }
 }
 
-/// The overview's button, at the bar's right: round glass, the same size
+/// The overview's button, at the bar's right: round frost, the same size
 /// as Back's.
 private struct TabsButton: View {
     let space: String
@@ -612,8 +611,27 @@ private struct TabsButton: View {
     var body: some View {
         BarButton(symbol: "square.on.square", label: "Tabs", action: action)
             .padding(2)
-            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .circle)
+            .background { BarFrost(shape: Circle(), space: space) }
             .accessibilityHint("Shows all your tabs")
+    }
+}
+
+/// Firn's frost on the iPhone's bars, washed with the space's color, over
+/// iOS's thinnest material blur, so the live page's shapes don't show
+/// through. A trial (David, 2026-11-09): iOS's soft edge blur, as under
+/// Safari's bar, never appeared under a web page (`docs/IOS-PLAN.md`).
+/// Reduce Transparency: solid.
+struct BarFrost<S: InsettableShape>: View {
+    let shape: S
+    let space: String
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        FirnFrost(shape: shape, fill: Theme.barFrost,
+                  tint: Theme.spaceColor(space).opacity(Theme.groupTint),
+                  solid: reduceTransparency) {
+            shape.fill(.ultraThinMaterial)
+        }
     }
 }
 

@@ -200,6 +200,10 @@ enum Theme {
     /// 2026-11-08): the blur erases shapes, so the fill can stay light;
     /// one level in both modes (David, 2026-11-08).
     static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.42, dark: 0x67635F, darkOpacity: 0.42)
+    /// The iPhone's bars (the address bar, and the overview's bar): Firn's
+    /// frost over iOS's soft edge blur, the card pills' fill to start with,
+    /// so there's one kind of glass (David, 2026-11-09).
+    static let barFrost = cardPillVeil
 
     /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
     /// overview while it's open, and the card's veil over a real blur of

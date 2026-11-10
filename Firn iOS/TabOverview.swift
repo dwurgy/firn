@@ -1642,27 +1642,8 @@ private struct Frost<S: InsettableShape>: View {
     var shadowY: CGFloat = 0.5
 
     var body: some View {
-        let tint = Theme.spaceColor(space).opacity(Theme.groupTint)
-        Group {
-            if solid {
-                shape.fill(Theme.tileSolid)
-                    .overlay { shape.fill(tint) }
-                    .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-            } else {
-                shape.fill(fill)
-                    .overlay { shape.fill(tint) }
-                    .overlay {
-                        shape.strokeBorder(
-                            LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom],
-                                           startPoint: .top, endPoint: .bottom),
-                            lineWidth: 1)
-                    }
-                    .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-                    .shadow(color: shadow, radius: shadowRadius, y: shadowY)
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        FirnFrost(shape: shape, fill: fill, tint: Theme.spaceColor(space).opacity(Theme.groupTint),
+                  solid: solid, shadow: shadow, shadowRadius: shadowRadius, shadowY: shadowY)
     }
 }
 
@@ -2708,9 +2689,10 @@ struct LetterMark: View {
 }
 
 /// The overview's bar, balanced like Safari's: + on the left, the space's
-/// name in a tinted glass pill in the middle (the switcher and its dots come
+/// name in a frosted pill in the middle (the switcher and its dots come
 /// with phase 4), and a round check on the right in a vivid version of the
-/// space's color.
+/// space's color. All on Firn's frost (`BarFrost`), over the list's soft
+/// edge blur; pressed, the warm wash.
 private struct OverviewBar: View {
     let space: Space
     let newTab: () -> Void
@@ -2730,7 +2712,7 @@ private struct OverviewBar: View {
                 .lineLimit(1)
                 .padding(.horizontal, 24)
                 .frame(height: Self.height)
-                .glassEffect(.regular.tint(Theme.frameTint(space.color)), in: .capsule)
+                .background { BarFrost(shape: Capsule(), space: space.color) }
                 .padding(.horizontal, Self.height + 16)
                 .accessibilityAddTraits(.isHeader)
             HStack {
@@ -2741,8 +2723,8 @@ private struct OverviewBar: View {
                         .frame(width: Self.height, height: Self.height)
                         .contentShape(.circle)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.tint(Theme.frameTint(space.color)).interactive(), in: .circle)
+                .buttonStyle(FrostPress(shape: Circle()))
+                .background { BarFrost(shape: Circle(), space: space.color) }
                 .accessibilityLabel("New Tab")
                 Spacer()
                 Button(action: done) {
@@ -2752,8 +2734,12 @@ private struct OverviewBar: View {
                         .frame(width: Self.height, height: Self.height)
                         .contentShape(.circle)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.tint(Theme.spaceVivid(space.color)).interactive(), in: .circle)
+                .buttonStyle(FrostPress(shape: Circle()))
+                // The one solid button, as Firn's buttons are ink: the
+                // space's vivid color under the frost's rim and hairline.
+                .background {
+                    FirnFrost(shape: Circle(), fill: Theme.spaceVivid(space.color))
+                }
                 .accessibilityLabel("Done")
             }
         }

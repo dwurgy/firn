@@ -1938,22 +1938,14 @@ struct FrostGlass: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        if reduceTransparency {
-            shape.fill(Theme.tileSolid)
-                .overlay { shape.fill((color ?? .clear).opacity(Theme.groupTint)) }
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-        } else {
-            // Frosted fills, like the tiles: never glass on the window's glass.
-            shape.fill(color == nil ? Theme.tileFill : Theme.groupFill)
-                .background { if lifted { LiftBacking(shape: shape) } }
-                .overlay { shape.fill((color ?? .clear).opacity(Theme.groupTint)) }
-                .overlay {
-                    shape.strokeBorder(
-                        LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
-                        lineWidth: 1)
-                }
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(color == nil ? -0.5 : 0) }
-                .shadow(color: color == nil ? Theme.shadowSoft : .clear, radius: 1, y: 0.5)
+        // Frosted fills, like the tiles: never glass on the window's glass.
+        FirnFrost(shape: shape,
+                  fill: color == nil ? Theme.tileFill : Theme.groupFill,
+                  tint: (color ?? .clear).opacity(Theme.groupTint),
+                  solid: reduceTransparency,
+                  shadow: color == nil ? Theme.shadowSoft : .clear,
+                  hairlineOutset: color == nil ? 0.5 : 0) {
+            if lifted { LiftBacking(shape: shape) }
         }
     }
 }

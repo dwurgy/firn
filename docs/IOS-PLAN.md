@@ -265,8 +265,14 @@ Create, rename, color, reorder, and delete spaces; each with its own data store,
 
 ### Phase 5: The address bar's glide (its own plan first)
 
-Scrolling down shrinks the bar to a domain-only pill; scrolling up or tapping brings it back (reaching the end doesn't: Safari leaves the pill small there); swiping along the bar or pill switches tabs. Follows your finger with Firn's easing; Reduce Motion simply fades.
+Scrolling down shrinks the bar to a domain-only pill; scrolling up or tapping brings it back (reaching the end doesn't: Safari leaves the pill small there); swiping along the bar or pill switches tabs. Reduce Motion simply fades.
 **Done:** read three long articles; the bar never jitters, never hides the domain, and swiping along it walks through your tabs. With Reduce Motion on, it only fades.
+
+**Planned (David, 2026-11-09), pulled ahead of the swipe up's delay** so the bar is finished first. **Glides on its own, as Safari's on iOS 26 does, not following the finger** (David: "glide on its own for sure"). The delay is WebKit's page picture, which the shrink doesn't touch; the pull just has to start from the small pill too (step 4). Four steps:
+1. **Noticing the scroll:** the page (`PageFrame`, the engine's iOS side) watches its own scrolling and says "shrink" or "grow" to the screen. Only your own scrolling counts (a drag and its glide, not a page jumping to a #link): about 24pt down shrinks, about 24pt up grows; always full at the page's top; bouncing past the end changes nothing (Safari leaves it small there); a page shorter than the screen never shrinks; a new page or another tab starts full. *Built 2026-11-09* (`BarScroll`, `PageFrame.scrolled` in `PageView+iOS.swift`; `barShrunk` in `BrowserScreen.swift`): checked in the Simulator on a long Wikipedia page (down shrinks, up grows); nothing shows it until step 2.
+2. **The shrink:** one bounce-free glide (about 0.3s): Back and Tabs fade and shrink into the field, the field narrows to a small pill (the site's name only, in smaller text, lower, near the home indicator), with its frost and loading glow; a tap on it grows the bar back. Typing, the page menu, and VoiceOver always use the full bar.
+3. **The page's room:** the page's bottom room follows the bar (step 2c's footers rule): shrunk at the end, the footer sits just above the pill; growing slides the page up by the difference so it stays whole.
+4. **A look over:** Reduce Motion (a plain fade), VoiceOver (the pill reads the site, "Shows the address bar"), light and dark, Reduce Transparency, and the swipe up and sideways swipe starting from the small pill.
 
 ### Phase 6: The everyday features
 

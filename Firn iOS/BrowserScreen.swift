@@ -115,6 +115,8 @@ struct BrowserScreen: View {
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
     /// the page knows how much of it the bar covers.
     @State private var barTop: CGFloat = 0
+    /// Scrolling down to read has shrunk the bar to a small pill (phase 5).
+    @State private var barShrunk = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -311,6 +313,9 @@ struct BrowserScreen: View {
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
+            // A new page or another tab starts with the full bar.
+            .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
+            .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
                 // Only the bar at rest counts: while it rides the keyboard,
                 // the page underneath shouldn't lay out again.
@@ -352,7 +357,10 @@ struct BrowserScreen: View {
 
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
-            PageView(page: page, barTop: barTop)
+            PageView(page: page, barTop: barTop) { scroll in
+                let shrink = scroll == .shrink
+                if barShrunk != shrink { barShrunk = shrink }
+            }
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
         } else if store.openTabs.isEmpty {

@@ -10,13 +10,16 @@ import WebKit
 public struct PageView: UIViewControllerRepresentable {
     private let page: any PageController
     private let barTop: CGFloat
+    private let onScroll: ((BarScroll) -> Void)?
 
     /// `barTop` is where Firn's own bar starts, from the screen's top (0
     /// for no bar), so WebKit can scroll the page's end clear of it and keep
-    /// fixed footers above it.
-    public init(page: any PageController, barTop: CGFloat = 0) {
+    /// fixed footers above it. `onScroll` hears when your own scrolling
+    /// should shrink the bar or grow it back (`BarScroll`).
+    public init(page: any PageController, barTop: CGFloat = 0, onScroll: ((BarScroll) -> Void)? = nil) {
         self.page = page
         self.barTop = barTop
+        self.onScroll = onScroll
     }
 
     public func makeUIViewController(context: Context) -> PageHolder {
@@ -25,6 +28,7 @@ public struct PageView: UIViewControllerRepresentable {
 
     public func updateUIViewController(_ holder: PageHolder, context: Context) {
         holder.barTop = barTop
+        (holder.view as? PageFrame)?.onScroll = onScroll
     }
 
     private var webKitPage: WebKitPageController {
@@ -86,6 +90,13 @@ public final class PageHolder: UIViewController {
     }
 }
 
+/// What your own scrolling says about the bar, as in Safari: scrolling
+/// down to read shrinks it, scrolling back up (or reaching the page's top)
+/// grows it (`docs/IOS-PLAN.md`, phase 5, step 1).
+public enum BarScroll: Sendable {
+    case shrink, grow
+}
+
 /// Passes on only real sizes, as on the Mac: SwiftUI sizes a newly shown
 /// view at 0×0 first, and every size change makes WebKit lay the whole page
 /// out again.
@@ -107,6 +118,12 @@ private final class PageFrame: UIView {
     private var colorWatchers: [NSKeyValueObservation] = []
     /// Pull down past the top to reload, as in Safari.
     var onRefresh: (() -> Void)?
+    /// Hears whether your scrolling should shrink or grow the bar.
+    var onScroll: ((BarScroll) -> Void)?
+    /// The scroll position last seen, and how far the page has moved one
+    /// way since it last turned around.
+    private var lastOffset: CGFloat?
+    private var travel: CGFloat = 0
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -126,6 +143,9 @@ private final class PageFrame: UIView {
             },
             webView.observe(\.isLoading) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.endRefreshing() }
+            },
+            webView.scrollView.observe(\.contentOffset) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scrolled() }
             },
         ]
     }
@@ -154,6 +174,45 @@ private final class PageFrame: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// How far the page must move one way before the bar changes, so a
+    /// small wobble of the finger never flickers it.
+    private static let turnDistance: CGFloat = 24
+
+    /// Only your own scrolling counts (a drag and the glide after it), not a
+    /// page jumping to a #link or scrolling itself. At the top the bar is
+    /// always full; past the end (a bounce) nothing changes, as Safari
+    /// leaves it small there; a page with nothing to scroll never shrinks.
+    private func scrolled() {
+        let scroller = webView.scrollView
+        let y = scroller.contentOffset.y
+        defer { lastOffset = y }
+        guard let onScroll, let last = lastOffset else { return }
+        let top = -scroller.contentInset.top
+        if y <= top + 1 {
+            travel = 0
+            if scroller.isTracking || scroller.isDecelerating { onScroll(.grow) }
+            return
+        }
+        guard scroller.isTracking || scroller.isDecelerating else {
+            travel = 0
+            return
+        }
+        let end = scroller.contentSize.height + scroller.contentInset.bottom - scroller.bounds.height
+        guard end > top + Self.turnDistance, y < end, last < end else {
+            travel = 0
+            return
+        }
+        let moved = y - last
+        guard moved != 0 else { return }
+        if (moved > 0) != (travel > 0) { travel = 0 }
+        travel += moved
+        if travel > Self.turnDistance {
+            onScroll(.shrink)
+        } else if travel < -Self.turnDistance {
+            onScroll(.grow)
+        }
+    }
 
     private func updateStripColor() {
         // The same color the page reports as `topColor`, for the glide.

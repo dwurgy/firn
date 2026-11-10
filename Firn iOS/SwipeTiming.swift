@@ -1,5 +1,6 @@
 import Foundation
 import QuartzCore
+import UIKit
 import os
 
 /// Measures the wait between a swipe up (or the tabs button) and the page
@@ -45,6 +46,33 @@ enum SwipeTiming {
         mark("overview laid out (card's spot known)")
     }
 
+    /// Lists every layer SwiftUI draws with the CPU (its `CGDrawingLayer`),
+    /// with its size and place on screen: the profile showed most of the
+    /// glide's time spent drawing those (2026-11-10).
+    static func listCPUDrawnLayers() {
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first else { return }
+        var found = 0
+        func walk(_ layer: CALayer, depth: Int) {
+            let name = String(describing: type(of: layer))
+            if name.contains("Drawing"), layer.bounds.width * layer.bounds.height > 2000 {
+                found += 1
+                let frame = layer.convert(layer.bounds, to: window.layer)
+                let size = "\(Int(frame.width))×\(Int(frame.height)) at \(Int(frame.minX)),\(Int(frame.minY))"
+                var chain: [String] = []
+                var up = layer.superlayer
+                while let l = up, chain.count < 4 {
+                    chain.append(String(describing: type(of: l)) + (l.delegate.map { "(\(type(of: $0)))" } ?? ""))
+                    up = l.superlayer
+                }
+                log.notice("  CPU layer \(name, privacy: .public) \(size, privacy: .public) opacity \(layer.opacity, privacy: .public) sublayers \(layer.sublayers?.count ?? 0, privacy: .public) ← \(chain.joined(separator: " ← "), privacy: .public)")
+            }
+            for sub in layer.sublayers ?? [] { walk(sub, depth: depth + 1) }
+        }
+        walk(window.layer, depth: 0)
+        log.notice("  CPU-drawn layers: \(found, privacy: .public)")
+    }
+
     fileprivate static func finish() {
         mark("timer stops")
         start = nil
@@ -56,6 +84,8 @@ enum SwipeTiming {
     @MainActor private final class Ticker: NSObject {
         private var link: CADisplayLink?
         private var last: CFTimeInterval?
+        private var listed = 0
+        private static let listAt: [CFTimeInterval] = [0.2, 0.42, 0.65]
 
         override init() {
             super.init()
@@ -76,6 +106,11 @@ enum SwipeTiming {
                 SwipeTiming.mark("slow frame (\(Int((now - last) * 1000))ms gap)")
             }
             last = now
+            if let start = SwipeTiming.start, listed < Self.listAt.count,
+               CACurrentMediaTime() - start > Self.listAt[listed] {
+                listed += 1
+                SwipeTiming.listCPUDrawnLayers()
+            }
             if let start = SwipeTiming.start, CACurrentMediaTime() - start > 1.5 {
                 stop()
                 SwipeTiming.finish()
@@ -86,5 +121,6 @@ enum SwipeTiming {
     @inline(__always) static func begin(_ kind: String, tab: UUID) {}
     @inline(__always) static func mark(_ step: String) {}
     @inline(__always) static func sawSpots(_ frames: [UUID: CGRect]) {}
+    @inline(__always) static func listCPUDrawnLayers() {}
     #endif
 }

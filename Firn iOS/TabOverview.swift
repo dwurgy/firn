@@ -317,7 +317,8 @@ struct TabOverview: View {
                     }
                     .transition(.identity)
                 } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
-                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted,
+                               slim: tallness(tab, onScreen: isOnScreen(tab)) < 0.5) {
                         tile(tab, spot: { _ in })
                     }
                     // There or not, never faded in or out.
@@ -1862,6 +1863,10 @@ private struct LiftedTile<Content: View>: View {
     let finger: DragFinger
     let height: CGFloat
     let lifted: Bool
+    /// A slim row: see-through at rest (10% in dark), so while it's held
+    /// it sits on one steady base, menu, drag, and forming group alike,
+    /// never switching with what's under it (David's recording, 2026-11-09).
+    var slim = false
     @ViewBuilder let content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1869,15 +1874,16 @@ private struct LiftedTile<Content: View>: View {
 
     var body: some View {
         let raised = lifted && up && !reduceMotion
+        let based = slim ? lifted || finger.solid : finger.solid
         GeometryReader { box in
             let origin = box.frame(in: .global).origin
             content
                 .frame(width: finger.width, height: height)
                 .background {
                     RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
-                        .fill(Theme.tileSolid)
-                        .opacity(finger.solid ? 1 : 0)
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: finger.solid)
+                        .fill(slim ? Theme.heldRowBase : Theme.tileSolid)
+                        .opacity(based ? 1 : 0)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: based)
                 }
                 // From a held tab's sunk size (`liftFrom`), so the press
                 // and the lift are one motion.

@@ -231,6 +231,9 @@ struct AddressBar: View {
     /// A long site's name is cut short with "…" in a pill no wider than
     /// this, so it stays small.
     static let compactMaxWidth: CGFloat = 240
+    /// How far the small pill's top sits below the full bar's, so the
+    /// page's end can rest just above the pill (phase 5, step 3).
+    static let compactTopDrop: CGFloat = BarButton.glassSize - compactHeight + compactDrop
 
     /// The menu's spot, in the field's own coordinates: from the field's
     /// left edge up, its bottom on the field's, kept inside the bar's right

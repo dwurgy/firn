@@ -357,7 +357,9 @@ struct BrowserScreen: View {
 
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
-            PageView(page: page, barTop: barTop) { scroll in
+            // The page's room follows the bar: shrunk, its end rests just
+            // above the small pill (phase 5, step 3).
+            PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) { scroll in
                 let shrink = scroll == .shrink
                 if barShrunk != shrink { barShrunk = shrink }
             }

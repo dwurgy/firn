@@ -247,12 +247,39 @@ private final class PageFrame: UIView {
             scroller.contentInsetAdjustmentBehavior = .never
         }
         if scroller.contentInset != covered {
+            let grew = covered.bottom - scroller.contentInset.bottom
+            let wasAtEnd = scroller.contentOffset.y >= endOffset - 1
             scroller.contentInset = covered
             scroller.verticalScrollIndicatorInsets = covered
+            if grew > 0, wasAtEnd { keepEndInView() }
         }
         // iOS's own choice, as Safari's: `.soft` ran the blur about 80pt
         // down and whiter; `.automatic` ends just under the clock (2026-11-05).
         scroller.topEdgeEffect.style = .automatic
+    }
+
+    /// The furthest the page scrolls down: its end just clear of the bar.
+    private var endOffset: CGFloat {
+        let scroller = webView.scrollView
+        return scroller.contentSize.height + scroller.contentInset.bottom - scroller.bounds.height
+    }
+
+    /// The bar grew while the page rested at its end (a tap on the small
+    /// pill): the page slides up by the difference in the bar's own glide,
+    /// so its end stays whole above the full bar, as in Safari (phase 5,
+    /// step 3). A page with nothing to scroll stays at its top.
+    private func keepEndInView() {
+        let scroller = webView.scrollView
+        let top = -scroller.contentInset.top
+        let target = endOffset
+        guard target > top, !scroller.isTracking else { return }
+        let move = { scroller.contentOffset.y = target }
+        if UIAccessibility.isReduceMotionEnabled {
+            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut, animations: move)
+        } else {
+            // The bar's `shrinkGlide`: a 0.32s spring with no bounce.
+            UIView.animate(springDuration: 0.32, bounce: 0, animations: move)
+        }
     }
 }
 #endif

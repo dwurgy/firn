@@ -124,18 +124,20 @@ struct BrowserScreen: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            if showingTabs {
-                TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                            lineShown: lineShown, heldCard: heldCard, arrival: arrival, open: openTab,
-                            done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
-                            newTab: startNewTab, typing: editing)
-                    // Typing from + leaves the overview where it is, under
-                    // the dim; its own bar stays behind the keyboard.
-                    .ignoresSafeArea(.keyboard)
-                    .allowsHitTesting(!editing && gliding == nil)
-                    .accessibilityHidden(editing)
-                    .transition(.opacity)
-            }
+            // Always built, hidden behind the page while browsing, so a swipe
+            // up only reveals it: building it on each swipe held the screen
+            // still for the first ~80ms, and 1.1s the first time after
+            // launch (David's iPhone, 2026-11-10).
+            TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
+                        lineShown: lineShown, heldCard: heldCard, arrival: arrival, open: openTab,
+                        done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
+                        newTab: startNewTab, typing: editing, shown: showingTabs)
+                // Typing from + leaves the overview where it is, under
+                // the dim; its own bar stays behind the keyboard.
+                .ignoresSafeArea(.keyboard)
+                .opacity(showingTabs ? 1 : 0)
+                .allowsHitTesting(showingTabs && !editing && gliding == nil)
+                .accessibilityHidden(!showingTabs || editing)
             // Under the page, so it shows only once the page's picture has
             // taken its place (above, it covered the page for a frame).
             if swiping {

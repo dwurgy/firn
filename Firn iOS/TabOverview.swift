@@ -40,6 +40,10 @@ struct TabOverview: View {
     /// Typing from +: the address field takes the bar's place, so the bar
     /// steps out of its way (it would show through the field's glass).
     var typing = false
+    /// On screen. The overview stays built behind the page while browsing
+    /// (hidden), so a swipe up only reveals it; whatever it remembers
+    /// resets as it hides.
+    var shown = true
 
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -273,12 +277,18 @@ struct TabOverview: View {
                     .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
                                           floor: !typing && gliding != nil ? 0.002 : 0))
             }
-            .onAppear {
-                openedAt = .now
-                lastViewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
-                loadTidied()
-                if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
+            // Ready before it shows: sizes taken, the tidy read, and scrolled
+            // to the tab on screen, so the page's card is in place the
+            // moment a swipe up starts. Again as it shows (as when it was
+            // built on each opening), and while hidden whenever the tab or
+            // space on screen changes.
+            .onAppear { getReady(scroller) }
+            .onChange(of: shown) { _, now in
+                if !now { forgetOpening() }
+                getReady(scroller)
             }
+            .onChange(of: store.activeTab?.id) { if !shown { getReady(scroller) } }
+            .onChange(of: store.activeSpace.id) { if !shown { getReady(scroller) } }
         }
         // Over everything, bar included: an open menu's dim (a tap on it
         // closes the menu), the held tab lifted over the list and following
@@ -297,10 +307,15 @@ struct TabOverview: View {
             }
         }
         .background {
+            // Hidden, only a picture already in memory: browsing never
+            // waits on the disk.
             OverviewHaze(tab: store.activeTab?.id,
-                         picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
+                         picture: store.activeTab.flatMap {
+                             shown ? pictures.image(for: $0.id) : pictures.cachedImage(for: $0.id)
+                         }, space: space)
         }
-        .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
+        // Only while shown: it takes the keyboard's focus to hear a shake.
+        .background { if shown { ShakeToUndo(undoManager: undoManager, closes: closes) } }
         .basecampFullAlert(isPresented: $basecampFull)
         // Firn leaving the screen closes an open hold menu, as iOS's do;
         // its frost is a picture of the screen as it opened.
@@ -313,6 +328,44 @@ struct TabOverview: View {
                 if let naming { store.rename(naming, to: name) }
             }
         }
+    }
+
+    /// What an opening takes as it starts: each tab's last-viewed time
+    /// (so nothing changes size while it's open), this space's tidy, and
+    /// the list scrolled to the tab on screen.
+    private func getReady(_ scroller: ScrollViewProxy) {
+        openedAt = .now
+        lastViewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
+        loadTidied()
+        if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
+    }
+
+    /// Hidden: everything a visit leaves behind goes, as when the
+    /// overview was built afresh for each one (a hold, a menu, a drag and
+    /// its moved order, a forming group, a rename, a pinch under way).
+    private func forgetOpening() {
+        hoverWait?.cancel()
+        edgeScroll?.cancel()
+        hoverWait = nil
+        edgeScroll = nil
+        hoverID = nil
+        forming = nil
+        heldMenu = nil
+        pointing = false
+        pointer.point = nil
+        pointer.card = nil
+        drag = nil
+        finger.held = nil
+        finger.solid = false
+        finger.pressed = nil
+        order = nil
+        members = nil
+        tileOrder = nil
+        finishing = false
+        pinchDone = false
+        listFade = 1
+        naming = nil
+        basecampFull = false
     }
 
     /// The held tab, lifted over the list and following the finger.
@@ -447,7 +500,7 @@ struct TabOverview: View {
             tab: tab,
             isOnScreen: onScreen,
             tallness: tallness(tab, onScreen: onScreen),
-            picture: onScreen ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
+            picture: onScreen && shown ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
             loadPicture: { await pictures.loadImage(for: tab.id) },
             ring: Theme.spaceColor(space),
             space: space,
@@ -2188,8 +2241,16 @@ private struct OverviewHaze: View {
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        // Another tab on screen: its own kept haze at once, as when the
+        // overview was built for each opening (it stays built now).
+        .onChange(of: tab) {
+            var now = Transaction()
+            now.disablesAnimations = true
+            withTransaction(now) { haze = tab.flatMap { Self.kept[$0] } }
+        }
         .task(id: picture.map(ObjectIdentifier.init)) {
-            guard let source = picture?.cgImage else { return haze = nil }
+            // No picture in memory (hidden): the kept haze stays.
+            guard let source = picture?.cgImage else { return }
             let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
             guard !Task.isCancelled else { return }
             haze = made.map { UIImage(cgImage: $0) }

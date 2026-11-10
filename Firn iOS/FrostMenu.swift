@@ -18,6 +18,9 @@ struct OpenHoldMenu {
     let sections: [[HoldMenuItem]]
     /// The screen as the menu opened, small, for the card's frost.
     let backdrop: UIImage?
+    /// Above the tile when there's room (a group's name line: below it are
+    /// the group's own tabs, David, 2026-11-09); else below, as any tile.
+    var prefersAbove = false
 }
 
 /// The held finger pointing at the menu's rows, as in iOS's own menus: it
@@ -124,7 +127,8 @@ struct HoldMenuPlacement: View {
         let bottom = safe.maxY - Self.margin
         let roomBelow = bottom - (tile.maxY + Self.gap)
         let roomAbove = (tile.minY - Self.gap) - top
-        let below = roomBelow >= height || (roomAbove < height && roomBelow >= roomAbove)
+        let below = menu.prefersAbove && roomAbove >= height ? false
+            : roomBelow >= height || (roomAbove < height && roomBelow >= roomAbove)
         let ox: CGFloat = leading ? 0.2 : 0.8
         if below {
             // Too little room either way: it covers the tile's end rather

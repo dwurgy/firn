@@ -23,10 +23,11 @@ struct BasecampTiles: View {
     var order: [UUID]? = nil
     /// The tile lifted and following the finger: its spot stays empty.
     var held: UUID? = nil
-    /// A drag is running: iOS's menu lift stops at once.
-    var dragging = false
+    /// The tile held still, sinking a little as its menu comes.
+    var pressed: UUID? = nil
     let open: (FirnCore.Tab) -> Void
-    /// The tile's hold menu, in sections split by dividers.
+    /// The tile's hold menu (Firn's own, opened by the overview), here
+    /// for VoiceOver's actions.
     let menu: @MainActor (FirnCore.Tab) -> [[HoldMenuItem]]
     /// VoiceOver's Move Left and Move Right: the tile to a new spot
     /// (counted without it, as the store counts).
@@ -134,15 +135,18 @@ struct BasecampTiles: View {
         // Dragging can't be found by VoiceOver: the same moves as actions.
         .accessibilityAction(named: "Move Left") { if index > 0 { move(tab, index - 1) } }
         .accessibilityAction(named: "Move Right") { if index < count - 1 { move(tab, index + 1) } }
-        // Holding opens iOS's own menu beside the tile, its shape lifting on
-        // a solid base (the Reduce Transparency look), so the glass doesn't
-        // darken as iOS's shadow shows through it. 1pt wider than the tile,
-        // so the lifted copy keeps the hairline and shadow just outside it;
-        // cut to the tile's own shape, the edge popped in late, once iOS put
-        // the real tile back (David's recording, 2026-11-08).
-        // A hold that moves becomes a drag, and the menu's lift stops.
-        .holdMenu(cornerRadius: Self.cornerRadius, outset: 1, base: Theme.tileSolid,
-                  dragging: dragging) { menu(tab) }
+        // Its menu's items, for VoiceOver (holding still opens Firn's own
+        // menu, from the overview's HoldToDrag).
+        .accessibilityActions {
+            ForEach(Array(menu(tab).joined().enumerated()), id: \.offset) { _, item in
+                Button(item.title, action: item.action)
+            }
+        }
+        // Held still, it sinks a little over the rest of the hold, so the
+        // finger feels the menu coming; let go early, it springs back.
+        .scaleEffect(pressed == tab.id ? pressedScale : 1)
+        .animation(pressed == tab.id ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
+                                     : .smooth(duration: 0.2), value: pressed == tab.id)
         .opacity(gliding == tab.id ? reveal : 1)
         // Lifted, its spot stays empty, at once (never faded).
         .opacity(held == tab.id ? 0 : 1)

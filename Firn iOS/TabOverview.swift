@@ -178,7 +178,7 @@ struct TabOverview: View {
                                   onScreen: heldCard ?? store.activeTab?.id,
                                   reveal: tileReveal, order: tileOrder,
                                   held: drag?.tile == true ? drag?.id : nil,
-                                  dragging: drag != nil,
+                                  pressed: finger.pressed,
                                   open: { tab in if !busy { open(tab) } },
                                   menu: { tileMenu(for: $0) },
                                   move: { tab, to in
@@ -207,9 +207,9 @@ struct TabOverview: View {
                                     canBegin: { liftable(at: $0) != nil },
                                     began: lift(at:), moved: follow(to:),
                                     ended: { letGo(cancelled: $0) },
-                                    wantsMenu: { menuTab(at: $0) != nil },
+                                    wantsMenu: { menuTarget(at: $0) != nil },
                                     pressing: { point in
-                                        finger.pressed = reduceMotion ? nil : point.flatMap { menuTab(at: $0)?.id }
+                                        finger.pressed = reduceMotion ? nil : point.flatMap { menuTarget(at: $0)?.id }
                                     },
                                     menu: openMenu(at:),
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
@@ -332,7 +332,8 @@ struct TabOverview: View {
                     // There or not, never faded in or out.
                     .transition(.identity)
                 } else if let group = store.tabGroups.first(where: { $0.id == drag.id }) {
-                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted,
+                               cornerRadius: GroupCard.cornerRadius) {
                         groupCard(group, lifted: true)
                     }
                     .transition(.identity)
@@ -549,15 +550,9 @@ struct TabOverview: View {
     /// What a hold at a point (global) opens a menu on: a tab's tile, or
     /// else the group card around the point. Only what's on screen counts.
     private func holdMenuTarget(at point: CGPoint) -> HoldMenuTarget? {
-        guard drag == nil, gliding == nil, spots.viewport.contains(point) else { return nil }
-        // A tab's menu is Firn's own now (`openMenu`), and a held tab in a
-        // group opens its own menu, never the group's.
-        if visibleTabs.contains(where: { spots.frames[$0.id]?.contains(point) == true }) { return nil }
-        if let group = store.tabGroups.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
-            return HoldMenuTarget(id: group.id, cornerRadius: GroupCard.cornerRadius,
-                                  sections: groupMenu(group).sections)
-        }
-        return nil
+        // Tabs', groups', and tiles' menus are all Firn's own now
+        // (`openMenu`); iOS's goes in step 3c's step 5.
+        nil
     }
 
     /// Where a held tab or group is now (global), if it's still in the list.
@@ -722,7 +717,7 @@ struct TabOverview: View {
             HoldMenuItem(title: "Move to Tabs", systemImage: "arrow.down.to.line") {
                 withAnimation(glide) { store.removeFromBasecamp(tab) }
             },
-            HoldMenuItem(title: "Remove from Basecamp", systemImage: "xmark") { removeTile(tab) },
+            HoldMenuItem(title: "Remove from Basecamp", systemImage: "xmark", closes: true) { removeTile(tab) },
         ]]
     }
 
@@ -818,42 +813,58 @@ struct TabOverview: View {
 
     // MARK: - Firn's hold menu
 
-    /// The tab a still hold at a point (global) opens Firn's menu for:
-    /// tabs only so far (groups and tiles in step 3c's step 4).
-    private func menuTab(at point: CGPoint) -> FirnCore.Tab? {
-        guard heldMenu == nil, drag == nil, gliding == nil, !pinchedRecently,
-              case let .tab(tab) = liftable(at: point) else { return nil }
-        return tab
+    /// What a still hold at a point (global) opens Firn's menu for: a tab,
+    /// a group's name line, or a Basecamp tile.
+    private func menuTarget(at point: CGPoint) -> Liftable? {
+        guard heldMenu == nil, drag == nil, gliding == nil, !pinchedRecently else { return nil }
+        return liftable(at: point)
     }
 
-    /// Held still: the tab lifts where it is, on its solid base, the rest
-    /// dims, and its menu forms beside it. The list holds still while it's
-    /// open (the dim takes every touch).
+    /// Held still: the tab, group, or tile lifts where it is, on its solid
+    /// base, the rest dims, and its menu forms beside it. The list holds
+    /// still while it's open (the dim takes every touch).
     private func openMenu(at point: CGPoint) {
-        guard let tab = menuTab(at: point), var frame = spots.frames[tab.id] else { return }
-        // The list reports the tab's place as it is sunk (`EmptyWhileHeld`):
-        // back to its real size, or the lifted tile shrank twice for a
-        // couple of frames (Simulator recording, 2026-11-09).
-        let sunk = finger.pressed == tab.id
-        if sunk {
+        guard let target = menuTarget(at: point), var frame = spots.frames[target.id] else { return }
+        let sunk = finger.pressed == target.id
+        // A tab reports its place as it is sunk (its spot is measured inside
+        // `EmptyWhileHeld`): back to its real size, or the lifted tile shrank
+        // twice for a couple of frames (Simulator recording, 2026-11-09).
+        // A group's and a tile's places are measured outside the sink.
+        if sunk, case .tab = target {
             let grow = 1 / pressedScale - 1
             frame = frame.insetBy(dx: -frame.width * grow / 2, dy: -frame.height * grow / 2)
         }
         // Before anything changes: the screen as it is, for the frost.
         let backdrop = ScreenPicture.take()
-        let sections = menu(for: tab)
-        startDrag(Drag(id: tab.id, start: frame, grab: point.y - frame.minY, group: false, from: tab.groupID),
-                  at: point)
-        guard drag?.id == tab.id else { return }
+        let sections: [[HoldMenuItem]]
+        // What the menu opens beside: the tile, or a group's name line.
+        var anchor = frame
+        let grab = point.y - frame.minY
+        switch target {
+        case let .tab(tab):
+            sections = menu(for: tab)
+            startDrag(Drag(id: tab.id, start: frame, grab: grab, group: false, from: tab.groupID), at: point)
+        case let .group(group):
+            sections = groupMenu(group).sections
+            anchor.size.height = group.folded && shownTabs(in: group).isEmpty
+                ? GroupCard.foldedHeight : GroupCard.headerHeight
+            startDrag(Drag(id: group.id, start: frame, grab: grab, group: true, from: nil), at: point)
+        case let .tile(tile):
+            sections = tileMenu(for: tile)
+            startDrag(Drag(id: tile.id, start: frame, grab: grab, group: false, from: nil,
+                           grabX: point.x - frame.minX, tile: true), at: point)
+        }
+        guard drag?.id == target.id else { return }
         finger.pressed = nil
         if sunk { finger.liftFrom = pressedScale }
         // A held tab near the list's edge doesn't scroll it.
         edgeScroll?.cancel()
         edgeScroll = nil
         finger.solid = true
+        let isGroup = if case .group = target { true } else { false }
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.2)) {
-            heldMenu = OpenHoldMenu(id: tab.id, tile: frame, fingerX: point.x,
-                                    sections: sections, backdrop: backdrop)
+            heldMenu = OpenHoldMenu(id: target.id, tile: anchor, fingerX: point.x,
+                                    sections: sections, backdrop: backdrop, prefersAbove: isGroup)
         }
     }
 
@@ -1611,7 +1622,7 @@ private struct GroupLine: View {
     var sections: [[HoldMenuItem]] {
         [[HoldMenuItem(title: "Rename", systemImage: "pencil", action: rename),
           HoldMenuItem(title: "Ungroup", systemImage: "folder.badge.minus", action: ungroup)],
-         [HoldMenuItem(title: "Close Group", systemImage: "xmark", action: close)]]
+         [HoldMenuItem(title: "Close Group", systemImage: "xmark", closes: true, action: close)]]
     }
 
     var actions: GroupActions { GroupActions(rename: rename, ungroup: ungroup, close: close) }
@@ -1851,6 +1862,13 @@ private enum Liftable {
     case tab(FirnCore.Tab)
     case group(TabGroup)
     case tile(FirnCore.Tab)
+
+    @MainActor var id: UUID {
+        switch self {
+        case let .tab(tab), let .tile(tab): tab.id
+        case let .group(group): group.id
+        }
+    }
 }
 
 /// Where the held tile is (global points): observed only by the tile.
@@ -1881,7 +1899,7 @@ private enum Liftable {
 }
 
 /// How far a held tab sinks before its menu opens (as iOS's items do).
-private let pressedScale: CGFloat = 0.97
+let pressedScale: CGFloat = 0.97
 
 /// A tab's place in the list, empty while the tab is held (or its page
 /// glides). It reads which tab is held itself: the list doesn't redraw a
@@ -1917,6 +1935,8 @@ private struct LiftedTile<Content: View>: View {
     /// it sits on one steady base, menu, drag, and forming group alike,
     /// never switching with what's under it (David's recording, 2026-11-09).
     var slim = false
+    /// The solid base's corners: a group card's are rounder than a tab's.
+    var cornerRadius: CGFloat = OverviewRow.cornerRadius
     @ViewBuilder let content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1930,7 +1950,7 @@ private struct LiftedTile<Content: View>: View {
             content
                 .modifier(LaneWidth(width: finger.width, height: height))
                 .background {
-                    RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(slim ? Theme.heldRowBase : Theme.tileSolid)
                         .opacity(based ? 1 : 0)
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: based)

@@ -295,7 +295,30 @@ final class Database {
         do {
             // Deleted visits are overwritten on disk, not just unlinked.
             try execute("PRAGMA secure_delete = ON")
+            // A visit is a small append: written to a log beside the file
+            // and folded in later, rather than flushing the whole file to
+            // the disk at every page (much less work, and less wear on a
+            // phone's storage). A sudden power cut can lose the last few
+            // visits, never the file.
+            try execute("PRAGMA journal_mode = WAL")
+            try execute("PRAGMA synchronous = NORMAL")
+            try migrate()
+        } catch {
+            sqlite3_close(handle)
+            throw error
+        }
+    }
+
+    deinit { sqlite3_close(handle) }
+
+    /// Brings the file up to the layout this Firn uses, one numbered step
+    /// at a time (SQLite's `user_version`), so a later change to the table
+    /// adds a step here and older files catch up instead of being lost.
+    private func migrate() throws {
+        let version = try select("PRAGMA user_version", []) { $0.integer(0) }.first ?? 0
+        if version < 1 {
             try execute("""
+                BEGIN;
                 CREATE TABLE IF NOT EXISTS visits (
                     id INTEGER PRIMARY KEY,
                     url TEXT NOT NULL,
@@ -306,14 +329,11 @@ final class Database {
                 CREATE INDEX IF NOT EXISTS visits_time ON visits(visited_at);
                 CREATE INDEX IF NOT EXISTS visits_site ON visits(site);
                 PRAGMA user_version = 1;
+                COMMIT;
                 """)
-        } catch {
-            sqlite3_close(handle)
-            throw error
         }
+        // The next layout: `if version < 2 { … PRAGMA user_version = 2 }`.
     }
-
-    deinit { sqlite3_close(handle) }
 
     func insert(url: String, site: String, title: String, at time: Double) throws -> Int64 {
         try run(

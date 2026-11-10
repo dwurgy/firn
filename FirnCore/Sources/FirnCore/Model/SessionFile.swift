@@ -26,13 +26,21 @@ public struct SessionFile: Sendable {
     /// (damaged, or from a newer Firn) is moved to `session.broken.json` so
     /// it's never silently lost, and Firn starts fresh.
     public func load() -> Session? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        let manager = FileManager.default
+        // A file that's there but can't be opened is set aside too: taken
+        // as "no session", the first save would write over it.
+        guard let data = try? Data(contentsOf: url) else {
+            guard manager.fileExists(atPath: url.path(percentEncoded: false)) else { return nil }
+            Self.log.error("The saved session couldn't be opened; set it aside and started fresh")
+            try? manager.removeItem(at: brokenURL)
+            try? manager.moveItem(at: url, to: brokenURL)
+            return nil
+        }
         if let session = try? Self.decoder.decode(Session.self, from: data),
            session.version <= Session.currentVersion {
             return session
         }
         Self.log.error("The saved session couldn't be read; set it aside and started fresh")
-        let manager = FileManager.default
         try? manager.removeItem(at: brokenURL)
         try? manager.moveItem(at: url, to: brokenURL)
         return nil

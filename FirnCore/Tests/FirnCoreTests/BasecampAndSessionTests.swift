@@ -329,6 +329,16 @@ struct BasecampAndSessionTests {
         #expect(try Data(contentsOf: file.brokenURL) == Data("not json".utf8))
     }
 
+    /// A file that's there but can't be opened (here, a folder in its
+    /// place) is set aside too, so the next save can't write over it.
+    @Test func aFileThatCantBeOpenedIsSetAsideNotOverwritten() throws {
+        let file = temporaryFile()
+        try FileManager.default.createDirectory(at: file.url, withIntermediateDirectories: true)
+        #expect(file.load() == nil)
+        #expect(!FileManager.default.fileExists(atPath: file.url.path()))
+        #expect(FileManager.default.fileExists(atPath: file.brokenURL.path()))
+    }
+
     @Test func aMissingFileIsAFreshStart() {
         #expect(temporaryFile().load() == nil)
     }

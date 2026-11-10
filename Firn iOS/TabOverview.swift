@@ -510,7 +510,9 @@ struct TabOverview: View {
             spot: spot,
             moveUp: moveUp,
             moveDown: moveDown,
-            groupName: tab.groupID.flatMap { id in store.tabGroups.first(where: { $0.id == id })?.name }
+            // From every group directly: `tabGroups` walks the whole tab
+            // list, and this runs for every tile on every redraw.
+            groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name }
         )
     }
 
@@ -1144,9 +1146,9 @@ struct TabOverview: View {
         }
 
         // Loose tabs a held tab could rest on to make a group with.
-        let loose: Set<UUID> = drag.group ? [] : Set(ids.filter { id in
-            id != drag.id && store.openTabs.contains { $0.id == id && $0.groupID == nil }
-        })
+        // Once per move, not once per tile: the finger moves every frame.
+        let looseIDs: Set<UUID> = drag.group ? [] : Set(store.looseTabs.map(\.id))
+        let loose: Set<UUID> = Set(ids.filter { $0 != drag.id && looseIDs.contains($0) })
         // The held tile's edge that leads toward `index` among `others`
         // (`was` is its own place there, nil if arriving: then its middle).
         func edge(toward index: Int, was: Int?) -> CGFloat {

@@ -292,6 +292,14 @@ A read through the whole iPhone app and the engine's iOS side, while David was a
 - **iOS's built-in link menu** (hold a link) is WebKit's default until Lookout (phase 6): its preview's data store and "Add to Reading List" (Safari's) aren't checked. Unsure, not a known leak; check when Lookout replaces it.
 - **Downloads already saved** by earlier builds sit in Firn's container on David's iPhone; deleting the app clears them (only test builds ever had this).
 
+**The back end, and built to last (same day):** FirnCore (the model, saving, history, passwords) is in good shape: Swift 6's strict concurrency, history in an actor with every SQL value bound, atomic saves, a versioned session file that sets a bad one aside rather than losing it, the engine kept behind `PageController`, Sparkle the only dependency (Mac), and 452 tests. Fixed:
+4. **A session file that couldn't be opened was written over.** Only an unreadable file was set aside; one that couldn't be opened at all counted as "no session", and the first save replaced it. Now it's set aside too (`SessionFile.load`, tested).
+5. **History flushed the whole file to disk at every page.** Now SQLite's write-ahead log (WAL, normal sync): far less work and less wear on the phone's storage; a power cut can lose the last few visits, never the file.
+6. **History's layout has numbered steps** (`Database.migrate`), so a later change to the table upgrades old files instead of needing them erased.
+7. **Two whole-list walks per tile in the overview** (a tile's group name, and loose tabs during a drag) now happen once; small, but they ran every frame of a drag.
+
+**Proposed, not done (David's OK first; mechanical, nothing on screen changes):** split the five largest files by their own sections, one file per commit: `TabOverview.swift` (2,836 lines: rows and cards, dragging, the hold menu's placement, the haze), `BrowserStore.swift` (2,054: an extension file per MARK section), and on the Mac `Sidebar.swift` (2,250), `BrowserWindow.swift` (1,834), and `WebKitPageController.swift` (1,347). Some `private` becomes module-internal. Then move the overview's rules that aren't drawing (where a dragged tab lands, which tabs are cards, tidying) into FirnCore, so they get tests and the iPad can share them. Small: `HistoryRecorder` keeps one entry per tab ever opened until quit (tiny; forget it on close).
+
 ### Phase 6: The everyday features
 
 In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy away (the Tidied away button beside the space's name in the overview's bottom bar, and the frost-and-thaw moment), history, find in page, downloads to Files, ad and tracker blocking with Stop Blocking per site, scam warnings, saved passwords (save, fill after a tap, Settings › Passwords behind Face ID), and Settings.

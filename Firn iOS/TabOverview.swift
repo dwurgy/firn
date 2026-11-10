@@ -76,6 +76,10 @@ struct TabOverview: View {
     @State private var picks = 0
     /// Pulled away from an open menu into a drag: a light tap.
     @State private var pulls = 0
+    /// The held finger slid toward the open menu: it points at its rows
+    /// until it lifts, and drags nothing.
+    @State private var pointing = false
+    @State private var pointer = MenuPointer()
     /// Where the finger was as it moved off an open menu, while Firn's
     /// tile still follows it sideways (see `DragFinger.dx`).
     @State private var handOffOrigin: CGPoint?
@@ -209,7 +213,7 @@ struct TabOverview: View {
                                     },
                                     menu: openMenu(at:),
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
-                                    leaveMenu: dragOffMenu(to:)))
+                                    leaveMenu: leaveMenu(to:from:)))
                 // Holding still opens a tab's or group's menu, the tile
                 // lifting solid (see `listHoldMenu`).
                 .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
@@ -290,7 +294,8 @@ struct TabOverview: View {
                         .transition(.opacity)
                 }
                 liftedTile
-                HoldMenuPlacement(menu: heldMenu, space: space, pick: pick(_:), dismiss: { closeMenu() })
+                HoldMenuPlacement(menu: heldMenu, space: space, pointer: pointer,
+                                  pick: pick(_:), dismiss: { closeMenu() })
             }
         }
         .background {
@@ -850,7 +855,36 @@ struct TabOverview: View {
         }
     }
 
-    /// The finger, still down from the hold, moved off the open menu: the
+    /// The finger, still down from the hold, has moved: toward the menu
+    /// (mostly up or down, toward the side it opened on) it points at the
+    /// rows, as in iOS's menus; away or sideways, the tab drags. Decided
+    /// once per touch.
+    private func leaveMenu(to point: CGPoint, from start: CGPoint) {
+        guard let menu = heldMenu else { return }
+        let dx = point.x - start.x, dy = point.y - start.y
+        if let card = pointer.card, abs(dy) > abs(dx),
+           card.midY > menu.tile.midY ? dy > 0 : dy < 0 {
+            pointing = true
+            pointer.point = point
+            return
+        }
+        dragOffMenu(to: point)
+    }
+
+    /// The finger lifted (or iOS took it) while pointing: the row under it
+    /// runs, or, off the rows, the menu simply stays open.
+    private func stopPointing(cancelled: Bool) {
+        pointing = false
+        if cancelled {
+            pointer.point = nil
+            return closeMenu()
+        }
+        pointer.releasePoint = pointer.point
+        pointer.point = nil
+        pointer.release += 1
+    }
+
+    /// The finger, still down from the hold, moved away from the open menu: the
     /// menu thaws and the tab already lifted for it becomes the drag, so
     /// there's only ever one tile. Held where the finger has it now, so it
     /// doesn't jump the few points the finger moved; its solid base fades
@@ -858,6 +892,7 @@ struct TabOverview: View {
     private func dragOffMenu(to point: CGPoint) {
         guard heldMenu != nil, var drag, drag.lifted, drag.id == heldMenu?.id else { return }
         withAnimation(.easeOut(duration: 0.15)) { heldMenu = nil }
+        pointer.card = nil
         pulls += 1
         drag.grab = point.y - finger.top
         drag.grabX = point.x - finger.left
@@ -881,6 +916,9 @@ struct TabOverview: View {
     private func closeMenu(then action: (@MainActor () -> Void)? = nil) {
         guard heldMenu != nil else { return }
         withAnimation(.easeOut(duration: 0.15)) { heldMenu = nil }
+        pointing = false
+        pointer.point = nil
+        pointer.card = nil
         order = nil
         members = nil
         tileOrder = nil
@@ -1074,6 +1112,7 @@ struct TabOverview: View {
     /// The tile stays under the finger, straight up and down, and the
     /// other tabs glide aside to show where it will land.
     private func follow(to point: CGPoint) {
+        if pointing { pointer.point = point; return }
         guard let drag, drag.lifted else { return }
         finger.top = point.y - drag.grab
         finger.y = point.y
@@ -1297,12 +1336,10 @@ struct TabOverview: View {
         resize(to: lane.minX, lane.width)
     }
 
-    /// The held tile narrows into a group's lane or widens out of one. Its
-    /// own softer glide, apart from the rows making room: `.smooth` did most
-    /// of the change in the first two frames, a jolt (David's recording,
-    /// 2026-11-09).
+    /// The held tile narrows into a group's lane or widens out of one, both
+    /// edges gliding together (0.25s, no bounce).
     private func resize(to left: CGFloat, _ width: CGFloat) {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             finger.left = left
             finger.width = width
         }
@@ -1334,6 +1371,7 @@ struct TabOverview: View {
     /// closing); a forming group thaws instead of being made, since
     /// nobody let go on it.
     private func letGo(cancelled: Bool = false) {
+        if pointing { return stopPointing(cancelled: cancelled) }
         handOffOrigin = nil
         edgeScroll?.cancel()
         edgeScroll = nil
@@ -1899,7 +1937,12 @@ private struct LiftedTile<Content: View>: View {
                 // and the lift are one motion.
                 .scaleEffect(raised ? 1.03 : (up ? 1 : finger.liftFrom))
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
-                .offset(x: finger.left + finger.dx - origin.x, y: finger.top - origin.y)
+                // Two offsets, not one: `top` changes with every move, at
+                // once, and as one offset that cut short the glide across,
+                // so the left edge jumped while the width glided (David,
+                // 2026-11-09).
+                .offset(x: finger.left + finger.dx - origin.x)
+                .offset(y: finger.top - origin.y)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -1929,9 +1972,10 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let pressing: (CGPoint?) -> Void
     let menu: (CGPoint) -> Void
     let menuEnded: (Bool) -> Void
-    /// The held finger moved off the open menu: from here, a drag
-    /// (`moved`, then `ended`).
-    let leaveMenu: (CGPoint) -> Void
+    /// The held finger moved from where the menu opened (the second
+    /// point): from here its moves and its lift come as a drag's
+    /// (`moved`, then `ended`), whether it drags or points at the menu.
+    let leaveMenu: (CGPoint, CGPoint) -> Void
 
     func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
         let hold = HoldThenMove()
@@ -1989,7 +2033,8 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
         case .changed where hold.leftMenu:
             // Moved off an open menu: it thaws, and the tile drags.
             hold.leftMenu = false
-            leaveMenu(point)
+            let move = hold.sinceMenu
+            leaveMenu(point, CGPoint(x: point.x - move.x, y: point.y - move.y))
         case .changed:
             if !hold.heldStill { moved(point) }
         case .ended: hold.heldStill ? menuEnded(false) : ended(false)
@@ -2027,6 +2072,8 @@ final class HoldThenMove: UIGestureRecognizer {
     /// The finger's latest point, and where it was as the menu opened.
     private var last: CGPoint = .zero
     private var menuPoint: CGPoint = .zero
+    /// How far the finger has moved since the menu opened.
+    var sinceMenu: CGPoint { CGPoint(x: last.x - menuPoint.x, y: last.y - menuPoint.y) }
     private var menuTimer: DispatchWorkItem?
     private var pressTimer: DispatchWorkItem?
     private var pressed = false

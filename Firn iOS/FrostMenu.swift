@@ -20,6 +20,20 @@ struct OpenHoldMenu {
     let backdrop: UIImage?
 }
 
+/// The held finger pointing at the menu's rows, as in iOS's own menus: it
+/// slid toward the menu instead of away (step 3c, 3b). The overview sets
+/// where the finger is; the menu lights the row under it and, on a let-go,
+/// runs that row.
+@MainActor @Observable final class MenuPointer {
+    /// The finger (global) while it points; nil otherwise.
+    var point: CGPoint?
+    /// Bumped as the finger lifts while pointing, at `releasePoint`.
+    var release = 0
+    var releasePoint: CGPoint?
+    /// The card (global), so the overview can tell which way is toward it.
+    var card: CGRect?
+}
+
 /// The open menu, placed beside its tile: below it if there's room, else
 /// above, lined up with the side of the tile nearest the finger, and kept
 /// inside the screen's safe area. Fills the safe area; only the card takes
@@ -28,6 +42,7 @@ struct HoldMenuPlacement: View {
     /// The open menu; nil while none is (the last one thaws where it was).
     let menu: OpenHoldMenu?
     let space: String
+    let pointer: MenuPointer
     let pick: (HoldMenuItem) -> Void
     /// A tap anywhere but the card, or VoiceOver's escape: the menu closes.
     let dismiss: () -> Void
@@ -67,7 +82,8 @@ struct HoldMenuPlacement: View {
                 // glides away from the tile.
                 ZStack {
                     if let menu {
-                        FrostMenu(sections: menu.sections, space: space, backdrop: menu.backdrop, pick: pick)
+                        FrostMenu(sections: menu.sections, space: space, backdrop: menu.backdrop,
+                                  pointer: pointer, pick: pick)
                             .frame(width: place.width)
                             .fixedSize(horizontal: false, vertical: true)
                             .id(menu.token)
@@ -144,6 +160,7 @@ struct FrostMenu: View {
     let sections: [[HoldMenuItem]]
     let space: String
     let backdrop: UIImage?
+    let pointer: MenuPointer
     let pick: (HoldMenuItem) -> Void
 
     static let rowHeight: CGFloat = 44
@@ -161,23 +178,34 @@ struct FrostMenu: View {
     /// The row whose list is open (its section and place), if any.
     @State private var open: [Int]?
     @State private var turns = 0
+    /// Each shown row's frame (global), for a pointing finger.
+    @State private var rows: [String: CGRect] = [:]
+    /// Resting on a row with a list: it opens after a moment, as iOS's do.
+    @State private var opening: Task<Void, Never>?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var shown: [[HoldMenuItem]] { sections.filter { !$0.isEmpty } }
 
+    /// The row under a point (global), if any.
+    private func row(at point: CGPoint?) -> String? {
+        guard let point else { return nil }
+        return rows.first { $0.value.contains(point) }?.key
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let lit = row(at: pointer.point)
         VStack(spacing: 0) {
             if let open, let parent = item(at: open) {
                 Group {
-                    Button { turn(to: nil) } label: {
+                    menuButton("back", lit: lit) {
                         MenuRow(title: parent.title, symbol: "chevron.left", back: true)
                     }
                     .accessibilityLabel("Back")
                     MenuSeparator()
-                    ForEach(Array(parent.children.enumerated()), id: \.offset) { _, child in
-                        Button { pick(child) } label: {
+                    ForEach(Array(parent.children.enumerated()), id: \.offset) { k, child in
+                        menuButton("child \(k)", lit: lit) {
                             MenuRow(title: child.title, dot: Theme.spaceColor(space))
                         }
                     }
@@ -188,9 +216,7 @@ struct FrostMenu: View {
                     ForEach(Array(shown.enumerated()), id: \.offset) { s, items in
                         if s > 0 { MenuSeparator() }
                         ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                            Button {
-                                if item.children.isEmpty { pick(item) } else { turn(to: [s, i]) }
-                            } label: {
+                            menuButton("\(s) \(i)", lit: lit) {
                                 MenuRow(title: item.title, symbol: item.systemImage, closes: item.closes,
                                         more: !item.children.isEmpty)
                             }
@@ -200,8 +226,25 @@ struct FrostMenu: View {
                 .transition(.opacity)
             }
         }
-        .buttonStyle(MenuRowStyle())
         .padding(Self.padding)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { pointer.card = $0 }
+        // A tick each time the pointing finger reaches another row.
+        .sensoryFeedback(trigger: lit) { _, now in now == nil ? nil : .selection }
+        .onChange(of: lit) { _, now in
+            opening?.cancel()
+            guard let now, let path = path(of: now), let item = item(at: path), !item.children.isEmpty
+            else { return }
+            opening = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.5))
+                guard !Task.isCancelled, row(at: pointer.point) == now else { return }
+                turn(to: path)
+            }
+        }
+        // Let go while pointing: the row under the finger runs, as a tap.
+        .onChange(of: pointer.release) {
+            opening?.cancel()
+            if let key = row(at: pointer.releasePoint) { run(key) }
+        }
         // Never takes a touch: its picture of the screen is clipped to the
         // card but still covers the whole screen, and it took every tap
         // outside the card, so the menu wouldn't close (2026-11-09).
@@ -220,6 +263,33 @@ struct FrostMenu: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+    }
+
+    /// A row: a tap runs it, and it tells where it is for a pointing finger.
+    private func menuButton(_ key: String, lit: String?,
+                            @ViewBuilder label: () -> MenuRow) -> some View {
+        Button { run(key) } label: { label() }
+            .buttonStyle(MenuRowStyle(lit: lit == key))
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { rows[key] = $0 }
+            .onDisappear { rows[key] = nil }
+    }
+
+    /// A main row's section and place, from its key.
+    private func path(of key: String) -> [Int]? {
+        let parts = key.split(separator: " ").compactMap { Int($0) }
+        return parts.count == 2 ? parts : nil
+    }
+
+    /// What a row does: a choice runs, a row with a list opens it, Back
+    /// goes back.
+    private func run(_ key: String) {
+        if key == "back" { return turn(to: nil) }
+        if key.hasPrefix("child "), let open, let parent = item(at: open),
+           let k = Int(key.dropFirst(6)), parent.children.indices.contains(k) {
+            return pick(parent.children[k])
+        }
+        guard let path = path(of: key), let item = item(at: path) else { return }
+        if item.children.isEmpty { pick(item) } else if open != path { turn(to: path) }
     }
 
     private func item(at path: [Int]) -> HoldMenuItem? {
@@ -319,13 +389,15 @@ private struct MenuRow: View {
     }
 }
 
-/// A warm wash under the finger.
+/// A warm wash under the finger: pressed, or a held finger pointing at it.
 private struct MenuRowStyle: ButtonStyle {
+    var lit = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(configuration.isPressed ? Theme.press : .clear)
+                    .fill(configuration.isPressed || lit ? Theme.press : .clear)
             }
     }
 }

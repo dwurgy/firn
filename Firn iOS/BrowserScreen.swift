@@ -52,6 +52,9 @@ struct BrowserScreen: View {
     /// corners, and how much the card's line on it has faded in.
     @State private var box: CGRect = .zero
     @State private var boxRadius: CGFloat = 0
+    /// Gliding into a tile: where it started and the tile's size, so the
+    /// picture takes the tile's shape early (`CardGlide`).
+    @State private var tileCrop: (from: CGRect, to: CGSize)?
     @State private var lineOnPicture: Double = 0
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
@@ -182,7 +185,8 @@ struct BrowserScreen: View {
                         Image(uiImage: standIn)
                             .resizable()
                             .frame(width: width, height: height)
-                            .modifier(CardGlide(width: width, box: box, radius: boxRadius))
+                            .modifier(CardGlide(width: width, box: box, radius: boxRadius,
+                                                cropFrom: tileCrop?.from, cropTo: tileCrop?.to))
                             .opacity(standInTab?.place == .basecamp ? 1 - tileReveal : 1)
                         if ringOnGlide, let standInTab, standInTab.place != .basecamp {
                             // The card's ring (`CardRing`), on the picture's inside edge.
@@ -257,7 +261,12 @@ struct BrowserScreen: View {
                 // a glide it stays a hair above 0: at 0 iOS lets its glass
                 // go, and setting the glass up again froze a frame partway
                 // back to the page (David's recording, 2026-11-04).
-                .opacity(editing ? 1 : max(gliding != nil ? 0.002 : 0, 1 - arrival * 2))
+                // Worked out on every frame (`ArrivalBand`): a plain
+                // opacity fades straight from start to end, so both bars
+                // faded at once and their words smudged together (David's
+                // recording, 2026-11-09).
+                .modifier(ArrivalBand(arrival: editing ? 0 : arrival, range: 0...0.45, fadesIn: false,
+                                      floor: !editing && gliding != nil ? 0.002 : 0))
                 .allowsHitTesting(barShown)
                 .accessibilityHidden(!barShown)
         }
@@ -284,6 +293,10 @@ struct BrowserScreen: View {
     /// creep (about 0.4s on David's iPhone), and it reports done before it
     /// has landed, so the swap with the page jumped the last few points.
     private static let glide = Animation.timingCurve(0.2, 0.85, 0.25, 1, duration: 0.32)
+    /// Into a Basecamp tile, a far bigger change (the whole screen down to
+    /// 56pt): a little longer and a gentler start, so it reads as a glide
+    /// rather than a snap (David's recording, 2026-11-09).
+    private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.25, 1, duration: 0.42)
     private static let fade = Animation.easeOut(duration: 0.2)
 
     private var bar: some View {
@@ -386,7 +399,7 @@ struct BrowserScreen: View {
             }
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
-            land(inCardOf: tab, curve: Self.glide)
+            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.glide)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -442,7 +455,10 @@ struct BrowserScreen: View {
         Task {
             guard let spot = await spot(of: tab.id) else { return fadeToTabs() }
             let tile = tab.place == .basecamp
-            if tile { tileReveal = 0 }
+            if tile {
+                tileReveal = 0
+                tileCrop = (from: box, to: spot.size)
+            }
             standInCardWidth = spot.width
             withAnimation(curve) {
                 box = spot
@@ -458,6 +474,7 @@ struct BrowserScreen: View {
                 ringOnGlide = false
                 standIn = nil
                 standInTab = nil
+                tileCrop = nil
             }
             // The line's fade starts on the glide's first frame (where the
             // page has just become its picture, so a hiccup can't show) and
@@ -467,8 +484,13 @@ struct BrowserScreen: View {
             if tile {
                 // Into a tile: the picture becomes the tile's glass over
                 // the glide's second half, ring and all, rather than
-                // landing with a card's line it doesn't have.
-                withAnimation(.easeInOut(duration: 0.2).delay(0.12)) { tileReveal = 1 }
+                // landing with a card's line it doesn't have. It starts
+                // early and is done before the glide's last creep, so the
+                // glass and icon are coming through as it arrives, never a
+                // tiny photo of the page sitting in the tile first (at 0.12s
+                // for 0.2s it sat there about 4 frames; David's recording,
+                // 2026-11-09).
+                withAnimation(.easeInOut(duration: 0.24).delay(0.06)) { tileReveal = 1 }
             } else {
                 withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
             }
@@ -782,7 +804,8 @@ struct BrowserScreen: View {
             }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
-                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot))
+                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot,
+                                                         duration: pull.tab.place == .basecamp ? 0.42 : 0.34))
             } else {
                 let page = pageBox(for: standIn!)
                 land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)
@@ -920,8 +943,7 @@ struct BrowserScreen: View {
     /// An ease-out glide whose start matches the finger's speed toward
     /// where it's going: a fast flick carries straight on, a slow let-go
     /// starts gently. A curve, not a spring, so it lands exactly on time.
-    private func carrying(_ velocity: CGSize, to target: CGRect) -> Animation {
-        let duration = 0.34
+    private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34) -> Animation {
         let dx = target.midX - box.midX
         let dy = target.midY - box.midY
         let distance = max(hypot(dx, dy), 1)
@@ -961,10 +983,33 @@ struct BrowserScreen: View {
 /// The page's picture in its box: scaled to the box's width, placed on it,
 /// and cut to the box's height with its corners. Transforms and a mask
 /// only, so nothing lays out again while it moves.
-private struct CardGlide: ViewModifier {
+private struct CardGlide: ViewModifier, Animatable {
     let width: CGFloat
-    let box: CGRect
-    let radius: CGFloat
+    var box: CGRect
+    var radius: CGFloat
+    /// Into a tile: where the glide started, and the tile's size. The
+    /// shown part takes the tile's shape over the first 60% of the way, so
+    /// the page becomes a tile as it shrinks, rather than flying as a tall
+    /// mini page and being cut down at the end (David's recording,
+    /// 2026-11-09).
+    var cropFrom: CGRect? = nil
+    var cropTo: CGSize? = nil
+
+    // Worked out on every frame, so the shown part, the ring, and the line
+    // all agree on the box mid-glide.
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
+        get { AnimatablePair(box.animatableData, radius) }
+        set { box.animatableData = newValue.first; radius = newValue.second }
+    }
+
+    /// The shown part's height on screen.
+    private var shownHeight: CGFloat {
+        guard let cropFrom, let cropTo, cropTo.width > 0, cropFrom.width > cropTo.width else { return box.height }
+        let travel = min(max((cropFrom.width - box.width) / (cropFrom.width - cropTo.width), 0), 1)
+        let eased = 1 - pow(1 - min(travel / 0.6, 1), 2)
+        let tileShaped = min(box.width * cropTo.height / cropTo.width, box.height)
+        return box.height + (tileShaped - box.height) * eased
+    }
 
     func body(content: Content) -> some View {
         let scale = width > 0 && box.width > 0 ? box.width / width : 1
@@ -972,7 +1017,7 @@ private struct CardGlide: ViewModifier {
             // One shape throughout, so its size and corners glide.
             .mask(alignment: .top) {
                 RoundedRectangle(cornerRadius: radius / scale, style: .continuous)
-                    .frame(height: box.height / scale)
+                    .frame(height: shownHeight / scale)
             }
             .scaleEffect(scale, anchor: .topLeading)
             .offset(x: box.minX, y: box.minY)

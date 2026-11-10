@@ -265,7 +265,8 @@ struct TabOverview: View {
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
-                    .opacity(typing ? 0 : max(gliding != nil ? 0.002 : 0, arrival * 2 - 1))
+                    .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
+                                          floor: !typing && gliding != nil ? 0.002 : 0))
             }
             .onAppear {
                 openedAt = .now
@@ -291,7 +292,8 @@ struct TabOverview: View {
             }
         }
         .background {
-            OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
+            OverviewHaze(tab: store.activeTab?.id,
+                         picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
         .background { ShakeToUndo(undoManager: undoManager, closes: closes) }
         .basecampFullAlert(isPresented: $basecampFull)
@@ -1596,6 +1598,26 @@ private struct ArrivalFade: ViewModifier, Animatable {
     }
 }
 
+/// Shown only within one stretch of the page's arrival, worked out on every
+/// frame: the page's bar is gone by 0.45 and the overview's starts at 0.55,
+/// so the two never show at once. `floor` keeps a bar's glass alive mid-glide.
+struct ArrivalBand: ViewModifier, Animatable {
+    var arrival: CGFloat
+    let range: ClosedRange<CGFloat>
+    let fadesIn: Bool
+    var floor: Double = 0
+    nonisolated var animatableData: CGFloat {
+        get { arrival }
+        set { arrival = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let span = max(range.upperBound - range.lowerBound, 0.001)
+        let through = Double(min(max((arrival - range.lowerBound) / span, 0), 1))
+        content.opacity(max(floor, fadesIn ? through : 1 - through))
+    }
+}
+
 /// Firn's frost, the Mac's `FrostGlass` recipe, for every frosted thing in
 /// the overview (group cards, and a card's title and X pills), so there's
 /// one kind of glass (David, 2026-11-08): a fill, the space's color at
@@ -2118,9 +2140,24 @@ private struct ShakeToUndo: UIViewRepresentable {
 /// remade only when the tab on screen or its picture changes, and a space
 /// change cross-fades the tint.
 private struct OverviewHaze: View {
+    let tab: UUID?
     let picture: UIImage?
     let space: String
     @State private var haze: UIImage?
+
+    /// Each tab's last haze, kept while Firn runs (a few small images), so
+    /// the overview opens with it already there. Made afresh every time, it
+    /// came in after the page had landed, a second change once everything
+    /// should be still (David's recording, 2026-11-09); a fresh one still
+    /// cross-fades in over it when the page has changed.
+    @MainActor private static var kept: [UUID: UIImage] = [:]
+
+    init(tab: UUID?, picture: UIImage?, space: String) {
+        self.tab = tab
+        self.picture = picture
+        self.space = space
+        _haze = State(initialValue: tab.flatMap { Self.kept[$0] })
+    }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -2161,6 +2198,10 @@ private struct OverviewHaze: View {
             let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
             guard !Task.isCancelled else { return }
             haze = made.map { UIImage(cgImage: $0) }
+            if let tab {
+                if Self.kept.count > 30 { Self.kept.removeAll() }
+                Self.kept[tab] = haze
+            }
         }
     }
 
@@ -2196,8 +2237,13 @@ private struct OverviewHaze: View {
             .clampedToExtent()
             .applyingGaussianBlur(sigma: Double(wide / tiny) / 2)
             .cropped(to: extent)
-        return CIContext(options: [.cacheIntermediates: false]).createCGImage(soft, from: extent)
+        return softener.createCGImage(soft, from: extent)
     }
+
+    /// One Core Image context, made once: setting one up for every haze
+    /// was most of the wait for a page's first haze. Core Image's contexts
+    /// are safe to share between threads.
+    private nonisolated(unsafe) static let softener = CIContext(options: [.cacheIntermediates: false])
 }
 
 /// A slim row on glass: the site's icon and the page's title, one line, as

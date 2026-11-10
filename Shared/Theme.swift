@@ -202,10 +202,11 @@ enum Theme {
     static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.42, dark: 0x67635F, darkOpacity: 0.42)
     /// The iPhone's bars (the address bar, and the overview's bar): Firn's
     /// frost over iOS's thinnest material, which already blurs and veils,
-    /// so the fill is lighter than the pills' (42% read a little too
-    /// opaque, David, 2026-11-09). The card pills' colors, one level for
-    /// both modes.
-    static let barFrost = Color(light: 0xE9E3DA, lightOpacity: 0.24, dark: 0x67635F, darkOpacity: 0.24)
+    /// so the fill is far lighter than the pills': 42%, then 24%, still
+    /// read milky next to Safari's bar (David's screenshots, 2026-11-09),
+    /// so the material does the work and the frost is mostly its rim,
+    /// hairline, and tint. The card pills' colors, one level for both modes.
+    static let barFrost = Color(light: 0xE9E3DA, lightOpacity: 0.10, dark: 0x67635F, darkOpacity: 0.10)
 
     /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
     /// overview while it's open, and the card's veil over a real blur of

@@ -74,6 +74,8 @@ struct TabOverview: View {
     /// Firn's hold menu, open for the held (lifted) tab (step 3c).
     @State private var heldMenu: OpenHoldMenu?
     @State private var picks = 0
+    /// Pulled away from an open menu into a drag: a light tap.
+    @State private var pulls = 0
     /// Where the finger was as it moved off an open menu, while Firn's
     /// tile still follows it sideways (see `DragFinger.dx`).
     @State private var handOffOrigin: CGPoint?
@@ -222,6 +224,7 @@ struct TabOverview: View {
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
             .sensoryFeedback(.impact(weight: .light), trigger: forms)
             .sensoryFeedback(.impact(weight: .light), trigger: picks)
+            .sensoryFeedback(.impact(weight: .light), trigger: pulls)
             // Pinch together for slim rows, apart for cards, as a photo
             // grid zooms. Once the pinch clearly goes one way, the whole
             // change runs as one glide, the tab under the fingers held in
@@ -855,6 +858,7 @@ struct TabOverview: View {
     private func dragOffMenu(to point: CGPoint) {
         guard heldMenu != nil, var drag, drag.lifted, drag.id == heldMenu?.id else { return }
         withAnimation(.easeOut(duration: 0.15)) { heldMenu = nil }
+        pulls += 1
         drag.grab = point.y - finger.top
         drag.grabX = point.x - finger.left
         self.drag = drag
@@ -1207,12 +1211,9 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
             members = groups
-            // Narrower in a group, the width of the list out of one.
-            if let lane {
-                finger.left = lane.minX
-                finger.width = lane.width
-            }
         }
+        // Narrower in a group, the width of the list out of one.
+        if let lane { resize(to: lane.minX, lane.width) }
     }
 
     /// Where a tab's tile sits across the list: inside a group's tint, or
@@ -1256,9 +1257,8 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
             forming = Forming(other: id, group: store.previewGroup(), above: held < other)
-            finger.left = lane.minX + GroupCard.inset
-            finger.width = lane.width - 2 * GroupCard.inset
         }
+        resize(to: lane.minX + GroupCard.inset, lane.width - 2 * GroupCard.inset)
         forms += 1
     }
 
@@ -1293,8 +1293,18 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             order = ids
             self.forming = nil
-            finger.left = lane.minX
-            finger.width = lane.width
+        }
+        resize(to: lane.minX, lane.width)
+    }
+
+    /// The held tile narrows into a group's lane or widens out of one. Its
+    /// own softer glide, apart from the rows making room: `.smooth` did most
+    /// of the change in the first two frames, a jolt (David's recording,
+    /// 2026-11-09).
+    private func resize(to left: CGFloat, _ width: CGFloat) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+            finger.left = left
+            finger.width = width
         }
     }
 

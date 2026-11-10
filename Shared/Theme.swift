@@ -213,6 +213,10 @@ enum Theme {
     static let holdMenuHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.10)
     /// Muted terracotta for closing things, never alarm red (Danger).
     static let danger = Color(light: 0xB0503A, dark: 0xE3907A)
+    /// The iPhone hold menu's Close rows: the same terracotta, a step deeper
+    /// in light and brighter in dark, since the menu's see-through frost is
+    /// mid-toned and `danger` read faint on it (David, 2026-11-09).
+    static let menuDanger = Color(light: 0xA2442F, dark: 0xF2A68C)
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {

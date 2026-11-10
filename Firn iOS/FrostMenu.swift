@@ -297,11 +297,11 @@ private struct MenuRow: View {
                 }
             }
             .frame(width: 24)
-            .foregroundStyle(closes ? Theme.danger : Theme.muted)
+            .foregroundStyle(closes ? Theme.menuDanger : Theme.muted)
             .accessibilityHidden(true)
             Text(title)
                 .font(back ? .footnote.weight(.semibold) : .callout)
-                .foregroundStyle(closes ? Theme.danger : back ? Theme.muted : Theme.ink)
+                .foregroundStyle(closes ? Theme.menuDanger : back ? Theme.muted : Theme.ink)
                 .lineLimit(1)
                 // Tightens a little before it's cut off ("New Group with This Tab").
                 .minimumScaleFactor(0.85)

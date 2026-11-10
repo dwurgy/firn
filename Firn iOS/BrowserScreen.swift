@@ -22,6 +22,8 @@ struct BrowserScreen: View {
     /// the glide froze. The live page stays put, hidden, and swaps with the
     /// picture at either end.
     @State private var standIn: UIImage?
+    /// The stand-in's size.
+    private var standInSize: CGSize? { standIn?.size }
     /// The page's color behind the status bar, which the picture leaves
     /// out: it fades as the picture shrinks and back as it grows, so the
     /// swap with the page shows nothing.
@@ -144,7 +146,7 @@ struct BrowserScreen: View {
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
 
-            if let standIn, standIn.size.width > 0 {
+            if let standInSize, standInSize.width > 0 {
                 if let standInTop {
                     // A fill, so a new tab's color fades in rather than snaps.
                     Rectangle()
@@ -160,7 +162,7 @@ struct BrowserScreen: View {
                 // own points, as the cards report theirs (measured: the
                 // layer's own corner isn't the screen's).
                 let width = pageFrame.width
-                let height = width * standIn.size.height / standIn.size.width
+                let height = width * standInSize.height / standInSize.width
                 let cardWidth = max(standInCardWidth ?? width - 32, 1)
                 GeometryReader { layer in
                     let corner = layer.frame(in: .global).origin
@@ -182,12 +184,14 @@ struct BrowserScreen: View {
                             .modifier(CardGlide(width: width, box: neighborBox(neighbor.place), radius: boxRadius))
                             .opacity(neighborsOpacity)
                         }
-                        Image(uiImage: standIn)
-                            .resizable()
-                            .frame(width: width, height: height)
-                            .modifier(CardGlide(width: width, box: box, radius: boxRadius,
-                                                cropFrom: tileCrop?.from, cropTo: tileCrop?.to))
-                            .opacity(standInTab?.place == .basecamp ? 1 - tileReveal : 1)
+                        Group {
+                            if let standIn { Image(uiImage: standIn).resizable() }
+                        }
+                        .frame(width: width, height: height)
+                        .modifier(CardGlide(width: width, box: box, radius: boxRadius,
+                                            cropFrom: tileCrop?.from, cropTo: tileCrop?.to))
+                        .modifier(ArrivalBand(arrival: standInTab?.place == .basecamp ? tileReveal : 0,
+                                              range: BasecampTiles.glideSwap, fadesIn: false))
                         if ringOnGlide, let standInTab, standInTab.place != .basecamp {
                             // The card's ring (`CardRing`), on the picture's inside edge.
                             CardRing(color: Theme.spaceColor(store.activeSpace.color), radius: boxRadius)
@@ -413,6 +417,10 @@ struct BrowserScreen: View {
     private func beginGlide(of tab: FirnCore.Tab) {
         openActiveGroup()
         gliding = tab.id
+        // A tile's spot stays empty until its page lands in it; shown, the
+        // tile sat there during the pull, vanished as the finger lifted,
+        // and came back (Simulator recording, 2026-11-09).
+        if tab.place == .basecamp { tileReveal = 0 }
         ringOnGlide = true
         standInCardWidth = spots.frames[tab.id]?.width
         lineShown = false
@@ -444,8 +452,12 @@ struct BrowserScreen: View {
     /// The page's own place on screen, for its picture: just below the
     /// status bar, as wide as the page.
     private func pageBox(for image: UIImage) -> CGRect {
+        pageBox(size: image.size)
+    }
+
+    private func pageBox(size: CGSize) -> CGRect {
         let width = pageFrame.width
-        let height = image.size.width > 0 ? width * image.size.height / image.size.width : pageFrame.height
+        let height = size.width > 0 ? width * size.height / size.width : pageFrame.height
         return CGRect(x: 0, y: pictures.topInset, width: width, height: height)
     }
 
@@ -462,6 +474,10 @@ struct BrowserScreen: View {
             standInCardWidth = spot.width
             withAnimation(curve) {
                 box = spot
+                // Into a tile: on the glide's own curve, so the picture and
+                // the tile swap as it settles into the tile's spot
+                // (`BasecampTiles.glideSwap`).
+                if tile { tileReveal = 1 }
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 stripOpacity = 0
                 arrival = 1
@@ -480,18 +496,8 @@ struct BrowserScreen: View {
             // page has just become its picture, so a hiccup can't show) and
             // eases in, so it's mostly seen over the second half. Started
             // 0.12s in, it froze a frame there (David's recordings,
-            // 2026-11-04).
-            if tile {
-                // Into a tile: the picture becomes the tile's glass over
-                // the glide's second half, ring and all, rather than
-                // landing with a card's line it doesn't have. It starts
-                // early and is done before the glide's last creep, so the
-                // glass and icon are coming through as it arrives, never a
-                // tiny photo of the page sitting in the tile first (at 0.12s
-                // for 0.2s it sat there about 4 frames; David's recording,
-                // 2026-11-09).
-                withAnimation(.easeInOut(duration: 0.24).delay(0.06)) { tileReveal = 1 }
-            } else {
+            // 2026-11-04). A tile has no line.
+            if !tile {
                 withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
             }
         }
@@ -545,7 +551,9 @@ struct BrowserScreen: View {
         Task {
             await Task.yield()
             withAnimation(.easeOut(duration: 0.1)) { lineOnPicture = 0 }
-            if tile { withAnimation(.easeOut(duration: 0.14)) { tileReveal = 0 } }
+            // On the glide's own curve: the tile and picture swap as it
+            // starts to grow (`BasecampTiles.glideSwap`).
+            if tile { withAnimation(Self.glide) { tileReveal = 0 } }
             land(onPage: tab, curve: Self.glide, switching: switching)
         }
     }
@@ -553,9 +561,9 @@ struct BrowserScreen: View {
     /// The picture glides from wherever it is to the page's own place, and
     /// the page takes over.
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool) {
-        guard let standIn else { return hideTabs() }
+        guard let standInSize else { return hideTabs() }
         withAnimation(curve) {
-            box = pageBox(for: standIn)
+            box = pageBox(size: standInSize)
             boxRadius = 0
             stripOpacity = 1
             arrival = 0
@@ -659,7 +667,7 @@ struct BrowserScreen: View {
         if var pull {
             pull.translation = drag.translation
             self.pull = pull
-            if standIn != nil { box = pulledBox(pull); followPull(pull) }
+            if standInSize != nil { box = pulledBox(pull); followPull(pull) }
             return
         }
         if newTabSwipe { return followNewTabSwipe(drag.translation) }
@@ -757,8 +765,8 @@ struct BrowserScreen: View {
     /// about 58% of the screen, then slower), and the point under the
     /// finger when it came down stays under the finger, in any direction.
     private func pulledBox(_ pull: Pull) -> CGRect {
-        guard let standIn else { return box }
-        let page = pageBox(for: standIn)
+        guard let standInSize else { return box }
+        let page = pageBox(size: standInSize)
         let lift = lift(pull)
         // Past half the screen, each point of lift shrinks it less.
         let beyond = max(0, lift - 1)
@@ -792,7 +800,7 @@ struct BrowserScreen: View {
             for _ in 0..<20 where standIn == nil {
                 try? await Task.sleep(for: .milliseconds(16))
             }
-            guard standIn != nil else {
+            guard standInSize != nil else {
                 // Too late now: a picture arriving after this is dropped.
                 if pullAwaitingPicture == pull.id { pullAwaitingPicture = nil }
                 return toTabs ? fadeToTabs() : hideTabs()
@@ -807,7 +815,7 @@ struct BrowserScreen: View {
                 land(inCardOf: pull.tab, curve: carrying(velocity, to: spot,
                                                          duration: pull.tab.place == .basecamp ? 0.42 : 0.34))
             } else {
-                let page = pageBox(for: standIn!)
+                let page = pageBox(size: standInSize!)
                 land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)
             }
         }

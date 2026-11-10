@@ -18,6 +18,12 @@ struct BasecampTiles: View {
     /// How far the gliding tile shows: it fades in as the page's picture
     /// lands in it, and out as the picture grows from it.
     var reveal: Double = 1
+    /// The stretch of a glide's way (`reveal`, run on the glide's own
+    /// curve) where the page's picture and the tile swap: the last 8%,
+    /// once the picture is nearly the tile's size and in its spot. Timed
+    /// apart, the picture faded out in mid-air, still 40% too big, and the
+    /// tile was just there (David's recording, 2026-11-09).
+    static let glideSwap: ClosedRange<CGFloat> = 0.92...1
     /// The tiles' order while one is dragged (the others glide aside);
     /// nil: the store's.
     var order: [UUID]? = nil
@@ -147,7 +153,7 @@ struct BasecampTiles: View {
         .scaleEffect(pressed == tab.id ? pressedScale : 1)
         .animation(pressed == tab.id ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
                                      : .smooth(duration: 0.2), value: pressed == tab.id)
-        .opacity(gliding == tab.id ? reveal : 1)
+        .modifier(ArrivalBand(arrival: gliding == tab.id ? reveal : 1, range: Self.glideSwap, fadesIn: true))
         // Lifted, its spot stays empty, at once (never faded).
         .opacity(held == tab.id ? 0 : 1)
         .animation(nil, value: held)

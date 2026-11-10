@@ -52,6 +52,8 @@ struct TabOverview: View {
     /// becomes a card again, so there's no mode to remember (David,
     /// 2026-11-05). Pinching apart undoes it. Saved per space.
     @State private var tidiedAt: Date?
+    /// Counts pinches between cards and rows, for their tap.
+    @State private var tidyChanges = 0
     /// How tall the tidied tabs from the last day are: 0 slim rows (tidied),
     /// 1 cards (not tidied), and anything between while a pinch glides.
     @State private var cards: CGFloat = 1
@@ -238,7 +240,10 @@ struct TabOverview: View {
                         pinchEnded()
                     }
             )
-            .sensoryFeedback(.selection, trigger: tidiedAt)
+            // Only a pinch (or its VoiceOver action) taps: on tidiedAt, it
+            // tapped every time a tidied overview opened, as it read the
+            // setting back (David, 2026-11-09: no haptic on the swipe up).
+            .sensoryFeedback(.selection, trigger: tidyChanges)
             // Pinching can't be found by VoiceOver: the same choice as an action.
             .accessibilityAction(named: tidiedAt != nil ? "Show Cards" : "Show Rows") {
                 setCards(tidiedAt != nil ? 1 : 0, scroller)
@@ -413,6 +418,7 @@ struct TabOverview: View {
         let tidy: Date? = target < 0.5 ? .now : nil
         let held = hold ?? store.activeTab.map { ($0.id, UnitPoint.center) }
         defer { saveTidied() }
+        if (tidy == nil) != (tidiedAt == nil) { tidyChanges += 1 }
         if reduceMotion {
             tidiedAt = tidy
             withAnimation(.easeOut(duration: 0.15)) { listFade = 0 } completion: {

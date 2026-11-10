@@ -206,7 +206,8 @@ struct TabOverview: View {
                                         finger.pressed = reduceMotion ? nil : point.flatMap { menuTab(at: $0)?.id }
                                     },
                                     menu: openMenu(at:),
-                                    menuEnded: { cancelled in if cancelled { closeMenu() } }))
+                                    menuEnded: { cancelled in if cancelled { closeMenu() } },
+                                    leaveMenu: dragOffMenu(to:)))
                 // Holding still opens a tab's or group's menu, the tile
                 // lifting solid (see `listHoldMenu`).
                 .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
@@ -843,6 +844,22 @@ struct TabOverview: View {
             heldMenu = OpenHoldMenu(id: tab.id, tile: frame, fingerX: point.x,
                                     sections: sections, backdrop: backdrop)
         }
+    }
+
+    /// The finger, still down from the hold, moved off the open menu: the
+    /// menu thaws and the tab already lifted for it becomes the drag, so
+    /// there's only ever one tile. Held where the finger has it now, so it
+    /// doesn't jump the few points the finger moved; its solid base fades
+    /// and the list scrolls at its edges again, as in any drag.
+    private func dragOffMenu(to point: CGPoint) {
+        guard heldMenu != nil, var drag, drag.lifted, drag.id == heldMenu?.id else { return }
+        withAnimation(.easeOut(duration: 0.15)) { heldMenu = nil }
+        drag.grab = point.y - finger.top
+        drag.grabX = point.x - finger.left
+        self.drag = drag
+        finger.solid = false
+        keepScrollingAtEdges()
+        follow(to: point)
     }
 
     /// A row was tapped: the menu thaws, the tab settles into its place,
@@ -1698,7 +1715,8 @@ private struct Frost<S: InsettableShape>: View {
 private struct Drag {
     let id: UUID
     let start: CGRect
-    let grab: CGFloat
+    /// Where down the tile the finger holds it.
+    var grab: CGFloat
     /// A whole group, held by its name line.
     let group: Bool
     /// The group a held tab was in when it lifted.
@@ -1895,6 +1913,9 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let pressing: (CGPoint?) -> Void
     let menu: (CGPoint) -> Void
     let menuEnded: (Bool) -> Void
+    /// The held finger moved off the open menu: from here, a drag
+    /// (`moved`, then `ended`).
+    let leaveMenu: (CGPoint) -> Void
 
     func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
         let hold = HoldThenMove()
@@ -1949,8 +1970,11 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
             // Lifted from where the finger first came down, then follows it.
             began(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
             moved(point)
+        case .changed where hold.leftMenu:
+            // Moved off an open menu: it thaws, and the tile drags.
+            hold.leftMenu = false
+            leaveMenu(point)
         case .changed:
-            // Moving with a menu open drags its tile off it (step 3c's step 3).
             if !hold.heldStill { moved(point) }
         case .ended: hold.heldStill ? menuEnded(false) : ended(false)
         case .cancelled: hold.heldStill ? menuEnded(true) : ended(true)
@@ -1981,6 +2005,12 @@ final class HoldThenMove: UIGestureRecognizer {
     var pressing: (CGPoint?) -> Void = { _ in }
     /// Began by holding still: a menu, not a drag.
     private(set) var heldStill = false
+    /// The finger, still down, has just moved `slop` points from where the
+    /// menu opened: from here it's a drag. Read once, by the action.
+    var leftMenu = false
+    /// The finger's latest point, and where it was as the menu opened.
+    private var last: CGPoint = .zero
+    private var menuPoint: CGPoint = .zero
     private var menuTimer: DispatchWorkItem?
     private var pressTimer: DispatchWorkItem?
     private var pressed = false
@@ -1999,6 +2029,7 @@ final class HoldThenMove: UIGestureRecognizer {
             return
         }
         start = touch.location(in: nil)
+        last = start
         startTime = touch.timestamp
         let press = DispatchWorkItem { [weak self] in
             guard let self, self.state == .possible, self.wantsMenu(self.start) else { return }
@@ -2012,6 +2043,7 @@ final class HoldThenMove: UIGestureRecognizer {
             // The press stays set: the menu reads it (the tab is sunk) and
             // clears it; `reset` reports the end once the finger lifts.
             self.heldStill = true
+            self.menuPoint = self.last
             self.state = .began
         }
         menuTimer = timer
@@ -2023,6 +2055,7 @@ final class HoldThenMove: UIGestureRecognizer {
         menuTimer?.cancel()
         menuTimer = nil
         heldStill = false
+        leftMenu = false
         moved = .zero
         super.reset()
     }
@@ -2030,6 +2063,7 @@ final class HoldThenMove: UIGestureRecognizer {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         guard let touch = touches.first else { return }
         let point = touch.location(in: nil)
+        last = point
         switch state {
         case .possible:
             moved = CGPoint(x: point.x - start.x, y: point.y - start.y)
@@ -2039,6 +2073,12 @@ final class HoldThenMove: UIGestureRecognizer {
             guard touch.timestamp - startTime >= Self.hold else { state = .failed; return }
             state = .began
         case .began, .changed:
+            // Off the menu: the same touch carries on as a drag, so the
+            // tile that lifted for the menu is the one that moves.
+            if heldStill, hypot(point.x - menuPoint.x, point.y - menuPoint.y) >= Self.slop {
+                heldStill = false
+                leftMenu = true
+            }
             state = .changed
         default: break
         }

@@ -8,10 +8,14 @@ struct HoldMenuItem {
     let systemImage: String?
     let action: @MainActor () -> Void
     let children: [HoldMenuItem]
+    /// Closes something (Close Tab, Close Group, Remove from Basecamp):
+    /// Firn's menu shows it in muted terracotta.
+    var closes = false
 
-    init(title: String, systemImage: String?, action: @escaping @MainActor () -> Void) {
+    init(title: String, systemImage: String?, closes: Bool = false, action: @escaping @MainActor () -> Void) {
         self.title = title
         self.systemImage = systemImage
+        self.closes = closes
         self.action = action
         children = []
     }

@@ -197,6 +197,20 @@ enum Theme {
     /// one level in both modes (David, 2026-11-08).
     static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.42, dark: 0x67635F, darkOpacity: 0.42)
 
+    /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
+    /// overview while it's open, and the card's veil over a real blur of
+    /// what's behind it (the pills' recipe: one fixed level, page white in
+    /// light, the pills' warm gray in dark), its frosted edge, and its shadow.
+    static let holdDim = Color(light: 0x14100C, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
+    /// Thicker than the mockup's 44% (David, 2026-11-09: words got hard to
+    /// read over a bright page), still one level for every screen.
+    static let holdMenuVeil = Color(light: 0xFBFAF8, lightOpacity: 0.58, dark: 0x4A4642, darkOpacity: 0.62)
+    static let holdMenuEdge = Color(light: 0xFFFFFF, lightOpacity: 0.60, dark: 0xC8DCE6, darkOpacity: 0.16)
+    static let holdMenuShadow = Color(light: 0x3C2814, lightOpacity: 0.24, dark: 0x000000, darkOpacity: 0.50)
+    static let holdMenuHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.10)
+    /// Muted terracotta for closing things, never alarm red (Danger).
+    static let danger = Color(light: 0xB0503A, dark: 0xE3907A)
+
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {
         func channel(_ shift: UInt32) -> UInt32 {

@@ -71,6 +71,9 @@ struct TabOverview: View {
 
     /// A tab held and being dragged to a new place (phase 2, step 5).
     @State private var drag: Drag?
+    /// Firn's hold menu, open for the held (lifted) tab (step 3c).
+    @State private var heldMenu: OpenHoldMenu?
+    @State private var picks = 0
     /// Where the finger was as it moved off an open menu, while Firn's
     /// tile still follows it sideways (see `DragFinger.dx`).
     @State private var handOffOrigin: CGPoint?
@@ -197,7 +200,13 @@ struct TabOverview: View {
                 .gesture(HoldToDrag(enabled: gliding == nil,
                                     canBegin: { liftable(at: $0) != nil },
                                     began: lift(at:), moved: follow(to:),
-                                    ended: { letGo(cancelled: $0) }))
+                                    ended: { letGo(cancelled: $0) },
+                                    wantsMenu: { menuTab(at: $0) != nil },
+                                    pressing: { point in
+                                        finger.pressed = reduceMotion ? nil : point.flatMap { menuTab(at: $0)?.id }
+                                    },
+                                    menu: openMenu(at:),
+                                    menuEnded: { cancelled in if cancelled { closeMenu() } }))
                 // Holding still opens a tab's or group's menu, the tile
                 // lifting solid (see `listHoldMenu`).
                 .listHoldMenu(dragging: drag != nil, target: holdMenuTarget(at:),
@@ -209,32 +218,9 @@ struct TabOverview: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
-            // The held tab, lifted over the list and following the finger.
-            .overlay {
-                if let drag, !drag.carried {
-                    if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
-                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
-                            BasecampTiles.lifted(tab, space: space,
-                                                 onScreen: tab.id == (heldCard ?? store.activeTab?.id),
-                                                 solid: drag.lifted)
-                        }
-                        .transition(.identity)
-                    } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
-                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
-                            tile(tab, spot: { _ in })
-                        }
-                        // There or not, never faded in or out.
-                        .transition(.identity)
-                    } else if let group = store.tabGroups.first(where: { $0.id == drag.id }) {
-                        LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
-                            groupCard(group, lifted: true)
-                        }
-                        .transition(.identity)
-                    }
-                }
-            }
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
             .sensoryFeedback(.impact(weight: .light), trigger: forms)
+            .sensoryFeedback(.impact(weight: .light), trigger: picks)
             // Pinch together for slim rows, apart for cards, as a photo
             // grid zooms. Once the pinch clearly goes one way, the whole
             // change runs as one glide, the tab under the fingers held in
@@ -288,6 +274,21 @@ struct TabOverview: View {
                 if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
             }
         }
+        // Over everything, bar included: an open menu's dim (a tap on it
+        // closes the menu), the held tab lifted over the list and following
+        // the finger, and the menu beside it.
+        .overlay {
+            ZStack(alignment: .topLeading) {
+                if heldMenu != nil {
+                    Theme.holdDim
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                liftedTile
+                HoldMenuPlacement(menu: heldMenu, space: space, pick: pick(_:), dismiss: { closeMenu() })
+            }
+        }
         .background {
             OverviewHaze(picture: store.activeTab.flatMap { pictures.image(for: $0.id) }, space: space)
         }
@@ -299,6 +300,33 @@ struct TabOverview: View {
             Button("Cancel", role: .cancel) {}
             Button("Done") {
                 if let naming { store.rename(naming, to: name) }
+            }
+        }
+    }
+
+    /// The held tab, lifted over the list and following the finger.
+    @ViewBuilder private var liftedTile: some View {
+        ZStack {
+            if let drag, !drag.carried {
+                if drag.tile, let tab = store.basecampTabs.first(where: { $0.id == drag.id }) {
+                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                        BasecampTiles.lifted(tab, space: space,
+                                             onScreen: tab.id == (heldCard ?? store.activeTab?.id),
+                                             solid: drag.lifted)
+                    }
+                    .transition(.identity)
+                } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
+                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                        tile(tab, spot: { _ in })
+                    }
+                    // There or not, never faded in or out.
+                    .transition(.identity)
+                } else if let group = store.tabGroups.first(where: { $0.id == drag.id }) {
+                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted) {
+                        groupCard(group, lifted: true)
+                    }
+                    .transition(.identity)
+                }
             }
         }
     }
@@ -512,9 +540,9 @@ struct TabOverview: View {
     /// else the group card around the point. Only what's on screen counts.
     private func holdMenuTarget(at point: CGPoint) -> HoldMenuTarget? {
         guard drag == nil, gliding == nil, spots.viewport.contains(point) else { return nil }
-        if let tab = visibleTabs.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
-            return HoldMenuTarget(id: tab.id, cornerRadius: OverviewRow.cornerRadius, sections: menu(for: tab))
-        }
+        // A tab's menu is Firn's own now (`openMenu`), and a held tab in a
+        // group opens its own menu, never the group's.
+        if visibleTabs.contains(where: { spots.frames[$0.id]?.contains(point) == true }) { return nil }
         if let group = store.tabGroups.first(where: { spots.frames[$0.id]?.contains(point) == true }) {
             return HoldMenuTarget(id: group.id, cornerRadius: GroupCard.cornerRadius,
                                   sections: groupMenu(group).sections)
@@ -652,9 +680,11 @@ struct TabOverview: View {
                 }
             }))
         }
-        var close = [HoldMenuItem(title: "Close Tab", systemImage: "xmark") { self.close(tab) }]
+        var close = [HoldMenuItem(title: "Close Tab", systemImage: "xmark", closes: true) { self.close(tab) }]
         if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
-            close.append(HoldMenuItem(title: "Close Other Tabs", systemImage: "xmark.square") { closeOthers(than: tab) })
+            close.append(HoldMenuItem(title: "Close Other Tabs", systemImage: "xmark.square", closes: true) {
+                closeOthers(than: tab)
+            })
         }
         return [link, keep, close]
     }
@@ -774,6 +804,89 @@ struct TabOverview: View {
         return nil
     }
 
+    // MARK: - Firn's hold menu
+
+    /// The tab a still hold at a point (global) opens Firn's menu for:
+    /// tabs only so far (groups and tiles in step 3c's step 4).
+    private func menuTab(at point: CGPoint) -> FirnCore.Tab? {
+        guard heldMenu == nil, drag == nil, gliding == nil, !pinchedRecently,
+              case let .tab(tab) = liftable(at: point) else { return nil }
+        return tab
+    }
+
+    /// Held still: the tab lifts where it is, on its solid base, the rest
+    /// dims, and its menu forms beside it. The list holds still while it's
+    /// open (the dim takes every touch).
+    private func openMenu(at point: CGPoint) {
+        guard let tab = menuTab(at: point), var frame = spots.frames[tab.id] else { return }
+        // The list reports the tab's place as it is sunk (`EmptyWhileHeld`):
+        // back to its real size, or the lifted tile shrank twice for a
+        // couple of frames (Simulator recording, 2026-11-09).
+        let sunk = finger.pressed == tab.id
+        if sunk {
+            let grow = 1 / pressedScale - 1
+            frame = frame.insetBy(dx: -frame.width * grow / 2, dy: -frame.height * grow / 2)
+        }
+        // Before anything changes: the screen as it is, for the frost.
+        let backdrop = ScreenPicture.take()
+        let sections = menu(for: tab)
+        startDrag(Drag(id: tab.id, start: frame, grab: point.y - frame.minY, group: false, from: tab.groupID),
+                  at: point)
+        guard drag?.id == tab.id else { return }
+        finger.pressed = nil
+        if sunk { finger.liftFrom = pressedScale }
+        // A held tab near the list's edge doesn't scroll it.
+        edgeScroll?.cancel()
+        edgeScroll = nil
+        finger.solid = true
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.2)) {
+            heldMenu = OpenHoldMenu(id: tab.id, tile: frame, fingerX: point.x,
+                                    sections: sections, backdrop: backdrop)
+        }
+    }
+
+    /// A row was tapped: the menu thaws, the tab settles into its place,
+    /// and then the choice runs, so a move or a close starts from the tab
+    /// where it is in the list.
+    private func pick(_ item: HoldMenuItem) {
+        guard heldMenu != nil else { return }
+        picks += 1
+        closeMenu(then: item.action)
+    }
+
+    /// The menu thaws (0.15s) and the lifted tab settles back into its
+    /// place (0.25s, no bounce; at once with Reduce Motion).
+    private func closeMenu(then action: (@MainActor () -> Void)? = nil) {
+        guard heldMenu != nil else { return }
+        withAnimation(.easeOut(duration: 0.15)) { heldMenu = nil }
+        order = nil
+        members = nil
+        tileOrder = nil
+        lastDrop = .now
+        guard var drag else { action?(); return }
+        let landing = spots.frames[drag.id] ?? drag.start
+        guard !reduceMotion else {
+            finger.solid = false
+            self.drag = nil
+            finger.held = nil
+            action?()
+            return
+        }
+        drag.lifted = false
+        withAnimation(.smooth(duration: 0.25)) {
+            finger.solid = false
+            finger.top = landing.minY
+            finger.left = landing.minX
+            finger.width = landing.width
+            self.drag = drag
+        } completion: {
+            self.drag = nil
+            finger.held = nil
+            lastDrop = .now
+            action?()
+        }
+    }
+
     /// The hold has begun: the tab or group under the finger lifts.
     private func lift(at point: CGPoint) {
         switch liftable(at: point) {
@@ -819,6 +932,7 @@ struct TabOverview: View {
         finger.width = new.start.width
         finger.y = point.y
         finger.dx = 0
+        finger.liftFrom = 1
         handOffOrigin = nil
         drag = new
         finger.held = new.id
@@ -1691,7 +1805,14 @@ private enum Liftable {
     /// The tab or group whose hold menu is open: iOS lifts a picture of it,
     /// so its place stays empty.
     var menu: UUID?
+    /// A tab held still, sinking a little until its menu opens.
+    var pressed: UUID?
+    /// The size the lifted tile rises from: a pressed tab's, sunk.
+    var liftFrom: CGFloat = 1
 }
+
+/// How far a held tab sinks before its menu opens (as iOS's items do).
+private let pressedScale: CGFloat = 0.97
 
 /// A tab's place in the list, empty while the tab is held (or its page
 /// glides). It reads which tab is held itself: the list doesn't redraw a
@@ -1705,7 +1826,13 @@ private struct EmptyWhileHeld: ViewModifier {
 
     func body(content: Content) -> some View {
         let empty = gliding || finger.held == id || finger.menu == id
+        let pressed = finger.pressed == id
         content
+            // Held still, it sinks a little over the rest of the hold, so
+            // the finger feels the menu coming; let go early, it springs back.
+            .scaleEffect(pressed ? pressedScale : 1)
+            .animation(pressed ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
+                               : .smooth(duration: 0.2), value: pressed)
             .opacity(empty ? 0 : 1)
             .animation(nil, value: empty)
     }
@@ -1734,7 +1861,9 @@ private struct LiftedTile<Content: View>: View {
                         .opacity(finger.solid ? 1 : 0)
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: finger.solid)
                 }
-                .scaleEffect(raised ? 1.03 : 1)
+                // From a held tab's sunk size (`liftFrom`), so the press
+                // and the lift are one motion.
+                .scaleEffect(raised ? 1.03 : (up ? 1 : finger.liftFrom))
                 .shadow(color: Theme.shadowPeek.opacity(raised ? 1 : 0), radius: 18, y: 8)
                 .offset(x: finger.left + finger.dx - origin.x, y: finger.top - origin.y)
         }
@@ -1759,11 +1888,20 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
     let moved: (CGPoint) -> Void
     /// True when iOS cancelled the touch rather than the finger lifting.
     let ended: (Bool) -> Void
+    /// Whether holding still at a point (global) opens Firn's menu there,
+    /// and opening it; then the finger lifting (false) or iOS cancelling
+    /// the touch (true). The menu stays open after the finger lifts.
+    let wantsMenu: (CGPoint) -> Bool
+    let pressing: (CGPoint?) -> Void
+    let menu: (CGPoint) -> Void
+    let menuEnded: (Bool) -> Void
 
     func makeUIGestureRecognizer(context: Context) -> HoldThenMove {
         let hold = HoldThenMove()
         hold.isEnabled = enabled
         hold.delegate = context.coordinator
+        hold.wantsMenu = wantsMenu
+        hold.pressing = pressing
         context.coordinator.canBegin = canBegin
         return hold
     }
@@ -1797,29 +1935,38 @@ private struct HoldToDrag: UIGestureRecognizerRepresentable {
 
     func updateUIGestureRecognizer(_ hold: HoldThenMove, context: Context) {
         hold.isEnabled = enabled
+        hold.wantsMenu = wantsMenu
+        hold.pressing = pressing
         context.coordinator.canBegin = canBegin
     }
 
     func handleUIGestureRecognizerAction(_ hold: HoldThenMove, context: Context) {
         let point = context.converter.location(in: .global)
         switch hold.state {
+        case .began where hold.heldStill:
+            menu(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
         case .began:
             // Lifted from where the finger first came down, then follows it.
             began(CGPoint(x: point.x - hold.moved.x, y: point.y - hold.moved.y))
             moved(point)
-        case .changed: moved(point)
-        case .ended: ended(false)
-        case .cancelled: ended(true)
+        case .changed:
+            // Moving with a menu open drags its tile off it (step 3c's step 3).
+            if !hold.heldStill { moved(point) }
+        case .ended: hold.heldStill ? menuEnded(false) : ended(false)
+        case .cancelled: hold.heldStill ? menuEnded(true) : ended(true)
         default: break
         }
     }
 }
 
 /// One finger held for `hold`, then moved `slop` points: begins. Moved
-/// sooner: fails at once (a scroll or a swipe). Never moved: fails when
-/// lifted, or when iOS's menu takes the touch.
+/// sooner: fails at once (a scroll or a swipe). Held still for `menuHold`
+/// where `wantsMenu` says there's a menu: begins too, `heldStill`, for
+/// Firn's hold menu. Otherwise never moved: fails when lifted, or when
+/// iOS's menu takes the touch.
 final class HoldThenMove: UIGestureRecognizer {
     static let hold: TimeInterval = 0.15
+    static let menuHold: TimeInterval = 0.5
     static let slop: CGFloat = 8
     private var start: CGPoint = .zero
     /// Where the finger came down, in the window.
@@ -1827,6 +1974,24 @@ final class HoldThenMove: UIGestureRecognizer {
     private var startTime: TimeInterval = 0
     /// How far the finger had moved when it began.
     private(set) var moved: CGPoint = .zero
+    /// Whether a still hold at a point (window) opens Firn's menu there.
+    var wantsMenu: (CGPoint) -> Bool = { _ in false }
+    /// A still finger where a menu will open, from `hold` on (the tile
+    /// starts to sink), and nil once it isn't (moved, lifted, or begun).
+    var pressing: (CGPoint?) -> Void = { _ in }
+    /// Began by holding still: a menu, not a drag.
+    private(set) var heldStill = false
+    private var menuTimer: DispatchWorkItem?
+    private var pressTimer: DispatchWorkItem?
+    private var pressed = false
+
+    private func endPress() {
+        pressTimer?.cancel()
+        pressTimer = nil
+        guard pressed else { return }
+        pressed = false
+        pressing(nil)
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         guard let touch = touches.first, (event.allTouches?.count ?? 1) == 1 else {
@@ -1835,6 +2000,31 @@ final class HoldThenMove: UIGestureRecognizer {
         }
         start = touch.location(in: nil)
         startTime = touch.timestamp
+        let press = DispatchWorkItem { [weak self] in
+            guard let self, self.state == .possible, self.wantsMenu(self.start) else { return }
+            self.pressed = true
+            self.pressing(self.start)
+        }
+        pressTimer = press
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hold, execute: press)
+        let timer = DispatchWorkItem { [weak self] in
+            guard let self, self.state == .possible, self.wantsMenu(self.start) else { return }
+            // The press stays set: the menu reads it (the tab is sunk) and
+            // clears it; `reset` reports the end once the finger lifts.
+            self.heldStill = true
+            self.state = .began
+        }
+        menuTimer = timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.menuHold, execute: timer)
+    }
+
+    override func reset() {
+        endPress()
+        menuTimer?.cancel()
+        menuTimer = nil
+        heldStill = false
+        moved = .zero
+        super.reset()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -1844,6 +2034,8 @@ final class HoldThenMove: UIGestureRecognizer {
         case .possible:
             moved = CGPoint(x: point.x - start.x, y: point.y - start.y)
             guard hypot(moved.x, moved.y) >= Self.slop else { return }
+            menuTimer?.cancel()
+            endPress()
             guard touch.timestamp - startTime >= Self.hold else { state = .failed; return }
             state = .began
         case .began, .changed:

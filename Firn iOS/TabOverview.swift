@@ -2357,6 +2357,22 @@ struct OverviewRow: View {
             .opacity(reduceMotion && leaving ? 0 : 1)
             .gesture(SidewaysPan(changed: follow, ended: letGo))
             .allowsHitTesting(!leaving)
+            // A tab brought back (a shake's Undo) comes back in place. The
+            // overview stays built now, and its row could keep the swipe
+            // that closed it: slid off the screen and taking no touches
+            // (David's iPhone, 2026-11-10). Reopening also picks the tab.
+            .onAppear { comeBack() }
+            .onChange(of: tab.lastActiveAt) { comeBack() }
+    }
+
+    private func comeBack() {
+        guard leaving || pull != 0 else { return }
+        var now = Transaction()
+        now.disablesAnimations = true
+        withTransaction(now) {
+            leaving = false
+            pull = 0
+        }
     }
 
     /// A slim row is one line on a flat fill; a tall card is the same line on its

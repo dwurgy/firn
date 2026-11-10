@@ -2163,6 +2163,12 @@ private struct OverviewHaze: View {
                             .scaledToFill()
                     }
                     .clipped()
+                    // Each haze its own layer, so a new one cross-fades in
+                    // by opacity alone. Changed in place, SwiftUI blended
+                    // the two images on the CPU at full screen size every
+                    // frame of the glide into the overview: three stalls
+                    // of 55–110ms each (David's iPhone, 2026-11-10).
+                    .id(ObjectIdentifier(haze))
                     .transition(.opacity)
                 // One level for every page, as honest as the Mac's
                 // window: whatever is behind is what shows.

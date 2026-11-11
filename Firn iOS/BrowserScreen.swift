@@ -382,11 +382,14 @@ struct BrowserScreen: View {
             }
             // A swipe up on the bar pulls the page into the overview, as
             // in Safari. Alongside the bar's own buttons, so a tap still taps.
+            // Only the full bar: the small pill is tap-only, as Safari's
+            // (David, 2026-11-11); a tap grows the bar, and then it swipes.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 6, coordinateSpace: .global)
                     .updating($dragging) { _, state, _ in state = true }
                     .onChanged(pullMoved)
-                    .onEnded { pullEnded(translation: $0.translation, velocity: $0.velocity) }
+                    .onEnded { pullEnded(translation: $0.translation, velocity: $0.velocity) },
+                including: barShrunk ? .subviews : .all
             )
             .onChange(of: dragging) { _, now in
                 if !now, newTabSwipe {

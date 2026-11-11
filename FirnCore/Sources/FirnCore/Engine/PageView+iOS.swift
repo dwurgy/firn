@@ -10,15 +10,19 @@ import WebKit
 public struct PageView: UIViewControllerRepresentable {
     private let page: any PageController
     private let barTop: CGFloat
+    private let held: PageHold?
     private let onScroll: ((BarScroll) -> Void)?
 
     /// `barTop` is where Firn's own bar starts, from the screen's top (0
     /// for no bar), so WebKit can scroll the page's end clear of it and keep
     /// fixed footers above it. `onScroll` hears when your own scrolling
-    /// should shrink the bar or grow it back (`BarScroll`).
-    public init(page: any PageController, barTop: CGFloat = 0, onScroll: ((BarScroll) -> Void)? = nil) {
+    /// should shrink the bar or grow it back (`BarScroll`). `held` moves
+    /// the live page while a finger pulls it (`PageHold`).
+    public init(page: any PageController, barTop: CGFloat = 0, held: PageHold? = nil,
+                onScroll: ((BarScroll) -> Void)? = nil) {
         self.page = page
         self.barTop = barTop
+        self.held = held
         self.onScroll = onScroll
     }
 
@@ -28,7 +32,9 @@ public struct PageView: UIViewControllerRepresentable {
 
     public func updateUIViewController(_ holder: PageHolder, context: Context) {
         holder.barTop = barTop
-        (holder.view as? PageFrame)?.onScroll = onScroll
+        guard let frame = holder.view as? PageFrame else { return }
+        frame.onScroll = onScroll
+        frame.held = held
     }
 
     private var webKitPage: WebKitPageController {
@@ -90,6 +96,21 @@ public final class PageHolder: UIViewController {
     }
 }
 
+/// Where the live page goes while a finger pulls it up from the bar (or
+/// sideways), until its picture takes over (`docs/IOS-PLAN.md`, the swipe
+/// up's delay, step 2b): the page below the status bar, scaled into `box`
+/// (screen points) with `radius` corners; the strip under the clock is
+/// left out, as the picture leaves it out.
+public struct PageHold: Equatable, Sendable {
+    public var box: CGRect
+    public var radius: CGFloat
+
+    public init(box: CGRect, radius: CGFloat) {
+        self.box = box
+        self.radius = radius
+    }
+}
+
 /// What your own scrolling says about the bar, as in Safari: scrolling
 /// down to read shrinks it, scrolling back up (or reaching the page's top)
 /// grows it (`docs/IOS-PLAN.md`, phase 5, step 1).
@@ -124,12 +145,41 @@ private final class PageFrame: UIView {
     /// way since it last turned around.
     private var lastOffset: CGFloat?
     private var travel: CGFloat = 0
+    /// Moved by a pull: by its layer alone (a transform and a mask), never
+    /// its frame. Moving the view itself made UIKit work out its safe area
+    /// again every frame and WebKit lay the whole page out again, which
+    /// froze the glide (step 3b); a layer change is invisible to both. The
+    /// page's insets also stay as they were until it's let go.
+    var held: PageHold? {
+        didSet {
+            guard held != oldValue else { return }
+            if oldValue == nil { heldTop = min(safeAreaInsets.top, bounds.height) }
+            applyHold()
+            if held == nil { setNeedsLayout() }
+        }
+    }
+    /// The status bar's height as the hold began.
+    private var heldTop: CGFloat = 0
+    /// Holds the web view and the page's color behind it, and is what a
+    /// pull moves. A view of Firn's own that SwiftUI never sizes: SwiftUI
+    /// sets this frame's own frame on every update, and with a scale on it
+    /// UIKit grew its size to match (402 to 434pt wide mid-pull), so WebKit
+    /// laid the page out again. Laid out by bounds and center only, which a
+    /// transform leaves alone.
+    private let mover = UIView()
+    private let holdMask: CALayer = {
+        let mask = CALayer()
+        mask.backgroundColor = UIColor.black.cgColor
+        mask.cornerCurve = .continuous
+        return mask
+    }()
 
     init(webView: WKWebView) {
         self.webView = webView
         super.init(frame: .zero)
-        if webView.frame.isEmpty { webView.frame = bounds }
-        addSubview(webView)
+        addSubview(mover)
+        if webView.frame.isEmpty { webView.frame = mover.bounds }
+        mover.addSubview(webView)
         updateStripColor()
         addRefreshControl()
         // KVO hands changes over on the main thread here: WebKit sets both
@@ -216,12 +266,39 @@ private final class PageFrame: UIView {
 
     private func updateStripColor() {
         // The same color the page reports as `topColor`, for the glide.
-        backgroundColor = webView.themeColor ?? webView.underPageBackgroundColor
+        mover.backgroundColor = webView.themeColor ?? webView.underPageBackgroundColor
     }
 
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
-        setNeedsLayout()
+        if held == nil { setNeedsLayout() }
+    }
+
+    /// Scales the page below the status bar into the hold's box, about the
+    /// layer's own middle, worked out from where the view rests (its
+    /// center and bounds, which a layer transform leaves alone).
+    private func applyHold() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let size = mover.bounds.size
+        guard let held, size.width > 0, size.height > heldTop, window != nil, held.box.width > 0 else {
+            mover.layer.transform = CATransform3DIdentity
+            mover.layer.mask = nil
+            return
+        }
+        let rest = convert(mover.bounds, to: nil)
+        let source = CGRect(x: 0, y: heldTop, width: size.width, height: size.height - heldTop)
+        let scale = held.box.width / source.width
+        let middle = CGPoint(x: rest.midX, y: rest.midY)
+        let sourceTop = CGPoint(x: rest.minX + source.minX, y: rest.minY + source.minY)
+        let shift = CGPoint(x: held.box.minX - middle.x - scale * (sourceTop.x - middle.x),
+                            y: held.box.minY - middle.y - scale * (sourceTop.y - middle.y))
+        mover.layer.transform = CATransform3DMakeAffineTransform(
+            CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: shift.x, ty: shift.y))
+        holdMask.frame = source
+        holdMask.cornerRadius = held.radius / scale
+        if mover.layer.mask !== holdMask { mover.layer.mask = holdMask }
     }
 
     /// Firn's bar's room from the screen's bottom edge; 0 for no bar.
@@ -233,7 +310,17 @@ private final class PageFrame: UIView {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
         // Only on a real change: each new frame lays the page out again.
-        if webView.frame != bounds { webView.frame = bounds }
+        // By bounds and center: the mover may be held (scaled), and its
+        // frame then isn't its size.
+        let middle = CGPoint(x: bounds.midX, y: bounds.midY)
+        if mover.bounds.size != bounds.size || mover.center != middle {
+            mover.bounds = CGRect(origin: .zero, size: bounds.size)
+            mover.center = middle
+            if held != nil { applyHold() }
+        }
+        if webView.frame != mover.bounds { webView.frame = mover.bounds }
+        // Held by a pull: the insets wait until it's let go.
+        guard held == nil else { return }
         let top = min(safeAreaInsets.top, bounds.height)
         let covered = UIEdgeInsets(top: top, left: 0, bottom: barRoom, right: 0)
         if webView.obscuredContentInsets != covered {

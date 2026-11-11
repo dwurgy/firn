@@ -24,6 +24,20 @@ struct BrowserScreen: View {
     @State private var standIn: UIImage?
     /// The stand-in's size.
     private var standInSize: CGSize? { standIn?.size }
+    /// A pull has the live page itself following the finger, until its
+    /// picture comes (WebKit takes 50–100ms) and takes its place in the
+    /// same spot, in one frame. Moved by its layer only (`PageHold`), so
+    /// it never lays out again (`docs/IOS-PLAN.md`, the swipe up's delay,
+    /// step 2b).
+    @State private var livePull = false
+    /// What a pull moves: the picture once it's here, the live page below
+    /// the status bar until then (the same size: the picture leaves the
+    /// strip out too).
+    private var pulledSize: CGSize? {
+        if let standInSize { return standInSize }
+        guard livePull, pageFrame.width > 0 else { return nil }
+        return CGSize(width: pageFrame.width, height: max(pageFrame.height - pictures.topInset, 1))
+    }
     /// The page's color behind the status bar, which the picture leaves
     /// out. Never faded: it goes the moment the page starts to move and is
     /// back the moment it's the page again. Fading, it read as a separate
@@ -155,7 +169,7 @@ struct BrowserScreen: View {
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
 
-            if let standInSize, standInSize.width > 0 {
+            if let standInSize = pulledSize, standInSize.width > 0 {
                 if let standInTop {
                     // A fill, so a new tab's color fades in rather than snaps.
                     Rectangle()
@@ -365,7 +379,8 @@ struct BrowserScreen: View {
         if let page = store.activeTab?.page {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
-            PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) { scroll in
+            PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
+                     held: livePull ? PageHold(box: box, radius: boxRadius) : nil) { scroll in
                 let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }
             }
@@ -528,6 +543,7 @@ struct BrowserScreen: View {
 
     /// No picture or no card to aim at: the overview fades in.
     private func fadeToTabs() {
+        livePull = false
         tileReveal = 1
         standIn = nil
         standInTab = nil
@@ -644,6 +660,7 @@ struct BrowserScreen: View {
     /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,
     /// or a card off screen).
     private func hideTabs() {
+        livePull = false
         standIn = nil
         standInTab = nil
         neighbors = []
@@ -690,7 +707,7 @@ struct BrowserScreen: View {
         if var pull {
             pull.translation = drag.translation
             self.pull = pull
-            if standInSize != nil { box = pulledBox(pull); followPull(pull) }
+            if pulledSize != nil { box = pulledBox(pull); followPull(pull) }
             return
         }
         if newTabSwipe { return followNewTabSwipe(drag.translation) }
@@ -744,22 +761,28 @@ struct BrowserScreen: View {
             followPull(started)
             return
         }
+        // The live page moves at once, from this very frame; its picture
+        // takes over when it comes.
+        livePull = true
+        standInTop = tab.page?.topColor
+        stripOpacity = 1
+        boxRadius = 0
+        box = pulledBox(started)
+        followPull(started)
+        SwipeTiming.mark("live page held")
         Task {
             let fresh = await picture?.value
             SwipeTiming.mark(fresh == nil ? "no new picture" : "picture arrived")
             guard let image = fresh ?? pictures.image(for: tab.id) else { return }
-            // Still held (or let go but not landed yet): the picture comes
-            // in under the finger, a short glide from the page's place.
-            guard pullAwaitingPicture == started.id, standIn == nil, gliding == tab.id else { return }
+            // Still held (or let go but not landed yet): the picture takes
+            // the live page's place exactly where it is, in one frame.
+            guard livePull, pullAwaitingPicture == started.id, standIn == nil, gliding == tab.id else { return }
             pullAwaitingPicture = nil
-            putStandIn(image, of: tab, at: pageBox(for: image))
+            let held = box, radius = boxRadius, strip = stripOpacity
+            putStandIn(image, of: tab, at: held, radius: radius)
+            stripOpacity = strip
+            livePull = false
             SwipeTiming.mark("picture set")
-            if let pull {
-                withAnimation(.easeOut(duration: 0.1)) {
-                    box = pulledBox(pull)
-                    followPull(pull)
-                }
-            }
         }
     }
 
@@ -796,8 +819,8 @@ struct BrowserScreen: View {
     /// about 58% of the screen, then slower), and the point under the
     /// finger when it came down stays under the finger, in any direction.
     private func pulledBox(_ pull: Pull) -> CGRect {
-        guard let standInSize else { return box }
-        let page = pageBox(size: standInSize)
+        guard let size = pulledSize else { return box }
+        let page = pageBox(size: size)
         let lift = lift(pull)
         // Past half the screen, each point of lift shrinks it less.
         let beyond = max(0, lift - 1)
@@ -834,6 +857,7 @@ struct BrowserScreen: View {
             }
             guard standInSize != nil else {
                 // Too late now: a picture arriving after this is dropped.
+                // The live page, if it was held, goes back to its place.
                 if pullAwaitingPicture == pull.id { pullAwaitingPicture = nil }
                 return toTabs ? fadeToTabs() : hideTabs()
             }

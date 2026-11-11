@@ -1023,12 +1023,19 @@ struct BrowserScreen: View {
         10 + 6 * box.width / max(pageFrame.width, 1)
     }
 
-    /// Sideways, each page carries its own pill in the bar, as in Safari:
-    /// the real one rides with the page on screen, an empty one with each
-    /// beside it; Back and the tabs button stay where they are.
+    /// Sideways, the page on screen and the one coming in share the bar's
+    /// gap, each with its own pill (`BarSlide`). Measured as on letting go
+    /// (`neighborChosen`), so the split carries straight on as the tab
+    /// beside becomes the one held. Toward a side with no tab, the pill
+    /// stays whole.
     private var barSlide: BarSlide? {
         guard swiping, !neighborsPeek, standIn != nil || livePull else { return nil }
-        return BarSlide(held: box.minX, others: neighbors.map { ($0.pinned ?? neighborBox($0.place)).minX })
+        let spacing = box.width + gap(box)
+        guard spacing > 1 else { return nil }
+        let t = (box.midX - pageFrame.midX) / spacing
+        let coming = t > 0 ? -1 : 1
+        guard t != 0, neighbors.contains(where: { $0.place == coming }) else { return BarSlide(progress: 0) }
+        return BarSlide(progress: t)
     }
 
     /// A page's strip under the clock, riding above its box.

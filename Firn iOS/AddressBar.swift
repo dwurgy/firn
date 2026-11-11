@@ -205,10 +205,21 @@ struct AddressBar: View {
                 // narrows; measured afterwards, they trailed it (step 2c).
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
-                // Sliding with its page, under Back and the tabs button,
-                // which stay put.
-                .offset(x: barSlide?.held ?? 0)
-                .zIndex(barSlide == nil ? 1 : -1)
+                // Sideways, the field's words stay inside its own pill as
+                // it shares the gap with the next one (`BarSlide`).
+                // Only then: otherwise nothing is clipped, as before.
+                .mask {
+                    if let activeSlide {
+                        GeometryReader { geo in
+                            let pill = activeSlide.pills(in: geo.size).held
+                            Capsule().frame(width: pill.width, height: pill.height)
+                                .position(x: pill.midX, y: pill.midY)
+                        }
+                    } else {
+                        Rectangle().padding(-400)
+                    }
+                }
+                .zIndex(1)
             if !editing.wrappedValue, !(reduceMotion && compact) {
                 hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
                     .transition(reduceMotion ? Self.shrinkFade : .opacity)
@@ -226,6 +237,12 @@ struct AddressBar: View {
         // 2026-11-09). Reduce Motion: nothing moves; the full bar and the
         // small pill cross-fade in place (`shrinkFade`, on each piece).
         .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
+    }
+
+    /// A sideways swipe, while the full bar shows (the small pill and the
+    /// open menu keep their own look).
+    private var activeSlide: BarSlide? {
+        compact || menuOpen ? nil : barSlide
     }
 
     static let shrinkGlide = Animation.spring(duration: 0.32, bounce: 0)
@@ -263,20 +280,22 @@ struct AddressBar: View {
         let open = menuOpen && fieldSize != .zero
         let small = CGRect(x: 0, y: fieldSize.height - Self.compactHeight + Self.compactDrop,
                            width: fieldSize.width, height: Self.compactHeight)
+        let pills = (open ? nil : activeSlide)?.pills(in: fieldSize)
         let frame = open ? menuFrame(fieldSize: fieldSize)
-            : compact ? small : CGRect(origin: .zero, size: fieldSize)
+            : compact ? small : pills?.held ?? CGRect(origin: .zero, size: fieldSize)
         let radius = open ? PageMenuPanel.cornerRadius : frame.height / 2
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        // The pages beside it carry empty pills of the same frost.
-        if let barSlide, !compact, !open {
-            ForEach(Array(barSlide.others.enumerated()), id: \.offset) { _, x in
-                BarFrost(shape: Capsule(), space: space)
-                    .frame(width: fieldSize.width, height: fieldSize.height)
-                    .position(x: fieldSize.width / 2 + x - barSlide.held, y: fieldSize.height / 2)
-            }
+        // The page coming in brings its own pill, an empty one of the same
+        // frost, growing out from the other button.
+        if let pills, let coming = pills.coming {
+            BarFrost(shape: Capsule(), space: space)
+                .frame(width: coming.width, height: coming.height)
+                .opacity(pills.comingOpacity)
+                .position(x: coming.midX, y: coming.midY)
         }
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
+            .opacity(pills?.heldOpacity ?? 1)
             .clipShape(shape)
             .background { BarFrost(shape: shape, space: space) }
             .frame(width: frame.width, height: frame.height)
@@ -799,15 +818,48 @@ extension EnvironmentValues {
     /// and the new one comes as the page settles, the pill staying put (as
     /// in Safari; David, 2026-11-10).
     @Entry var barLabelHidden = false
-    /// Pages sliding sideways: how far the page on screen has moved, and
-    /// where each beside it is (`BarSlide`).
+    /// Pages sliding sideways: how far the page on screen has slid
+    /// (`BarSlide`), so the two pills share the gap.
     @Entry var barSlide: BarSlide? = nil
 }
 
-/// The bar's pills during a sideways swipe: `held` is how far the page on
-/// screen has slid (its pill, the real field, rides with it), `others` where
-/// each page beside it is, each carrying an empty pill.
+/// The bar's pills during a sideways swipe, as Safari's but calm (David,
+/// 2026-11-11): both stay in the gap between Back and the tabs button,
+/// never under them. The page on screen's pill keeps its far edge at its
+/// button while its near edge pulls in; the coming page's pill grows out
+/// from the other button; a thin seam between them follows the swipe.
+/// Flat frost, no swelling or melting where they meet.
 struct BarSlide: Equatable {
-    var held: CGFloat
-    var others: [CGFloat]
+    /// How far the page on screen has slid, in pages: positive to the
+    /// right (the page before it coming in from Back's side), negative to
+    /// the left. 0 at rest; only where a page is there to come in.
+    var progress: CGFloat
+
+    /// The gap between the two pills.
+    static let seam: CGFloat = 6
+
+    /// Where each pill sits in the field's own space. A pill narrower than
+    /// it is tall becomes a shrinking circle against its button, fading.
+    func pills(in size: CGSize) -> (held: CGRect, heldOpacity: Double, coming: CGRect?, comingOpacity: Double) {
+        let t = min(max(progress, -1), 1)
+        let w = size.width, h = size.height
+        let split = t >= 0 ? w * t : w * (1 + t)
+        // The seam opens over the swipe's first few points, so the pill
+        // doesn't jump narrower as it starts.
+        let seam = Self.seam * min(abs(t) * w / Self.seam, 1)
+        // The coming pill is on the left when the page slides right.
+        let left = split - seam / 2, right = w - split - seam / 2
+        let heldWidth = t >= 0 ? right : left
+        let comingWidth = t >= 0 ? left : right
+        func rect(_ width: CGFloat, atLeft: Bool) -> CGRect {
+            // Narrower than tall, it's a circle that shrinks against its
+            // button, never reaching into the other pill.
+            let tall = min(h, max(width, 0))
+            return CGRect(x: atLeft ? 0 : w - max(width, 0), y: (h - tall) / 2, width: max(width, 0), height: tall)
+        }
+        func fade(_ width: CGFloat) -> Double { Double(min(max(width / h, 0), 1)) }
+        let held = rect(heldWidth, atLeft: t < 0)
+        let coming = comingWidth > 0 ? rect(comingWidth, atLeft: t >= 0) : nil
+        return (held, fade(heldWidth), coming, fade(comingWidth))
+    }
 }

@@ -26,6 +26,7 @@ struct AddressBar: View {
     @Binding var shrunk: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.barSlide) private var barSlide
+    @Environment(\.barGive) private var barGive
     /// What's being typed, for the results above the field (empty at rest).
     @State private var typed = ""
     /// This space's history pages for what's typed, looked up as you type.
@@ -223,6 +224,12 @@ struct AddressBar: View {
                         Rectangle().padding(-400)
                     }
                 }
+                // Swiped past the last tab, the field's right edge gives
+                // toward the thumb. Its own slot stays the same (the tabs
+                // button doesn't move); the field, its glass, and its words
+                // lay out narrower inside it, so the site stays centered
+                // and Reload stays inside the frost.
+                .padding(.trailing, compact || menuOpen ? 0 : barGive)
                 .zIndex(1)
             if !editing.wrappedValue, !(reduceMotion && compact) {
                 hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
@@ -818,6 +825,9 @@ extension EnvironmentValues {
     /// Pages sliding sideways: how far the page on screen has slid
     /// (`BarSlide`), so the two pills share the gap.
     @Entry var barSlide: BarSlide? = nil
+    /// Swiping past the last tab: how far (pt) the field's right edge has
+    /// pulled in toward the thumb. 0 at rest.
+    @Entry var barGive: CGFloat = 0
 }
 
 /// The bar's pills during a sideways swipe, as Safari's but calm (David,

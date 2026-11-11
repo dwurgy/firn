@@ -140,6 +140,9 @@ struct BrowserScreen: View {
     /// WebKit made the swipe start late and then jump (David's recording,
     /// 2026-11-06).
     @State private var newTabShift: CGFloat = 0
+    /// How far the bar's field pulls in toward the thumb meanwhile (pt),
+    /// as the pills give in an ordinary sideways swipe (David, 2026-11-11).
+    @State private var newTabGive: CGFloat = 0
     /// A swipe past the last tab is under way (instead of a pull).
     @State private var newTabSwipe = false
     /// The page menu, grown out of the bar.
@@ -367,6 +370,7 @@ struct BrowserScreen: View {
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
             .environment(\.barSlide, barSlide)
+            .environment(\.barGive, newTabGive)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
@@ -969,6 +973,9 @@ struct BrowserScreen: View {
         newTabReach = reach
         let past = min(dx + Self.newTabDistance, 0)
         newTabShift = (max(dx, -Self.newTabDistance) + past * 0.25) * Self.newTabGive
+        // The field gives about half as much as the + moves: about 30pt
+        // by the point a new tab is ready, little more past it.
+        newTabGive = -newTabShift * 0.55
     }
 
     /// Let go: far enough (or flicked) starts typing for a new tab at once,
@@ -982,6 +989,8 @@ struct BrowserScreen: View {
         }
         let wants = newTabReach >= 1
             || (translation.width < -Self.newTabDistance * 0.4 && velocity.width < -400)
+        // Either way, the field glides back to its full width.
+        withAnimation(.smooth(duration: 0.25)) { newTabGive = 0 }
         if wants {
             startNewTab()
             // Back off the edge it came from, keeping its color, while the

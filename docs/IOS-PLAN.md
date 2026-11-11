@@ -409,3 +409,54 @@ The items below are kept for the reasoning; 1, 2, 3, 4, 6, 7, 8, 9, and 10 are a
 - Basecamp's balanced rows match the Mac's existing code exactly, row for row; only "up to 6 across" is new.
 - Tidying uses days of using Firn, 7 by default, as on the Mac.
 - Lookout, tidy away, First light, and split view (roomy layout only) carry over as the brief says.
+
+## 6. Later: iPhone Duo and Xcode 27.2 (notes only, nothing decided)
+
+Found 2026-11-10. David: finish the normal iPhone version first, then the Duo. None of this is planned or approved yet.
+
+### Xcode's plugin
+
+- Works: it found the project, switched "Firn iOS" to the iPhone Duo simulator, and built, installed, and ran Firn.
+- The Duo can't be folded from the command line (`simctl` has no fold, posture, or hinge command). Fold it in Device Hub. **Never** switch a simulator screen off (`simctl io … screenConfig … power off`): it crashed SpringBoard and needed a reboot.
+- Screens: cover (`primary`) 466×678pt, inner (`primary-1`) 669×951pt. A screenshot of one screen: `xcrun simctl io <udid> screenshot --display=primary`.
+- Duo screenshots can come back black for a few minutes after boot (a known 27.2 issue).
+
+### Previews (RenderPreview)
+
+- They work on a Duo destination, with a "Display: Outer / Inner" choice, light and dark, and every text size. Good for still looks (a pill, a card, a menu); not for motion, gestures, or the fold.
+- They need `ENABLE_DEBUG_DYLIB = YES` on the iPhone target. It's NO there, copied from the Mac target, where it's a fix for ad-hoc signing (`docs/HISTORY.md`, Signing); the iPhone target doesn't need it. Firn has no `#Preview` blocks yet.
+
+### Firn on the Duo, folded (the only position captured)
+
+- The bar sits left of center: the cover screen keeps the clock and camera in a column on the right, so the safe area is 382pt wide and Firn centers the bar in it (34pt of room on the left, about 118pt on the right). The scene behind fills the screen.
+- In dark mode the clock is dark grey on the dark sky while the Wi-Fi symbol is white; maybe Firn's status bar style (not checked).
+- The overview's hidden buttons (+, the space's name, Done) may still be visible to VoiceOver on the empty page (not confirmed).
+- Not yet seen: half-folded, open, the overview, or a web page.
+
+### What Apple's guidance says
+
+- On the cover screen, and on the inner screen held sideways, system toolbars and tab bars move to a column on the right. Firn's bar is its own, so it won't move by itself.
+- When half-folded, the crease is a "reserved region" content should avoid (SwiftUI's `ReservedRegion`, `onHingeChange`, `DeviceHinge`). Prefer an even number of columns so content splits at the fold. The outer camera is always a reserved region.
+- Only one place in the iPhone code reads screen insets directly (`BrowserScreen.swift`, the top inset), so there's little to undo.
+
+### A possible plan (a draft, for when David is ready)
+
+1. Decide the look (David): on the cover screen and the inner screen held sideways, keep the bar at the bottom (centered across the whole screen, clear of the camera) or move it up the right side, as Apple's apps do.
+2. Pictures of every position: David folds in Device Hub; Claude captures light and dark, including folding with the overview open and during a swipe up.
+3. The bar on the cover screen, as decided, and the dark-mode clock.
+4. The inner screen: cards in two columns, and Basecamp's column limit (`BasecampLayout` already takes one).
+5. The fold: keep the bar, Firn's hold menu, and the cards off the crease when half-folded.
+6. A look over: light, dark, Reduce Motion, VoiceOver, and every position.
+
+### "Build and test" in CLAUDE.md, if the plugin becomes the normal way
+
+- Build, run, and test through Xcode's plugin (Xcode open on Firn) instead of `xcodebuild`; keep `swift test` for FirnCore and `xcodebuild` in `scripts/`.
+- Previews for still looks, on both Duo screens, light and dark (needs the setting above).
+- Device Hub, driven by David: Controls › Shake (Undo Close Tab), Device › Slow Animations (glides frame by frame), and Memory Pressure (page pictures, sleeping tabs; not found in Apple's docs, so where it lives is unconfirmed).
+
+### The JSON project format (`.xcproj`)
+
+- Xcode 27.2 can store the project as JSON instead of `project.pbxproj` (Project navigator › File inspector › Project Format › JSON). Undone by discarding the change in git.
+- For Firn: worth it, but low priority. The project file is small (484 lines), and new files never touch it (folder-synced groups), so it has changed only 17 times.
+- Both apps build and run the same; it only needs Xcode 27 or later to open the project. The folder stays `Firn.xcodeproj`, so `scripts/release.sh` and `scripts/demo-shots.sh` keep their paths; per Apple's docs `xcodebuild` reads either format (not tried with Firn's).
+- Apple's format is at 0.1.0, so waiting costs nothing. If done: its own step, one commit, both apps built and a `release.sh` dry run first.

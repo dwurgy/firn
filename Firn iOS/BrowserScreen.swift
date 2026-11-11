@@ -110,9 +110,6 @@ struct BrowserScreen: View {
     private static let peek: CGFloat = 20
     /// The least room between a peeking tab and the held page.
     private static let peekBuffer: CGFloat = 24
-    /// A sideways swipe moved on to a tab beside it: its pill slides in
-    /// empty, and the name comes as the page settles.
-    @State private var swipeSwitched = false
     /// How long a pull up is held before the tabs beside it come in.
     private static let neighborsWait = Duration.milliseconds(450)
     /// A sideways swipe on the bar: the pages slide at full size, over the
@@ -217,8 +214,7 @@ struct BrowserScreen: View {
                         // rounded top corners. The live page brings its own.
                         if swiping {
                             ForEach(neighbors) { neighbor in
-                                topBand(neighbor.tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor },
-                                        over: neighbor.pinned ?? neighborBox(neighbor.place))
+                                topBand(neighbor.top, over: neighbor.pinned ?? neighborBox(neighbor.place))
                                     .opacity(neighborsOpacity * neighborsIn)
                             }
                             if standIn != nil { topBand(standInTop, over: box) }
@@ -370,7 +366,6 @@ struct BrowserScreen: View {
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
-            .environment(\.barLabelHidden, swiping && swipeSwitched)
             .environment(\.barSlide, barSlide)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
@@ -520,7 +515,7 @@ struct BrowserScreen: View {
         box = frame
         boxRadius = radius
         stripOpacity = radius == 0 ? 1 : 0
-        standInTop = tab.page?.topColor
+        standInTop = image.topEdgeColor ?? tab.page?.topColor
         standInTab = tab
         standIn = image
         standInFade = 1
@@ -741,6 +736,10 @@ struct BrowserScreen: View {
         let tab: FirnCore.Tab
         let image: UIImage?
         var place: Int
+        /// The strip under the clock while it's beside: its picture's top
+        /// edge, else the page's own color (none while asleep or loading,
+        /// when it's still black).
+        let top: CGColor?
         /// Where it's drawn while set, rather than by its place: where it
         /// was as another tab was picked, so it glides on from there.
         var pinned: CGRect? = nil
@@ -795,7 +794,6 @@ struct BrowserScreen: View {
         neighborsIn = up ? 0 : 1
         neighborsPeek = up
         heldShift = 0
-        swipeSwitched = false
         if up, !beside.isEmpty {
             Task {
                 try? await Task.sleep(for: Self.neighborsWait)
@@ -824,7 +822,7 @@ struct BrowserScreen: View {
         // The live page moves at once, from this very frame; its picture
         // takes over when it comes.
         livePull = true
-        standInTop = tab.page?.topColor
+        standInTop = pictures.cachedImage(for: tab.id)?.topEdgeColor ?? tab.page?.topColor
         // Sideways, the page carries its own strip (`topBand`).
         stripOpacity = up ? 1 : 0
         boxRadius = 0
@@ -1012,7 +1010,8 @@ struct BrowserScreen: View {
         return [-1, 1].compactMap { place in
             let i = index + place
             guard tabs.indices.contains(i) else { return nil }
-            return Neighbor(id: tabs[i].id, tab: tabs[i], image: pictures.image(for: tabs[i].id), place: place)
+            let image = pictures.image(for: tabs[i].id)
+            return Neighbor(id: tabs[i].id, tab: tabs[i], image: image, place: place, top: stripColor(tabs[i], image))
         }
     }
 
@@ -1093,12 +1092,12 @@ struct BrowserScreen: View {
             beside[i].place -= shift
             beside[i].pinned = shown[beside[i].id]
         }
-        beside.append(Neighbor(id: held.id, tab: held, image: heldImage, place: -shift, pinned: box))
+        beside.append(Neighbor(id: held.id, tab: held, image: heldImage, place: -shift,
+                               top: standInTop, pinned: box))
         neighbors = beside
         // Behind a pull, the overview keeps the held tab's card (hidden,
         // as gliding still names it) so nothing there changes size.
         heldCard = held.id
-        swipeSwitched = true
         store.select(neighbor.tab)
         box = spot
         standIn = image
@@ -1107,7 +1106,7 @@ struct BrowserScreen: View {
         // tab's. A page asleep or still loading keeps the old one: before
         // it has drawn, its color is black (found 2026-11-04), and the
         // page's own strip takes over as the picture fades.
-        let newTop = neighbor.tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor }
+        let newTop = neighbor.top
         Task {
             // One frame in its new role before the glide, so it starts
             // where it is.
@@ -1115,6 +1114,12 @@ struct BrowserScreen: View {
             if let newTop { withAnimation(.easeOut(duration: 0.3)) { standInTop = newTop } }
             land(onPage: neighbor.tab, curve: carrying(velocity, to: pageBox(for: image)), switching: true)
         }
+    }
+
+    /// The strip under the clock for a tab beside: its picture's top edge,
+    /// else the page's own color unless it's asleep or loading.
+    private func stripColor(_ tab: FirnCore.Tab, _ image: UIImage?) -> CGColor? {
+        image?.topEdgeColor ?? tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor }
     }
 
     /// A blank page the size of a picture, for a tab never pictured.

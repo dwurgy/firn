@@ -116,3 +116,31 @@ final class PagePictures {
         }
     }
 }
+
+extension UIImage {
+    /// The color along the picture's top edge, averaged: what was just
+    /// under the clock, for the strip there while the picture stands in
+    /// for the page. A site's theme color can be quite another color (on
+    /// steamdb.info, bright blue over a dark header; David's recording,
+    /// 2026-11-11). Drawn down to 32 pixels, so it costs next to nothing.
+    var topEdgeColor: CGColor? {
+        guard let image = cgImage, image.width > 0, image.height > 0,
+              let edge = image.cropping(to: CGRect(x: 0, y: 0, width: image.width, height: min(6, image.height))),
+              let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let count = 32
+        var pixels = [UInt8](repeating: 0, count: count * 4)
+        let drawn: Bool = pixels.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: count, height: 1, bitsPerComponent: 8,
+                                          bytesPerRow: count * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.interpolationQuality = .high
+            context.draw(edge, in: CGRect(x: 0, y: 0, width: count, height: 1))
+            return true
+        }
+        guard drawn else { return nil }
+        var sum = [0.0, 0.0, 0.0]
+        for i in 0..<count { for c in 0..<3 { sum[c] += Double(pixels[i * 4 + c]) } }
+        let n = Double(count) * 255
+        return CGColor(colorSpace: space, components: [sum[0] / n, sum[1] / n, sum[2] / n, 1])
+    }
+}

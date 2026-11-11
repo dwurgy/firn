@@ -200,6 +200,10 @@ struct AddressBar: View {
             AddressField(store: store, editing: editing, typingNewTab: typingNewTab,
                          menuOpen: $menuOpen, typed: $typed, compact: compact,
                          grow: { shrunk = false }, opened: opened)
+                // Sideways, the words fade with their pill: gone by the time
+                // it's about half the gap, so the next page's come in as its
+                // pill grows, with nothing popping as the tab changes.
+                .opacity(activeSlide?.wordsOpacity ?? 1)
                 // The glass and the menu are laid out with the field itself,
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
@@ -400,7 +404,6 @@ private struct NavigationPill: View {
 
 private struct AddressField: View {
     @Environment(\.barQuiet) private var barQuiet
-    @Environment(\.barLabelHidden) private var barLabelHidden
     /// The keyboard is still leaving (see `AddressBar.settling`).
     @Environment(\.barSettling) private var settling
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -500,8 +503,6 @@ private struct AddressField: View {
                         restingLabel
                             .id(reduceMotion && compact)
                             .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
-                            .opacity(barLabelHidden ? 0 : 1)
-                            .animation(.easeOut(duration: 0.15), value: barLabelHidden)
                     }
                 }
                 .overlay {
@@ -814,10 +815,6 @@ extension EnvironmentValues {
     /// Typing just ended and the keyboard is still leaving: the field rides
     /// down with it, and its resting parts wait (see `AddressBar.settling`).
     @Entry var barSettling = false
-    /// Pages are sliding sideways under the bar: the site's name fades out
-    /// and the new one comes as the page settles, the pill staying put (as
-    /// in Safari; David, 2026-11-10).
-    @Entry var barLabelHidden = false
     /// Pages sliding sideways: how far the page on screen has slid
     /// (`BarSlide`), so the two pills share the gap.
     @Entry var barSlide: BarSlide? = nil
@@ -837,6 +834,15 @@ struct BarSlide: Equatable {
 
     /// The gap between the two pills.
     static let seam: CGFloat = 6
+
+    /// How much of the held pill's words show: none until it's past half
+    /// the gap, all of them once it's nearly whole. The same curve going
+    /// and coming, so a swipe let go early fades them back.
+    var wordsOpacity: Double {
+        let held = 1 - min(abs(progress), 1)
+        let x = min(max((held - 0.55) / 0.35, 0), 1)
+        return Double(x * x * (3 - 2 * x))
+    }
 
     /// Where each pill sits in the field's own space. A pill narrower than
     /// it is tall becomes a shrinking circle against its button, fading.

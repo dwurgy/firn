@@ -254,6 +254,12 @@ struct TabOverview: View {
             }
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // While a page is held, only the haze is behind it, as in
+            // Safari: the cards come in over the landing's last stretch
+            // (and leave first as a tab opens). Shown clearly behind a slow
+            // hold, they were distracting (David, 2026-11-10). A hair above
+            // 0, so the cards' blur isn't dropped and rebuilt mid-glide.
+            .modifier(ArrivalBand(arrival: arrival, range: 0.85...1, fadesIn: true, floor: 0.002))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {

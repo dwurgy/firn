@@ -94,6 +94,13 @@ struct BrowserScreen: View {
     /// page lands in its card).
     @State private var neighbors: [Neighbor] = []
     @State private var neighborsOpacity: Double = 1
+    /// How far the tabs beside it have come in (0 to 1). A pull up shows
+    /// them only after a short hold, sliding in from the edges, so a quick
+    /// flick never does (as in Safari; David, 2026-11-10); a sideways swipe
+    /// shows them at once. Only shown can one be picked.
+    @State private var neighborsIn: CGFloat = 1
+    /// How long a pull up is held before the tabs beside it come in.
+    private static let neighborsWait = Duration.milliseconds(450)
     /// A sideways swipe on the bar: the pages slide at full size, over the
     /// frame's sand, with the overview left out.
     @State private var swiping = false
@@ -205,7 +212,9 @@ struct BrowserScreen: View {
                             .frame(width: width, height: height, alignment: .top)
                             .background(Theme.page)
                             .modifier(CardGlide(width: width, box: neighborBox(neighbor.place), radius: boxRadius))
-                            .opacity(neighborsOpacity)
+                            // In from beyond the screen's edge.
+                            .offset(x: CGFloat(neighbor.place) * (1 - neighborsIn) * 80)
+                            .opacity(neighborsOpacity * neighborsIn)
                         }
                         Group {
                             if let standIn { Image(uiImage: standIn).resizable() }
@@ -746,6 +755,14 @@ struct BrowserScreen: View {
         barQuiet = true
         neighbors = beside
         neighborsOpacity = 1
+        neighborsIn = up ? 0 : 1
+        if up, !beside.isEmpty {
+            Task {
+                try? await Task.sleep(for: Self.neighborsWait)
+                guard pull?.id == started.id else { return }
+                withAnimation(.smooth(duration: 0.3)) { neighborsIn = 1 }
+            }
+        }
         if up {
             beginGlide(of: tab)
         } else {
@@ -953,6 +970,7 @@ struct BrowserScreen: View {
     /// The tab beside it to open on letting go: moved (or flicked) more
     /// than about two fifths of the way toward the middle.
     private func neighborChosen(_ velocity: CGSize) -> Neighbor? {
+        guard neighborsIn > 0.5 else { return nil }
         let spacing = box.width + gap(box)
         guard spacing > 1 else { return nil }
         let moved = (box.midX - pageFrame.midX + velocity.width * 0.15) / spacing

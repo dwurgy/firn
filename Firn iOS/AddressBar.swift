@@ -539,7 +539,11 @@ private struct AddressField: View {
         // widens; unclipped, they lingered outside the glass (Simulator
         // recording, 2026-11-09). Reduce Motion: no narrowing to see, and
         // clipped, they vanished rather than fading (2026-11-10).
-        .clipShape(reduceMotion ? AnyShape(Rectangle().inset(by: -200)) : AnyShape(Rectangle()))
+        // It reaches down past the field's spot, where the small pill's name
+        // now sits (2026-11-11: clipped at the field's bottom, only the
+        // letters' tops showed).
+        .clipShape(reduceMotion ? AnyShape(Rectangle().inset(by: -200))
+                                : AnyShape(ReachingDown(by: AddressBar.compactDrop)))
         // The small pill: a tap anywhere on the field's 48pt spot (the
         // pill is drawn in its lower part) grows the bar back. Over the
         // whole field, not the text field: an overlay there only took taps
@@ -883,5 +887,14 @@ struct BarSlide: Equatable {
         let held = rect(heldWidth, atLeft: t < 0)
         let coming = comingWidth > 0 ? rect(comingWidth, atLeft: t >= 0) : nil
         return (held, fade(heldWidth), coming, fade(comingWidth))
+    }
+}
+
+/// A rectangle that reaches further down than its frame: the field's clip,
+/// so the small pill's name, hanging below the field, isn't cut off.
+private struct ReachingDown: Shape {
+    let by: CGFloat
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height + by))
     }
 }

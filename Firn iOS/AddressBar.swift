@@ -262,11 +262,13 @@ struct AddressBar: View {
     static let shrinkFade = AnyTransition.opacity.animation(.easeOut(duration: 0.2))
     /// The small pill: shorter than the bar, and lower, nearer the home
     /// indicator, as Safari's. The bar keeps its own 48pt spot, so the page
-    /// doesn't lay out again as it shrinks.
-    static let compactHeight: CGFloat = 36
-    static let compactDrop: CGFloat = 8
+    /// doesn't lay out again as it shrinks. Matched to Safari's from David's
+    /// screenshots side by side (2026-11-11): about 33pt tall, its bottom
+    /// about 14pt above the screen's edge, just over the home indicator.
+    static let compactHeight: CGFloat = 33
+    static let compactDrop: CGFloat = 20
     /// The site's name in the small pill, against its 16pt at rest.
-    static let compactTextScale: CGFloat = 0.8
+    static let compactTextScale: CGFloat = 0.78
     static let compactPadding: CGFloat = 16
     /// A long site's name is cut short with "…" in a pill no wider than
     /// this, so it stays small.
@@ -544,7 +546,11 @@ private struct AddressField: View {
         // inside the text's own height (Simulator, 2026-11-09).
         .overlay {
             if compact {
-                Button { if !barQuiet { grow() } } label: { Color.clear.contentShape(.rect) }
+                // Reaching down past the field's spot: the pill hangs below
+                // it, as Safari's does (2026-11-11).
+                Button { if !barQuiet { grow() } } label: {
+                    Color.clear.contentShape(.rect).padding(.bottom, -AddressBar.compactDrop)
+                }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Address")
                     .accessibilityValue(text)

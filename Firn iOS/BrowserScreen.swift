@@ -99,6 +99,15 @@ struct BrowserScreen: View {
     /// flick never does (as in Safari; David, 2026-11-10); a sideways swipe
     /// shows them at once. Only shown can one be picked.
     @State private var neighborsIn: CGFloat = 1
+    /// Held after a pull up, the tabs beside it peek in from the screen's
+    /// edges rather than sitting beside it, a little bigger than the held
+    /// page, and move with it sideways (as in Safari; David, 2026-11-10).
+    @State private var neighborsPeek = false
+    /// How far the held page has been moved sideways, kept past the
+    /// finger's lift for the landing.
+    @State private var heldShift: CGFloat = 0
+    /// How much of a peeking tab shows at the screen's edge.
+    private static let peek: CGFloat = 20
     /// How long a pull up is held before the tabs beside it come in.
     private static let neighborsWait = Duration.milliseconds(450)
     /// A sideways swipe on the bar: the pages slide at full size, over the
@@ -211,9 +220,10 @@ struct BrowserScreen: View {
                             }
                             .frame(width: width, height: height, alignment: .top)
                             .background(Theme.page)
-                            .modifier(CardGlide(width: width, box: neighborBox(neighbor.place), radius: boxRadius))
+                            .modifier(CardGlide(width: width, box: neighbor.pinned ?? neighborBox(neighbor.place),
+                                                radius: boxRadius))
                             // In from beyond the screen's edge.
-                            .offset(x: CGFloat(neighbor.place) * (1 - neighborsIn) * 80)
+                            .offset(x: CGFloat(neighbor.place) * (1 - neighborsIn) * (Self.peek + 40))
                             .opacity(neighborsOpacity * neighborsIn)
                         }
                         Group {
@@ -301,7 +311,7 @@ struct BrowserScreen: View {
                 // opacity fades straight from start to end, so both bars
                 // faded at once and their words smudged together (David's
                 // recording, 2026-11-09).
-                .modifier(ArrivalBand(arrival: editing ? 0 : arrival, range: 0...0.45, fadesIn: false,
+                .modifier(ArrivalBand(arrival: editing ? 0 : arrival, range: 0...0.2, fadesIn: false,
                                       floor: !editing && gliding != nil ? 0.002 : 0))
                 .allowsHitTesting(barShown)
                 .accessibilityHidden(!barShown)
@@ -614,6 +624,9 @@ struct BrowserScreen: View {
             box = pageBox(size: standInSize)
             boxRadius = 0
             arrival = 0
+            // The tabs beside it glide from where they are to beside it.
+            neighborsPeek = false
+            for i in neighbors.indices { neighbors[i].pinned = nil }
         } completion: {
             stripOpacity = 1
             pageHidden = false
@@ -707,6 +720,9 @@ struct BrowserScreen: View {
         let tab: FirnCore.Tab
         let image: UIImage?
         var place: Int
+        /// Where it's drawn while set, rather than by its place: where it
+        /// was as another tab was picked, so it glides on from there.
+        var pinned: CGRect? = nil
     }
 
     /// The finger moves on the bar. Going up more than across, it grabs the
@@ -756,6 +772,8 @@ struct BrowserScreen: View {
         neighbors = beside
         neighborsOpacity = 1
         neighborsIn = up ? 0 : 1
+        neighborsPeek = up
+        heldShift = 0
         if up, !beside.isEmpty {
             Task {
                 try? await Task.sleep(for: Self.neighborsWait)
@@ -845,14 +863,29 @@ struct BrowserScreen: View {
         // Pulled down, it barely gives; swiped sideways, it stays level.
         let dy = pull.sideways ? 0
             : pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height
-        // Swiped toward a side with no tab, it gives a little and comes back.
-        var dx = pull.translation.width
-        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
+        let dx = sidewaysShift(pull)
         let finger = CGPoint(x: pull.start.x + dx, y: pull.start.y + dy)
         let anchorX = pull.start.x - page.minX
         let anchorY = pull.start.y - page.minY
-        return CGRect(x: finger.x - anchorX * scale, y: finger.y - anchorY * scale,
+        var top = finger.y - anchorY * scale
+        // Held up, its top stays below the clock, giving only a little
+        // (Safari's does; Firn's rose under the status bar, David's
+        // recording, 2026-11-10). The limit comes in as it shrinks, so
+        // nothing moves at the grab.
+        if !pull.sideways {
+            let limit = pictures.topInset + 20 * min((1 - scale) / 0.42, 1)
+            if top < limit { top = limit - 10 * (1 - exp(-(limit - top) / 60)) }
+        }
+        return CGRect(x: finger.x - anchorX * scale, y: top,
                       width: page.width * scale, height: page.height * scale)
+    }
+
+    /// How far the held page goes sideways with the finger. Swiped toward
+    /// a side with no tab, it gives a little and comes back.
+    private func sidewaysShift(_ pull: Pull) -> CGFloat {
+        var dx = pull.translation.width
+        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
+        return dx
     }
 
     /// Let go: pulled far enough or flicked up, it lands in its card;
@@ -863,6 +896,7 @@ struct BrowserScreen: View {
         guard var pull else { return }
         SwipeTiming.mark("finger lifted")
         pull.translation = translation
+        heldShift = sidewaysShift(pull)
         self.pull = nil
         let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
@@ -964,13 +998,26 @@ struct BrowserScreen: View {
 
     /// Where a tab beside the held one sits: the held box, moved over.
     private func neighborBox(_ place: Int) -> CGRect {
-        box.offsetBy(dx: CGFloat(place) * (box.width + gap(box)), dy: 0)
+        guard neighborsPeek else { return box.offsetBy(dx: CGFloat(place) * (box.width + gap(box)), dy: 0) }
+        // At the screen's edge, a little bigger than the held page, and
+        // moved as far sideways as it has been.
+        let screen = pageFrame.width
+        let grown = box.insetBy(dx: -box.width * 0.02, dy: -box.height * 0.02)
+        let shift = pull.map(sidewaysShift) ?? heldShift
+        let x = place > 0 ? screen - Self.peek + shift : Self.peek + shift - grown.width
+        return CGRect(x: x, y: grown.minY, width: grown.width, height: grown.height)
     }
 
     /// The tab beside it to open on letting go: moved (or flicked) more
     /// than about two fifths of the way toward the middle.
     private func neighborChosen(_ velocity: CGSize) -> Neighbor? {
         guard neighborsIn > 0.5 else { return nil }
+        if neighborsPeek {
+            // Dragged about a quarter of the screen toward one (or flicked).
+            let moved = (heldShift + velocity.width * 0.15) / max(pageFrame.width, 1)
+            let place = moved > 0.25 ? -1 : moved < -0.25 ? 1 : 0
+            return place == 0 ? nil : neighbors.first { $0.place == place }
+        }
         let spacing = box.width + gap(box)
         guard spacing > 1 else { return nil }
         let moved = (box.midX - pageFrame.midX + velocity.width * 0.15) / spacing
@@ -984,11 +1031,16 @@ struct BrowserScreen: View {
     private func open(_ neighbor: Neighbor, carrying velocity: CGSize) {
         guard let held = standInTab, let heldImage = standIn else { return hideTabs() }
         let image = neighbor.image ?? plainPage(like: heldImage)
-        let spot = neighborBox(neighbor.place)
+        // Each where it's drawn now: the glide carries them on from there.
+        let shown = Dictionary(uniqueKeysWithValues: neighbors.map { ($0.id, $0.pinned ?? neighborBox($0.place)) })
+        let spot = shown[neighbor.id] ?? neighborBox(neighbor.place)
         let shift = neighbor.place
         var beside = neighbors.filter { $0.id != neighbor.id }
-        for i in beside.indices { beside[i].place -= shift }
-        beside.append(Neighbor(id: held.id, tab: held, image: heldImage, place: -shift))
+        for i in beside.indices {
+            beside[i].place -= shift
+            beside[i].pinned = shown[beside[i].id]
+        }
+        beside.append(Neighbor(id: held.id, tab: held, image: heldImage, place: -shift, pinned: box))
         neighbors = beside
         // Behind a pull, the overview keeps the held tab's card (hidden,
         // as gliding still names it) so nothing there changes size.

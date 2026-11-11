@@ -108,6 +108,11 @@ struct BrowserScreen: View {
     @State private var heldShift: CGFloat = 0
     /// How much of a peeking tab shows at the screen's edge.
     private static let peek: CGFloat = 20
+    /// The least room between a peeking tab and the held page.
+    private static let peekBuffer: CGFloat = 24
+    /// A sideways swipe moved on to a tab beside it: its pill slides in
+    /// empty, and the name comes as the page settles.
+    @State private var swipeSwitched = false
     /// How long a pull up is held before the tabs beside it come in.
     private static let neighborsWait = Duration.milliseconds(450)
     /// A sideways swipe on the bar: the pages slide at full size, over the
@@ -365,7 +370,8 @@ struct BrowserScreen: View {
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
-            .environment(\.barLabelHidden, swiping && abs(pull.map(sidewaysShift) ?? heldShift) > 24)
+            .environment(\.barLabelHidden, swiping && swipeSwitched)
+            .environment(\.barSlide, barSlide)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
@@ -789,6 +795,7 @@ struct BrowserScreen: View {
         neighborsIn = up ? 0 : 1
         neighborsPeek = up
         heldShift = 0
+        swipeSwitched = false
         if up, !beside.isEmpty {
             Task {
                 try? await Task.sleep(for: Self.neighborsWait)
@@ -1016,6 +1023,14 @@ struct BrowserScreen: View {
         10 + 6 * box.width / max(pageFrame.width, 1)
     }
 
+    /// Sideways, each page carries its own pill in the bar, as in Safari:
+    /// the real one rides with the page on screen, an empty one with each
+    /// beside it; Back and the tabs button stay where they are.
+    private var barSlide: BarSlide? {
+        guard swiping, !neighborsPeek, standIn != nil || livePull else { return nil }
+        return BarSlide(held: box.minX, others: neighbors.map { ($0.pinned ?? neighborBox($0.place)).minX })
+    }
+
     /// A page's strip under the clock, riding above its box.
     private func topBand(_ color: CGColor?, over box: CGRect) -> some View {
         UnevenRoundedRectangle(topLeadingRadius: boxRadius, topTrailingRadius: boxRadius, style: .continuous)
@@ -1032,7 +1047,10 @@ struct BrowserScreen: View {
         let screen = pageFrame.width
         let grown = box.insetBy(dx: -box.width * 0.02, dy: -box.height * 0.02)
         let shift = pull.map(sidewaysShift) ?? heldShift
-        let x = place > 0 ? screen - Self.peek + shift : Self.peek + shift - grown.width
+        var x = place > 0 ? screen - Self.peek + shift : Self.peek + shift - grown.width
+        // Never touching the held page, nor under it: a page held off to
+        // one side pushes that side's tab out (David, 2026-11-11).
+        x = place > 0 ? max(x, box.maxX + Self.peekBuffer) : min(x, box.minX - Self.peekBuffer - grown.width)
         return CGRect(x: x, y: grown.minY, width: grown.width, height: grown.height)
     }
 
@@ -1073,6 +1091,7 @@ struct BrowserScreen: View {
         // Behind a pull, the overview keeps the held tab's card (hidden,
         // as gliding still names it) so nothing there changes size.
         heldCard = held.id
+        swipeSwitched = true
         store.select(neighbor.tab)
         box = spot
         standIn = image

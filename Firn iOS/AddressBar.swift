@@ -25,6 +25,7 @@ struct AddressBar: View {
     /// small pill grows it back.
     @Binding var shrunk: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.barSlide) private var barSlide
     /// What's being typed, for the results above the field (empty at rest).
     @State private var typed = ""
     /// This space's history pages for what's typed, looked up as you type.
@@ -204,7 +205,10 @@ struct AddressBar: View {
                 // narrows; measured afterwards, they trailed it (step 2c).
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
-                .zIndex(1)
+                // Sliding with its page, under Back and the tabs button,
+                // which stay put.
+                .offset(x: barSlide?.held ?? 0)
+                .zIndex(barSlide == nil ? 1 : -1)
             if !editing.wrappedValue, !(reduceMotion && compact) {
                 hidesForMenu(toward: .leading) { TabsButton(space: space, action: showTabs) }
                     .transition(reduceMotion ? Self.shrinkFade : .opacity)
@@ -263,6 +267,14 @@ struct AddressBar: View {
             : compact ? small : CGRect(origin: .zero, size: fieldSize)
         let radius = open ? PageMenuPanel.cornerRadius : frame.height / 2
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        // The pages beside it carry empty pills of the same frost.
+        if let barSlide, !compact, !open {
+            ForEach(Array(barSlide.others.enumerated()), id: \.offset) { _, x in
+                BarFrost(shape: Capsule(), space: space)
+                    .frame(width: fieldSize.width, height: fieldSize.height)
+                    .position(x: fieldSize.width / 2 + x - barSlide.held, y: fieldSize.height / 2)
+            }
+        }
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
             .clipShape(shape)
@@ -787,4 +799,15 @@ extension EnvironmentValues {
     /// and the new one comes as the page settles, the pill staying put (as
     /// in Safari; David, 2026-11-10).
     @Entry var barLabelHidden = false
+    /// Pages sliding sideways: how far the page on screen has moved, and
+    /// where each beside it is (`BarSlide`).
+    @Entry var barSlide: BarSlide? = nil
+}
+
+/// The bar's pills during a sideways swipe: `held` is how far the page on
+/// screen has slid (its pill, the real field, rides with it), `others` where
+/// each page beside it is, each carrying an empty pill.
+struct BarSlide: Equatable {
+    var held: CGFloat
+    var others: [CGFloat]
 }

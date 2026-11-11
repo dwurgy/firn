@@ -206,6 +206,18 @@ struct BrowserScreen: View {
                 GeometryReader { layer in
                     let corner = layer.frame(in: .global).origin
                     ZStack(alignment: .topLeading) {
+                        // Sideways, each page carries its own strip under
+                        // the clock, which stays still over them (as in
+                        // Safari); behind the pictures, filling their
+                        // rounded top corners. The live page brings its own.
+                        if swiping {
+                            ForEach(neighbors) { neighbor in
+                                topBand(neighbor.tab.page.flatMap { $0.isLoading || $0.url == nil ? nil : $0.topColor },
+                                        over: neighbor.pinned ?? neighborBox(neighbor.place))
+                                    .opacity(neighborsOpacity * neighborsIn)
+                            }
+                            if standIn != nil { topBand(standInTop, over: box) }
+                        }
                         // The tabs beside it, the same size, a gap apart.
                         ForEach(neighbors) { neighbor in
                             Group {
@@ -344,6 +356,8 @@ struct BrowserScreen: View {
     /// rather than a snap (David's recording, 2026-11-09).
     private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.25, 1, duration: 0.42)
     private static let fade = Animation.easeOut(duration: 0.2)
+    /// Pages sliding sideways round to about the screen's own corners.
+    private static let slideRadius: CGFloat = 50
 
     private var bar: some View {
         AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
@@ -351,6 +365,7 @@ struct BrowserScreen: View {
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
+            .environment(\.barLabelHidden, swiping && abs(pull.map(sidewaysShift) ?? heldShift) > 24)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
@@ -399,7 +414,7 @@ struct BrowserScreen: View {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
             PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
-                     held: livePull ? PageHold(box: box, radius: boxRadius) : nil) { scroll in
+                     held: livePull ? PageHold(box: box, radius: boxRadius, includesTop: swiping) : nil) { scroll in
                 let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }
             }
@@ -788,10 +803,13 @@ struct BrowserScreen: View {
             gliding = tab.id
             lineOnPicture = 0
             swiping = true
+            // The page carries its own strip now (`topBand`).
+            stripOpacity = 0
         }
         if let lingering {
             putStandIn(lingering, of: tab, at: pageBox(for: lingering))
             if lingeringTop != nil { standInTop = lingeringTop }
+            if !up { stripOpacity = 0 }
             box = pulledBox(started)
             followPull(started)
             return
@@ -800,7 +818,8 @@ struct BrowserScreen: View {
         // takes over when it comes.
         livePull = true
         standInTop = tab.page?.topColor
-        stripOpacity = 1
+        // Sideways, the page carries its own strip (`topBand`).
+        stripOpacity = up ? 1 : 0
         boxRadius = 0
         box = pulledBox(started)
         followPull(started)
@@ -838,7 +857,7 @@ struct BrowserScreen: View {
             // the clock's color from what's under it, a moment late, and
             // with the strip gone the clock vanished against the sand
             // (David's recording, 2026-11-04, dark mode).
-            boxRadius = min(abs(pull.translation.width) / 60, 1) * 34
+            boxRadius = min(abs(pull.translation.width) / 60, 1) * Self.slideRadius
             return
         }
         let progress = min(lift(pull), 1)
@@ -993,7 +1012,16 @@ struct BrowserScreen: View {
     /// The gap between the held page and the ones beside it: a little
     /// narrower as they shrink.
     private func gap(_ box: CGRect) -> CGFloat {
-        12 + 12 * box.width / max(pageFrame.width, 1)
+        // Nearly touching at full size, as Safari's pages slide.
+        10 + 6 * box.width / max(pageFrame.width, 1)
+    }
+
+    /// A page's strip under the clock, riding above its box.
+    private func topBand(_ color: CGColor?, over box: CGRect) -> some View {
+        UnevenRoundedRectangle(topLeadingRadius: boxRadius, topTrailingRadius: boxRadius, style: .continuous)
+            .fill(color.map { Color(cgColor: $0) } ?? Theme.page)
+            .frame(width: box.width, height: pictures.topInset + boxRadius)
+            .offset(x: box.minX, y: box.minY - pictures.topInset)
     }
 
     /// Where a tab beside the held one sits: the held box, moved over.

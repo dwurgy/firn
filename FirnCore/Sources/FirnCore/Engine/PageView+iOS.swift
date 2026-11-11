@@ -104,10 +104,14 @@ public final class PageHolder: UIViewController {
 public struct PageHold: Equatable, Sendable {
     public var box: CGRect
     public var radius: CGFloat
+    /// The strip under the clock comes along, above `box` (a sideways
+    /// swipe, where each page carries its own).
+    public var includesTop: Bool
 
-    public init(box: CGRect, radius: CGFloat) {
+    public init(box: CGRect, radius: CGFloat, includesTop: Bool = false) {
         self.box = box
         self.radius = radius
+        self.includesTop = includesTop
     }
 }
 
@@ -296,7 +300,7 @@ private final class PageFrame: UIView {
                             y: held.box.minY - middle.y - scale * (sourceTop.y - middle.y))
         mover.layer.transform = CATransform3DMakeAffineTransform(
             CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: shift.x, ty: shift.y))
-        holdMask.frame = source
+        holdMask.frame = held.includesTop ? CGRect(origin: .zero, size: size) : source
         holdMask.cornerRadius = held.radius / scale
         if mover.layer.mask !== holdMask { mover.layer.mask = holdMask }
     }

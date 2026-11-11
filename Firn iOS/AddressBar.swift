@@ -369,6 +369,7 @@ private struct NavigationPill: View {
 
 private struct AddressField: View {
     @Environment(\.barQuiet) private var barQuiet
+    @Environment(\.barLabelHidden) private var barLabelHidden
     /// The keyboard is still leaving (see `AddressBar.settling`).
     @Environment(\.barSettling) private var settling
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -468,6 +469,8 @@ private struct AddressField: View {
                         restingLabel
                             .id(reduceMotion && compact)
                             .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
+                            .opacity(barLabelHidden ? 0 : 1)
+                            .animation(.easeOut(duration: 0.15), value: barLabelHidden)
                     }
                 }
                 .overlay {
@@ -780,4 +783,8 @@ extension EnvironmentValues {
     /// Typing just ended and the keyboard is still leaving: the field rides
     /// down with it, and its resting parts wait (see `AddressBar.settling`).
     @Entry var barSettling = false
+    /// Pages are sliding sideways under the bar: the site's name fades out
+    /// and the new one comes as the page settles, the pill staying put (as
+    /// in Safari; David, 2026-11-10).
+    @Entry var barLabelHidden = false
 }

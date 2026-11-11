@@ -1007,14 +1007,22 @@ struct BrowserScreen: View {
     }
     private let reachedNewTab = UIImpactFeedbackGenerator(style: .light)
 
-    private func isLast(_ tab: FirnCore.Tab) -> Bool {
-        store.openTabs.last?.id == tab.id
+    /// The order a sideways swipe moves through: Basecamp's tiles in their
+    /// grid order, then the tabs, as Safari's pinned tabs lead into its
+    /// others (David, 2026-11-11). So a tile swipes like any tab, and the
+    /// last tile swipes on to the first tab.
+    private var swipeTabs: [FirnCore.Tab] {
+        store.basecampTabs + store.openTabs
     }
 
-    /// The tabs just before and after this one in the list, with their
-    /// saved pictures.
+    private func isLast(_ tab: FirnCore.Tab) -> Bool {
+        swipeTabs.last?.id == tab.id
+    }
+
+    /// The tabs just before and after this one in the swipe order, with
+    /// their saved pictures.
     private func neighbors(of tab: FirnCore.Tab) -> [Neighbor] {
-        let tabs = store.openTabs
+        let tabs = swipeTabs
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return [] }
         return [-1, 1].compactMap { place in
             let i = index + place

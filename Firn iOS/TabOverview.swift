@@ -183,6 +183,7 @@ struct TabOverview: View {
                                   reveal: tileReveal, order: tileOrder,
                                   held: drag?.tile == true ? drag?.id : nil,
                                   pressed: finger.pressed,
+                                  incoming: drag?.basecamp == true ? drag?.id : nil,
                                   open: { tab in if !busy { open(tab) } },
                                   menu: { tileMenu(for: $0) },
                                   move: { tab, to in
@@ -386,9 +387,26 @@ struct TabOverview: View {
                     }
                     .transition(.identity)
                 } else if let tab = store.openTabs.first(where: { $0.id == drag.id }) {
-                    LiftedTile(finger: finger, height: drag.start.height, lifted: drag.lifted,
+                    // Carried up over Basecamp, it becomes a tile: the row
+                    // fades as the tile comes through, and the shape glides.
+                    let shaped = drag.basecamp
+                    LiftedTile(finger: finger, height: shaped ? drag.tileSize.height : drag.start.height,
+                               lifted: drag.lifted,
                                steady: tallness(tab, onScreen: isOnScreen(tab)) < 0.5) {
-                        tile(tab, spot: { _ in })
+                        ZStack {
+                            tile(tab, spot: { _ in })
+                                // Kept to the shrinking shape (a card's
+                                // picture doesn't shrink with it); loose
+                                // otherwise, so nothing of a row is cut.
+                                .mask {
+                                    RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
+                                        .padding(shaped ? 0 : -40)
+                                }
+                                .opacity(shaped ? 0 : 1)
+                            BasecampTiles.lifted(tab, space: space, onScreen: isOnScreen(tab),
+                                                 solid: drag.lifted)
+                                .opacity(shaped ? 1 : 0)
+                        }
                     }
                     // There or not, never faded in or out.
                     .transition(.identity)
@@ -1089,8 +1107,10 @@ struct TabOverview: View {
     private func follow(to point: CGPoint) {
         if pointing { pointer.point = point; return }
         guard let drag, drag.lifted else { return }
-        finger.top = point.y - drag.grab
+        finger.x = point.x
         finger.y = point.y
+        if !drag.tile && !drag.group { return rearrange() }
+        finger.top = point.y - drag.grab
         if drag.tile {
             // Kept inside the list's sides, so it never slides off screen.
             let view = spots.viewport
@@ -1108,11 +1128,14 @@ struct TabOverview: View {
     /// beside the grid, it lands in the nearest spot; never in the tabs.
     private func makeRoomForTile() {
         guard let drag, var ids = tileOrder, let from = ids.firstIndex(of: drag.id) else { return }
-        let middle = CGPoint(x: finger.left + drag.start.width / 2, y: finger.top + drag.start.height / 2)
+        let size = drag.basecamp ? drag.tileSize : drag.start.size
+        let middle = CGPoint(x: finger.left + size.width / 2, y: finger.top + size.height / 2)
         var nearest = from
         var best = CGFloat.infinity
         for (index, id) in ids.enumerated() {
-            guard let frame = spots.frames[id] else { continue }
+            // A carried tab's spot is its own (its row's frame is the list's).
+            let spot = drag.basecamp && id == drag.id ? spots.incoming : spots.frames[id]
+            guard let frame = spot else { continue }
             let distance = hypot(frame.midX - middle.x, frame.midY - middle.y)
             if distance < best { best = distance; nearest = index }
         }
@@ -1236,6 +1259,162 @@ struct TabOverview: View {
         return (spots.viewport.minX + 16, spots.viewport.width - 32)
     }
 
+    // MARK: Into Basecamp
+
+    /// Whether the finger is over Basecamp's grid (or above it), while it
+    /// shows. A carried tab stays a tile until the finger is clearly below
+    /// the grid, past the 12pt gap, so it doesn't flicker at the edge.
+    private var overBasecamp: Bool {
+        guard let grid = spots.basecamp, grid.maxY > spots.viewport.minY else { return false }
+        return finger.y < grid.maxY + (drag?.basecamp == true ? 12 : 0)
+    }
+
+    /// A held tab follows the finger. Carried up over Basecamp, it becomes
+    /// a tile there and the tiles make room (a short glide, no bounce);
+    /// back below, a row again, and the list makes room. Over a full
+    /// Basecamp (or for a tab with no address) nothing changes shape and
+    /// the list goes back as it was, since letting go there glides it home.
+    private func rearrange() {
+        guard let drag, drag.lifted, !drag.tile else { return }
+        if drag.group { return makeRoom() }
+        let over = overBasecamp
+        let tab = store.openTabs.first { $0.id == drag.id }
+        let fits = store.canAddToBasecamp && tab?.url != nil
+        if over && fits {
+            if !drag.basecamp { carryIntoBasecamp(drag) }
+            followAsTile()
+            return makeRoomForTile()
+        }
+        let left = drag.basecamp ? lane(in: nil).minX : finger.left
+        if drag.basecamp { carryOutOfBasecamp(drag) }
+        place(finger.y - drag.grab, left)
+        if over {
+            // Over a full Basecamp: the list as it was, the tab's place open.
+            waitToForm(over: nil)
+            let rest = restingOrder()
+            guard order != rest.ids || members != rest.groups else { return }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                order = rest.ids
+                members = rest.groups
+            }
+            return
+        }
+        makeRoom()
+    }
+
+    /// The list's order and groups as the store has them (nothing moved).
+    private func restingOrder() -> (ids: [UUID], groups: [UUID: [UUID]]) {
+        (store.tabListItems.map(\.id),
+         Dictionary(store.tabGroups.map { group in
+             (group.id, group.folded ? [] : store.tabs(in: group).map(\.id))
+         }) { a, _ in a })
+    }
+
+    /// Puts the held tile's top-left corner here: gliding while it changes
+    /// shape (each move retargets the same smooth glide), at once otherwise.
+    private func place(_ top: CGFloat, _ left: CGFloat) {
+        let gliding = !reduceMotion && Date.now < (drag?.reshaping ?? .distantPast)
+        withAnimation(gliding ? .smooth(duration: 0.25) : nil) {
+            finger.top = top
+            finger.left = left
+        }
+    }
+
+    /// A tile-shaped tab, centered under the finger, kept inside the list.
+    private func followAsTile() {
+        guard let drag else { return }
+        let view = spots.viewport
+        let size = drag.tileSize
+        place(finger.y - size.height / 2,
+              min(max(finger.x - size.width / 2, view.minX), view.maxX - size.width))
+    }
+
+    /// The tab becomes a tile under the finger: its place in the list (or
+    /// its group) closes, and a spot opens among the tiles, the nearest.
+    private func carryIntoBasecamp(_ old: Drag) {
+        var new = old
+        new.basecamp = true
+        new.reshaping = .now + 0.3
+        let width = spots.basecamp?.width ?? spots.viewport.width - 32
+        new.tileSize = BasecampTiles.tileSize(count: store.basecampTabs.count + 1, width: width)
+        if forming != nil { thaw() }
+        waitToForm(over: nil)
+        finger.solid = false
+        spots.incoming = nil
+        var tiles = store.basecampTabs.map(\.id)
+        let nearest = tiles.indices.min { a, b in
+            let fa = spots.frames[tiles[a]] ?? .zero, fb = spots.frames[tiles[b]] ?? .zero
+            return hypot(fa.midX - finger.x, fa.midY - finger.y) < hypot(fb.midX - finger.x, fb.midY - finger.y)
+        }
+        // Before the nearest tile if the finger is left of its middle.
+        let at = nearest.map { index in
+            (spots.frames[tiles[index]]?.midX ?? 0) < finger.x ? index + 1 : index
+        } ?? tiles.count
+        tiles.insert(new.id, at: at)
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            drag = new
+            order?.removeAll { $0 == new.id }
+            members = members?.mapValues { $0.filter { $0 != new.id } }
+            tileOrder = tiles
+            finger.width = new.tileSize.width
+        }
+        forms += 1
+    }
+
+    /// Back below Basecamp: a row (or card) again, the full list's width,
+    /// held where the finger first held it; its spot among the tiles closes.
+    private func carryOutOfBasecamp(_ old: Drag) {
+        var new = old
+        new.basecamp = false
+        new.reshaping = .now + 0.3
+        spots.incoming = nil
+        let lane = lane(in: nil)
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            drag = new
+            tileOrder = nil
+            finger.width = lane.width
+        }
+    }
+
+    /// Let go over Basecamp: the tile settles into its spot, then the store
+    /// adds it there (leaving its group, as Add to Basecamp does), where
+    /// the tile already is, so nothing else moves. If iOS took the touch,
+    /// nothing is saved and the list is simply as it was.
+    private func settleInBasecamp(_ drag: Drag, cancelled: Bool) {
+        finger.solid = false
+        func finish(adding: Bool) {
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) {
+                if adding, let tab = store.openTabs.first(where: { $0.id == drag.id }),
+                   let at = tileOrder?.firstIndex(of: drag.id) {
+                    _ = store.addToBasecamp(tab, at: at)
+                }
+                order = nil
+                members = nil
+                tileOrder = nil
+                self.drag = nil
+                finger.held = nil
+                spots.incoming = nil
+            }
+            lastDrop = .now
+        }
+        guard !cancelled else { return finish(adding: false) }
+        let landing = spots.incoming ?? CGRect(x: finger.left, y: finger.top,
+                                               width: drag.tileSize.width, height: drag.tileSize.height)
+        guard !reduceMotion else { return finish(adding: true) }
+        var settling = drag
+        settling.lifted = false
+        withAnimation(.smooth(duration: 0.25)) {
+            finger.top = landing.minY
+            finger.left = landing.minX
+            finger.width = landing.width
+            self.drag = settling
+        } completion: {
+            finish(adding: true)
+        }
+    }
+
     // MARK: Hold to form
 
     /// The held tab rests on a loose tab (or no longer does): after about
@@ -1349,6 +1528,8 @@ struct TabOverview: View {
         hoverWait = nil
         hoverID = nil
         guard var drag else { finger.solid = false; return }
+        if drag.basecamp { return settleInBasecamp(drag, cancelled: cancelled) }
+        let fullBasecamp = !drag.group && overBasecamp && !store.canAddToBasecamp
         if let forming {
             if !cancelled { finger.solid = false; return settle(drag, into: forming) }
             thaw()
@@ -1371,6 +1552,7 @@ struct TabOverview: View {
             self.drag = nil
             finger.held = nil
             lastDrop = .now
+            if fullBasecamp { basecampFull = true }
             return
         }
         drag.lifted = false
@@ -1383,6 +1565,8 @@ struct TabOverview: View {
             self.drag = nil
             finger.held = nil
             lastDrop = .now
+            // Let go over a full Basecamp: home first, then the reason.
+            if fullBasecamp { basecampFull = true }
         }
     }
 
@@ -1448,7 +1632,7 @@ struct TabOverview: View {
                 let y = min(max(scroll.contentOffset.y + speed, lowest), highest)
                 guard abs(y - scroll.contentOffset.y) > 0.5 else { continue }
                 scrollPosition.scrollTo(y: y)
-                if drag?.tile == true { makeRoomForTile() } else { makeRoom() }
+                if drag?.tile == true { makeRoomForTile() } else { rearrange() }
             }
         }
     }
@@ -1565,6 +1749,10 @@ struct Frost<S: InsettableShape>: View {
     var cards: Set<UUID> = []
     /// The list's scroll, for scrolling while a tab is held at an edge.
     var scroll: ScrollGeometry?
+    /// Basecamp's grid (nil while empty), and the empty spot in it for a
+    /// tab carried up from the list.
+    var basecamp: CGRect?
+    var incoming: CGRect?
 }
 
 /// UIKit offers "Undo Close Tab" on a shake only when something holds

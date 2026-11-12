@@ -19,6 +19,13 @@ struct Drag {
     var grabX: CGFloat = 0
     /// A Basecamp tile, moving only within Basecamp.
     var tile = false
+    /// A tab carried up over Basecamp: tile-shaped, `tileSize`, centered
+    /// under the finger, with a spot open for it among the tiles.
+    var basecamp = false
+    var tileSize: CGSize = .zero
+    /// Until then, the held tile glides after the finger rather than
+    /// sitting right under it: it's changing shape (row to tile or back).
+    var reshaping = Date.distantPast
 }
 
 /// A group forming while a held tab rests on a loose one: the loose tab,
@@ -108,6 +115,7 @@ enum Liftable {
     var left: CGFloat = 0
     var width: CGFloat = 0
     /// The finger itself.
+    var x: CGFloat = 0
     var y: CGFloat = 0
     /// Resting on another tab, waiting for their group to form: the held
     /// tile turns solid so the one under it doesn't show through.
@@ -189,18 +197,19 @@ struct LiftedTile<Content: View>: View {
     }
 }
 
-/// The held tile's width, worked out afresh on every frame of a glide. A
+/// The held tile's size, worked out afresh on every frame of a glide. A
 /// plain `.frame` lays the row out at its new width at once and only
 /// eases the picture, and the row's left edge jumped as it moved into or
 /// out of a group while its right edge glided (David's recordings,
 /// 2026-11-09). With these two, both edges move together, frame by frame.
+/// The height glides too, as a tab carried up becomes a Basecamp tile.
 struct LaneWidth: ViewModifier, Animatable {
     var width: CGFloat
-    let height: CGFloat
+    var height: CGFloat
 
-    nonisolated var animatableData: CGFloat {
-        get { width }
-        set { width = newValue }
+    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(width, height) }
+        set { (width, height) = (newValue.first, newValue.second) }
     }
 
     func body(content: Content) -> some View {

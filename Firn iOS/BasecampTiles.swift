@@ -31,6 +31,9 @@ struct BasecampTiles: View {
     var held: UUID? = nil
     /// The tile held still, sinking a little as its menu comes.
     var pressed: UUID? = nil
+    /// A tab carried up into Basecamp: its id is in `order`, where an
+    /// empty spot opens for it (`OverviewSpots.incoming`).
+    var incoming: UUID? = nil
     let open: (FirnCore.Tab) -> Void
     /// The tile's hold menu (Firn's own, opened by the overview), here
     /// for VoiceOver's actions.
@@ -55,39 +58,81 @@ struct BasecampTiles: View {
     private var space: String { store.activeSpace.color }
 
     var body: some View {
-        let tiles = shownTiles
-        if !tiles.isEmpty {
-            let layout = BasecampLayout.make(count: tiles.count, width: width,
+        let items = shownSpots
+        if !items.isEmpty {
+            let layout = BasecampLayout.make(count: items.count, width: width,
                                              maximumColumns: Self.maximumColumns,
                                              minimumWidth: Self.minimumWidth)
             let tileWidth = tileWidth(for: layout)
-            let centers = places(count: tiles.count, layout, tileWidth: tileWidth)
+            let centers = places(count: items.count, layout, tileWidth: tileWidth)
             // One stack with every tile placed by its spot, not a stack per
             // row: a tile moving to another row while one is dragged glides
             // there instead of fading out of one row and into the next.
             ZStack(alignment: .topLeading) {
-                ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tab in
-                    tile(tab, at: index, of: tiles.count)
-                        .frame(width: tileWidth, height: Self.tileHeight)
-                        .position(centers[index])
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, spot in
+                    Group {
+                        switch spot {
+                        case let .tile(tab): tile(tab, at: index, of: items.count)
+                        case .incoming: incomingSpot
+                        }
+                    }
+                    .frame(width: tileWidth, height: Self.tileHeight)
+                    .position(centers[index])
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: height(rows: max(layout.rows.count, 1)))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            // Where Basecamp is, so a tab carried over it can become a tile.
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.basecamp = $0 }
+            .onDisappear { spots.basecamp = nil }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Basecamp")
         }
     }
 
-    /// The tiles in the order shown: the drag's while one moves.
-    private var shownTiles: [FirnCore.Tab] {
+    /// A spot in the grid: a tile, or the empty place a tab carried up
+    /// from the list will land in.
+    private enum Spot {
+        case tile(FirnCore.Tab)
+        case incoming(UUID)
+
+        @MainActor var id: UUID {
+            switch self {
+            case let .tile(tab): tab.id
+            case let .incoming(id): id
+            }
+        }
+    }
+
+    /// The spots in the order shown: the drag's while one moves.
+    private var shownSpots: [Spot] {
         let tiles = store.basecampTabs
-        guard let order else { return tiles }
+        guard let order else { return tiles.map(Spot.tile) }
         let byID = Dictionary(tiles.map { ($0.id, $0) }) { a, _ in a }
-        let ordered = order.compactMap { byID[$0] }
+        let ordered: [Spot] = order.compactMap { id in
+            if let tab = byID[id] { return .tile(tab) }
+            return id == incoming ? .incoming(id) : nil
+        }
         // A tile added mid-drag (never, but nothing goes missing) at the end.
-        return ordered + tiles.filter { !order.contains($0.id) }
+        return ordered + tiles.filter { !order.contains($0.id) }.map(Spot.tile)
+    }
+
+    /// The empty place a carried tab will land in: nothing shows, only
+    /// where it is.
+    private var incomingSpot: some View {
+        Color.clear
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.incoming = $0 }
+            .accessibilityHidden(true)
+    }
+
+    /// A tile's size with `count` tiles across `width` (the list's width):
+    /// a tab carried up becomes this size as the grid makes room for it.
+    static func tileSize(count: Int, width: CGFloat) -> CGSize {
+        let layout = BasecampLayout.make(count: count, width: width,
+                                         maximumColumns: maximumColumns, minimumWidth: minimumWidth)
+        let columns = CGFloat(layout.rows.first ?? 1)
+        return CGSize(width: max((width - (columns - 1) * gap) / columns, 0), height: tileHeight)
     }
 
     private func height(rows: Int) -> CGFloat {
@@ -130,8 +175,7 @@ struct BasecampTiles: View {
 
     /// Every tile the same width: the longest row fills the list's width.
     private func tileWidth(for layout: BasecampLayout) -> CGFloat {
-        let columns = CGFloat(layout.rows.first ?? 1)
-        return max((width - (columns - 1) * Self.gap) / columns, 0)
+        Self.tileSize(count: layout.rows.reduce(0, +), width: width).width
     }
 
     private func tile(_ tab: FirnCore.Tab, at index: Int, of count: Int) -> some View {

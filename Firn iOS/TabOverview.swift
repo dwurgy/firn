@@ -397,20 +397,24 @@ struct TabOverview: View {
                     LiftedTile(finger: finger, height: shaped ? drag.tileSize.height : drag.start.height,
                                lifted: drag.lifted,
                                steady: tallness(tab, onScreen: isOnScreen(tab)) < 0.5) {
-                        ZStack {
-                            tile(tab, spot: { _ in })
-                                // Kept to the shrinking shape (a card's
-                                // picture doesn't shrink with it); loose
-                                // otherwise, so nothing of a row is cut.
-                                .mask {
-                                    RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
-                                        .padding(shaped ? 0 : -40)
-                                }
-                                .opacity(shaped ? 0 : 1)
-                            BasecampTiles.lifted(tab, space: space, onScreen: isOnScreen(tab),
-                                                 solid: drag.lifted)
-                                .opacity(shaped ? 1 : 0)
-                        }
+                        // The tile sets the size and the row lies over it:
+                        // a card keeps its own height, and side by side in
+                        // a stack it held the tile at a card's height, a
+                        // tall narrow block (David's recording, 2026-11-12).
+                        BasecampTiles.lifted(tab, space: space, onScreen: isOnScreen(tab),
+                                             solid: drag.lifted)
+                            .opacity(shaped ? 1 : 0)
+                            .overlay {
+                                tile(tab, spot: { _ in })
+                                    // Kept to the shrinking shape (a card's
+                                    // picture doesn't shrink with it); loose
+                                    // otherwise, so nothing of a row is cut.
+                                    .mask {
+                                        RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
+                                            .padding(shaped ? 0 : -40)
+                                    }
+                                    .opacity(shaped ? 0 : 1)
+                            }
                     }
                     // There or not, never faded in or out.
                     .transition(.identity)

@@ -37,6 +37,9 @@ struct BasecampTiles: View {
     /// A tab being dragged while Basecamp is empty: one blank tile of
     /// frost shows where it could go (as on the Mac), the tab's own spot.
     var blank: UUID? = nil
+    /// A tile carried down into the tabs: its spot closes (the others
+    /// close up); if it was the only one, a blank tile stays to carry it back.
+    var away: UUID? = nil
     let open: (FirnCore.Tab) -> Void
     /// The tile's hold menu (Firn's own, opened by the overview), here
     /// for VoiceOver's actions.
@@ -110,8 +113,8 @@ struct BasecampTiles: View {
 
     /// The spots in the order shown: the drag's while one moves.
     private var shownSpots: [Spot] {
-        let tiles = store.basecampTabs
-        if tiles.isEmpty, order == nil, let blank { return [.incoming(blank)] }
+        let tiles = store.basecampTabs.filter { $0.id != away }
+        if tiles.isEmpty, let blank, order?.contains(blank) != true { return [.incoming(blank)] }
         guard let order else { return tiles.map(Spot.tile) }
         let byID = Dictionary(tiles.map { ($0.id, $0) }) { a, _ in a }
         let ordered: [Spot] = order.compactMap { id in
@@ -126,7 +129,7 @@ struct BasecampTiles: View {
     /// where it is; in an empty Basecamp, a blank tile of frost.
     private var incomingSpot: some View {
         Group {
-            if store.basecampTabs.isEmpty { TileGlass() } else { Color.clear }
+            if store.basecampTabs.allSatisfy({ $0.id == away }) { TileGlass() } else { Color.clear }
         }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.incoming = $0 }
             .accessibilityHidden(true)

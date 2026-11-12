@@ -17,7 +17,7 @@ struct Drag {
     var lifted = true
     /// Where across the tile the finger holds it (Basecamp tiles move both ways).
     var grabX: CGFloat = 0
-    /// A Basecamp tile, moving only within Basecamp.
+    /// A Basecamp tile: among the tiles, or carried down into the tabs (`tabs`).
     var tile = false
     /// A tab carried up over Basecamp: tile-shaped, `tileSize`, centered
     /// under the finger, with a spot open for it among the tiles.
@@ -33,6 +33,14 @@ struct Drag {
     /// at this size and shrunk or grown as one picture, so nothing inside
     /// it is laid out again mid-glide (David, 2026-11-12). Nil otherwise.
     var rowSize: CGSize?
+    /// A Basecamp tile carried down below the grid: a card (`rowHeight`
+    /// tall, the size it will be in the list), with a place open for it
+    /// among the tabs.
+    var tabs = false
+    var rowHeight: CGFloat = 0
+
+    /// How tall the held tab is now: a carried tile's card, or its own.
+    var height: CGFloat { tile && tabs ? rowHeight : start.height }
 }
 
 /// A group forming while a held tab rests on a loose one: the loose tab,

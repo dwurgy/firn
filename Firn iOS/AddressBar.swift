@@ -205,23 +205,45 @@ struct AddressBar: View {
                 // it's about half the gap, so the next page's come in as its
                 // pill grows, with nothing popping as the tab changes.
                 .opacity(activeSlide?.wordsOpacity ?? 1)
+                // Sideways, the field's words stay inside its own pill as
+                // it shares the gap with the next one (`BarSlide`), and
+                // dissolve toward the seam rather than being cut by it (a
+                // long site's name was cut mid-letter). Only the words: the
+                // glass, below, keeps its crisp edge. Only while sliding:
+                // otherwise nothing is clipped, as before.
+                .mask {
+                    if let activeSlide {
+                        GeometryReader { geo in
+                            let pill = activeSlide.pills(in: geo.size).held
+                            activeSlide.wordsMask(width: pill.width)
+                                .clipShape(Capsule())
+                                .frame(width: pill.width, height: pill.height)
+                                .position(x: pill.midX, y: pill.midY)
+                        }
+                    } else {
+                        Rectangle().padding(-400)
+                    }
+                }
                 // The glass and the menu are laid out with the field itself,
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
-                // Sideways, the field's words stay inside its own pill as
-                // it shares the gap with the next one (`BarSlide`).
-                // Only then: otherwise nothing is clipped, as before.
-                .mask {
+                // The page coming in brings its own pill, an empty one of
+                // the same frost, growing out from the other button. Outside
+                // the mask, which only holds the field's own pill (inside
+                // it, the coming pill never showed).
+                .background {
                     if let activeSlide {
                         GeometryReader { geo in
-                            let pill = activeSlide.pills(in: geo.size).held
-                            Capsule().frame(width: pill.width, height: pill.height)
-                                .position(x: pill.midX, y: pill.midY)
+                            let pills = activeSlide.pills(in: geo.size)
+                            if let coming = pills.coming {
+                                BarFrost(shape: Capsule(), space: space)
+                                    .frame(width: coming.width, height: coming.height)
+                                    .opacity(pills.comingOpacity)
+                                    .position(x: coming.midX, y: coming.midY)
+                            }
                         }
-                    } else {
-                        Rectangle().padding(-400)
                     }
                 }
                 // Swiped past the last tab, the field's right edge gives
@@ -298,19 +320,13 @@ struct AddressBar: View {
             : compact ? small : pills?.held ?? CGRect(origin: .zero, size: fieldSize)
         let radius = open ? PageMenuPanel.cornerRadius : frame.height / 2
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        // The page coming in brings its own pill, an empty one of the same
-        // frost, growing out from the other button.
-        if let pills, let coming = pills.coming {
-            BarFrost(shape: Capsule(), space: space)
-                .frame(width: coming.width, height: coming.height)
-                .opacity(pills.comingOpacity)
-                .position(x: coming.midX, y: coming.midY)
-        }
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
-            .opacity(pills?.heldOpacity ?? 1)
             .clipShape(shape)
             .background { BarFrost(shape: shape, space: space) }
+            // The whole pill fades as it becomes a circle, its frost too,
+            // as the coming one does.
+            .opacity(pills?.heldOpacity ?? 1)
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY)
         if reduceMotion {
@@ -862,6 +878,22 @@ struct BarSlide: Equatable {
         let held = 1 - min(abs(progress), 1)
         let x = min(max((held - 0.55) / 0.35, 0), 1)
         return Double(x * x * (3 - 2 * x))
+    }
+
+    /// How far in from the seam the held pill's words dissolve.
+    static let feather: CGFloat = 28
+
+    /// The held pill's words: whole at its far edge, fading out over the
+    /// last few points toward the seam. The fade grows in with the swipe,
+    /// so nothing near the field's edge dims as it starts.
+    func wordsMask(width: CGFloat) -> LinearGradient {
+        let pulled = min(abs(progress) * width / Self.feather, 1)
+        let f = Double(min(Self.feather * pulled / max(width, 1), 1))
+        // Sliding right, the held pill is on the right, its seam on the left.
+        let stops: [Gradient.Stop] = progress >= 0
+            ? [.init(color: .clear, location: 0), .init(color: .black, location: f)]
+            : [.init(color: .black, location: 1 - f), .init(color: .clear, location: 1)]
+        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
     }
 
     /// Where each pill sits in the field's own space. A pill narrower than

@@ -26,6 +26,9 @@ struct Drag {
     /// Until then, the held tile glides after the finger rather than
     /// sitting right under it: it's changing shape (row to tile or back).
     var reshaping = Date.distantPast
+    /// A tab that has moved (not only lifted for its menu): an empty
+    /// Basecamp shows a blank tile to carry it onto.
+    var moved = false
 }
 
 /// A group forming while a held tab rests on a loose one: the loose tab,

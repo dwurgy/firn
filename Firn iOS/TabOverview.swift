@@ -184,6 +184,7 @@ struct TabOverview: View {
                                   held: drag?.tile == true ? drag?.id : nil,
                                   pressed: finger.pressed,
                                   incoming: drag?.basecamp == true ? drag?.id : nil,
+                                  blank: blankTile,
                                   open: { tab in if !busy { open(tab) } },
                                   menu: { tileMenu(for: $0) },
                                   move: { tab, to in
@@ -200,6 +201,9 @@ struct TabOverview: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                // The blank tile comes and goes with a glide, the list
+                // moving down to make room and back up once it's let go.
+                .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: blankTile != nil)
                 // Hold, then move, to lift a tab and drag it to a new place,
                 // as in Safari: in the list, into a group, between groups,
                 // or out; or hold a group's name line to move the whole
@@ -1261,6 +1265,14 @@ struct TabOverview: View {
 
     // MARK: Into Basecamp
 
+    /// While a tab moves and Basecamp is empty: the blank tile to carry
+    /// it onto, the tab's own spot.
+    private var blankTile: UUID? {
+        guard let drag, drag.moved, store.basecampTabs.isEmpty,
+              store.openTabs.first(where: { $0.id == drag.id })?.url != nil else { return nil }
+        return drag.id
+    }
+
     /// Whether the finger is over Basecamp's grid (or above it), while it
     /// shows. A carried tab stays a tile until the finger is clearly below
     /// the grid, past the 12pt gap, so it doesn't flicker at the edge.
@@ -1275,8 +1287,12 @@ struct TabOverview: View {
     /// Basecamp (or for a tab with no address) nothing changes shape and
     /// the list goes back as it was, since letting go there glides it home.
     private func rearrange() {
-        guard let drag, drag.lifted, !drag.tile else { return }
+        guard var drag, drag.lifted, !drag.tile else { return }
         if drag.group { return makeRoom() }
+        if !drag.moved {
+            drag.moved = true
+            self.drag = drag
+        }
         let over = overBasecamp
         let tab = store.openTabs.first { $0.id == drag.id }
         let fits = store.canAddToBasecamp && tab?.url != nil
@@ -1340,7 +1356,6 @@ struct TabOverview: View {
         if forming != nil { thaw() }
         waitToForm(over: nil)
         finger.solid = false
-        spots.incoming = nil
         var tiles = store.basecampTabs.map(\.id)
         let nearest = tiles.indices.min { a, b in
             let fa = spots.frames[tiles[a]] ?? .zero, fb = spots.frames[tiles[b]] ?? .zero
@@ -1367,7 +1382,6 @@ struct TabOverview: View {
         var new = old
         new.basecamp = false
         new.reshaping = .now + 0.3
-        spots.incoming = nil
         let lane = lane(in: nil)
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
             drag = new

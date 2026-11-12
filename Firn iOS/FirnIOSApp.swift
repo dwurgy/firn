@@ -19,6 +19,12 @@ struct FirnIOSApp: App {
     /// (above).
     @State private var incoming: URL?
 
+    /// Gooper Deck, if the build copied it in (Typography.swift). Fonts are
+    /// safe to register this early; only web views must wait (above).
+    init() {
+        BrandFont.register()
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {

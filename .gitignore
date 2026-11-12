@@ -65,3 +65,6 @@ fastlane/test_output
 .DS_Store
 DerivedData/
 .swiftpm/
+
+# Licensed fonts, kept only on David's Mac (never commit: the license forbids sharing)
+PrivateFonts/

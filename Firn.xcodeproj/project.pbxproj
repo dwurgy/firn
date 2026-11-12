@@ -142,6 +142,7 @@
 				A1000000000000000000001C /* Sources */,
 				A1000000000000000000001D /* Frameworks */,
 				A1000000000000000000001E /* Resources */,
+				A10000000000000000000031 /* Copy Private Fonts */,
 			);
 			buildRules = (
 			);
@@ -217,6 +218,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000031 /* Copy Private Fonts */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Private Fonts";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copies Gooper Deck (licensed, never committed) from PrivateFonts into the app, if it is there.\n# Without it (a fork, a fresh clone) this does nothing, and brand moments use the system serif.\nsrc=\"${SRCROOT}/PrivateFonts\"\ndest=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Fonts\"\nfor f in GooperDeck-Regular.otf GooperDeck-SemiBold.otf; do\n  if [ -f \"$src/$f\" ]; then\n    mkdir -p \"$dest\" && cp -f \"$src/$f\" \"$dest/$f\"\n  else\n    rm -f \"$dest/$f\"\n  fi\ndone\nexit 0\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000007 /* Sources */ = {
@@ -354,6 +378,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Firn iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Firn;
@@ -388,6 +413,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 72LHR8K4P5;
 				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Firn iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Firn;

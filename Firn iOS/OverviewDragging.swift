@@ -29,6 +29,10 @@ struct Drag {
     /// A tab that has moved (not only lifted for its menu): an empty
     /// Basecamp shows a blank tile to carry it onto.
     var moved = false
+    /// The row's (or card's) own size while it changes shape: it's drawn
+    /// at this size and shrunk or grown as one picture, so nothing inside
+    /// it is laid out again mid-glide (David, 2026-11-12). Nil otherwise.
+    var rowSize: CGSize?
 }
 
 /// A group forming while a held tab rests on a loose one: the loose tab,
@@ -436,5 +440,30 @@ final class HoldThenMove: UIGestureRecognizer {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
         state = (state == .began || state == .changed) ? .cancelled : .failed
+    }
+}
+
+/// A held row or card changing shape (into a Basecamp tile and back):
+/// drawn at its own size and scaled as one picture to fill the shape it's
+/// gliding through, centered (the shape's mask trims the rest). Laid out
+/// at each in-between size instead, its picture shifted and its pill
+/// squeezed for a few frames (David's recording, 2026-11-12). Without a
+/// size, it's laid out normally.
+struct ScaledRow<Content: View>: View {
+    let size: CGSize?
+    @ViewBuilder let content: Content
+
+    /// One view either way, so the row isn't rebuilt (its picture
+    /// reloaded) as the glide starts or ends.
+    var body: some View {
+        GeometryReader { box in
+            let own = size.flatMap { $0.width > 0 && $0.height > 0 ? $0 : nil } ?? box.size
+            let scale = own.width > 0 && own.height > 0
+                ? max(box.size.width / own.width, box.size.height / own.height) : 1
+            content
+                .frame(width: own.width, height: own.height)
+                .scaleEffect(scale)
+                .frame(width: box.size.width, height: box.size.height)
+        }
     }
 }

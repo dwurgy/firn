@@ -405,9 +405,8 @@ struct TabOverview: View {
                                              solid: drag.lifted)
                             .opacity(shaped ? 1 : 0)
                             .overlay {
-                                tile(tab, spot: { _ in })
-                                    // Kept to the shrinking shape (a card's
-                                    // picture doesn't shrink with it); loose
+                                ScaledRow(size: drag.rowSize) { tile(tab, spot: { _ in }) }
+                                    // Kept to the shrinking shape; loose
                                     // otherwise, so nothing of a row is cut.
                                     .mask {
                                         RoundedRectangle(cornerRadius: OverviewRow.cornerRadius, style: .continuous)
@@ -1297,6 +1296,11 @@ struct TabOverview: View {
             drag.moved = true
             self.drag = drag
         }
+        // Back to its own size: laid out normally again (it looks the same).
+        if !drag.basecamp, drag.rowSize != nil, Date.now >= drag.reshaping {
+            drag.rowSize = nil
+            self.drag = drag
+        }
         let over = overBasecamp
         let tab = store.openTabs.first { $0.id == drag.id }
         let fits = store.canAddToBasecamp && tab?.url != nil
@@ -1355,6 +1359,7 @@ struct TabOverview: View {
         var new = old
         new.basecamp = true
         new.reshaping = .now + 0.3
+        new.rowSize = old.rowSize ?? CGSize(width: finger.width, height: old.start.height)
         let width = spots.basecamp?.width ?? spots.viewport.width - 32
         new.tileSize = BasecampTiles.tileSize(count: store.basecampTabs.count + 1, width: width)
         if forming != nil { thaw() }

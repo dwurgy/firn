@@ -35,14 +35,6 @@ private let tapHeight: CGFloat = 44
 private let tapHeight: CGFloat? = nil
 #endif
 
-/// The Aa popover opens below the pill on both: iOS reads the arrow's edge
-/// from the popover's side, the Mac from the button's.
-#if os(iOS)
-private let choicesArrow: Edge = .top
-#else
-private let choicesArrow: Edge = .bottom
-#endif
-
 // MARK: - The book
 
 /// The book from the approved design (`docs/reader-design.html`), its
@@ -103,28 +95,95 @@ struct ReaderBookButton: View {
 
 // MARK: - Aa
 
-/// The Aa pill in the reader's top corner, on the same frost as the
-/// iPhone's bar pills (`BarFrost`). It opens a native popover with the only
-/// two choices: Serif or Sans, and text size. The reader runs no scripts,
-/// so these live in Firn, over it.
+/// The Aa pill in the reader's top corner, on the bar's frost
+/// (`BarFrost`). Tapped, the pill itself grows into a small card with the
+/// only two choices, Serif or Sans and text size, the way the iPhone's page
+/// menu grows out of the address field: one piece of frost, down and to
+/// the left from the corner, in one bounce-free glide; the words come in
+/// once it has mostly grown and go first as it closes (David, 2026-11-13:
+/// never a system popover). A tap anywhere else, or Esc, closes it. Reduce
+/// Motion: the pill and the card cross-fade in place. The reader runs no
+/// scripts, so this lives in Firn, over it.
+///
+/// Place it filling the reader's area: it lays itself out in the top
+/// right corner, `inset` in, and catches taps elsewhere only while open.
 struct ReaderTextButton: View {
     let space: String
-    @State private var showsChoices = false
+    var inset: CGFloat = 14
+    @State private var open = false
     @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let shape = Capsule()
-        Button { showsChoices.toggle() } label: {
+        ZStack(alignment: .topTrailing) {
+            if open {
+                // A tap or click anywhere else closes it, as the page menu does.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { open = false }
+                    .accessibilityHidden(true)
+            }
+            card
+                .padding(.top, inset)
+                .padding(.trailing, inset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        // The page menu's glide. Reduce Motion: a fade (on the pieces).
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: open)
+        #if os(macOS)
+        .onExitCommand { open = false }
+        #endif
+        .onDisappear { open = false }
+    }
+
+    private var size: CGSize { open ? ReaderTextCard.size : ReaderTextCard.pill }
+
+    @ViewBuilder private var card: some View {
+        let radius = open ? ReaderTextCard.radius : ReaderTextCard.pill.height / 2
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        ZStack(alignment: .topTrailing) {
+            glass(shape)
+            if open {
+                ReaderTextChoices { open = false }
+                    .frame(width: ReaderTextCard.size.width, height: ReaderTextCard.size.height)
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(.easeOut(duration: 0.16).delay(reduceMotion ? 0 : 0.12)),
+                        removal: .opacity.animation(.easeOut(duration: 0.08))))
+            } else {
+                pillButton(shape)
+                    .transition(.asymmetric(
+                        // Back once the pill has nearly settled; sooner, the word sat
+                        // off-center in frost still shrinking (Simulator, 2026-11-13).
+                        insertion: .opacity.animation(.easeOut(duration: 0.16).delay(reduceMotion ? 0 : 0.2)),
+                        removal: .opacity.animation(.easeOut(duration: 0.08))))
+            }
+        }
+        .frame(width: size.width, height: size.height, alignment: .topTrailing)
+        .clipShape(shape)
+        // Open, taps on the card's own frost stay on it.
+        .background { if open { shape.fill(.clear).contentShape(shape).onTapGesture {} } }
+    }
+
+    @ViewBuilder private func glass(_ shape: RoundedRectangle) -> some View {
+        let frost = BarFrost(shape: shape, space: space)
+            .frame(width: size.width, height: size.height)
+        if reduceMotion {
+            // No growing: the pill's frost and the card's swap with a fade.
+            frost.id(open).transition(.opacity.animation(.easeOut(duration: 0.2)))
+        } else {
+            frost
+        }
+    }
+
+    private func pillButton(_ shape: RoundedRectangle) -> some View {
+        Button { open = true } label: {
             Text("Aa")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background { BarFrost(shape: shape, space: space) }
+                .frame(width: ReaderTextCard.pill.width, height: ReaderTextCard.pill.height)
                 .overlay { shape.fill(Theme.hover).opacity(hovering ? 1 : 0).allowsHitTesting(false) }
-                .contentShape(shape)
-                .frame(minWidth: tapHeight, minHeight: tapHeight)
-                .contentShape(Rectangle())
+                // Apple's 44pt to tap on the iPhone, around the small pill.
+                .contentShape(Rectangle().inset(by: -ReaderTextCard.pillReach))
         }
         .buttonStyle(FrostPress(shape: shape))
         .onHover { hovering = $0 }
@@ -132,37 +191,63 @@ struct ReaderTextButton: View {
         .help("Text")
         .accessibilityLabel("Reader text")
         .accessibilityHint("Font and text size")
-        .popover(isPresented: $showsChoices, arrowEdge: choicesArrow) {
-            ReaderTextChoices()
-                // A small popover on the iPhone too, never a sheet.
-                .presentationCompactAdaptation(.popover)
-        }
     }
 }
 
-/// Inside the Aa popover: Serif or Sans, each shown in its own font, then
+/// The Aa card's measures: the iPhone's are the page menu's (22pt corners,
+/// 44pt rows); the Mac's are its panels' (14pt corners).
+private enum ReaderTextCard {
+    static let pill = CGSize(width: 46, height: 30)
+    #if os(iOS)
+    static let pillReach: CGFloat = 7
+    static let radius: CGFloat = 22
+    static let inset: CGFloat = 8
+    static let sizeRow: CGFloat = 44
+    #else
+    static let pillReach: CGFloat = 0
+    static let radius: CGFloat = 14
+    static let inset: CGFloat = 6
+    static let sizeRow: CGFloat = 34
+    #endif
+    static let fontRow: CGFloat = 50
+    static let gap: CGFloat = 6
+    /// Each pair of choices sits in a soft well, its corners one step in
+    /// from the card's.
+    static let wellRadius = radius - inset
+    static let size = CGSize(width: 232,
+                             height: inset * 2 + (fontRow + 6) + gap + (sizeRow + 6))
+}
+
+/// Inside the Aa card: Serif or Sans, each shown in its own font, then
 /// smaller and larger text.
 private struct ReaderTextChoices: View {
+    let close: () -> Void
     @Bindable private var style = ReaderStyle.shared
+    @AccessibilityFocusState private var firstFocused: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 4) {
+        VStack(spacing: ReaderTextCard.gap) {
+            well {
                 fontChoice(.serif, name: "Serif", design: .serif)
+                    .accessibilityFocused($firstFocused)
                 fontChoice(.sans, name: "Sans", design: .default)
             }
-            .padding(3)
-            .background(Theme.hover, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            HStack(spacing: 4) {
+            well {
                 sizeChoice(smaller: true)
                 sizeChoice(smaller: false)
             }
-            .padding(3)
-            .background(Theme.hover, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(12)
-        .frame(width: 232)
+        .padding(ReaderTextCard.inset)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, close)
+        .onAppear { firstFocused = true }
+    }
+
+    private func well(@ViewBuilder _ content: () -> some View) -> some View {
+        HStack(spacing: 4) { content() }
+            .padding(3)
+            .background(Theme.hover, in: RoundedRectangle(cornerRadius: ReaderTextCard.wellRadius, style: .continuous))
     }
 
     private func fontChoice(_ font: ReaderLook.Font, name: String, design: Font.Design) -> some View {
@@ -174,10 +259,10 @@ private struct ReaderTextChoices: View {
             }
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .frame(height: ReaderTextCard.fontRow)
             .background {
                 if isOn {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: ReaderTextCard.wellRadius - 3, style: .continuous)
                         .fill(Theme.page)
                         .shadow(color: Theme.shadowSoft, radius: 1.5, y: 1)
                 }
@@ -185,6 +270,7 @@ private struct ReaderTextChoices: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.15), value: isOn)
         .accessibilityLabel(name)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
@@ -196,10 +282,10 @@ private struct ReaderTextChoices: View {
                 .font(.system(size: smaller ? 13 : 19))
                 .foregroundStyle(Theme.ink.opacity(enabled ? 1 : 0.3))
                 .frame(maxWidth: .infinity)
-                .frame(height: tapHeight ?? 34)
+                .frame(height: ReaderTextCard.sizeRow)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(FrostPress(shape: RoundedRectangle(cornerRadius: 8, style: .continuous)))
+        .buttonStyle(FrostPress(shape: RoundedRectangle(cornerRadius: ReaderTextCard.wellRadius - 3, style: .continuous)))
         .disabled(!enabled)
         .accessibilityLabel(smaller ? "Smaller text" : "Larger text")
     }

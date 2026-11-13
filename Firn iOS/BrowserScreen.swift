@@ -437,15 +437,14 @@ struct BrowserScreen: View {
     @ViewBuilder private var readerText: some View {
         let shown = store.activeTab?.page?.isReading == true && !showingTabs && !pageHidden
             && pull == nil && !swiping && !editing
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             if shown {
-                ReaderTextButton(space: store.activeSpace.color)
-                    .padding(.top, 3)
-                    .padding(.trailing, 16)
+                // Just under the clock, 16pt in, as in the approved design.
+                ReaderTextButton(space: store.activeSpace.color, inset: 10)
+                    .padding(.trailing, 6)
                     .transition(.opacity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: shown)
     }
 

@@ -147,10 +147,9 @@ struct PagePane: View {
                     // A plain fade either way; quicker with Reduce Motion.
                     .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: page.loadError)
                     .overlay(alignment: .topLeading) { fillList(on: tab, page: page) }
-                    .overlay(alignment: .topTrailing) {
+                    .overlay {
                         if page.isReading {
                             ReaderTextButton(space: store.activeSpace.color)
-                                .padding(14)
                                 .transition(.opacity)
                         }
                     }

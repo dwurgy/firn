@@ -30,7 +30,7 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
 ## Apple's technology
 
 - **CloudKit's private database,** through `CKSyncEngine` (macOS 14 and iOS 17, Firn's minimums). It keeps changes made offline, sends them later, takes pushes from other devices, retries, and reports iCloud sign-in and sign-out. One custom zone for Firn.
-- **Every field in `encryptedValues`:** names, colors, addresses, titles, and times are encrypted on the device with keys kept in iCloud Keychain, so Apple can't read them (to confirm against Apple's documentation in step 1, before any wording promises it). Record names are random UUIDs (already Firn's ids), so they say nothing. Record types (`Space`, `TabGroup`, `Tab`, `Visit`) are visible to Apple but hold nothing personal.
+- **Every field in `encryptedValues`:** names, colors, addresses, titles, and times are encrypted on the device with keys kept in iCloud Keychain, so Apple can't read them. **Checked in step 1: only true with Advanced Data Protection;** see "Step 1: what the facts turned out to be". Record names are random UUIDs (already Firn's ids), so they say nothing. Record types (`Space`, `TabGroup`, `Tab`, `Visit`) are visible to Apple but hold nothing personal.
 - **Saved passwords in iCloud Keychain** (`kSecAttrSynchronizable`), end-to-end encrypted. Passkeys go the same way once Apple grants their entitlement.
 - **Handoff** through `NSUserActivity` (web browsing activity): the page on the iPhone shows in the Mac's Dock, and the other way around.
 - **Latest change wins,** per record, by its last-changed time (every record already has one). Things that belong to one device (where a group sits in the list, whether it's folded, which tab is on screen) never go in a record.
@@ -48,6 +48,18 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
 8. **Passwords to iCloud Keychain.** Its own short plan first: it moves where people's passwords live, so never a quiet switch.
 9. **A look over.** The privacy wording (David's OK; `docs/privacy-page.md` and the README), "Turn off and delete from iCloud", the welcome's "Use iCloud" step (Mac and iPhone), the security check, VoiceOver, and the two-device test. *Done:* with sync off, nothing leaves either device.
 
+## Step 1: what the facts turned out to be (2026-11-13)
+
+- **`encryptedValues` is not end-to-end for most people.** Apple's own pages: CloudKit encrypts the fields on the device, but under standard iCloud protection the keys are "secured in Apple data centers"; only with Advanced Data Protection (opt-in, few people use it) are CloudKit encrypted fields end-to-end. So "encrypted so only your devices can read it" would be untrue for most people. By contrast, **iCloud Keychain and Safari's own history are end-to-end under both settings.** Sources: `support.apple.com/102651` (iCloud data security overview), the Platform Security guide's Advanced Data Protection page, and `CKRecord.encryptedValues`'s documentation.
+  - **The way to keep the promise (Claude's suggestion, David to decide):** Firn encrypts each record's fields itself (CryptoKit, AES-GCM) with one key per iCloud account, kept as a synced iCloud Keychain item (`kSecAttrSynchronizable`), which is end-to-end for everyone. CloudKit then only ever stores sealed bytes; Apple can't read them with or without Advanced Data Protection. Cost: a small amount of code in step 2, and if someone resets their iCloud Keychain, the synced copy can't be read and each device re-uploads what it has (the same thing CloudKit's own encryption does then).
+  - **Or** keep `encryptedValues` alone and word it honestly ("encrypted in your iCloud; with Advanced Data Protection, only your devices can read it").
+- **Safari's history sync:** Apple publishes no number. Older reports (Elcomsoft, 2017) say iCloud holds about the last two weeks to 30 days, and a new device gets only the last 30 days. So "as Safari does" points to **the last 30 days**, with Firn's full year staying on each device. Unconfirmed; Apple doesn't document it.
+- **Developer ID with CloudKit and push:** Apple's capabilities table has a Developer ID column, but its marks didn't come through in text. The developer portal will show it when the profile is made; that's the real check. Known details: the Mac's push key is `com.apple.developer.aps-environment` (iOS's is `aps-environment`; never both in one file), a Developer ID app must name `com.apple.developer.icloud-container-environment` (Production), and a profile made before a capability was turned on lacks it (make new ones).
+- **Entitlements to add.** Mac (`Firn/Firn.entitlements`): `com.apple.developer.icloud-container-identifiers` (`iCloud.com.firnbrowser.firn`), `com.apple.developer.icloud-services` (`CloudKit`), `com.apple.developer.icloud-container-environment` (`Production`), and `com.apple.developer.aps-environment` (`production`). iPhone: a new `Firn iOS/Firn iOS.entitlements` with the same container and service, `aps-environment`, and `remote-notification` in `UIBackgroundModes` (Info.plist), so other devices' changes arrive. None of these sends anything by itself; nothing registers for pushes until step 3.
+
 ## Open
 
-Nothing yet. (Settled 2026-11-13: loose tabs as in Arc, and no Tabs setting.)
+- Firn's own encryption (keys in iCloud Keychain) or `encryptedValues` alone with honest wording (above).
+- History: the last 30 days (as Safari seems to), or the whole year.
+
+(Settled 2026-11-13: loose tabs as in Arc, and no Tabs setting.)

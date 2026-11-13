@@ -2,8 +2,8 @@ import CloudKit
 import FirnCore
 import SwiftUI
 
-/// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): Spaces, and
-/// at the end, sync's switch (docs/SYNC-PLAN.md, step 3). Every space in its order (hold and
+/// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): Spaces, then
+/// blocking's switch, and at the end, sync's switch (docs/SYNC-PLAN.md, step 3). Every space in its order (hold and
 /// drag to reorder), and below, the one picked: its name, color, sign-ins,
 /// and Delete, in the Mac's words (`Firn/SpacesSettings.swift`). Changes
 /// apply as they're made; only Stop Sharing and Delete ask first.
@@ -27,6 +27,7 @@ struct SettingsSheet: View {
     /// off (signed out of iCloud, another account, or Firn's data deleted).
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
     @State private var availability = ICloudSync.Availability.available
+    @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
 
     /// The space picked, or the one on screen when none is (or it's gone).
     private var selected: Space {
@@ -90,6 +91,7 @@ struct SettingsSheet: View {
                     }
                 }
 
+                privacySection
                 syncSection
             }
             .listStyle(.insetGrouped)
@@ -218,6 +220,24 @@ struct SettingsSheet: View {
             if index < store.spaces.count - 1 {
                 Button("Move Down") { move(space, by: 1) }
             }
+        }
+    }
+
+    /// "Block ads and trackers", the Mac's switch in the Mac's words
+    /// (Settings › Privacy there). Pages follow from their next load.
+    private var privacySection: some View {
+        Section {
+            Toggle("Block ads and trackers", isOn: $blocksContent)
+                .font(.body)
+                .foregroundStyle(Theme.ink)
+                .tint(Theme.accent)
+                .frame(minHeight: 44)
+                .listRowBackground(Theme.hover)
+                .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
+        } header: {
+            sectionTitle("Privacy")
+        } footer: {
+            footnote("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the page menu; each space keeps its own choices.")
         }
     }
 

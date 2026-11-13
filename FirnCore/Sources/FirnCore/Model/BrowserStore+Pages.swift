@@ -37,6 +37,23 @@ extension BrowserStore {
         activeSpace.blocksContent(on: url)
     }
 
+    /// What turning blocking on or off for `page`'s site is called ("Stop
+    /// Blocking on example.com"), or nil if there's no site to do it for: no
+    /// address, an error page, or blocking off everywhere (`enabled`).
+    public func blockingToggleName(for page: any PageController, enabled: Bool) -> String? {
+        guard enabled, page.loadError == nil, let url = page.url,
+              let site = BlockingSite.of(url) else { return nil }
+        return blocksContent(on: url) ? "Stop Blocking on \(site)" : "Block Ads and Trackers on \(site)"
+    }
+
+    /// Turns blocking on or off for `page`'s site, in the space on screen
+    /// only, and loads the page again so the change shows.
+    public func toggleBlocking(on page: any PageController) {
+        guard page.loadError == nil, let url = page.url else { return }
+        setBlocksContent(!blocksContent(on: url), on: url)
+        page.reload()
+    }
+
     /// Turns blocking on or off for `url`'s site in the space on screen, and
     /// only there. Pages follow from their next load. Turning it back on also
     /// clears a wider site that covered this one (example.com, for shop.example.com).

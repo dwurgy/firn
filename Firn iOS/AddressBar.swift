@@ -47,6 +47,21 @@ struct AddressBar: View {
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
     private var engine: SearchEngine { SearchEngine.chosen }
+    @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
+    /// "Stop Blocking on example.com" (or turning it back on) for the page
+    /// on screen; nil when there's no site, or blocking is off everywhere.
+    private var blockingName: String? {
+        guard let page else { return nil }
+        return store.blockingToggleName(for: page, enabled: blocksContent)
+    }
+
+    /// The same choice in the page menu: the words, and the site on a
+    /// second line, since a whole "Stop Blocking on …" won't fit its width.
+    private var blockingRow: PageMenuPanel.Blocking? {
+        guard blockingName != nil, let url = page?.url, let site = BlockingSite.of(url) else { return nil }
+        return PageMenuPanel.Blocking(title: store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers",
+                                      site: site)
+    }
     /// The small pill shows only at rest: typing and the page menu always
     /// have the whole bar.
     private var compact: Bool { shrunk && !editing.wrappedValue && !menuOpen && store.activeTab?.page != nil }
@@ -171,6 +186,11 @@ struct AddressBar: View {
             if let url = page.url {
                 add("copy-link", "Copy Link", ["address", "url"]) { UIPasteboard.general.url = url }
                 add("share", "Share…", ["send", "link"]) { ShareSheet.present(url) }
+            }
+            if let name = blockingName {
+                add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
+                    store.toggleBlocking(on: page)
+                }
             }
             add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)
@@ -314,7 +334,8 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        return CGRect(x: x, y: fieldSize.height - PageMenuPanel.height, width: width, height: PageMenuPanel.height)
+        let height = PageMenuPanel.height(blocking: blockingRow != nil)
+        return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
     /// The field's frost, as one piece that becomes the menu: the same tint
@@ -349,7 +370,9 @@ struct AddressBar: View {
     @ViewBuilder private func menuPanel(fieldSize: CGSize) -> some View {
         if menuOpen, let url = page?.url, fieldSize != .zero {
             let frame = menuFrame(fieldSize: fieldSize)
-            PageMenuPanel(url: url) { menuOpen = false }
+            PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
+                if let page { store.toggleBlocking(on: page) }
+            }) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
                 // The words come in once the glass has mostly grown, and go
@@ -705,19 +728,28 @@ private struct AddressField: View {
 
 /// The page's own short menu, grown out of the field's glass (Firn's own,
 /// not iOS's, so it carries the bar's tint and glass). Only what people
-/// reach for; Find, Zoom, Stop Blocking, and Request Desktop Site join it
-/// in phase 6.
+/// reach for, and Stop Blocking for the site; Find, Zoom, and Request
+/// Desktop Site join it in phase 6.
 private struct PageMenuPanel: View {
     let url: URL
+    /// "Stop Blocking" (or "Block Ads and Trackers") and its site, or nil
+    /// when there's no site for it.
+    struct Blocking {
+        let title: String
+        let site: String
+    }
+    let blocking: Blocking?
+    let toggleBlocking: () -> Void
     let close: () -> Void
     @AccessibilityFocusState private var firstFocused: Bool
 
     static let width: CGFloat = 250
     static let cornerRadius: CGFloat = 22
     private static let rowHeight: CGFloat = 48
-    private static let rows = 2
     private static let inset: CGFloat = 6
-    static var height: CGFloat { rowHeight * CGFloat(rows) + inset * 2 }
+    static func height(blocking: Bool) -> CGFloat {
+        rowHeight * CGFloat(blocking ? 3 : 2) + inset * 2
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -730,6 +762,13 @@ private struct PageMenuPanel: View {
                 UIPasteboard.general.url = url
                 close()
             }
+            if let blocking {
+                row(blocking.title, detail: blocking.site, symbol: "hand.raised") {
+                    close()
+                    toggleBlocking()
+                }
+                .accessibilityLabel("\(blocking.title) on \(blocking.site)")
+            }
         }
         .padding(Self.inset)
         .accessibilityElement(children: .contain)
@@ -738,15 +777,28 @@ private struct PageMenuPanel: View {
         .onAppear { firstFocused = true }
     }
 
-    private func row(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, detail: String? = nil, symbol: String,
+                     action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: symbol)
                     .font(BarButton.symbolFont)
                     .frame(width: 24)
                     .accessibilityHidden(true)
-                Text(title)
-                    .font(.body)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.body)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    if let detail {
+                        // A long site's name loses its middle, keeping both ends.
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
                 Spacer(minLength: 0)
             }
             .foregroundStyle(Theme.ink)

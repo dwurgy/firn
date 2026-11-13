@@ -167,6 +167,15 @@ public enum BrowserEngine {
         WebKitPageController(dataStoreID: dataStoreID)
     }
 
+    /// The "Block ads and trackers" setting's key in the app's own
+    /// preferences, the same on the Mac and the iPhone.
+    public nonisolated static let blockingKey = "blocksContent"
+
+    /// The "Block ads and trackers" setting as saved (on by default).
+    public nonisolated static var blockingIsOn: Bool {
+        UserDefaults.standard.object(forKey: blockingKey) as? Bool ?? true
+    }
+
     /// Starts ad and tracker blocking: finds the compiled lists (or compiles
     /// them, in the background, the first time). Call once at launch, before
     /// pages load; pages made earlier still get the rules when they're ready.

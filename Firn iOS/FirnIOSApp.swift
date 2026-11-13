@@ -62,6 +62,10 @@ final class Browser {
     /// and whenever Firn leaves the screen (iOS may end it after that without
     /// a word).
     init() {
+        // Ad and tracker blocking, as on the Mac: the lists come with Firn
+        // and compile in the background the first time; pages made before
+        // they're ready get them once they are.
+        BrowserEngine.startBlocking(enabled: BrowserEngine.blockingIsOn)
         let file = SessionFile.standard
         let session = file.load()
         let placesFile = PagePlacesFile.standard

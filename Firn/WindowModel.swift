@@ -434,17 +434,14 @@ final class WindowModel {
     /// ("Stop Blocking on example.com"), or nil if there's no site to do it
     /// for: no page, an error page, or blocking off everywhere (`enabled`).
     func frontBlockingName(enabled: Bool) -> String? {
-        guard enabled, let page = frontPage, page.loadError == nil, let url = page.url,
-              let site = BlockingSite.of(url) else { return nil }
-        return store.blocksContent(on: url) ? "Stop Blocking on \(site)" : "Block Ads and Trackers on \(site)"
+        guard let page = frontPage else { return nil }
+        return store.blockingToggleName(for: page, enabled: enabled)
     }
 
     /// Turns blocking on or off for the front page's site, in this space
     /// only, and loads the page again so the change shows.
     func toggleFrontBlocking() {
-        guard let page = frontPage, page.loadError == nil, let url = page.url else { return }
-        store.setBlocksContent(!store.blocksContent(on: url), on: url)
-        page.reload()
+        if let page = frontPage { store.toggleBlocking(on: page) }
     }
 
     // MARK: Find on page

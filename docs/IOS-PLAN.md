@@ -320,6 +320,8 @@ A read through the whole iPhone app and the engine's iOS side, while David was a
 ### Phase 6: The everyday features
 
 In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy away (the Tidied away button beside the space's name in the overview's bottom bar, and the frost-and-thaw moment), history, find in page, downloads to Files, ad and tracker blocking with Stop Blocking per site, scam warnings, saved passwords (save, fill after a tap, Settings › Passwords behind Face ID), and Settings.
+
+*Done early (2026-11-13): ad and tracker blocking.* The iPhone starts the Mac's blocker at launch (`BrowserEngine.startBlocking`), with "Block ads and trackers" in Settings (a Privacy section, the Mac's words) and Stop Blocking per site, per space, in the page menu (the words, the site on a quiet second line) and the command bar. The wording and the toggle live in FirnCore (`BrowserStore.blockingToggleName`, `toggleBlocking`), shared with the Mac. Checked in the Simulator: the ad and tracker blocked, the ad boxes hidden, Stop Blocking and back, and the choice kept across a relaunch. *Found:* EasyList turns hiding off on `localhost` and `127.0.0.1` (`$generichide`), so `docs/blocking-test.html` must be opened through the Mac's `.local` name; its instructions now say so. Not yet on David's iPhone.
 **Done:** a week of using Firn as the iPhone's only browser (it can't be the default yet, so open it yourself), plus the Mac's test pages (`docs/blocking-test.html`, `docs/password-test.html`) passing on the iPhone.
 
 ### Phase 7: iPad

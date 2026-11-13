@@ -7,7 +7,7 @@ import SwiftUI
 enum Preference {
     static let newTabPlacement = "newTabPlacement"
     static let driftAfter = "driftAfter"
-    static let blocksContent = "blocksContent"
+    static let blocksContent = BrowserEngine.blockingKey
     static let searchEngine = SearchEngine.preferenceKey
     /// Whether typing in the command bar asks the search engine for
     /// suggestions. Off until someone says yes: it's the one place typing
@@ -21,9 +21,7 @@ enum Preference {
     static let lookoutHinted = "lookoutHinted"
 
     /// The "Block ads and trackers" setting before any view has read it (on by default).
-    static var blocksContentAtLaunch: Bool {
-        UserDefaults.standard.object(forKey: blocksContent) as? Bool ?? true
-    }
+    static var blocksContentAtLaunch: Bool { BrowserEngine.blockingIsOn }
 }
 
 /// The Settings window (⌘, or Firn › Settings…): a few plain choices, and

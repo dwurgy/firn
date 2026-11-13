@@ -42,6 +42,9 @@ struct Sidebar: View {
                 systemImage: "sidebar.left"
             ) { window.toggleSidebar() }
             Spacer(minLength: 0)
+            if #available(macOS 15.4, *), !DemoMode.isOn {
+                ExtensionToolbar(store: store, window: window)
+            }
             if let page = store.activeTab?.page {
                 NavigationButtons(page: page)
             } else {
@@ -249,7 +252,7 @@ private struct AddressBar: View {
         return Theme.rowPadding + reload + zoom
     }
 
-    var body: some View {
+    private var addressField: some View {
         TextField("Search or enter address", text: $text)
             .textFieldStyle(.plain)
             .font(Theme.tabFont)
@@ -293,6 +296,10 @@ private struct AddressBar: View {
                 }
                 .padding(.trailing, 4)
             }
+    }
+
+    var body: some View {
+        addressField
             .onHover { hovering = $0 }
             .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")
             .onSubmit(open)

@@ -1676,7 +1676,8 @@ struct BrowserCommands: Commands {
     private var page: (any PageController)? { window.frontPage }
     private var everydayTab: FirnCore.Tab? { window.everydayTab }
 
-    var body: some Commands {
+    // Older SDKs limit each CommandsBuilder block to ten children.
+    @CommandsBuilder private var appAndFileCommands: some Commands {
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { Updater.shared.checkNow() }
                 .disabled(!Updater.shared.canCheck)
@@ -1706,6 +1707,10 @@ struct BrowserCommands: Commands {
             Button("Import from Arc…") { window.importFromArc() }
                 .disabled(window.showsWelcome)
         }
+    }
+
+    var body: some Commands {
+        appAndFileCommands
         CommandGroup(replacing: .printItem) {
             // The page in front: a Lookout's while one is open.
             Button("Print…") { page?.printPage() }

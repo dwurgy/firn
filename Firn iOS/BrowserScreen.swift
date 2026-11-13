@@ -195,6 +195,7 @@ struct BrowserScreen: View {
                 .opacity(pageHidden ? 0 : 1)
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
+            readerText
 
             if let standInSize = pulledSize, standInSize.width > 0 {
                 if let standInTop {
@@ -430,6 +431,24 @@ struct BrowserScreen: View {
             .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
     }
 
+    /// Reader's Aa pill, just under the clock at the top right, as in the
+    /// approved design: only while reading, and gone while the page is
+    /// pulled, the overview shows, or an address is being typed.
+    @ViewBuilder private var readerText: some View {
+        let shown = store.activeTab?.page?.isReading == true && !showingTabs && !pageHidden
+            && pull == nil && !swiping && !editing
+        ZStack(alignment: .topTrailing) {
+            if shown {
+                ReaderTextButton(space: store.activeSpace.color)
+                    .padding(.top, 3)
+                    .padding(.trailing, 16)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: shown)
+    }
+
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
             // The page's room follows the bar: shrunk, its end rests just
@@ -441,6 +460,10 @@ struct BrowserScreen: View {
             }
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
+                // Every reader follows the one look, on screen or coming back to it.
+                .task(id: ReaderStyle.shared.look) {
+                    if page.isReading { page.setReaderLook(ReaderStyle.shared.look) }
+                }
         } else if store.openTabs.isEmpty {
             // A space with no tabs: Sunrise, exactly as the Mac's empty
             // page (no words, no centered mark; only the snow takes the

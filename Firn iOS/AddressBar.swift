@@ -192,6 +192,10 @@ struct AddressBar: View {
                     store.toggleBlocking(on: page)
                 }
             }
+            add("reader", page.isReading ? "Hide Reader" : "Show Reader",
+                ["reader", "reading", "article", "text only", "book"], when: page.isArticle || page.isReading) {
+                ReaderStyle.shared.toggle(page, space: space)
+            }
             add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)
             }
@@ -554,21 +558,22 @@ private struct AddressField: View {
                 .allowsHitTesting(isEditing)
                 .accessibilityHidden(!isEditing)
                 .overlay {
-                    if !isEditing {
-                        // Reduce Motion: the full-size name and the small
-                        // pill's cross-fade rather than gliding.
-                        restingLabel
-                            .id(reduceMotion && compact)
-                            .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
-                    }
-                }
-                .overlay {
                     if !isEditing, !compact {
                         Button { if !barQuiet { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
                             .accessibilityValue(text)
                             .accessibilityHint("Edit the address or search")
+                    }
+                }
+                // Over the edit button: only the book takes taps.
+                .overlay {
+                    if !isEditing {
+                        // Reduce Motion: the full-size name and the small
+                        // pill's cross-fade rather than gliding.
+                        restingLabel
+                            .id(reduceMotion && compact)
+                            .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
                     }
                 }
             if !(reduceMotion && compact) {
@@ -624,23 +629,36 @@ private struct AddressField: View {
     /// touch smaller, before it's cut short. A text field can do neither,
     /// so this is a plain label over it.
     private var restingLabel: some View {
-        Group {
-            if text.isEmpty {
-                Text("Search or enter address").foregroundStyle(Theme.muted)
-            } else {
-                Text(verbatim: text).foregroundStyle(Theme.ink)
+        HStack(spacing: 2) {
+            // Reader's book, just before the site, as in the approved
+            // design (Safari's reader icon sits at the pill's start too).
+            if showsBook, let page {
+                ReaderBookButton(isOn: page.isReading, space: store.activeSpace.color) {
+                    if !barQuiet { ReaderStyle.shared.toggle(page, space: store.activeSpace.color) }
+                }
+                .transition(.opacity)
             }
+            Group {
+                if text.isEmpty {
+                    Text("Search or enter address").foregroundStyle(Theme.muted)
+                } else {
+                    Text(verbatim: text).foregroundStyle(Theme.ink)
+                }
+            }
+            // Medium, as Safari's: regular read thin over the glass (David,
+            // 2026-11-05).
+            .font(.callout.weight(.medium))
+            .lineLimit(1)
+            .allowsTightening(true)
+            .minimumScaleFactor(0.9)
+            .truncationMode(.tail)
+            // Laid out at its resting size and then scaled down, so the words
+            // glide smaller rather than jumping to a new font size.
+            .frame(width: compact ? compactTextWidth : nil)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
-        // Medium, as Safari's: regular read thin over the glass (David,
-        // 2026-11-05).
-        .font(.callout.weight(.medium))
-        .lineLimit(1)
-        .allowsTightening(true)
-        .minimumScaleFactor(0.9)
-        .truncationMode(.tail)
-        // Laid out at its resting size and then scaled down, so the words
-        // glide smaller rather than jumping to a new font size.
-        .frame(width: compact ? compactTextWidth : nil)
+        .animation(.easeOut(duration: 0.2), value: showsBook)
         .frame(maxWidth: .infinity)
         .scaleEffect(compact ? AddressBar.compactTextScale : 1)
         .offset(y: compact ? compactDrop : 0)
@@ -654,8 +672,14 @@ private struct AddressField: View {
         }
         .opacity(menuOpen || settling ? 0 : 1)
         .animation(.easeOut(duration: 0.1), value: menuOpen)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .allowsHitTesting(showsBook && !menuOpen)
+    }
+
+    /// The book shows on pages that read as articles, and while Reader is
+    /// on; never in the small pill (only the site fits there).
+    private var showsBook: Bool {
+        guard !compact, !typingNewTab, let page else { return false }
+        return page.isArticle || page.isReading
     }
 
     /// How far the small pill's middle sits below the field's.

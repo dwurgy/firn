@@ -448,13 +448,7 @@ final class WindowModel {
     /// screen. A page that turns out too short just loses its book.
     func toggleReader() {
         guard let page = readerPage else { return }
-        if page.isReading {
-            page.closeReader()
-            return
-        }
-        guard page.isArticle else { return }
-        let accent = Theme.spaceHex(store.activeSpace.color)
-        Task { _ = await page.openReader(look: ReaderStyle.shared.look, accent: accent) }
+        ReaderStyle.shared.toggle(page, space: store.activeSpace.color)
     }
 
     // MARK: Blocking

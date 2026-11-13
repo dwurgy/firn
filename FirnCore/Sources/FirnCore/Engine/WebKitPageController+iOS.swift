@@ -9,8 +9,13 @@ extension WebKitPageController {
         webView.becomeFirstResponder()
     }
 
+    /// The view on screen: Reader's while it's on, so the overview's card
+    /// shows what was being read.
+    private var frontView: WKWebView { reader?.webView ?? webView }
+
     func snapshot(width: CGFloat) async -> CGImage? {
         guard url != nil, loadError == nil else { return nil }
+        let webView = frontView
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(width))
         // The page below the status bar only: the strip behind the clock
@@ -25,7 +30,8 @@ extension WebKitPageController {
     }
 
     var topColor: CGColor? {
-        (webView.themeColor ?? webView.underPageBackgroundColor)?.cgColor
+        let webView = frontView
+        return (webView.themeColor ?? webView.underPageBackgroundColor)?.cgColor
     }
 
     /// iOS prints from the share sheet, which comes in a later phase.

@@ -13,7 +13,35 @@ final class ReaderStyle {
     }
 
     private init() {}
+
+    /// Reader on or off for `page` (the book, the command bar, or ⇧⌘R on
+    /// the Mac). A page that turns out too short just loses its book.
+    func toggle(_ page: any PageController, space: String) {
+        if page.isReading {
+            page.closeReader()
+            return
+        }
+        guard page.isArticle else { return }
+        let look = look
+        let accent = Theme.spaceHex(space)
+        Task { _ = await page.openReader(look: look, accent: accent) }
+    }
 }
+
+/// Tap room on the iPhone: Apple's 44pt, around the same small drawing.
+#if os(iOS)
+private let tapHeight: CGFloat = 44
+#else
+private let tapHeight: CGFloat? = nil
+#endif
+
+/// The Aa popover opens below the pill on both: iOS reads the arrow's edge
+/// from the popover's side, the Mac from the button's.
+#if os(iOS)
+private let choicesArrow: Edge = .top
+#else
+private let choicesArrow: Edge = .bottom
+#endif
 
 // MARK: - The book
 
@@ -60,6 +88,7 @@ struct ReaderBookButton: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(isOn ? color.opacity(0.16) : hovering ? Theme.hover : .clear)
                 }
+                .frame(height: tapHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -94,6 +123,8 @@ struct ReaderTextButton: View {
                 .background { BarFrost(shape: shape, space: space) }
                 .overlay { shape.fill(Theme.hover).opacity(hovering ? 1 : 0).allowsHitTesting(false) }
                 .contentShape(shape)
+                .frame(minWidth: tapHeight, minHeight: tapHeight)
+                .contentShape(Rectangle())
         }
         .buttonStyle(FrostPress(shape: shape))
         .onHover { hovering = $0 }
@@ -101,8 +132,10 @@ struct ReaderTextButton: View {
         .help("Text")
         .accessibilityLabel("Reader text")
         .accessibilityHint("Font and text size")
-        .popover(isPresented: $showsChoices, arrowEdge: .bottom) {
+        .popover(isPresented: $showsChoices, arrowEdge: choicesArrow) {
             ReaderTextChoices()
+                // A small popover on the iPhone too, never a sheet.
+                .presentationCompactAdaptation(.popover)
         }
     }
 }
@@ -163,7 +196,7 @@ private struct ReaderTextChoices: View {
                 .font(.system(size: smaller ? 13 : 19))
                 .foregroundStyle(Theme.ink.opacity(enabled ? 1 : 0.3))
                 .frame(maxWidth: .infinity)
-                .frame(height: 34)
+                .frame(height: tapHeight ?? 34)
                 .contentShape(Rectangle())
         }
         .buttonStyle(FrostPress(shape: RoundedRectangle(cornerRadius: 8, style: .continuous)))

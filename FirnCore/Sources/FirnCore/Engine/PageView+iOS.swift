@@ -12,6 +12,9 @@ public struct PageView: UIViewControllerRepresentable {
     private let barTop: CGFloat
     private let held: PageHold?
     private let onScroll: ((BarScroll) -> Void)?
+    /// Reader's own view, while Reader is on. Read here, in the caller's
+    /// body, so SwiftUI updates the holder when Reader opens or closes.
+    private let reader: WKWebView?
 
     /// `barTop` is where Firn's own bar starts, from the screen's top (0
     /// for no bar), so WebKit can scroll the page's end clear of it and keep
@@ -24,10 +27,14 @@ public struct PageView: UIViewControllerRepresentable {
         self.barTop = barTop
         self.held = held
         self.onScroll = onScroll
+        let webKitPage = page as? WebKitPageController
+        self.reader = webKitPage?.isReading == true ? webKitPage?.reader?.webView : nil
     }
 
     public func makeUIViewController(context: Context) -> PageHolder {
-        PageHolder(page: webKitPage)
+        let holder = PageHolder(page: webKitPage)
+        (holder.view as? PageFrame)?.show(reader: reader, fade: 0)
+        return holder
     }
 
     public func updateUIViewController(_ holder: PageHolder, context: Context) {
@@ -35,6 +42,8 @@ public struct PageView: UIViewControllerRepresentable {
         guard let frame = holder.view as? PageFrame else { return }
         frame.onScroll = onScroll
         frame.held = held
+        // A cross-fade either way; a little quicker with Reduce Motion.
+        frame.show(reader: reader, fade: context.environment.accessibilityReduceMotion ? 0.15 : 0.2)
     }
 
     private var webKitPage: WebKitPageController {
@@ -198,10 +207,62 @@ private final class PageFrame: UIView {
             webView.observe(\.isLoading) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.endRefreshing() }
             },
-            webView.scrollView.observe(\.contentOffset) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.scrolled() }
+            webView.scrollView.observe(\.contentOffset) { [weak self] scroller, _ in
+                MainActor.assumeIsolated { self?.scrolled(scroller) }
             },
         ]
+    }
+
+    // MARK: Reader
+
+    /// Reader's view, over the page while Reader is on (`ReaderPage`).
+    private(set) var reader: WKWebView?
+    private var readerWatcher: NSKeyValueObservation?
+    /// What's on screen and scrolled: Reader's view, or the page.
+    private var front: WKWebView { reader ?? webView }
+
+    /// Cross-fades Reader's view in over the page, or out again. It sits in
+    /// the mover with the page, so a pull carries it as it carries the
+    /// page, and it gets the same room under the clock and above the bar,
+    /// and shrinks the bar the same way. Once covered, the page is hidden,
+    /// so neither touches nor VoiceOver reach it behind the reader. No pull
+    /// to refresh in the reader: there's nothing of its own to reload.
+    func show(reader newReader: WKWebView?, fade: TimeInterval) {
+        guard newReader !== reader else { return }
+        let old = reader
+        reader = newReader
+        lastOffset = nil
+        travel = 0
+        readerWatcher = newReader?.scrollView.observe(\.contentOffset) { [weak self] scroller, _ in
+            MainActor.assumeIsolated { self?.scrolled(scroller) }
+        }
+        if let newReader {
+            newReader.frame = mover.bounds
+            newReader.alpha = 0
+            newReader.scrollView.contentInsetAdjustmentBehavior = .never
+            mover.insertSubview(newReader, aboveSubview: old ?? webView)
+            applyInsets(to: newReader)
+        } else {
+            webView.isHidden = false
+        }
+        let done = { [weak self] in
+            guard let self else { return }
+            if let old, old !== self.reader { old.removeFromSuperview() }
+            if self.reader != nil, self.reader === newReader { self.webView.isHidden = true }
+            UIAccessibility.post(notification: .screenChanged, argument: nil)
+        }
+        guard fade > 0, window != nil else {
+            newReader?.alpha = 1
+            old?.alpha = 0
+            done()
+            return
+        }
+        UIView.animate(withDuration: fade, delay: 0, options: .curveEaseOut) {
+            newReader?.alpha = 1
+            old?.alpha = 0
+        } completion: { _ in
+            MainActor.assumeIsolated { done() }
+        }
     }
 
     /// iOS's own pull-to-refresh. The spinner tucks away as soon as the
@@ -237,8 +298,9 @@ private final class PageFrame: UIView {
     /// page jumping to a #link or scrolling itself. At the top the bar is
     /// always full; past the end (a bounce) nothing changes, as Safari
     /// leaves it small there; a page with nothing to scroll never shrinks.
-    private func scrolled() {
-        let scroller = webView.scrollView
+    private func scrolled(_ scroller: UIScrollView) {
+        // Only the view in front: the page under the reader keeps still.
+        guard scroller === front.scrollView else { return }
         let y = scroller.contentOffset.y
         defer { lastOffset = y }
         guard let onScroll, let last = lastOffset else { return }
@@ -252,7 +314,7 @@ private final class PageFrame: UIView {
             travel = 0
             return
         }
-        let end = scroller.contentSize.height + scroller.contentInset.bottom - scroller.bounds.height
+        let end = endOffset(front)
         guard end > top + Self.turnDistance, y < end, last < end else {
             travel = 0
             return
@@ -322,9 +384,18 @@ private final class PageFrame: UIView {
             mover.center = middle
             if held != nil { applyHold() }
         }
-        if webView.frame != mover.bounds { webView.frame = mover.bounds }
+        for view in [webView, reader].compactMap({ $0 }) where view.frame != mover.bounds {
+            view.frame = mover.bounds
+        }
         // Held by a pull: the insets wait until it's let go.
         guard held == nil else { return }
+        applyInsets(to: webView)
+        if let reader { applyInsets(to: reader) }
+    }
+
+    /// Tells a web view (the page, or Reader's) what the status bar and
+    /// Firn's bar cover.
+    private func applyInsets(to webView: WKWebView) {
         let top = min(safeAreaInsets.top, bounds.height)
         let covered = UIEdgeInsets(top: top, left: 0, bottom: barRoom, right: 0)
         if webView.obscuredContentInsets != covered {
@@ -339,10 +410,10 @@ private final class PageFrame: UIView {
         }
         if scroller.contentInset != covered {
             let grew = covered.bottom - scroller.contentInset.bottom
-            let wasAtEnd = scroller.contentOffset.y >= endOffset - 1
+            let wasAtEnd = scroller.contentOffset.y >= endOffset(webView) - 1
             scroller.contentInset = covered
             scroller.verticalScrollIndicatorInsets = covered
-            if grew > 0, wasAtEnd { keepEndInView() }
+            if grew > 0, wasAtEnd { keepEndInView(webView) }
         }
         // iOS's own choice, as Safari's: `.soft` ran the blur about 80pt
         // down and whiter; `.automatic` ends just under the clock (2026-11-05).
@@ -350,7 +421,7 @@ private final class PageFrame: UIView {
     }
 
     /// The furthest the page scrolls down: its end just clear of the bar.
-    private var endOffset: CGFloat {
+    private func endOffset(_ webView: WKWebView) -> CGFloat {
         let scroller = webView.scrollView
         return scroller.contentSize.height + scroller.contentInset.bottom - scroller.bounds.height
     }
@@ -359,10 +430,10 @@ private final class PageFrame: UIView {
     /// pill): the page slides up by the difference in the bar's own glide,
     /// so its end stays whole above the full bar, as in Safari (phase 5,
     /// step 3). A page with nothing to scroll stays at its top.
-    private func keepEndInView() {
+    private func keepEndInView(_ webView: WKWebView) {
         let scroller = webView.scrollView
         let top = -scroller.contentInset.top
-        let target = endOffset
+        let target = endOffset(webView)
         guard target > top, !scroller.isTracking else { return }
         let move = { scroller.contentOffset.y = target }
         if UIAccessibility.isReduceMotionEnabled {

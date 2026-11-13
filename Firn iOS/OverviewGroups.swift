@@ -33,9 +33,11 @@ struct GroupLine: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.ink)
                             .lineLimit(1)
-                            // The new name swaps in while hidden, so "New
-                            // Group" never fades out over it.
-                            .contentTransition(.identity)
+                            // A name that follows its tabs fades into the
+                            // next in place (the chevron glides to its end).
+                            // A first name arrives while the dots stand
+                            // here, so "New Group" never fades out over it.
+                            .contentTransition(reduceMotion ? .identity : .opacity)
                     }
                 }
                 .transition(.opacity)
@@ -47,6 +49,8 @@ struct GroupLine: View {
                 Spacer(minLength: 14)
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: naming)
+            // Only a name Firn chose fades; a rename by hand just shows.
+            .animation(reduceMotion || group.namedByHand ? nil : .smooth(duration: 0.3), value: group.name)
             // Over the slim rows' icons (24pt, 14pt in from the row).
             .padding(.leading, 14)
             .frame(minHeight: height)
@@ -58,9 +62,11 @@ struct GroupLine: View {
         .buttonStyle(UndimmedPress())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityLabel(naming ? "New group, naming" : group.name)
-        // The name arrived: VoiceOver hears it, as the dots fade (step 4's look over).
-        .onChange(of: naming) { was, now in
-            if was, !now { AccessibilityNotification.Announcement("Group named \(group.name)").post() }
+        // The name arrived, or followed its tabs: VoiceOver hears it.
+        .onChange(of: GroupNameState(naming: naming, name: group.name)) { was, now in
+            if was.arrived(now, namedByHand: group.namedByHand) {
+                AccessibilityNotification.Announcement("Group named \(group.name)").post()
+            }
         }
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityHint(group.folded ? "Shows the group's tabs" : "Folds the group")

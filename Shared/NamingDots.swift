@@ -33,3 +33,16 @@ struct NamingDots: View {
         .accessibilityHidden(true)
     }
 }
+
+/// What VoiceOver needs to hear a group's name as it arrives: its first
+/// name (the dots giving way), or a new one that followed its tabs. A
+/// rename by hand isn't announced: the person just typed it.
+struct GroupNameState: Equatable {
+    let naming: Bool
+    let name: String
+
+    func arrived(_ now: GroupNameState, namedByHand: Bool) -> Bool {
+        if naming { return !now.naming }
+        return !now.naming && name != now.name && !namedByHand
+    }
+}

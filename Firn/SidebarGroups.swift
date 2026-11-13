@@ -171,9 +171,11 @@ struct GroupCard<Rows: View>: View {
                             .foregroundStyle(Theme.groupName)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            // The new name swaps in while hidden, so "New
-                            // Group" never fades out over it.
-                            .contentTransition(.identity)
+                            // A name that follows its tabs fades into the
+                            // next in place (the chevron glides to its end).
+                            // A first name arrives while the dots stand
+                            // here, so "New Group" never fades out over it.
+                            .contentTransition(reduceMotion ? .identity : .opacity)
                     }
                 }
                 .transition(.opacity)
@@ -194,6 +196,8 @@ struct GroupCard<Rows: View>: View {
         .padding(.leading, Theme.rowPadding)
         .padding(.trailing, 4)
         .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: isNaming)
+        // Only a name Firn chose fades; a rename by hand just shows.
+        .animation(reduceMotion || group.namedByHand ? nil : .smooth(duration: 0.3), value: group.name)
         .frame(height: Theme.groupHeaderHeight)
         .contentShape(Rectangle())
         .onTapGesture { if !isRenaming, !foldLocked { toggleFold() } }
@@ -201,9 +205,11 @@ struct GroupCard<Rows: View>: View {
         // While renaming, VoiceOver reaches the name field itself.
         .accessibilityElement(children: isRenaming ? .contain : .ignore)
         .accessibilityLabel(isNaming ? "New group, naming" : group.name)
-        // The name arrived: VoiceOver hears it, as the dots fade (step 4's look over).
-        .onChange(of: isNaming) { was, now in
-            if was, !now { AccessibilityNotification.Announcement("Group named \(group.name)").post() }
+        // The name arrived, or followed its tabs: VoiceOver hears it.
+        .onChange(of: GroupNameState(naming: isNaming, name: group.name)) { was, now in
+            if was.arrived(now, namedByHand: group.namedByHand) {
+                AccessibilityNotification.Announcement("Group named \(group.name)").post()
+            }
         }
         .accessibilityValue(group.folded ? "Folded" : "Open")
         .accessibilityAddTraits(.isButton)

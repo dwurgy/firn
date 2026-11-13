@@ -1,8 +1,9 @@
+import CloudKit
 import FirnCore
 import SwiftUI
 
-/// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): for now only
-/// Spaces (sync's switch joins it later). Every space in its order (hold and
+/// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): Spaces, and
+/// at the end, sync's switch (docs/SYNC-PLAN.md, step 3). Every space in its order (hold and
 /// drag to reorder), and below, the one picked: its name, color, sign-ins,
 /// and Delete, in the Mac's words (`Firn/SpacesSettings.swift`). Changes
 /// apply as they're made; only Stop Sharing and Delete ask first.
@@ -12,6 +13,7 @@ import SwiftUI
 /// picked space's color, as New Space is.
 struct SettingsSheet: View {
     let store: BrowserStore
+    let sync: ICloudSync
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,6 +23,10 @@ struct SettingsSheet: View {
     @State private var confirmingStopSharing = false
     @State private var deleting: Space?
     @FocusState private var nameFocused: Bool
+    /// The saved switch, so it goes off by itself when the engine turns sync
+    /// off (signed out of iCloud, another account, or Firn's data deleted).
+    @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
+    @State private var availability = ICloudSync.Availability.available
 
     /// The space picked, or the one on screen when none is (or it's gone).
     private var selected: Space {
@@ -83,6 +89,8 @@ struct SettingsSheet: View {
                                  : "Its tabs, groups, and Basecamp go with it.")
                     }
                 }
+
+                syncSection
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -104,6 +112,11 @@ struct SettingsSheet: View {
         }
         // The space picked was deleted, or another was picked.
         .onChange(of: selected.id) { name = selected.name }
+        .task { availability = await ICloudSync.availability() }
+        // Signed in or out of iCloud while Settings is open.
+        .onReceive(NotificationCenter.default.publisher(for: .CKAccountChanged)) { _ in
+            Task { availability = await ICloudSync.availability() }
+        }
         .confirmationDialog(
             "Stop sharing sign-ins?",
             isPresented: $confirmingStopSharing,
@@ -204,6 +217,35 @@ struct SettingsSheet: View {
             }
             if index < store.spaces.count - 1 {
                 Button("Move Down") { move(space, by: 1) }
+            }
+        }
+    }
+
+    /// "Sync with iCloud", the Mac's switch in the Mac's words. Only the
+    /// one switch until passwords sync (step 8).
+    private var syncSection: some View {
+        let canSync = availability == .available
+        return Section {
+            Toggle("Sync with iCloud", isOn: Binding(
+                get: { syncIsOn && canSync },
+                set: { $0 ? sync.turnOn() : sync.turnOff() }
+            ))
+            .font(.body)
+            .foregroundStyle(Theme.ink)
+            .tint(Theme.accent)
+            .disabled(!canSync)
+            .frame(minHeight: 44)
+            .listRowBackground(Theme.hover)
+        } header: {
+            sectionTitle("iCloud")
+        } footer: {
+            switch availability {
+            case .available:
+                footnote("Keeps your spaces the same on your iPhone, iPad, and Mac, through your own iCloud. They’re encrypted on this iPhone, so only your devices can read them. Sign-ins stay on each device, so a separate space starts signed out on the others.")
+            case .signedOut:
+                footnote("Sign in to iCloud in the Settings app to use sync.")
+            case .unavailable:
+                footnote("iCloud isn’t available on this iPhone.")
             }
         }
     }

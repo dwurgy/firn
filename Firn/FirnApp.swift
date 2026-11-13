@@ -95,7 +95,7 @@ struct FirnApp: App {
         // sidebar's full-height toolbar: this way the traffic lights, the
         // title, and the page color match the History window.
         Window("Settings", id: "settings") {
-            SettingsView(window: window)
+            SettingsView(window: window, sync: sync)
         }
         .windowResizability(.contentSize)
         .windowToolbarStyle(.unified)

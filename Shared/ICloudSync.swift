@@ -67,6 +67,23 @@ final class ICloudSync {
         }
     }
 
+    /// Whether this device can sync: signed in to iCloud, and iCloud allowed
+    /// (Screen Time or a managed device can forbid it). Settings asks before
+    /// offering the switch, and again when the account changes.
+    enum Availability { case available, signedOut, unavailable }
+
+    static func availability() async -> Availability {
+        // Can't tell yet (offline at launch, say): let the switch be tried;
+        // the engine waits for the account by itself.
+        guard let status = try? await CKContainer(identifier: containerID).accountStatus() else { return .available }
+        switch status {
+        case .available, .couldNotDetermine, .temporarilyUnavailable: return .available
+        case .noAccount: return .signedOut
+        case .restricted: return .unavailable
+        @unknown default: return .available
+        }
+    }
+
     /// The switch, turned on (step 3, part 3).
     func turnOn() {
         UserDefaults.standard.set(true, forKey: Self.enabledKey)

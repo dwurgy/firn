@@ -7,6 +7,7 @@ import SwiftUI
 struct BrowserScreen: View {
     let store: BrowserStore
     let pictures: PagePictures
+    let sync: ICloudSync
     /// A link from another app, opened as a new tab once it arrives.
     @Binding var incoming: URL?
     @FocusState private var editing: Bool
@@ -344,7 +345,7 @@ struct BrowserScreen: View {
         .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
         .onChange(of: sheets.newSpace || sheets.settings) { if sheets.newSpace || sheets.settings { editing = false } }
         .sheet(isPresented: $sheets.newSpace) { NewSpaceSheet(store: store) }
-        .sheet(isPresented: $sheets.settings) { SettingsSheet(store: store) }
+        .sheet(isPresented: $sheets.settings) { SettingsSheet(store: store, sync: sync) }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }

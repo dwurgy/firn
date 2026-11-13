@@ -29,7 +29,7 @@ struct FirnIOSApp: App {
         WindowGroup {
             Group {
                 if let browser {
-                    BrowserScreen(store: browser.store, pictures: browser.pictures, incoming: $incoming)
+                    BrowserScreen(store: browser.store, pictures: browser.pictures, sync: browser.sync, incoming: $incoming)
                 } else {
                     Theme.page.ignoresSafeArea()
                 }

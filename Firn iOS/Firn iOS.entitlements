@@ -12,6 +12,10 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
+	<!-- Production, as the Mac's Developer ID build must be: builds from Xcode would otherwise use Development, a
+	     separate database, and never see the Mac's records (docs/SYNC-PLAN.md, step 3). -->
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
 	<!-- Silent pushes from iCloud, so a change made on another device arrives without waiting. Development for builds
 	     from Xcode; Xcode switches it to production when exporting for the App Store. Nothing registers for them
 	     until sync is turned on. -->

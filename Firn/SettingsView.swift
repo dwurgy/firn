@@ -31,6 +31,7 @@ enum Preference {
 /// Dia (David, 2026-10-25), rather than Safari's row of tabs.
 struct SettingsView: View {
     let window: WindowModel
+    let sync: ICloudSync
 
     /// Every pane is the same size, so the window never jumps between them.
     static let size = CGSize(width: 720, height: 520)
@@ -69,6 +70,7 @@ struct SettingsView: View {
                 case .spaces: SpacesSettings(window: window)
                 case .privacy: PrivacySettings()
                 case .passwords: PasswordsSettings(store: window.store)
+                case .sync: SyncSettings(sync: sync)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -96,7 +98,7 @@ struct SettingsView: View {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, spaces, privacy, passwords
+    case general, tabs, spaces, privacy, passwords, sync
 
     var id: Self { self }
 
@@ -107,6 +109,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .spaces: "Spaces"
         case .privacy: "Privacy"
         case .passwords: "Passwords"
+        case .sync: "Sync"
         }
     }
 
@@ -117,6 +120,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .spaces: "square.stack"
         case .privacy: "hand.raised"
         case .passwords: "key"
+        case .sync: "icloud"
         }
     }
 }

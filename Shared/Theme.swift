@@ -23,7 +23,12 @@ enum Theme {
     /// The system accent (radio buttons, switches, focus): a slightly more
     /// saturated Glacier, from the asset catalog. Set on controls in sheets
     /// by hand, where macOS otherwise draws them in its own blue.
+    #if os(macOS)
     static let accent = Color("AccentColor")
+    #else
+    /// The iPhone's catalog has no accent: the same values, here.
+    static let accent = Color(light: 0x689ABB, dark: 0x5F98BB)
+    #endif
 
     /// Hover and press: a warm brown wash in light, warm white in dark.
     static let hover = Color(light: 0x463728, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.07)

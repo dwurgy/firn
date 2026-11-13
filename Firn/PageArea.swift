@@ -116,9 +116,9 @@ struct PageArea: View {
     private func page(_ tab: FirnCore.Tab?, inUseID: UUID?, frosted: FirnCore.Tab?) -> some View {
         let isInUse = tab != nil && tab?.id == inUseID
         let pressable = inUseID != nil && !isInUse
-        // With no tab open at all, the empty page is First light, in this space's snow.
-        let firstLight = store.activeTab == nil && inUseID == nil ? store.activeSpace.color : nil
-        return PagePane(store: store, tab: tab, firstLight: firstLight,
+        // With no tab open at all, the empty page is Sunrise, in this space's snow.
+        let sunrise = store.activeTab == nil && inUseID == nil ? store.activeSpace.color : nil
+        return PagePane(store: store, tab: tab, sunrise: sunrise,
                         onPointerDown: pressable ? { if let tab { store.select(tab) } } : nil)
             .overlay {
                 if frosted != nil {

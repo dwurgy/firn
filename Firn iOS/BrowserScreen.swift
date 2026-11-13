@@ -429,10 +429,10 @@ struct BrowserScreen: View {
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
         } else if store.openTabs.isEmpty {
-            // A space with no tabs: First light, exactly as the Mac's empty
+            // A space with no tabs: Sunrise, exactly as the Mac's empty
             // page (no words, no centered mark; only the snow takes the
             // space's color).
-            FirstLightScene(spaceColor: store.activeSpace.color)
+            SunriseScene(spaceColor: store.activeSpace.color)
                 // The clock goes light over the blue-hour sky, in both looks.
                 .background(LightStatusBar(on: !showingTabs && !pageHidden))
                 .transition(.opacity)

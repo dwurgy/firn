@@ -248,13 +248,14 @@ enum Theme {
         }
     }
 
-    // MARK: First light
+    // MARK: Sunrise
 
     /// The welcome's and the empty page's scene, "Sunrise" (BRAND.md;
     /// docs/SUNRISE-PLAN.md). Dark is "blue hour". The sky and sun are
     /// always Firn's own; only the snow takes the space's color.
-    enum FirstLight {
-        /// The paper grain: multiplied in light, soft light in dark.
+    enum Sunrise {
+        /// The paper grain (`PaperGrain`, now only the iPhone overview's haze):
+        /// multiplied in light, soft light in dark.
         static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
 
         /// Sunrise's snow for a space in one look (docs/SUNRISE-PLAN.md, "The

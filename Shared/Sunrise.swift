@@ -15,7 +15,7 @@ import SwiftUI
 /// texture is a static image; the sky, sun, and snow draw once per size and
 /// look; the flakes drift in Core Animation, so nothing in Firn redraws
 /// while the scene sits idle.
-struct FirstLightScene: View {
+struct SunriseScene: View {
     /// The space's color name (`Space.color`); only the snow takes it.
     let spaceColor: String
     /// The whole scene, or one half of it: the welcome's finish lifts the
@@ -36,11 +36,11 @@ struct FirstLightScene: View {
                     SunriseSky()
                     // Never on small screens (BRAND.md).
                     if proxy.size.width >= 600 {
-                        FirstLightFlakes(reduceMotion: reduceMotion)
+                        SunriseFlakes(reduceMotion: reduceMotion)
                     }
                 }
                 if part != .back {
-                    FirstLightSnow(spaceColor: spaceColor, reduceMotion: reduceMotion)
+                    SunriseSnow(spaceColor: spaceColor, reduceMotion: reduceMotion)
                         .frame(height: proxy.size.height * Self.snowShare)
                 }
             }
@@ -64,7 +64,7 @@ private struct SunriseSky: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let sky = Theme.FirstLight.sky(dark: colorScheme == .dark)
+        let sky = Theme.Sunrise.sky(dark: colorScheme == .dark)
         Canvas { context, size in
             Self.drawSky(in: context, size: size, sky: sky)
             Self.drawLight(in: context, size: size, sky: sky)
@@ -74,7 +74,7 @@ private struct SunriseSky: View {
 
     /// Where the snow's surface sits: its highest point, and the dip.
     private static func surface(_ size: CGSize) -> (top: CGFloat, ridge: CGFloat, dip: CGFloat) {
-        let snowHeight = size.height * FirstLightScene.snowShare
+        let snowHeight = size.height * SunriseScene.snowShare
         let ridge = SnowLayers.layout(width: size.width, height: snowHeight).edges[0]
         let top = size.height - snowHeight
         return (top, ridge, top + ridge)
@@ -86,7 +86,7 @@ private struct SunriseSky: View {
         size.width < 600 ? 0.5 : min(1, max(0.75, size.height / 900))
     }
 
-    private static func drawSky(in context: GraphicsContext, size: CGSize, sky: Theme.FirstLight.Sky) {
+    private static func drawSky(in context: GraphicsContext, size: CGSize, sky: Theme.Sunrise.Sky) {
         let w = size.width
         guard w > 0, size.height > 0 else { return }
         let (top, ridge, dip) = surface(size)
@@ -101,7 +101,7 @@ private struct SunriseSky: View {
     }
 
     /// The warm band and the halo: the sun's light on the sky.
-    private static func drawLight(in context: GraphicsContext, size: CGSize, sky: Theme.FirstLight.Sky) {
+    private static func drawLight(in context: GraphicsContext, size: CGSize, sky: Theme.Sunrise.Sky) {
         let w = size.width
         guard w > 0, size.height > 0 else { return }
         let dip = surface(size).dip
@@ -117,7 +117,7 @@ private struct SunriseSky: View {
     }
 
     /// The glow and the disc.
-    private static func drawSun(in context: GraphicsContext, size: CGSize, sky: Theme.FirstLight.Sky) {
+    private static func drawSun(in context: GraphicsContext, size: CGSize, sky: Theme.Sunrise.Sky) {
         guard size.width > 0, size.height > 0 else { return }
         let dip = surface(size).dip
         let scale = scale(size)
@@ -152,7 +152,7 @@ private struct SunriseSky: View {
 /// the site's hand-cut edge (`SnowEdges`) and drawn as the site's `.lay` is.
 /// A new space's snow fades in over the old one over 600ms, as the site's
 /// does (instantly with Reduce Motion).
-private struct FirstLightSnow: View {
+private struct SunriseSnow: View {
     let spaceColor: String
     let reduceMotion: Bool
     /// The snow underneath, and the one fading in over it.
@@ -212,7 +212,7 @@ private struct SnowLayers: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let snow = Theme.FirstLight.snow(space, dark: colorScheme == .dark)
+        let snow = Theme.Sunrise.snow(space, dark: colorScheme == .dark)
         let textures = Array([SnowTexture.fresh, SnowTexture.fresh, SnowTexture.packed,
                               SnowTexture.packed, SnowTexture.packed].prefix(Self.count))
         Canvas { context, size in
@@ -248,7 +248,7 @@ private struct SnowLayers: View {
     }
 
     static func draw(in context: inout GraphicsContext, size: CGSize,
-                     snow: Theme.FirstLight.Snow, textures: [Image?]) {
+                     snow: Theme.Sunrise.Snow, textures: [Image?]) {
         let w = size.width, height = size.height
         guard w > 0, height > 0 else { return }
         let layout = layout(width: w, height: height)
@@ -349,7 +349,7 @@ private struct SnowLayers: View {
 /// words will sit. AppKit, not SwiftUI: the drift is a Core Animation
 /// animation that the system runs on its own, so Firn doesn't redraw every
 /// frame (a repeating SwiftUI animation would).
-private struct FirstLightFlakes: NSViewRepresentable {
+private struct SunriseFlakes: NSViewRepresentable {
     let reduceMotion: Bool
 
     func makeNSView(context: Context) -> FlakesView { FlakesView() }
@@ -362,7 +362,7 @@ private struct FirstLightFlakes: NSViewRepresentable {
 private final class FlakesView: NSView {
     /// Where each sits, as parts of the window (left and top), its size in
     /// points, its turn in degrees, and how far into the drift it starts
-    /// (FirstLight.tsx, `FLAKES`).
+    /// (docs/electron-welcome/FirstLight.tsx, `FLAKES`).
     private static let flakes: [(left: CGFloat, top: CGFloat, size: CGFloat, turn: CGFloat, start: Double)] = [
         (0.117, 0.175, 30, -12, 0),
         (0.859, 0.138, 22, 18, 6),
@@ -383,8 +383,8 @@ private final class FlakesView: NSView {
         wantsLayer = true
         for flake in Self.flakes {
             let layer = CALayer()
-            layer.backgroundColor = Theme.FirstLight.flake.cgColor
-            layer.opacity = Theme.FirstLight.flakeOpacity
+            layer.backgroundColor = Theme.Sunrise.flake.cgColor
+            layer.opacity = Theme.Sunrise.flakeOpacity
             layer.mask = CALayer()
             layer.mask?.contentsGravity = .resizeAspect
             layer.bounds = CGRect(x: 0, y: 0, width: flake.size, height: flake.size)
@@ -447,7 +447,7 @@ private final class FlakesView: NSView {
 #else
 /// iOS's twin of the Mac's flakes, above: the same four marks and the same
 /// Core Animation drift, placed in UIKit's coordinates (y points down).
-private struct FirstLightFlakes: UIViewRepresentable {
+private struct SunriseFlakes: UIViewRepresentable {
     let reduceMotion: Bool
 
     func makeUIView(context: Context) -> FlakesView { FlakesView() }
@@ -478,8 +478,8 @@ private final class FlakesView: UIView {
         let mark = UIImage(named: "FirnMarkSmall")?.cgImage
         for flake in Self.flakes {
             let layer = CALayer()
-            layer.backgroundColor = Theme.FirstLight.flake.cgColor
-            layer.opacity = Theme.FirstLight.flakeOpacity
+            layer.backgroundColor = Theme.Sunrise.flake.cgColor
+            layer.opacity = Theme.Sunrise.flakeOpacity
             layer.mask = CALayer()
             layer.mask?.contentsGravity = .resizeAspect
             layer.mask?.contents = mark

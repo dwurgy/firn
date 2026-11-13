@@ -81,7 +81,7 @@ public enum DemoSession {
         add(materials, to: work, lastActiveAt: minutesAgo(60))
         let workTab = add(firnSite, to: work, lastActiveAt: minutesAgo(55))
 
-        // Trip: a nod to First light.
+        // Trip: a nod to Sunrise (Sisters, Oregon).
         let sistersGroup = group("Sisters", in: trip)
         add(smithRock, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(48))
         let tripTab = add(sistersCoffee, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(46))

@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// Reads the path data of an SVG `<path d="…">` into a CGPath, so Firn's
-/// own drawings (the overflow box, First light's flakes) can be kept exactly
+/// own drawings (the overflow box, Sunrise's flakes) can be kept exactly
 /// as they were drawn and approved (as SVG), rather than retyped by hand. Covers M, L, H, V, C, S, Q, A, and Z, in
 /// absolute and relative forms. Only ever fed Firn's own icon strings.
 public enum SVGPath {

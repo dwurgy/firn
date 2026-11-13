@@ -60,9 +60,9 @@ struct OverviewHaze: View {
                 .fill(Theme.frameTint(space))
                 .animation(.easeOut(duration: 0.2), value: space)
             if !reduceTransparency {
-                Image("FirstLightGrain")
+                Image("PaperGrain")
                     .resizable(resizingMode: .tile)
-                    .opacity(Theme.FirstLight.grainOpacity(dark: colorScheme == .dark))
+                    .opacity(Theme.Sunrise.grainOpacity(dark: colorScheme == .dark))
                     .blendMode(colorScheme == .dark ? .softLight : .multiply)
             }
         }

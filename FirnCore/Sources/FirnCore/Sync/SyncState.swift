@@ -24,7 +24,26 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// next look, once the word is out.
     var announced: Set<UUID> = []
 
+    // The first sync (David, 2026-11-13): a space of this device's joins
+    // another device's space of the same name. It keeps its own id and data
+    // store here, so its sign-ins, history, and saved passwords stay; the
+    // two below translate at iCloud's edge. Everything above is in this
+    // device's own terms; what goes out and comes in is in iCloud's.
+
+    /// iCloud's id for a joined space → this device's.
+    var joinedSpaces: [UUID: UUID] = [:]
+    /// iCloud's data store id for a joined space → this device's.
+    var joinedStores: [UUID: UUID] = [:]
+    /// Spaces whose records came from iCloud (this device's ids).
+    var arrived: Set<UUID> = []
+    /// Spaces join, and an untouched one gives way, only until the engine's
+    /// first fetch is done (nothing of this device's goes up before then).
+    public private(set) var firstSyncDone = false
+
     public init() {}
+
+    /// The engine's first fetch is done: from now on spaces arrive as new.
+    public mutating func finishFirstSync() { firstSyncDone = true }
 
     /// The fields that sync, as they are on a device right now.
     struct Fields: Codable, Equatable, Sendable {
@@ -34,15 +53,78 @@ public struct SyncState: Codable, Equatable, Sendable {
     }
 
     /// Every record this device would hand iCloud now, for a first upload
-    /// or after iCloud lost them (the engine asks for records by id).
+    /// or after iCloud lost them (the engine asks for records by iCloud's
+    /// id). Nil for a space that joined another: it goes by that one's id.
     public func item(for id: SyncRecordID) -> SyncItem? {
         guard let uuid = UUID(uuidString: id.name) else { return nil }
         switch id.kind {
-        case .space: return spaces[uuid].map(SyncItem.space)
-        case .group: return groups[uuid].map(SyncItem.group)
-        case .tab: return tabs[uuid].map(SyncItem.tab)
+        case .space:
+            let local = localSpace(uuid)
+            guard remoteSpace(local) == uuid else { return nil }
+            return spaces[local].map { .space(toCloud($0)) }
+        case .group: return groups[uuid].map { .group(toCloud($0)) }
+        case .tab: return tabs[uuid].map { .tab(toCloud($0)) }
         case .visit: return nil
         }
+    }
+
+    // MARK: - iCloud's terms and this device's
+
+    func localSpace(_ id: UUID) -> UUID { joinedSpaces[id] ?? id }
+    func remoteSpace(_ id: UUID) -> UUID { joinedSpaces.first { $0.value == id }?.key ?? id }
+    func localStore(_ id: UUID) -> UUID { joinedStores[id] ?? id }
+    func remoteStore(_ id: UUID) -> UUID { joinedStores.first { $0.value == id }?.key ?? id }
+
+    func toCloud(_ space: SyncedSpace) -> SyncedSpace {
+        var space = space
+        space.id = remoteSpace(space.id)
+        space.dataStoreID = remoteStore(space.dataStoreID)
+        return space
+    }
+
+    func toCloud(_ group: SyncedGroup) -> SyncedGroup {
+        var group = group
+        group.spaceID = remoteSpace(group.spaceID)
+        return group
+    }
+
+    func toCloud(_ tab: SyncedTab) -> SyncedTab {
+        var tab = tab
+        tab.spaceID = remoteSpace(tab.spaceID)
+        return tab
+    }
+
+    func toCloud(_ item: SyncItem) -> SyncItem {
+        switch item {
+        case let .space(space): .space(toCloud(space))
+        case let .group(group): .group(toCloud(group))
+        case let .tab(tab): .tab(toCloud(tab))
+        case .visit: item
+        }
+    }
+
+    func toCloud(_ id: SyncRecordID) -> SyncRecordID {
+        guard id.kind == .space, let uuid = UUID(uuidString: id.name) else { return id }
+        return SyncRecordID(kind: .space, name: remoteSpace(uuid).uuidString)
+    }
+
+    func fromCloud(_ space: SyncedSpace) -> SyncedSpace {
+        var space = space
+        space.id = localSpace(space.id)
+        space.dataStoreID = localStore(space.dataStoreID)
+        return space
+    }
+
+    func fromCloud(_ group: SyncedGroup) -> SyncedGroup {
+        var group = group
+        group.spaceID = localSpace(group.spaceID)
+        return group
+    }
+
+    func fromCloud(_ tab: SyncedTab) -> SyncedTab {
+        var tab = tab
+        tab.spaceID = localSpace(tab.spaceID)
+        return tab
     }
 }
 

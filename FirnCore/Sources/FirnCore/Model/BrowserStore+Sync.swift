@@ -48,7 +48,8 @@ extension BrowserStore {
         }
 
         state.seen = fields
-        return changes
+        // In iCloud's terms: a joined space goes by its iCloud id.
+        return SyncChanges(saves: changes.saves.map(state.toCloud), deletes: changes.deletes.map(state.toCloud))
     }
 
     /// The fields that sync, as they are here now: every space, groups kept
@@ -96,7 +97,7 @@ extension BrowserStore {
     /// and returned to send. Visits are history's (`HistoryStore`), not the
     /// store's, and are passed over here.
     public func applySync(saves: [SyncItem], deletes: [SyncRecordID], to state: inout SyncState) -> SyncApplied {
-        let toSend = takeSyncChanges(into: &state)
+        var toSend = takeSyncChanges(into: &state)
         var waiting: [SyncItem] = []
         var spaceSaves: [SyncedSpace] = []
         var groupSaves: [SyncedGroup] = []
@@ -109,18 +110,27 @@ extension BrowserStore {
             case .visit: break
             }
         }
-        for space in spaceSaves.sorted(by: { $0.order < $1.order }) { apply(space, to: &state) }
-        for group in groupSaves where !apply(group, to: &state) { waiting.append(.group(group)) }
+        // Spaces first, so groups and tabs can be put in this device's terms.
+        for space in spaceSaves.sorted(by: { $0.order < $1.order }) {
+            if !state.firstSyncDone { join(space, in: &state) }
+            apply(state.fromCloud(space), to: &state)
+        }
+        if !state.firstSyncDone { giveWay(in: &state) }
+        // A space that joined goes by iCloud's id now, and one that gave way
+        // is gone: what was taken to send is taken again in today's terms.
+        toSend.saves = toSend.saves.compactMap { state.item(for: $0.id) }
+
+        for group in groupSaves where !apply(state.fromCloud(group), to: &state) { waiting.append(.group(group)) }
         // Tabs leaving a group go last first: each lands just below what's
         // left of it, so a whole group ungrouped keeps its order.
         let joining = tabSaves.filter { $0.groupID != nil }.sorted { $0.order < $1.order }
         let leaving = tabSaves.filter { $0.groupID == nil }.sorted { $0.order > $1.order }
-        for tab in joining + leaving where !apply(tab, to: &state) { waiting.append(.tab(tab)) }
+        for tab in joining + leaving where !apply(state.fromCloud(tab), to: &state) { waiting.append(.tab(tab)) }
 
         let deleted = { (kind: SyncKind) in deletes.filter { $0.kind == kind }.compactMap { UUID(uuidString: $0.name) } }
         for id in deleted(.tab) { applyTabDelete(id, to: &state) }
         for id in deleted(.group) { applyGroupDelete(id, to: &state) }
-        for id in deleted(.space) { applySpaceDelete(id, to: &state) }
+        for id in deleted(.space) { applySpaceDelete(state.localSpace(id), to: &state) }
 
         // What's here now came in: it isn't an edit of this device's.
         state.seen = syncFields()
@@ -134,6 +144,7 @@ extension BrowserStore {
     }
 
     private func apply(_ incoming: SyncedSpace, to state: inout SyncState) {
+        state.arrived.insert(incoming.id)
         guard Self.isNewer(incoming.changedAt, than: state.spaces[incoming.id]?.changedAt) else { return }
         var record = incoming
         let position = min(max(incoming.order, 0), spaces.count)
@@ -159,6 +170,47 @@ extension BrowserStore {
         }
         renumberSpaces()
         state.spaces[incoming.id] = record
+    }
+
+    /// The first sync (David, 2026-11-13): a space of this device's that
+    /// never synced joins an arriving one of the same name. It keeps its id,
+    /// tabs, groups, Basecamp, and data store here (so its sign-ins, history,
+    /// and saved passwords stay), and goes by the other's ids in iCloud.
+    private func join(_ incoming: SyncedSpace, in state: inout SyncState) {
+        guard state.joinedSpaces[incoming.id] == nil, !spaces.contains(where: { $0.id == incoming.id }),
+              let name = Space.cleanName(incoming.name) else { return }
+        let joined = Set(state.joinedSpaces.values)
+        guard let local = spaces.first(where: {
+            !state.arrived.contains($0.id) && !joined.contains($0.id)
+                && $0.name.compare(name, options: .caseInsensitive) == .orderedSame
+        }) else { return }
+        // Its data store is kept by iCloud's id for it. If either id already
+        // stands for another (spaces that share sign-ins on one device but
+        // not the other), it doesn't join, and arrives as a new space.
+        if let kept = state.joinedStores[incoming.dataStoreID] {
+            guard kept == local.dataStoreID else { return }
+        } else if incoming.dataStoreID != local.dataStoreID {
+            guard !spaces.contains(where: { $0.dataStoreID == incoming.dataStoreID }),
+                  state.remoteStore(local.dataStoreID) == local.dataStoreID else { return }
+            state.joinedStores[incoming.dataStoreID] = local.dataStoreID
+        }
+        state.joinedSpaces[incoming.id] = local.id
+        // Its record so far was this device's own and never went up: iCloud's
+        // name, color, and order come in fresh.
+        state.spaces[local.id] = nil
+    }
+
+    /// The first sync: a space of this device's that never synced, with no
+    /// tabs, tiles, or groups, gives way once others have arrived.
+    private func giveWay(in state: inout SyncState) {
+        guard spaces.contains(where: { state.arrived.contains($0.id) }) else { return }
+        let joined = Set(state.joinedSpaces.values)
+        for space in spaces where !state.arrived.contains(space.id) && !joined.contains(space.id) {
+            guard spaces.count > 1, !tabs.contains(where: { $0.spaceID == space.id }),
+                  !groups.contains(where: { $0.spaceID == space.id }) else { continue }
+            state.spaces[space.id] = nil
+            deleteSpace(space)
+        }
     }
 
     /// A space stopped sharing on another device: its pages start again in
@@ -256,6 +308,8 @@ extension BrowserStore {
     /// stays: Firn always has one.
     private func applySpaceDelete(_ id: UUID, to state: inout SyncState) {
         state.spaces[id] = nil
+        state.arrived.remove(id)
+        state.joinedSpaces = state.joinedSpaces.filter { $0.value != id }
         state.groups = state.groups.filter { $0.value.spaceID != id }
         state.tabs = state.tabs.filter { $0.value.spaceID != id }
         guard let space = spaces.first(where: { $0.id == id }) else { return }

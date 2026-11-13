@@ -49,6 +49,16 @@ struct SyncTests {
         // Each device's first look; they agree on the one space.
         send(from: mac, to: phone)
         send(from: phone, to: mac)
+        mac.state.finishFirstSync()
+        phone.state.finishFirstSync()
+        return (mac, phone)
+    }
+
+    /// A Mac already syncing, and a phone turning sync on with its own spaces.
+    func firstSync(phoneSpaces: [Space]) -> (SyncDevice, SyncDevice) {
+        let mac = SyncDevice(spaces: [personal], clock: clock)
+        mac.state.finishFirstSync()
+        let phone = SyncDevice(spaces: phoneSpaces, clock: clock)
         return (mac, phone)
     }
 
@@ -114,6 +124,72 @@ struct SyncTests {
         #expect(SyncSeal(keyData: Data(count: 16)) == nil)
         #expect(SyncSeal.makeKeyData().count == 32)
         #expect(SyncSeal.makeKeyData() != SyncSeal.makeKeyData())
+    }
+
+    // MARK: - The first sync
+
+    @Test func aSpaceWithTheSameNameJoinsAndKeepsItsSignIns() throws {
+        let phonePersonal = Space(name: "personal", color: "sage", order: 0, dataStoreID: UUID())
+        let (mac, phone) = firstSync(phoneSpaces: [phonePersonal])
+        makeGroup("Trip", "a", on: mac)
+        phone.store.openTab(url("b"))
+        let fromPhone = send(from: mac, to: phone).toSend
+        // One space: the phone's own, under the Mac's name and color, its
+        // data store (sign-ins, history, passwords) untouched.
+        #expect(phone.store.spaces.map(\.id) == [phonePersonal.id])
+        #expect(phone.space.name == "Personal" && phone.space.color == "glacier")
+        #expect(phone.space.dataStoreID == phonePersonal.dataStoreID)
+        #expect(phone.erased.ids.isEmpty)
+        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a"])
+        #expect(phone.store.tabs.contains { $0.url == url("b") && $0.spaceID == phonePersonal.id })
+        // Nothing of the phone's own id goes up.
+        #expect(fromPhone.saves.allSatisfy { $0.id.name != phonePersonal.id.uuidString })
+        #expect(phone.state.item(for: SyncRecordID(kind: .space, name: phonePersonal.id.uuidString)) == nil)
+        phone.state.finishFirstSync()
+
+        // From now on each side's edits reach the other in its own terms.
+        phone.store.updateSpace(phone.space, name: "Home", color: phone.space.color)
+        makeGroup("Work", "c", on: phone)
+        send(from: phone, to: mac)
+        #expect(mac.store.spaces.count == 1 && mac.space.name == "Home")
+        #expect(mac.space.dataStoreID == personal.dataStoreID && mac.erased.ids.isEmpty)
+        #expect(mac.group(named: "Work")?.spaceID == personal.id)
+        makeGroup("Later", "d", on: mac)
+        send(from: mac, to: phone)
+        #expect(phone.group(named: "Later")?.spaceID == phonePersonal.id)
+        #expect(phone.space.dataStoreID == phonePersonal.dataStoreID && phone.erased.ids.isEmpty)
+    }
+
+    @Test func anUntouchedSpaceGivesWay() throws {
+        let untouched = Space(name: "New Space", color: "glacier", order: 0, dataStoreID: UUID())
+        let (mac, phone) = firstSync(phoneSpaces: [untouched])
+        let fromPhone = send(from: mac, to: phone).toSend
+        #expect(phone.store.spaces.map(\.id) == [personal.id])
+        #expect(fromPhone.isEmpty)
+        #expect(phone.state.item(for: SyncRecordID(kind: .space, name: untouched.id.uuidString)) == nil)
+    }
+
+    @Test func aSpaceInUseArrivesOnTheOtherDevice() throws {
+        let work = Space(name: "Work", color: "sand", order: 0, dataStoreID: UUID())
+        let (mac, phone) = firstSync(phoneSpaces: [work])
+        makeGroup("Desk", "a", on: phone)
+        let fromPhone = send(from: mac, to: phone).toSend
+        #expect(Set(phone.store.spaces.map(\.id)) == [work.id, personal.id])
+        phone.state.finishFirstSync()
+        let seal = SyncSeal(keyData: key)!
+        _ = mac.store.applySync(saves: fromPhone.saves.map { try! seal.open(try! seal.seal($0)) },
+                                deletes: fromPhone.deletes, to: &mac.state)
+        #expect(mac.store.spaces.contains { $0.id == work.id && $0.dataStoreID == work.dataStoreID })
+        #expect(mac.group(named: "Desk")?.spaceID == work.id)
+    }
+
+    @Test func afterTheFirstSyncSpacesNeverJoin() {
+        let (mac, phone) = devices()
+        let macWork = mac.store.addSpace(name: "Work", color: "sand")
+        let phoneWork = phone.store.addSpace(name: "Work", color: "sage")
+        send(from: mac, to: phone)
+        #expect(phone.store.spaces.count == 3)
+        #expect(Set(phone.store.spaces.map(\.id)) == [personal.id, macWork.id, phoneWork.id])
     }
 
     // MARK: - Groups

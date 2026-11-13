@@ -282,6 +282,14 @@ enum Theme {
             return zip([0.20, 0.33, 0.47, 0.62, 0.78], [0.12, 0.20, 0.29, 0.38, 0.48])
                 .map { Color(light: mix(0xFBFAF8, tint, $0), dark: mix(0x2B2826, tint, $1)) }
         }
+
+        /// Sunrise's five snow layers, surface first: Glacier's snow with its
+        /// hue turned a little toward the space's color (`SnowColors`).
+        /// Not drawn yet; it replaces `snow(_:)` in Sunrise step 3.
+        static func sunriseSnow(_ space: String) -> [Color] {
+            let snow = SnowColors.layers(space: space, spaceHex: spaceHex(space))
+            return zip(snow.light, snow.dark).map { Color(light: $0, dark: $1) }
+        }
     }
 
     /// The welcome's own colors over First light; its card is the command

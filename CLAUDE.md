@@ -99,7 +99,7 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 
 ### Sunrise (the welcome and the empty page)
 
-Firn's brand moments use the "Sunrise" look, the same as firnbrowser.com: sunrise at a snowy cabin near Sisters, Oregon, coffee in hand. A blue-hour sky warming to dawn at the horizon, the sun just peeking over textured snow, and a few drifting flakes. **Every value lives in `brand/BRAND.md`** (a copy from `dwurgy/firn-site`; the site's CSS wins); don't copy numbers here. It replaces "First light"; the move is planned in `docs/SUNRISE-PLAN.md` (progress is marked there; step 1, the tiles and edges, done 2026-11-13), and until it's built the code still draws First light (`Shared/FirstLight.swift`).
+Firn's brand moments use the "Sunrise" look, the same as firnbrowser.com: sunrise at a snowy cabin near Sisters, Oregon, coffee in hand. A blue-hour sky warming to dawn at the horizon, the sun just peeking over textured snow, and a few drifting flakes. **Every value lives in `brand/BRAND.md`** (a copy from `dwurgy/firn-site`; the site's CSS wins); don't copy numbers here. It replaces "First light"; the move is planned in `docs/SUNRISE-PLAN.md` (progress is marked there; step 1, the tiles and edges, and step 2, the snow colors, done 2026-11-13), and until it's built the code still draws First light (`Shared/FirstLight.swift`).
 
 - **Where:** only the full-window welcome and the empty page (no open tabs). Never everyday browsing, Settings, Lookout, the command bar, menus, downloads, or scam warnings. Everyday screens are plain warm paper.
 - **Only the snow and the mark take the space's color.** The sky and the sun are always Firn's own.

@@ -28,7 +28,8 @@
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; padding: 40px 24px 80px; background: var(--sheet-bg); color: var(--ink);
+  margin: 0; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--sheet-bg); color: var(--ink);
   font: 15px/1.5 -apple-system, system-ui, sans-serif;
   transition: background .2s ease-out, color .2s ease-out;
 }
@@ -163,7 +164,8 @@ p.note { margin: 0 0 12px; color: var(--muted); max-width: 70ch; }
 .pagebox .reader { height: 100%; overflow: auto; padding: 64px 48px 80px; }
 
 /* ---------- iPhone ---------- */
-.phones { display: flex; gap: 40px; flex-wrap: wrap; margin-top: 20px; }
+.phones { display: flex; gap: 40px; margin-top: 20px; overflow-x: auto; padding: 12px 12px 40px; }
+.phone { flex: none; }
 .phone {
   width: 393px; height: 852px; border-radius: 56px; overflow: hidden; position: relative;
   box-shadow: 0 0 0 10px #1d1b19, 0 0 0 11px #3a3633, 0 30px 70px rgba(60,40,20,.25);
@@ -292,7 +294,7 @@ document.querySelectorAll('.book').forEach(b => {
   b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
 });
 const sizes = [16, 19, 22, 26];
-const state = { mode: 'light', font: 'serif', size: 19, space: '#7F9CB0' };
+const state = { mode: (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light', font: 'serif', size: 19, space: '#7F9CB0' };
 function apply() {
   document.body.classList.toggle('dark', state.mode === 'dark');
   document.documentElement.classList.toggle('dark', state.mode === 'dark');

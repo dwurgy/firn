@@ -13,19 +13,14 @@ import SwiftUI
 ///
 /// Performance (CLAUDE.md): gradients and shapes, no filters; the snow's
 /// texture is a static image; the sky, sun, and snow draw once per size and
-/// look, and the sun's rise moves them by transform and opacity only; the
-/// flakes drift in Core Animation, so nothing in Firn redraws while the
-/// scene sits idle.
+/// look; the flakes drift in Core Animation, so nothing in Firn redraws
+/// while the scene sits idle.
 struct FirstLightScene: View {
     /// The space's color name (`Space.color`); only the snow takes it.
     let spaceColor: String
     /// The whole scene, or one half of it: the welcome's finish lifts the
     /// real window between the sky (back) and the snow (front).
     var part = Part.whole
-    /// Whether the sun is up. The welcome keeps it low, just peeking, until
-    /// "Welcome in." raises it (1.2s); everywhere else it's simply up.
-    /// Reduce Motion: always up, as the site.
-    var sunUp = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Part { case whole, back, front }
@@ -38,7 +33,7 @@ struct FirstLightScene: View {
         GeometryReader { proxy in
             ZStack(alignment: .bottom) {
                 if part != .front {
-                    SunriseSky(rise: sunUp || reduceMotion ? 1 : SunriseSky.lowRise)
+                    SunriseSky()
                     // Never on small screens (BRAND.md).
                     if proxy.size.width >= 600 {
                         FirstLightFlakes(reduceMotion: reduceMotion)
@@ -62,33 +57,19 @@ struct FirstLightScene: View {
 /// `.sunrise` in home.css): the blue-hour gradient, two soft apricot glows
 /// low on it, and the sun at 62% across, in the lowest dip of the surface's
 /// edge, so the snow (drawn over it) hides the disc's lower part.
-///
-/// Three layers, each drawn once per size and look: the sky, the sun's
-/// light (band and halo), and the sun itself (glow and disc). The rise, as
-/// the site's: at `rise` r the sun sits 300pt × (1 − r) lower and its light
-/// shows at .36 + .64r, moved by offset and opacity only, so it glides
-/// without redrawing.
+/// Always where the site's risen sun is: about two thirds of the disc over
+/// the snow in light, only a cap in dark (blue hour), in the welcome as on
+/// the empty page. Drawn once per size and look.
 private struct SunriseSky: View {
-    /// 0 is the site's sun before it rises (hidden in the snow), 1 is up.
-    let rise: CGFloat
     @Environment(\.colorScheme) private var colorScheme
-
-    /// The welcome's sun before its finish: a sliver over the snow in light
-    /// (about a third of the risen disc), still under it in dark.
-    static let lowRise: CGFloat = 0.75
 
     var body: some View {
         let sky = Theme.FirstLight.sky(dark: colorScheme == .dark)
-        ZStack {
-            Canvas { context, size in Self.drawSky(in: context, size: size, sky: sky) }
-            Canvas { context, size in Self.drawLight(in: context, size: size, sky: sky) }
-                .opacity(0.36 + 0.64 * rise)
-            Canvas { context, size in Self.drawSun(in: context, size: size, sky: sky) }
-                .visualEffect { content, proxy in
-                    content.offset(y: 300 * Self.scale(proxy.size) * (1 - rise))
-                }
+        Canvas { context, size in
+            Self.drawSky(in: context, size: size, sky: sky)
+            Self.drawLight(in: context, size: size, sky: sky)
+            Self.drawSun(in: context, size: size, sky: sky)
         }
-        .animation(.easeOut(duration: 1.2), value: rise)
     }
 
     /// Where the snow's surface sits: its highest point, and the dip.
@@ -135,7 +116,7 @@ private struct SunriseSky: View {
                 center: CGPoint(x: 0.62 * w, y: dip), radii: CGSize(width: 0.45 * w, height: 360 * scale))
     }
 
-    /// The glow and the disc, risen (the layer's offset lowers them).
+    /// The glow and the disc.
     private static func drawSun(in context: GraphicsContext, size: CGSize, sky: Theme.FirstLight.Sky) {
         guard size.width > 0, size.height > 0 else { return }
         let dip = surface(size).dip
@@ -167,8 +148,8 @@ private struct SunriseSky: View {
     }
 }
 
-/// Sunrise's snow: five layers, surface first, each cut along one of the
-/// site's hand-cut edges (`SnowEdges`) and drawn as the site's `.lay` is.
+/// Sunrise's snow: the surface layer alone (`SnowLayers.count`), cut along
+/// the site's hand-cut edge (`SnowEdges`) and drawn as the site's `.lay` is.
 /// A new space's snow fades in over the old one over 600ms, as the site's
 /// does (instantly with Reduce Motion).
 private struct FirstLightSnow: View {
@@ -219,15 +200,21 @@ private struct FirstLightSnow: View {
     }
 }
 
-/// The five layers in one `Canvas`, drawn once per size, look, and space.
+/// The snow's layers in one `Canvas`, drawn once per size, look, and space.
 private struct SnowLayers: View {
+    /// How many of the site's five layers show, surface first. One, as the
+    /// site's link preview (David, 2026-11-13): on one screen, five layers sit
+    /// so close together that the snow looks busy; on the site they're spread
+    /// down a long page.
+    static let count = 1
+
     let space: String
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let snow = Theme.FirstLight.snow(space, dark: colorScheme == .dark)
-        let textures = [SnowTexture.fresh, SnowTexture.fresh, SnowTexture.packed,
-                        SnowTexture.packed, SnowTexture.packed]
+        let textures = Array([SnowTexture.fresh, SnowTexture.fresh, SnowTexture.packed,
+                              SnowTexture.packed, SnowTexture.packed].prefix(Self.count))
         Canvas { context, size in
             Self.draw(in: &context, size: size, snow: snow, textures: textures)
         }
@@ -244,8 +231,8 @@ private struct SnowLayers: View {
     /// deepest at least 0.6 of one; room left over is shared out evenly, and
     /// if there isn't enough, the ridges shrink with the layers.
     static func layout(width: CGFloat, height: CGFloat) -> Layout {
-        var edges: [CGFloat] = width < 600 ? [56, 36, 36, 36, 36] : [96, 64, 64, 64, 64]
-        var gaps = edges.prefix(4).map { $0 * 1.15 } + [edges[4] * 0.6]
+        var edges: [CGFloat] = Array((width < 600 ? [56, 36, 36, 36, 36] : [96, 64, 64, 64, 64]).prefix(count))
+        var gaps = edges.dropLast().map { $0 * 1.15 } + [edges[count - 1] * 0.6]
         let needed = gaps.reduce(0, +)
         if needed > height {
             let shrink = height / needed
@@ -266,7 +253,7 @@ private struct SnowLayers: View {
         guard w > 0, height > 0 else { return }
         let layout = layout(width: w, height: height)
         // How much the ridges shrank, for the surface's warm light.
-        let shrink = layout.edges[1] / (w < 600 ? 36 : 64)
+        let shrink = layout.edges[0] / (w < 600 ? 56 : 96)
 
         func edge(_ index: Int, shift: CGFloat = 0) -> [CGPoint] {
             let top = layout.tops[index], rise = layout.edges[index]
@@ -282,11 +269,12 @@ private struct SnowLayers: View {
             return path
         }
 
-        for index in 0..<5 {
+        let last = count - 1
+        for index in 0...last {
             let top = layout.tops[index], rise = layout.edges[index]
             let surface = index == 0
             // Down to the lowest point of the next layer's edge, which covers the rest.
-            let bottom = index < 4 ? min(height, layout.tops[index + 1] + layout.edges[index + 1]) : height
+            let bottom = index < last ? min(height, layout.tops[index + 1] + layout.edges[index + 1]) : height
             let tall = bottom - top
             let points = edge(index)
             let shape = closed(points, to: bottom)
@@ -329,7 +317,7 @@ private struct SnowLayers: View {
                          style: StrokeStyle(lineWidth: surface ? 8 : 6, lineJoin: .round))
             // 8. The shadow the next edge casts on this layer: ten copies of
             // it, each a little higher and fainter in sum, so it fades smoothly.
-            if index < 4 {
+            if index < last {
                 let next = layout.edges[index + 1]
                 for step in 1...10 {
                     let lift = 0.6 * pow(CGFloat(step) / 10, 1.6) * next

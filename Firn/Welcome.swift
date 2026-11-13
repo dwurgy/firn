@@ -35,8 +35,7 @@ struct WelcomeLift: ViewModifier {
 
 /// Behind the real window while the welcome is open: Sunrise's sky, sun,
 /// and flakes, "Welcome in.", and the warm shadow the window casts as it
-/// rises. The sun rises with the window (it waits low, just peeking, all
-/// through the welcome). All of it stays under the window until the finish lowers it;
+/// rises. All of it stays under the window until the finish lowers it;
 /// the snow stays in front, in the welcome (`FirstLightScene.Part`).
 struct WelcomeBackdrop: View {
     let window: WindowModel
@@ -46,7 +45,7 @@ struct WelcomeBackdrop: View {
             let finishing = window.welcomeFinish != nil
             GeometryReader { proxy in
                 ZStack(alignment: .top) {
-                    FirstLightScene(spaceColor: "glacier", part: .back, sunUp: finishing)
+                    FirstLightScene(spaceColor: "glacier", part: .back)
                     // "Welcome in." sits in the sky; the window rises over it.
                     Text("Welcome in.")
                         .font(BrandFont.gooper(44))
@@ -126,7 +125,7 @@ private struct Welcome: View {
             // space's color from the space step on. At the finish only the
             // snow stays here, in front of the rising window; the sky is
             // behind it (`WelcomeBackdrop`).
-            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front, sunUp: false)
+            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front)
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             GeometryReader { proxy in

@@ -2,8 +2,12 @@
 
 The logo and app icons, made with Claude Design. The mark is a firn crystal
 ("Drift · Lean"): an abstract, hand-shaped crystal of settled alpine snow,
-with six soft, uneven arms. The wordmark is "firn" in Fraunces (soft),
-converted to outlines.
+with six soft, uneven arms. The wordmark is "firn" in Gooper Condensed
+Medium, converted to outlines (2026-11-13; it was Fraunces). The lockups
+`svg/firn-lockup.svg` and `svg/firn-lockup-on-dark.svg` are the Gooper ones,
+the same files as the website's `public/assets/`. The other wordmark and
+lockup SVGs here still have the old Fraunces "firn": don't use them until
+they're replaced.
 
 **Everything in this folder is final.** Earlier explorations (other marks,
 other fonts) are kept only in the Firn design system, never here. If a file
@@ -24,13 +28,14 @@ Firn uses the **Glacier** app icon (copies live in `../Firn/`):
 - macOS 14 and 15: the Glacier PNGs in `app-icons/`, in the app's asset
   catalog.
 
-The mark (`svg/firn-mark.svg`) is for First light moments such as the empty
+The mark (`svg/firn-mark.svg`) is for Sunrise moments such as the empty
 page. The `-small` SVGs are versions drawn for tiny sizes; use them at 48pt
 and under.
 
 Colors: Glacier `#6E98B2` (mark) on frame sand `#E9E3DA`, page white
-`#FBFAF8`, ink `#241F1B`, and dark frame `#3A3734`. Type: Fraunces (soft) for
-the wordmark and big headings only; the system font for everything else.
+`#FBFAF8`, ink `#241F1B`, and dark frame `#3A3734`. Type: the wordmark is
+Gooper Condensed Medium (outlines only); headlines follow `BRAND.md`; the
+system font for everything else.
 
 The website's favicons live with the website (`dwurgy/firn-site`); the
 Windows icons left with the Electron app (`dwurgy/firn-legacy`).

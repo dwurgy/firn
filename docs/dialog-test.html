@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firn dialog test</title>
+<style>
+  body { font: 17px -apple-system, sans-serif; margin: 24px; color: #241F1B; background: #FBFAF8; }
+  button { font: inherit; display: block; width: 100%; margin: 10px 0; padding: 12px; border-radius: 10px;
+           border: 1px solid #9D9389; background: #E9E3DA; color: #241F1B; }
+  #out { margin-top: 20px; padding: 12px; border-radius: 10px; background: #E9E3DA; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<h1>Dialogs</h1>
+<p>Each button asks Firn to show a page's alert. The answer shows below.</p>
+<button onclick="alert('An alert from this page.'); say('alert closed')">alert()</button>
+<button onclick="say('confirm: ' + confirm('Delete this?'))">confirm()</button>
+<button onclick="say('prompt: ' + JSON.stringify(prompt('Your name?', 'David')))">prompt()</button>
+<button onclick="for (let i = 0; i < 5; i++) alert('Alert ' + (i + 1) + ' of 5'); say('five done')">Five alerts in a row</button>
+<div id="out"></div>
+<script>
+function say(t) { document.getElementById('out').textContent = t; }
+// For the Simulator, where taps don't reach pages: ?run=0 to ?run=3 presses that button on load.
+const run = new URLSearchParams(location.search).get('run');
+if (run !== null) setTimeout(() => document.querySelectorAll('button')[Number(run)]?.click(), 800);
+</script>
+</body>
+</html>

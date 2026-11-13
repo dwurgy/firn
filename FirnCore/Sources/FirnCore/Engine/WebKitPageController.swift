@@ -4,6 +4,8 @@ import WebKit
 #if os(macOS)
 import AppKit
 import UniformTypeIdentifiers
+#else
+import UIKit
 #endif
 
 /// A page backed by WKWebView. Everything WebKit-specific stays in this file
@@ -1061,8 +1063,7 @@ extension WebKitPageController {
     ) {
         guard let window = webView.window, !dialogsBlocked, !isShowingPanel else { return done(nil) }
         let alert = NSAlert()
-        let host = frame.securityOrigin.host
-        alert.messageText = host.isEmpty ? "This page says" : "\(host) says"
+        alert.messageText = Self.dialogTitle(for: frame)
         alert.informativeText = Self.clipped(message)
         for title in buttons { alert.addButton(withTitle: title) }
         alert.accessoryView = field
@@ -1127,10 +1128,107 @@ extension WebKitPageController {
             }
         }
     }
+}
+#endif
 
-    /// Pages decide what these say; a few screens' worth is plenty.
-    private static func clipped(_ text: String) -> String {
+extension WebKitPageController {
+    /// Pages decide what alerts say; a few screens' worth is plenty.
+    fileprivate static func clipped(_ text: String) -> String {
         text.count > 2000 ? String(text.prefix(2000)) + "…" : text
+    }
+
+    /// Heads an alert with the site that asked: the frame's real origin, so
+    /// an embedded frame can't pass itself off as the page.
+    fileprivate static func dialogTitle(for frame: WKFrameInfo) -> String {
+        let host = frame.securityOrigin.host
+        return host.isEmpty ? "This page says" : "\(host) says"
+    }
+}
+
+#if os(iOS)
+// Without these, WebKit on iOS answers at once and shows nothing: confirm()
+// is always Cancel, so a site's "Delete this?" could never be said yes to.
+// iOS's own alert, as Safari's, with the Mac's rules (CLAUDE.md, Security).
+extension WebKitPageController {
+    /// `alert()`.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        showDialog(message, from: frame, cancel: false) { _ in completionHandler() }
+    }
+
+    /// `confirm()`: true only if OK was tapped.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        showDialog(message, from: frame) { answer in completionHandler(answer != nil) }
+    }
+
+    /// `prompt()`: the typed text, or nil for Cancel.
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        showDialog(prompt, from: frame, field: Self.clipped(defaultText ?? "")) { answer in
+            completionHandler(answer)
+        }
+    }
+
+    /// One alert at a time, over whatever Firn is showing. `done` gets nil
+    /// for Cancel, otherwise the field's text (empty without a field). A
+    /// page that isn't on screen, or one told to stop, is answered Cancel
+    /// without asking, so nothing jumps out.
+    private func showDialog(
+        _ message: String,
+        from frame: WKFrameInfo,
+        cancel: Bool = true,
+        field: String? = nil,
+        done: @escaping @MainActor (String?) -> Void
+    ) {
+        guard !dialogsBlocked, !isShowingPanel,
+              let root = webView.window?.rootViewController else { return done(nil) }
+        var top = root
+        while let shown = top.presentedViewController { top = shown }
+        // Something on its way out can't present; don't ask then.
+        guard !top.isBeingDismissed else { return done(nil) }
+
+        let alert = UIAlertController(
+            title: Self.dialogTitle(for: frame), message: Self.clipped(message), preferredStyle: .alert)
+        if let field { alert.addTextField { $0.text = field } }
+        // Called once, whichever button ends it.
+        var answered = false
+        let finish: @MainActor (String?) -> Void = { [weak self] answer in
+            guard !answered else { return }
+            answered = true
+            self?.isShowingPanel = false
+            done(answer)
+        }
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak alert] _ in
+            finish(alert?.textFields?.first?.text ?? "")
+        })
+        if cancel {
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish(nil) })
+        }
+        dialogsShown += 1
+        // From the second one on, a way out of a page that keeps asking.
+        if dialogsShown > 1 {
+            alert.addAction(UIAlertAction(title: "Don’t let this page show more", style: .default) {
+                [weak self] _ in
+                self?.dialogsBlocked = true
+                finish(nil)
+            })
+        }
+        isShowingPanel = true
+        top.present(alert, animated: true)
     }
 }
 #endif

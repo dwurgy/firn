@@ -33,9 +33,10 @@ struct WelcomeLift: ViewModifier {
     }
 }
 
-/// Behind the real window while the welcome is open: First light's sky,
-/// sun, and flakes, "Welcome in.", and the warm shadow the window casts as
-/// it rises. All of it stays under the window until the finish lowers it;
+/// Behind the real window while the welcome is open: Sunrise's sky, sun,
+/// and flakes, "Welcome in.", and the warm shadow the window casts as it
+/// rises. The sun rises with the window (it waits low, just peeking, all
+/// through the welcome). All of it stays under the window until the finish lowers it;
 /// the snow stays in front, in the welcome (`FirstLightScene.Part`).
 struct WelcomeBackdrop: View {
     let window: WindowModel
@@ -45,11 +46,11 @@ struct WelcomeBackdrop: View {
             let finishing = window.welcomeFinish != nil
             GeometryReader { proxy in
                 ZStack(alignment: .top) {
-                    FirstLightScene(spaceColor: "glacier", part: .back, sunRises: finishing, oldSky: true)
+                    FirstLightScene(spaceColor: "glacier", part: .back, sunUp: finishing)
                     // "Welcome in." sits in the sky; the window rises over it.
                     Text("Welcome in.")
                         .font(Theme.fraunces(44, weight: 360))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(Theme.Welcome.skyInk)
                         .padding(.top, proxy.size.height * 0.15)
                         .opacity(finishing ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.2), value: finishing)
@@ -71,7 +72,7 @@ struct WelcomeBackdrop: View {
     }
 }
 
-/// The welcome, the first time Firn opens (and from Help): the First light
+/// The welcome, the first time Firn opens (and from Help): the Sunrise
 /// scene and a few short steps. The steps and words come from the Electron
 /// app (docs/electron-welcome), updated for the native Firn (plan in
 /// docs/HISTORY.md, Phase 6); the card, buttons, and controls are the Mac's
@@ -125,7 +126,7 @@ private struct Welcome: View {
             // space's color from the space step on. At the finish only the
             // snow stays here, in front of the rising window; the sky is
             // behind it (`WelcomeBackdrop`).
-            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front, oldSky: true)
+            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front, sunUp: false)
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             GeometryReader { proxy in
@@ -139,16 +140,21 @@ private struct Welcome: View {
                         card
                     }
                 }
-                // Hello sits a little above the middle, clear of the snow. The
-                // cards hang from one fixed line, so the dots and titles stay
-                // put while each step's card grows or shrinks below them.
+                // Hello sits above the middle, on the dark part of the sky:
+                // its light words would fade into the warm band low on it.
+                // The cards hang from one fixed line, so the dots and titles
+                // stay put while each step's card grows or shrinks below them.
                 .padding(EdgeInsets(top: step == .hello ? 24 : max(24, proxy.size.height * 0.18),
-                                    leading: 24, bottom: 134, trailing: 24))
+                                    leading: 24,
+                                    bottom: step == .hello ? max(134, proxy.size.height * 0.32) : 134,
+                                    trailing: 24))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: step == .hello ? .center : .top)
             }
             .modifier(FinishFade(finishing: finish != nil))
             // Faded, it isn't there for VoiceOver either.
             .accessibilityHidden(finish != nil)
+            // On the snow, not the sky: the ordinary glass button reads on
+            // snow in both looks.
             Button("Skip setup", action: finishWelcome)
                 .modifier(WelcomeButton(prominent: false))
                 .controlSize(.large)
@@ -229,7 +235,10 @@ private struct Welcome: View {
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
         .background {
+            // Paper under the glass, so the card reads as paper over the
+            // dark sky (`Theme.Welcome.cardBase`).
             CommandBarGlass(shape: shape, color: Theme.spaceColor(colorName))
+                .background { shape.fill(Theme.Welcome.cardBase) }
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: colorName)
         }
         .clipShape(shape)
@@ -297,7 +306,7 @@ private enum WelcomeStep: CaseIterable {
 
 // MARK: - Steps
 
-/// Hello: no card, just the mark and the words.
+/// Hello: no card, just the mark and the words, light on the sky.
 private struct HelloScreen: View {
     let next: () -> Void
 
@@ -316,11 +325,12 @@ private struct HelloScreen: View {
             Text("Welcome to Firn")
                 .font(Theme.fraunces(64, weight: 360))
                 .tracking(-0.9)
+                .foregroundStyle(Theme.Welcome.skyInk)
                 .accessibilityAddTraits(.isHeader)
             Text("A calm place for the web. Ads and trackers are blocked, and Firn never tracks you. Let’s set up a few things; it takes a minute, and you can change any of it later.")
                 .font(.system(size: 17))
                 .lineSpacing(4)
-                .foregroundStyle(Theme.muted)
+                .foregroundStyle(Theme.Welcome.skyMuted)
                 .frame(maxWidth: 480)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 16)
@@ -329,7 +339,7 @@ private struct HelloScreen: View {
                 // Wide enough to answer the big heading above it.
                 Text("Let’s Begin").frame(minWidth: 130)
             }
-                .modifier(WelcomeButton(prominent: true))
+                .modifier(SkyButton(prominent: true))
                 .controlSize(.extraLarge)
                 .keyboardShortcut(.defaultAction)
         }
@@ -910,7 +920,8 @@ private struct StepHeading: View {
     }
 }
 
-/// Where the step is: a dot for each, as a page control draws them.
+/// Where the step is: a dot for each, as a page control draws them, light
+/// on the sky above the card.
 private struct StepDots: View {
     let count: Int
     let current: Int
@@ -920,8 +931,8 @@ private struct StepDots: View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { index in
                 Circle()
-                    .fill(Theme.ink)
-                    .opacity(index == current ? 0.7 : 0.22)
+                    .fill(Theme.Welcome.skyInk)
+                    .opacity(index == current ? 0.85 : 0.3)
                     .frame(width: 7, height: 7)
             }
         }
@@ -1102,3 +1113,68 @@ private struct CapsuleButton: View {
             .animation(.easeOut(duration: 0.15), value: hovering)
     }
 }
+
+/// Buttons on the blue-hour sky, the same in both looks (BRAND.md, "Buttons,
+/// links and focus"): the main one a light pill with dark words, weight 600;
+/// the rest the site's small pill (a faint light fill and edge, light
+/// words). Not the system's glass: over the dark sky in light mode it would
+/// keep dark words. The focus ring is the brand's light frost, 3pt.
+private struct SkyButton: ViewModifier {
+    let prominent: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .buttonStyle(SkyButtonStyle(prominent: prominent))
+            .focusEffectDisabled()
+    }
+}
+
+private struct SkyButtonStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        SkyButtonLabel(configuration: configuration, prominent: prominent)
+    }
+}
+
+private struct SkyButtonLabel: View {
+    let configuration: ButtonStyleConfiguration
+    let prominent: Bool
+    @State private var hovering = false
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.isFocused) private var isFocused
+
+    private var height: CGFloat {
+        switch controlSize {
+        case .extraLarge: 44
+        case .large: 32
+        default: 26
+        }
+    }
+
+    var body: some View {
+        let shape = Capsule()
+        configuration.label
+            .font(.system(size: controlSize == .extraLarge ? 15 : 13, weight: prominent ? .semibold : .medium))
+            .foregroundStyle(prominent ? Theme.Welcome.skyButtonText : Theme.Welcome.skyInk)
+            .padding(.horizontal, height * 0.55)
+            .frame(height: height)
+            .background {
+                if prominent {
+                    shape.fill(Theme.Welcome.skyButton.opacity(configuration.isPressed ? 0.82 : hovering ? 0.92 : 1))
+                } else {
+                    shape.fill(configuration.isPressed ? Theme.Welcome.skyPillPress : hovering ? Theme.Welcome.skyPillHover : Theme.Welcome.skyPill)
+                        .overlay { shape.strokeBorder(Theme.Welcome.skyPillEdge, lineWidth: 1) }
+                }
+            }
+            .overlay {
+                if isFocused {
+                    shape.strokeBorder(Theme.Welcome.skyFocus, lineWidth: 3).padding(-5)
+                }
+            }
+            .contentShape(shape)
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.2), value: hovering)
+    }
+}
+

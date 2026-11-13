@@ -250,23 +250,10 @@ enum Theme {
 
     // MARK: First light
 
-    /// The welcome's and the empty page's scene (docs/electron-welcome/styles.css,
-    /// "First light"). Dark is "blue hour". The sky and sun are always Firn's
-    /// own; only the snow takes the space's color.
+    /// The welcome's and the empty page's scene, "Sunrise" (BRAND.md;
+    /// docs/SUNRISE-PLAN.md). Dark is "blue hour". The sky and sun are
+    /// always Firn's own; only the snow takes the space's color.
     enum FirstLight {
-        static let skyTop = Color(light: 0xF2F5F6, dark: 0x2E2F31)
-        static let cool = Color(light: 0x9DB7C8, lightOpacity: 0.34, dark: 0x6E98B2, darkOpacity: 0.24)
-        static let warm = Color(light: 0xF2C4A0, lightOpacity: 0.42, dark: 0xD69268, darkOpacity: 0.16)
-        static let warm2 = Color(light: 0xECCEBA, lightOpacity: 0.28, dark: 0xA0786E, darkOpacity: 0.10)
-        static let sun = Color(light: 0xF4C298, lightOpacity: 0.62, dark: 0xD68C60, darkOpacity: 0.32)
-        static let sunMid = Color(light: 0xF4C298, lightOpacity: 0.22, dark: 0xD68C60, darkOpacity: 0.10)
-        /// The flakes: Firn's small mark in Glacier, faint, in both looks.
-        #if os(macOS)
-        static let flake = NSColor(hex: 0x7F9CB0, opacity: 1)
-        #else
-        static let flake = UIColor(hex: 0x7F9CB0, opacity: 1)
-        #endif
-        static let flakeOpacity: Float = 0.22
         /// The paper grain: multiplied in light, soft light in dark.
         static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
 
@@ -373,13 +360,13 @@ enum Theme {
             let sunDrop: CGFloat
         }
 
-        /// Sunrise's flakes on the dark sky: Glow's glacier, faint.
+        /// The flakes on the dark sky: Glow's glacier, faint, in both looks.
         #if os(macOS)
-        static let skyFlake = NSColor(hex: 0x9DB7C8, opacity: 1)
+        static let flake = NSColor(hex: 0x9DB7C8, opacity: 1)
         #else
-        static let skyFlake = UIColor(hex: 0x9DB7C8, opacity: 1)
+        static let flake = UIColor(hex: 0x9DB7C8, opacity: 1)
         #endif
-        static let skyFlakeOpacity: Float = 0.3
+        static let flakeOpacity: Float = 0.3
 
         /// One color, the same in both looks.
         private static func plain(_ hex: UInt32, _ opacity: Double = 1) -> Color {
@@ -388,15 +375,38 @@ enum Theme {
         }
     }
 
-    /// The welcome's own colors over First light; its card is the command
+    /// The welcome's own colors over Sunrise; its card is the command
     /// bar's glass (`CommandBarGlass`).
     enum Welcome {
         /// The little window drawings' bars.
         static let pill = Color(light: 0xFFFFFF, lightOpacity: 0.6, dark: 0xFFFAF5, darkOpacity: 0.12)
-        /// The Hello screen's mark: glacier, lighter at the top.
-        static let markTop = Color(light: 0x9DB7C8, dark: 0x9DB7C8)
-        static let markBottom = Color(light: 0x6E98B2, dark: 0x6E98B2)
-        static let markShadow = Color(light: 0x3C5A6E, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.35)
+        /// The Hello screen's mark: the on-dark lockup's sand (BRAND.md,
+        /// "Logo"), a touch lighter at the top.
+        static let markTop = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
+        static let markBottom = Color(light: 0xE9E3DA, dark: 0xE9E3DA)
+        static let markShadow = Color(light: 0x0B0F18, lightOpacity: 0.35, dark: 0x000000, darkOpacity: 0.35)
+
+        // Words and buttons on the blue-hour sky: light in both looks
+        // (BRAND.md, "Text on the dark sky" and "Buttons, links and focus").
+        /// Headlines and words on the sky (15:1).
+        static let skyInk = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
+        /// Muted words on the sky (11:1).
+        static let skyMuted = Color(light: 0xD4CDC5, dark: 0xD4CDC5)
+        /// The main button on the sky: a light pill, dark words.
+        static let skyButton = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
+        static let skyButtonText = Color(light: 0x2B2826, dark: 0x2B2826)
+        /// The small pill on the sky (the site's eyebrow): a faint light
+        /// fill, a slightly stronger edge, light words.
+        static let skyPill = Color(light: 0xF5F1EC, lightOpacity: 0.1, dark: 0xF5F1EC, darkOpacity: 0.1)
+        static let skyPillHover = Color(light: 0xF5F1EC, lightOpacity: 0.16, dark: 0xF5F1EC, darkOpacity: 0.16)
+        static let skyPillPress = Color(light: 0xF5F1EC, lightOpacity: 0.22, dark: 0xF5F1EC, darkOpacity: 0.22)
+        static let skyPillEdge = Color(light: 0xF5F1EC, lightOpacity: 0.18, dark: 0xF5F1EC, darkOpacity: 0.18)
+        /// The keyboard focus ring on the sky (3pt).
+        static let skyFocus = Color(light: 0xCFE3EF, dark: 0xCFE3EF)
+        /// Paper under the steps' card, so its glass reads as paper over the
+        /// dark sky instead of taking the navy in (the glass alone lets about
+        /// 40% through).
+        static let cardBase = Color(light: 0xFBFAF8, lightOpacity: 0.55, dark: 0x2B2826, darkOpacity: 0.5)
     }
 
     // MARK: Sizes

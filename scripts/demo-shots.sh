@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO="${0:A:h:h}"
-ALL=(hero work trip command lookout split tidied history empty peek)
+ALL=(hero work trip command lookout split tidied history empty peek welcome)
 SHOTS=("${ALL[@]}")
 # Firn's sandbox lets it write only here; the file is removed after each shot.
 READY="$HOME/Downloads/.firn-demo-shot"

@@ -7,6 +7,7 @@ import Testing
 private final class FakeNamer: GroupNamer, @unchecked Sendable {
     private let lock = NSLock()
     private var _asked: [[GroupNamingTab]] = []
+    private var _currents: [String?] = []
     let answer: String?
     let isAvailable: Bool
 
@@ -16,9 +17,14 @@ private final class FakeNamer: GroupNamer, @unchecked Sendable {
     }
 
     var asked: [[GroupNamingTab]] { lock.withLock { _asked } }
+    /// The current name it was given each time (nil for a new group).
+    var currents: [String?] { lock.withLock { _currents } }
 
-    func name(for tabs: [GroupNamingTab]) async -> String? {
-        lock.withLock { _asked.append(tabs) }
+    func name(for tabs: [GroupNamingTab], current: String?) async -> String? {
+        lock.withLock {
+            _asked.append(tabs)
+            _currents.append(current)
+        }
         return answer ?? tabs.map(\.site).joined(separator: " ")
     }
 }
@@ -31,6 +37,7 @@ struct GroupNamingTests {
         let store = BrowserStore(spaces: [space], makePage: { FakePage(dataStoreID: $0) })
         store.groupNamer = namer
         store.groupNameWait = .seconds(60)
+        store.groupRenamePause = .milliseconds(20)
         return store
     }
 
@@ -179,6 +186,107 @@ struct GroupNamingTests {
         let group = try #require(store.newGroup(with: tab))
         await settle()
         #expect(name(of: group.id, in: store) == "New Group")
+    }
+
+    // MARK: - Naming again (David, 2026-11-13)
+
+    /// A group of a and b, named "b.example a.example" by the fake namer.
+    private func namedGroup(_ store: BrowserStore, _ namer: FakeNamer) async throws -> (TabGroup, [FirnCore.Tab]) {
+        let tabs = [store.openTab(url("a")), store.openTab(url("b"))]
+        try page(of: tabs[0]).commit(url("a"), title: "Alpha")
+        try page(of: tabs[1]).commit(url("b"), title: "Bravo")
+        let group = try #require(store.newGroup(with: tabs[1]))
+        store.group(tabs[0], with: tabs[1])
+        await settle { namer.asked.count == 1 && name(of: group.id, in: store) != "New Group" }
+        #expect(name(of: group.id, in: store) == "b.example a.example")
+        return (group, tabs)
+    }
+
+    private func titled(_ store: BrowserStore, _ host: String) throws -> FirnCore.Tab {
+        let tab = store.openTab(url(host))
+        try page(of: tab).commit(url(host), title: host.capitalized)
+        return tab
+    }
+
+    @Test func aTabJoiningNamesTheGroupAgainWithItsCurrentName() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, _) = try await namedGroup(store, namer)
+        store.move(try titled(store, "c"), toEndOf: group)
+        await settle { namer.asked.count == 2 && name(of: group.id, in: store) != "b.example a.example" }
+        #expect(name(of: group.id, in: store) == "b.example a.example c.example")
+        #expect(namer.currents == [nil, "b.example a.example"])
+    }
+
+    @Test func aTabLeavingNamesTheGroupAgain() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, tabs) = try await namedGroup(store, namer)
+        store.takeOutOfGroup(tabs[0])
+        await settle { namer.asked.count == 2 && name(of: group.id, in: store) != "b.example a.example" }
+        #expect(name(of: group.id, in: store) == "b.example")
+    }
+
+    @Test func aGroupNamedByHandNeverChanges() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, _) = try await namedGroup(store, namer)
+        store.rename(group, to: "Mine")
+        store.move(try titled(store, "c"), toEndOf: group)
+        await settle()
+        #expect(name(of: group.id, in: store) == "Mine")
+        #expect(namer.asked.count == 1)
+    }
+
+    @Test func quickChangesAskOnce() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, _) = try await namedGroup(store, namer)
+        store.move(try titled(store, "c"), toEndOf: group)
+        store.move(try titled(store, "d"), toEndOf: group)
+        await settle { namer.asked.count == 2 && name(of: group.id, in: store) != "b.example a.example" }
+        await settle()
+        #expect(namer.asked.count == 2)
+        // Both newcomers in the one ask (names keep three words).
+        #expect(namer.asked.last?.map(\.site) == ["b.example", "a.example", "c.example", "d.example"])
+    }
+
+    @Test func aRenameByHandWhileAskingWins() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, _) = try await namedGroup(store, namer)
+        store.move(try titled(store, "c"), toEndOf: group)
+        await settle { namer.asked.count == 2 }
+        store.rename(group, to: "Mine")
+        await settle()
+        #expect(name(of: group.id, in: store) == "Mine")
+    }
+
+    @Test func groupsFromBeforeCountAsNamedByHand() async throws {
+        let namer = FakeNamer()
+        let store = makeStore(namer: namer)
+        let (group, _) = try await namedGroup(store, namer)
+        var session = store.session(sidebarWidth: 260, sidebarCollapsed: false)
+        // Saved as not named by hand…
+        #expect(session.groups.first?.namedByHand == false)
+        // …and a file from before the mark existed.
+        session.groups[0].namedByHand = nil
+        let restored = BrowserStore(restoring: session, defaultSpaces: [space], makePage: { FakePage(dataStoreID: $0) })
+        let restoredNamer = FakeNamer()
+        restored.groupNamer = restoredNamer
+        restored.groupRenamePause = .milliseconds(20)
+        let restoredGroup = try #require(restored.tabGroups.first { $0.id == group.id })
+        #expect(restoredGroup.namedByHand)
+        restored.move(restored.openTab(url("c")), toEndOf: restoredGroup)
+        await settle()
+        #expect(restoredNamer.asked.isEmpty)
+    }
+
+    @Test func theRequestOffersTheCurrentNameOnlyWhenThereIsOne() {
+        let tabs = [GroupNamingTab(title: "Soup", site: "food.example")]
+        #expect(GroupNaming.request(tabs, current: nil) == "Tabs:\n- Soup (food.example)")
+        #expect(GroupNaming.request(tabs, current: "New Group") == "Tabs:\n- Soup (food.example)")
+        #expect(GroupNaming.request(tabs, current: "Recipes").contains("\"Recipes\""))
     }
 
     // MARK: - Cleaning

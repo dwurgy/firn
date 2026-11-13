@@ -67,12 +67,16 @@ public struct SyncedGroup: Codable, Equatable, Sendable {
     public var id: UUID
     public var spaceID: UUID
     public var name: String
+    /// Named by the person, so no device renames it from its tabs. Missing
+    /// counts as named by hand.
+    public var namedByHand: Bool?
     public var changedAt: Date
 
-    public init(id: UUID, spaceID: UUID, name: String, changedAt: Date) {
+    public init(id: UUID, spaceID: UUID, name: String, namedByHand: Bool? = nil, changedAt: Date) {
         self.id = id
         self.spaceID = spaceID
         self.name = name
+        self.namedByHand = namedByHand
         self.changedAt = changedAt
     }
 }

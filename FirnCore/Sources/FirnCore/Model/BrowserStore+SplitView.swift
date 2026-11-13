@@ -53,7 +53,11 @@ extension BrowserStore {
         incoming.groupID = anchor.groupID
         let at = tabs.firstIndex { $0.id == anchor.id }!
         tabs.insert(incoming, at: side == .left ? at : at + 1)
-        if oldGroupID != anchor.groupID { endIfEmpty(oldGroupID) }
+        if oldGroupID != anchor.groupID {
+            endIfEmpty(oldGroupID)
+            membersChanged(anchor.groupID)
+            membersChanged(oldGroupID)
+        }
         let split = SplitGroup(spaceID: anchor.spaceID)
         splits.append(split)
         anchor.splitID = split.id

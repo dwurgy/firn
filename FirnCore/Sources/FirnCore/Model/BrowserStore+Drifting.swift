@@ -37,6 +37,7 @@ extension BrowserStore {
         let groupID = tab.groupID
         tab.groupID = nil
         endIfEmpty(groupID)
+        membersChanged(groupID)
         tab.sleep()
         tab.place = .drifted
         tab.driftedAt = now()

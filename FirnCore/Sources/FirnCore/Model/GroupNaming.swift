@@ -15,13 +15,16 @@ public struct GroupNamingTab: Sendable, Hashable {
     }
 }
 
-/// Names a new group from its tabs (David, 2026-11-06: always on, on the
-/// device only). Returns nil when it can't, and the group keeps "New Group".
+/// Names a group from its tabs (David, 2026-11-06: always on, on the
+/// device only). Returns nil when it can't, and the group keeps its name.
 public protocol GroupNamer: Sendable {
     /// Whether it can name a group right now (Apple Intelligence may be
     /// off). When it can't, a new group isn't shown as being named.
     var isAvailable: Bool { get }
-    func name(for tabs: [GroupNamingTab]) async -> String?
+    /// `current` is the group's name when it's being named again (tabs
+    /// joined or left): the namer keeps it unless it no longer fits, so
+    /// names don't wander (David, 2026-11-13). Nil for a new group.
+    func name(for tabs: [GroupNamingTab], current: String?) async -> String?
 }
 
 public extension GroupNamer {
@@ -111,7 +114,7 @@ struct OnDeviceGroupNamer: GroupNamer {
 
     var isAvailable: Bool { SystemLanguageModel.default.isAvailable }
 
-    func name(for tabs: [GroupNamingTab]) async -> String? {
+    func name(for tabs: [GroupNamingTab], current: String?) async -> String? {
         let model = SystemLanguageModel.default
         guard model.isAvailable else { return nil }
         let tabs = GroupNaming.prepared(tabs)
@@ -119,7 +122,7 @@ struct OnDeviceGroupNamer: GroupNamer {
         let session = LanguageModelSession(model: model, instructions: Self.instructions)
         do {
             let response = try await session.respond(
-                to: "Tabs:\n" + GroupNaming.listing(tabs),
+                to: GroupNaming.request(tabs, current: current),
                 generating: Answer.self,
                 options: GenerationOptions(temperature: 0.3, maximumResponseTokens: 24)
             )
@@ -134,6 +137,16 @@ struct OnDeviceGroupNamer: GroupNamer {
 #endif
 
 extension GroupNaming {
+    /// What the namer is asked: the tabs, and when it's named again, its
+    /// current name to keep if it still fits. The current name was this
+    /// device's own answer (cleaned), never a page's words.
+    static func request(_ tabs: [GroupNamingTab], current: String?) -> String {
+        let listing = "Tabs:\n" + listing(tabs)
+        guard let current = current.flatMap(cleaned) else { return listing }
+        return listing + "\n\nThe group is called \"\(current)\" now. "
+            + "Reply with that same name if it still fits these tabs; only if it no longer does, reply with a better one."
+    }
+
     /// A new group not named yet: waiting for its tabs' titles, or asking.
     enum State: Equatable {
         case waiting

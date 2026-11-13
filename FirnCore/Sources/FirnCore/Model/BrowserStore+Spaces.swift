@@ -60,7 +60,7 @@ extension BrowserStore {
                 ))
             }
             for importedGroup in imported.groups {
-                let group = TabGroup(spaceID: space.id, name: importedGroup.name)
+                let group = TabGroup(spaceID: space.id, name: importedGroup.name, namedByHand: true)
                 groups.append(group)
                 for site in importedGroup.sites {
                     tabs.append(Tab(spaceID: space.id, url: site.url, title: site.title, groupID: group.id, lastActiveAt: now()))

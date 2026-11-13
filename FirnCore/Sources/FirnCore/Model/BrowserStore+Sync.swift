@@ -63,7 +63,10 @@ extension BrowserStore {
             )
         }
         for group in groups where !group.tidies {
-            fields.groups[group.id] = SyncedGroup(id: group.id, spaceID: group.spaceID, name: group.name, changedAt: .distantPast)
+            fields.groups[group.id] = SyncedGroup(
+                id: group.id, spaceID: group.spaceID, name: group.name, namedByHand: group.namedByHand,
+                changedAt: .distantPast
+            )
             let members = tabs.filter { $0.groupID == group.id && $0.place == .open }
             for (index, tab) in members.enumerated() {
                 guard let url = tab.url.flatMap(Self.webURL) else { continue }
@@ -236,11 +239,15 @@ extension BrowserStore {
             record.name = TabGroup.cleanName(incoming.name) ?? groups[index].name
             groups[index].name = record.name
             groups[index].tidies = false
+            groups[index].namedByHand = incoming.namedByHand ?? true
+            // Another device's name wins; this one doesn't ask again for it.
             unnamedGroups[incoming.id] = nil
+            renameRounds[incoming.id] = nil
         } else {
             record.name = TabGroup.cleanName(incoming.name) ?? TabGroup.defaultName
             // It shows once its first tab arrives.
-            groups.append(TabGroup(id: incoming.id, spaceID: incoming.spaceID, name: record.name))
+            groups.append(TabGroup(id: incoming.id, spaceID: incoming.spaceID, name: record.name,
+                                   namedByHand: incoming.namedByHand ?? true))
         }
         state.groups[incoming.id] = record
         return true

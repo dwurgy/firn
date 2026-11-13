@@ -62,6 +62,7 @@ extension BrowserStore {
             tab.driftedAt = nil
             if let groupID = tab.groupID, let group = groups.first(where: { $0.id == groupID }) {
                 insert(tab, at: position, in: tabs(in: group), fallback: arrivalIndex(in: tab.spaceID))
+                membersChanged(groupID)
             } else {
                 tab.groupID = nil
                 insertInTabList([tab], at: listPosition, fallback: arrivalIndex(in: tab.spaceID))

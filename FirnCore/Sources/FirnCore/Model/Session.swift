@@ -62,16 +62,20 @@ public struct GroupRecord: Codable, Equatable, Sendable {
     /// True for a group a link made that isn't kept by hand yet; missing
     /// (nil) otherwise, and in files from before it.
     public var tidies: Bool?
+    /// Whether the person named it. Missing (nil) in files from before
+    /// names followed their tabs, and those groups count as named by hand.
+    public var namedByHand: Bool?
     public var lastChangedAt: Date
 
     public init(id: UUID, spaceID: UUID, name: String, order: Int, folded: Bool, tidies: Bool? = nil,
-                lastChangedAt: Date) {
+                namedByHand: Bool? = nil, lastChangedAt: Date) {
         self.id = id
         self.spaceID = spaceID
         self.name = name
         self.order = order
         self.folded = folded
         self.tidies = tidies
+        self.namedByHand = namedByHand
         self.lastChangedAt = lastChangedAt
     }
 

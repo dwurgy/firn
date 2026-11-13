@@ -22,6 +22,7 @@ extension BrowserStore {
         tab.groupID = nil
         insert(tab, at: position ?? tiles.count, in: tiles)
         endIfEmpty(groupID)
+        membersChanged(groupID)
         return true
     }
 
@@ -84,6 +85,7 @@ extension BrowserStore {
             tab.groupID = group.id
             insert(tab, at: position, in: Self.rows(tabs(in: group)), fallback: index)
             keep(group)
+            membersChanged(group.id)
         } else {
             insertInTabList([tab], at: position, fallback: index)
         }

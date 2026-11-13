@@ -77,6 +77,15 @@ public final class BrowserStore {
     /// saved: a group still waiting at quit keeps its default name.
     /// Observed, so the apps can show a group is being named (`isNaming`).
     var unnamedGroups: [UUID: GroupNaming.State] = [:]
+    /// After tabs join or leave a group, it waits this long for things to
+    /// settle before it's named again, so a few quick changes ask once.
+    @ObservationIgnored var groupRenamePause: Duration = .seconds(2)
+    /// Groups to be named again, by round: a newer change starts a new
+    /// round, and an older round's answer is dropped. Not observed: a
+    /// rename shows no "naming" mark, only the new name.
+    @ObservationIgnored var renameRounds: [UUID: Int] = [:]
+    /// The round each group has already asked in, so it asks only once.
+    @ObservationIgnored var renameAsked: [UUID: Int] = [:]
     @ObservationIgnored var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.

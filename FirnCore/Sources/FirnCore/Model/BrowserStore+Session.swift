@@ -36,7 +36,8 @@ extension BrowserStore {
         let groupRecords = groups.enumerated().map { order, group in
             var record = GroupRecord(
                 id: group.id, spaceID: group.spaceID, name: group.name, order: order,
-                folded: group.folded, tidies: group.tidies ? true : nil, lastChangedAt: stamp
+                folded: group.folded, tidies: group.tidies ? true : nil, namedByHand: group.namedByHand,
+                lastChangedAt: stamp
             )
             if let saved = savedGroupRecords[group.id], saved.sameContent(as: record) {
                 record.lastChangedAt = saved.lastChangedAt
@@ -83,7 +84,7 @@ extension BrowserStore {
             return TabGroup(
                 id: record.id, spaceID: record.spaceID,
                 name: TabGroup.cleanName(record.name) ?? TabGroup.defaultName, folded: record.folded,
-                tidies: record.tidies ?? false
+                tidies: record.tidies ?? false, namedByHand: record.namedByHand ?? true
             )
         }
         let groupSpaces = Dictionary(restoredGroups.map { ($0.id, $0.spaceID) }, uniquingKeysWith: { first, _ in first })

@@ -58,7 +58,9 @@ extension BrowserStore {
     func add(_ tab: Tab, below opener: Tab?, inBackground: Bool) {
         if let opener, let index = lastIndex(withSplitOf: opener) {
             var position: Int
+            var joined: UUID?
             if opener.place == .open {
+                joined = opener.groupID
                 if opener.groupID == nil, opener.splitID == nil {
                     let group = TabGroup(spaceID: opener.spaceID, name: freeGroupName(in: opener.spaceID),
                                          tidies: true)
@@ -77,6 +79,9 @@ extension BrowserStore {
                 position += 1
             }
             tabs.insert(tab, at: position)
+            // A link into a group it was already in (a new group is named
+            // as it's made).
+            membersChanged(joined)
         } else {
             tabs.insert(tab, at: arrivalIndex(in: tab.spaceID))
         }
@@ -153,6 +158,7 @@ extension BrowserStore {
         if tab.place != .basecamp || leavingBasecamp {
             tabs.remove(at: index)
             endIfEmpty(tab.groupID)
+            membersChanged(tab.groupID)
         }
 
         guard activeTabID == tab.id else { return }

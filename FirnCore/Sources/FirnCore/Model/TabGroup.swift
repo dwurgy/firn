@@ -16,13 +16,20 @@ public struct TabGroup: Identifiable, Hashable, Sendable {
     /// or a tab put in it): its tabs tidy away like loose ones, so groups
     /// links make don't keep tabs forever (David, 2026-11-06).
     public internal(set) var tidies: Bool
+    /// Named by the person (Rename), so its name never changes by itself.
+    /// Until then the name follows its tabs: it's asked again as tabs join
+    /// or leave (David, 2026-11-13). Groups from before this count as named
+    /// by hand, so none is renamed by surprise.
+    public internal(set) var namedByHand: Bool
 
-    init(id: UUID = UUID(), spaceID: UUID, name: String = defaultName, folded: Bool = false, tidies: Bool = false) {
+    init(id: UUID = UUID(), spaceID: UUID, name: String = defaultName, folded: Bool = false, tidies: Bool = false,
+         namedByHand: Bool = false) {
         self.id = id
         self.spaceID = spaceID
         self.name = name
         self.folded = folded
         self.tidies = tidies
+        self.namedByHand = namedByHand
     }
 
     /// A name fit to show: one line, trimmed, and not too long; nil if

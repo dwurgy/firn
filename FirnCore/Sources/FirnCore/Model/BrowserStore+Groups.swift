@@ -13,8 +13,8 @@ extension BrowserStore {
         let group = TabGroup(spaceID: tab.spaceID, name: freeGroupName(in: tab.spaceID))
         groups.append(group)
         startNaming(group.id)
+        let oldGroupID = tab.groupID
         movingSplit(of: tab) {
-            let oldGroupID = tab.groupID
             tab.groupID = group.id
             if let oldGroupID {
                 tabs.remove(at: index)
@@ -23,6 +23,7 @@ extension BrowserStore {
                 endIfEmpty(oldGroupID)
             }
         }
+        membersChanged(oldGroupID)
         return group
     }
 
@@ -44,8 +45,8 @@ extension BrowserStore {
     public func move(_ tab: Tab, into group: TabGroup, at position: Int) {
         guard tab.place == .open, tab.spaceID == group.spaceID, groups.contains(where: { $0.id == group.id }),
               let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        let oldGroupID = tab.groupID
         movingSplit(of: tab) {
-            let oldGroupID = tab.groupID
             tabs.remove(at: index)
             tab.groupID = group.id
             insert(tab, at: position, in: Self.rows(tabs(in: group), skipping: tab.splitID), fallback: index)
@@ -53,6 +54,10 @@ extension BrowserStore {
                 endIfEmpty(oldGroupID)
                 keep(group)
             }
+        }
+        if oldGroupID != group.id {
+            membersChanged(group.id)
+            membersChanged(oldGroupID)
         }
     }
 
@@ -100,6 +105,7 @@ extension BrowserStore {
             }
             endIfEmpty(groupID)
         }
+        membersChanged(groupID)
     }
 
     /// Where a dragged everyday tab lands: `position` among a group's tabs,
@@ -123,8 +129,11 @@ extension BrowserStore {
               let name = TabGroup.cleanName(name) else { return }
         groups[index].name = name
         groups[index].tidies = false
-        // Named by hand: the namer's answer, if one comes, is dropped.
+        groups[index].namedByHand = true
+        // Named by hand: the namer's answer, if one comes, is dropped, and
+        // it's never named again.
         unnamedGroups[group.id] = nil
+        renameRounds[group.id] = nil
     }
 
     public func setFolded(_ group: TabGroup, _ folded: Bool) {
@@ -229,7 +238,7 @@ extension BrowserStore {
         unnamedGroups[groupID] = .asking
         let named = members.map { GroupNamingTab(title: $0.savedTitle, site: $0.url?.host() ?? "") }
         Task { @MainActor [weak self] in
-            let name = await namer.name(for: named)
+            let name = await namer.name(for: named, current: nil)
             self?.finishNaming(groupID, with: name)
         }
     }
@@ -241,6 +250,68 @@ extension BrowserStore {
               let answer, let name = GroupNaming.cleaned(answer),
               let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
         groups[index].name = freeGroupName(in: groups[index].spaceID, base: name, for: groupID)
+    }
+
+    // MARK: - Naming groups again
+
+    /// A tab joined or left a group on this device. Unless the person named
+    /// it, it's named again from its tabs once things settle: after
+    /// `groupRenamePause`, when every tab has its title, or with what it has
+    /// after `groupNameWait` more. Never for changes from another device
+    /// (sync), so two devices can't keep renaming each other's groups.
+    func membersChanged(_ groupID: UUID?) {
+        guard let groupID, groupNamer?.isAvailable == true,
+              let group = groups.first(where: { $0.id == groupID }), !group.namedByHand else { return }
+        // Its first name is still waiting for titles: the newcomer is in it.
+        guard unnamedGroups[groupID] != .waiting else { return }
+        let round = (renameRounds[groupID] ?? 0) + 1
+        renameRounds[groupID] = round
+        let pause = groupRenamePause
+        let wait = groupNameWait
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: pause)
+            self?.renameIfReady(groupID, round: round)
+            try? await Task.sleep(for: wait)
+            self?.renameIfReady(groupID, round: round, waitedLongEnough: true)
+        }
+    }
+
+    /// Asks the namer again, with the group's current name to keep if it
+    /// still fits, once per round.
+    func renameIfReady(_ groupID: UUID, round: Int, waitedLongEnough: Bool = false) {
+        guard renameRounds[groupID] == round, renameAsked[groupID] != round,
+              let group = groups.first(where: { $0.id == groupID }), !group.namedByHand,
+              let namer = groupNamer else { return }
+        // Its first name is still on the way: try again once it's there.
+        guard unnamedGroups[groupID] == nil else {
+            if waitedLongEnough { membersChanged(groupID) }
+            return
+        }
+        let members = tabs.filter { $0.groupID == groupID }
+        guard !members.isEmpty else { return }
+        guard waitedLongEnough || members.allSatisfy({ !$0.savedTitle.isEmpty || $0.page == nil }) else { return }
+        renameAsked[groupID] = round
+        let named = members.map { GroupNamingTab(title: $0.savedTitle, site: $0.url?.host() ?? "") }
+        // "New Group" (its first naming found nothing) isn't worth keeping.
+        let current = group.name.hasPrefix(TabGroup.defaultName) ? nil : group.name
+        Task { @MainActor [weak self] in
+            let name = await namer.name(for: named, current: current)
+            self?.finishRenaming(groupID, round: round, with: name)
+        }
+    }
+
+    /// Takes the answer if nothing newer happened (another change, a
+    /// rename by hand, or the group ending) and it's a different name.
+    /// Doesn't count as keeping the group (it still tidies).
+    func finishRenaming(_ groupID: UUID, round: Int, with answer: String?) {
+        guard renameRounds[groupID] == round else { return }
+        renameRounds[groupID] = nil
+        renameAsked[groupID] = nil
+        guard let answer, let name = GroupNaming.cleaned(answer),
+              let index = groups.firstIndex(where: { $0.id == groupID }), !groups[index].namedByHand else { return }
+        let free = freeGroupName(in: groups[index].spaceID, base: name, for: groupID)
+        guard free != groups[index].name else { return }
+        groups[index].name = free
     }
 
     /// A tab's title arrived: its group may be ready for a name.

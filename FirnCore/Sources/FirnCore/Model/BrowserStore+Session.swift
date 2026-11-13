@@ -138,6 +138,7 @@ extension BrowserStore {
         keepSplitsTogether()
         let usedGroups = Set(tabs.compactMap(\.groupID))
         groups = restoredGroups.filter { usedGroups.contains($0.id) }
+        endLoneLinkGroups()
         savedRecords = Dictionary(session.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         savedGroupRecords = Dictionary(session.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         savedSplitRecords = Dictionary(session.splits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })

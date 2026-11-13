@@ -159,6 +159,7 @@ extension BrowserStore {
         // Its tabs stay right where the card was.
         for tab in tabs(in: group) { tab.groupID = nil }
         groups.remove(at: index)
+        endingGroupIDs.remove(group.id)
     }
 
     /// Closes a group and all its tabs. If one of them was on screen, the
@@ -176,6 +177,7 @@ extension BrowserStore {
         }
         tabs.removeAll { $0.groupID == group.id }
         groups.remove(at: index)
+        endingGroupIDs.remove(group.id)
         if wasShowing {
             activeTabID = nil
             selectMostRecent()
@@ -320,16 +322,61 @@ extension BrowserStore {
         nameIfReady(groupID)
     }
 
-    /// A group with no tabs left ends.
-    /// Ends a group a tab just left if nothing's left in it, or, if a link
-    /// made it and it isn't kept yet, if one tab is left (as in Dia): that
-    /// tab goes back to being loose, right where it is (David, 2026-11-13).
-    /// A group someone kept may be a group of one.
+    /// Ends a group a tab just left if nothing's left in it. If a link made
+    /// it and it isn't kept yet, one tab left is enough (as in Dia): it's
+    /// marked ending, so the apps can let its card go as Ungroup does, and
+    /// then that tab is loose, right where it is (David, 2026-11-13). If no
+    /// window ends it, the store does after `groupEndingWait`. A group
+    /// someone kept may be a group of one.
     func endIfEmpty(_ groupID: UUID?) {
         guard let groupID, let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
         let members = tabs.filter { $0.groupID == groupID }
-        guard members.isEmpty || (groups[index].tidies && members.count == 1) else { return }
-        for tab in members { tab.groupID = nil }
-        groups.remove(at: index)
+        if members.isEmpty {
+            endingGroupIDs.remove(groupID)
+            groups.remove(at: index)
+        } else if endsAtOne(groups[index], members: members.count), !endingGroupIDs.contains(groupID) {
+            endingGroupIDs.insert(groupID)
+            let wait = groupEndingWait
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: wait)
+                self?.finishEnding(groupID)
+            }
+        }
+    }
+
+    private func endsAtOne(_ group: TabGroup, members: Int) -> Bool {
+        group.tidies && members == 1
+    }
+
+    /// A link-made group down to one tab, whose card should go now (as
+    /// Ungroup's does) before `finishEnding` makes its tab loose.
+    public func isEnding(_ group: TabGroup) -> Bool {
+        endingGroupIDs.contains(group.id)
+    }
+
+    /// Ends a group `isEnding` marked, its tab loose right where it is,
+    /// unless it's no longer down to one link-made tab (a link opened
+    /// another in it, it was renamed, or a tab was put in). Returns whether
+    /// it ended, so a window can bring the card back if it didn't.
+    @discardableResult
+    public func finishEnding(_ group: TabGroup) -> Bool {
+        finishEnding(group.id)
+    }
+
+    @discardableResult
+    func finishEnding(_ groupID: UUID) -> Bool {
+        guard endingGroupIDs.remove(groupID) != nil,
+              let group = groups.first(where: { $0.id == groupID }),
+              endsAtOne(group, members: tabs(in: group).count) else { return false }
+        ungroup(group)
+        return true
+    }
+
+    /// Link-made groups of one left in a saved session (Firn quit before
+    /// one ended) end as it opens, with no motion.
+    func endLoneLinkGroups() {
+        for group in groups where endsAtOne(group, members: tabs(in: group).count) {
+            ungroup(group)
+        }
     }
 }

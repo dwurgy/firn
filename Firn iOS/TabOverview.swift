@@ -339,6 +339,13 @@ struct TabOverview: View {
         // Firn leaving the screen closes an open hold menu, as iOS's do;
         // its frost is a picture of the screen as it opened.
         .onChange(of: scenePhase) { _, now in if now != .active { closeMenu() } }
+        // A link-made group down to one tab goes as Ungroup's does: the
+        // same glide (David, 2026-11-13). Out of view, the store ends it.
+        .onChange(of: store.endingGroupIDs) { _, ending in
+            for group in store.tabGroups where ending.contains(group.id) {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { _ = store.finishEnding(group) }
+            }
+        }
         .alert("Rename Group",
                isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $name)

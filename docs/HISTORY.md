@@ -466,6 +466,8 @@ As in Dia: a group a link made (not yet kept by renaming or putting a tab in by 
 3. Fallback: the store ends it itself after about 1s if no window did (another space, no view), and a temporary group of one ends on load.
 Tests to update: the six in `GroupsTests` expect the mark, then the end.
 
+**Built (2026-11-13), all three steps.** FirnCore: `endIfEmpty` marks the group in `endingGroupIDs` (observed, not saved); `finishEnding` ends it only if it's still link-made with one tab, and says whether it did; Ungroup and Close Group clear the mark; a 1s fallback (`groupEndingWait`) ends it if no window did; `endLoneLinkGroups` ends any left in a saved session as it opens. Mac: the sidebar watches the mark and runs `release(_:ending:)`, Ungroup's own thaw (Reduce Motion, its 0.2s fade); if the group got a tab back meanwhile, the frost forms again. iPhone: the overview watches it and ends it inside Ungroup's `.smooth(duration: 0.25)` (none with Reduce Motion). Tests: the six now expect the mark, then the end, plus three new ones (a tab back cancels it, the fallback, and a relaunch). ⇧⌘T during the thaw puts the tab back in the group, so the pair stays. Not yet checked by David.
+
 ## Sunrise replaces First light (2026-11-13)
 
 The welcome and the empty page moved from "First light" to "Sunrise", the look of firnbrowser.com; the plan and every step's notes are in `docs/SUNRISE-PLAN.md`. Step 6 renamed the code to match (`Shared/Sunrise.swift`, `SunriseScene`, `Theme.Sunrise`, `PaperGrain`), so older entries above that say First light mean the same scene by its old name.

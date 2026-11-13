@@ -86,6 +86,13 @@ public final class BrowserStore {
     @ObservationIgnored var renameRounds: [UUID: Int] = [:]
     /// The round each group has already asked in, so it asks only once.
     @ObservationIgnored var renameAsked: [UUID: Int] = [:]
+    /// Link-made groups down to one tab, about to end: the apps play their
+    /// Ungroup motion, then call `finishEnding` (see `endIfEmpty`).
+    /// Observed, so the windows see one start. Not saved.
+    public internal(set) var endingGroupIDs: Set<UUID> = []
+    /// How long an ending group waits for a window to end it before the
+    /// store does, with no motion (it's in another space, say).
+    @ObservationIgnored var groupEndingWait: Duration = .seconds(1)
     @ObservationIgnored var windowID = UUID()
     /// What each tab looked like when last saved, so a record's last-changed
     /// time only moves when the record really changed.

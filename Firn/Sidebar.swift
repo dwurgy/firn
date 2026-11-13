@@ -158,6 +158,12 @@ struct TabList: View {
         }
         .overlay(alignment: .topLeading) { liftedGroup }
         .onChange(of: window.tileInList) { tileChanged(window.tileInList) }
+        // A link-made group down to one tab: its card thaws away as Ungroup's
+        // does, then the store ends it (David, 2026-11-13). One out of view
+        // (another space) the store ends by itself.
+        .onChange(of: store.endingGroupIDs) { _, ending in
+            for group in store.tabGroups where ending.contains(group.id) { release(group, ending: true) }
+        }
         // Settled into Basecamp: its row's open slot here closes.
         .onChange(of: window.tabInBasecamp) {
             if window.tabInBasecamp == nil, drag?.overBasecamp == true {
@@ -297,11 +303,18 @@ struct TabList: View {
     /// Ungroup, as frost thawing: the name line folds away, the card's insets
     /// and glass melt, and the tabs rise into place. The card ends exactly
     /// where the loose tabs will be, so the store's change that follows is
-    /// invisible. Reduce Motion: a plain fade.
-    private func release(_ group: TabGroup) {
+    /// invisible. Reduce Motion: a plain fade. `ending`: a link-made group
+    /// the store marked (`isEnding`); it ends only if it still should, and
+    /// its frost forms again if not (a link opened another tab in it).
+    private func release(_ group: TabGroup, ending: Bool = false) {
         guard releasingGroupID == nil else { return }
+        let end: () -> Bool = {
+            if ending { return store.finishEnding(group) }
+            store.ungroup(group)
+            return true
+        }
         guard !reduceMotion else {
-            withAnimation(.easeOut(duration: 0.2)) { store.ungroup(group) }
+            withAnimation(.easeOut(duration: 0.2)) { _ = end() }
             return
         }
         withAnimation(Theme.thaw) {
@@ -310,9 +323,11 @@ struct TabList: View {
         afterThaw {
             var settled = Transaction()
             settled.disablesAnimations = true
-            withTransaction(settled) {
-                store.ungroup(group)
-                releasingGroupID = nil
+            let ended = withTransaction(settled) { end() }
+            if ended {
+                withTransaction(settled) { releasingGroupID = nil }
+            } else {
+                withAnimation(Theme.thaw) { releasingGroupID = nil }
             }
         }
     }

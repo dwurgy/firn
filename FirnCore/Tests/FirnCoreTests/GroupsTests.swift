@@ -133,7 +133,19 @@ struct GroupsTests {
     }
 
     // A link-made group left with one tab ends, the tab loose where it was
-    // (as in Dia; David, 2026-11-13).
+    // (as in Dia; David, 2026-11-13): first it's marked ending, so the apps
+    // can let its card go as Ungroup does, then it ends.
+
+    /// The one group is marked ending and still there; ending it leaves none.
+    private func expectEndingThenEnd(_ store: BrowserStore) throws {
+        let group = try #require(store.tabGroups.first)
+        #expect(store.tabGroups.count == 1)
+        #expect(store.isEnding(group))
+        #expect(store.tabs(in: group).count == 1)
+        #expect(store.finishEnding(group))
+        #expect(store.tabGroups.isEmpty)
+        #expect(store.endingGroupIDs.isEmpty)
+    }
 
     @Test func closingEitherTabOfALinkMadePairEndsTheGroup() throws {
         for closingOpener in [true, false] {
@@ -141,7 +153,7 @@ struct GroupsTests {
             let tabs = open("a", "b", in: store)
             let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
             store.close(closingOpener ? tabs[0] : link)
-            #expect(store.tabGroups.isEmpty)
+            try expectEndingThenEnd(store)
             #expect(hosts(store.looseTabs) == [closingOpener ? "link.example" : "a.example", "b.example"])
         }
     }
@@ -151,7 +163,7 @@ struct GroupsTests {
         let tabs = open("a", "b", in: store)
         let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
         store.takeOutOfGroup(link)
-        #expect(store.tabGroups.isEmpty)
+        try expectEndingThenEnd(store)
         #expect(hosts(store.looseTabs) == ["a.example", "link.example", "b.example"])
     }
 
@@ -160,7 +172,7 @@ struct GroupsTests {
         let tabs = open("a", "b", in: store)
         let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
         store.drift(link)
-        #expect(store.tabGroups.isEmpty)
+        try expectEndingThenEnd(store)
         #expect(tabs[0].groupID == nil)
     }
 
@@ -173,6 +185,7 @@ struct GroupsTests {
         let group = try #require(store.tabGroups.first)
         #expect(hosts(store.tabs(in: group)) == ["a.example", "link2.example"])
         #expect(group.tidies)
+        #expect(!store.isEnding(group))
     }
 
     @Test func aKeptGroupOfOneStays() throws {
@@ -182,6 +195,7 @@ struct GroupsTests {
         store.rename(try #require(store.tabGroups.first), to: "Trip")
         store.close(link)
         #expect(store.tabGroups.map(\.name) == ["Trip"])
+        #expect(store.endingGroupIDs.isEmpty)
         let byHand = try #require(store.newGroup(with: tabs[1]))
         #expect(store.tabs(in: byHand).count == 1)
     }
@@ -191,9 +205,50 @@ struct GroupsTests {
         let tabs = open("a", "b", in: store)
         let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
         store.close(link)
+        try expectEndingThenEnd(store)
         store.reopenClosed()
         #expect(store.tabGroups.isEmpty)
         #expect(Set(hosts(store.looseTabs)) == ["a.example", "b.example", "link.example"])
+    }
+
+    @Test func anEndingGroupThatGetsATabBackStays() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link1"), opener: tabs[0], inBackground: true)
+        store.close(link)
+        let group = try #require(store.tabGroups.first)
+        #expect(store.isEnding(group))
+        // A link opened before the card has gone: still a pair.
+        store.openTab(url("link2"), opener: tabs[0], inBackground: true)
+        #expect(!store.finishEnding(group))
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "link2.example"])
+        #expect(!store.isEnding(group))
+    }
+
+    @Test func anEndingGroupEndsByItselfIfNoWindowDoes() async throws {
+        let store = makeStore()
+        store.groupEndingWait = .milliseconds(10)
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.close(link)
+        #expect(store.tabGroups.count == 1)
+        // Other tests share the main actor, so give it time.
+        for _ in 0..<200 where !store.tabGroups.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.tabGroups.isEmpty)
+        #expect(store.endingGroupIDs.isEmpty)
+        #expect(tabs[0].groupID == nil)
+    }
+
+    @Test func aLinkMadeGroupOfOneEndsOnRelaunch() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.close(link)
+        let restored = makeStore(restoring: save(store))
+        #expect(restored.tabGroups.isEmpty)
+        #expect(hosts(restored.looseTabs) == ["a.example", "b.example"])
     }
 
     @Test func aLinkMadeGroupStillTidiesAfterARelaunch() throws {

@@ -174,13 +174,16 @@ struct OverviewBar: View {
         DragGesture(minimumDistance: 10)
             .updating($touching) { _, state, _ in state = true }
             .onChanged { drag in
-                guard !finishing, abs(drag.translation.width) > abs(drag.translation.height) || progress != 0
+                // Reduce Motion: nothing slides; the swipe is judged as it ends.
+                guard !reduceMotion, !finishing,
+                      abs(drag.translation.width) > abs(drag.translation.height) || progress != 0
                 else { return }
                 let width = max(pillFrame.width, 1)
                 let t = min(max(drag.translation.width / width, -1), 1)
                 progress = neighbor(t) == nil ? 0 : t
             }
             .onEnded { drag in
+                if reduceMotion { return swipeWithoutSliding(drag) }
                 guard !finishing, progress != 0 else { return }
                 let width = max(pillFrame.width, 1)
                 let flung = drag.predictedEndTranslation.width / width
@@ -207,6 +210,23 @@ struct OverviewBar: View {
                     withAnimation(.easeOut(duration: 0.18)) { wordsIn = 1 }
                 }
             }
+    }
+
+    /// Reduce Motion, as the address bar's tab swipe (which it leaves out):
+    /// no pills slide. A swipe mostly sideways, past 40% of the pill or
+    /// flung, changes space; the new name fades in where the old one was.
+    private func swipeWithoutSliding(_ drag: DragGesture.Value) {
+        let dx = drag.translation.width
+        guard abs(dx) > abs(drag.translation.height) else { return }
+        let width = max(pillFrame.width, 1)
+        let direction: CGFloat = dx > 0 ? 1 : -1
+        guard abs(dx) / width > 0.4 || drag.predictedEndTranslation.width / width * direction > 0.8,
+              let next = neighbor(direction) else { return }
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) { wordsIn = 0 }
+        select(next)
+        withAnimation(.easeOut(duration: 0.2)) { wordsIn = 1 }
     }
 }
 

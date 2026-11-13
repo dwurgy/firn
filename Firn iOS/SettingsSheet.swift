@@ -195,8 +195,17 @@ struct SettingsSheet: View {
         .listRowSeparator(.hidden)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction(named: "Move Up") { move(space, by: -1) }
-        .accessibilityAction(named: "Move Down") { move(space, by: 1) }
+        .accessibilityHint(isSelected ? "" : "Shows its settings below.")
+        // Only the moves that would do something.
+        .accessibilityActions {
+            let index = store.spaces.firstIndex { $0.id == space.id } ?? 0
+            if index > 0 {
+                Button("Move Up") { move(space, by: -1) }
+            }
+            if index < store.spaces.count - 1 {
+                Button("Move Down") { move(space, by: 1) }
+            }
+        }
     }
 
     private var nameField: some View {

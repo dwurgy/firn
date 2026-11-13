@@ -168,6 +168,23 @@ public final class Tab: Identifiable {
         }
     }
 
+    /// Follows a synced tab to the address another device left it at. A
+    /// page someone is looking at is never pulled away; one awake behind
+    /// the scenes loads the new address; a resting one wakes there.
+    func follow(_ url: URL, title: String, onScreen: Bool) {
+        if let page {
+            guard !onScreen, page.url != url else { return }
+            page.load(url)
+        } else if restingURL != url {
+            if !Self.sameHost(url, restingURL) { restingIcon = nil }
+            restingURL = url
+            restingTitle = title
+            restingMemory = nil
+        } else if !title.isEmpty {
+            restingTitle = title
+        }
+    }
+
     /// Makes the page (if needed) and starts loading where the tab rests.
     func wake(using makePage: () -> any PageController) {
         guard page == nil else { return }

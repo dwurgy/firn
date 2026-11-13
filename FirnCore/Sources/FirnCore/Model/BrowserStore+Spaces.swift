@@ -165,12 +165,16 @@ extension BrowserStore {
         lastTabBySpace[deleted.id] = nil
         spaces.remove(at: index)
         renumberSpaces()
-        if !spaces.contains(where: { $0.dataStoreID == deleted.dataStoreID }) {
-            removeData(deleted.dataStoreID)
-            // After any visit still being saved, so none lands once it's erased.
-            let dataStoreID = deleted.dataStoreID
-            history?.enqueue { await $0.removeAll(in: dataStoreID) }
-        }
+        releaseIfUnused(deleted.dataStoreID)
+    }
+
+    /// Erases a data store's sign-ins, cookies, site data, and history once
+    /// no space uses it.
+    func releaseIfUnused(_ dataStoreID: UUID) {
+        guard !spaces.contains(where: { $0.dataStoreID == dataStoreID }) else { return }
+        removeData(dataStoreID)
+        // After any visit still being saved, so none lands once it's erased.
+        history?.enqueue { await $0.removeAll(in: dataStoreID) }
     }
 
     /// Keeps each space's `order` matching its place in `spaces`.

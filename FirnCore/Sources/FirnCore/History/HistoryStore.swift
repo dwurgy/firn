@@ -76,6 +76,72 @@ public actor HistoryStore {
         )
     }
 
+    // MARK: Syncing
+
+    /// How far back history goes to iCloud: the last 30 days, as Safari
+    /// seems to (docs/SYNC-PLAN.md). Each device keeps its own full year.
+    public static let syncedFor: TimeInterval = 30 * 24 * 60 * 60
+
+    /// A new visit's sync id: 32 random hex digits.
+    static func newSyncID() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    /// Whether a sync id is one Firn makes (and nothing else).
+    static func isSyncID(_ id: String) -> Bool {
+        id.count == 32 && id.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
+
+    /// The data store's visits from the last 30 days, oldest first, for sync.
+    public func syncedVisits(in dataStoreID: UUID, now: Date = .now) -> [SyncedVisit] {
+        guard let db = try? existingDatabase(for: dataStoreID) else { return [] }
+        let since = now.addingTimeInterval(-Self.syncedFor).timeIntervalSince1970
+        return (try? db.select(
+            "SELECT sync_id, url, title, visited_at FROM visits WHERE visited_at >= ? ORDER BY visited_at",
+            [.real(since)]
+        ) { row -> SyncedVisit? in
+            guard let url = URL(string: row.text(1)) else { return nil }
+            return SyncedVisit(id: row.text(0), dataStoreID: dataStoreID, url: url, title: row.text(2),
+                               visitedAt: Date(timeIntervalSince1970: row.real(3)))
+        }) ?? []
+    }
+
+    /// Adds visits from other devices, each once (by its sync id): only
+    /// http and https addresses from the last 30 days, and not from the
+    /// future. A visit already here gets the other device's title if it has
+    /// one. Returns how many were new.
+    @discardableResult
+    public func addSyncedVisits(_ visits: [SyncedVisit], now: Date = .now) -> Int {
+        let since = now.addingTimeInterval(-Self.syncedFor)
+        let latest = now.addingTimeInterval(24 * 60 * 60)
+        var added = 0
+        for (dataStoreID, visits) in Dictionary(grouping: visits, by: \.dataStoreID) {
+            guard let db = try? database(for: dataStoreID) else { continue }
+            try? db.transaction {
+                for visit in visits {
+                    guard Self.isSyncID(visit.id), WebAddress.isWebURL(visit.url),
+                          visit.visitedAt >= since, visit.visitedAt <= latest else { continue }
+                    let address = visit.url.absoluteString
+                    guard address.utf8.count <= Self.urlLimit else { continue }
+                    let title = Self.trimmed(visit.title)
+                    let known = try db.select("SELECT id FROM visits WHERE sync_id = ?", [.text(visit.id)]) { $0.integer(0) }
+                    if let id = known.first {
+                        if !title.isEmpty {
+                            try db.run("UPDATE visits SET title = ? WHERE id = ?", .text(title), .integer(id))
+                        }
+                    } else {
+                        _ = try db.insert(
+                            url: address, site: WebAddress.site(of: visit.url).lowercased(), title: title,
+                            at: visit.visitedAt.timeIntervalSince1970, syncID: visit.id
+                        )
+                        added += 1
+                    }
+                }
+            }
+        }
+        return added
+    }
+
     // MARK: Reading
 
     /// Visits, newest first: all of them, or those whose title, address, or
@@ -332,13 +398,25 @@ final class Database {
                 COMMIT;
                 """)
         }
-        // The next layout: `if version < 2 { … PRAGMA user_version = 2 }`.
+        if version < 2 {
+            // Each visit's own id for iCloud sync (row numbers are per
+            // device); visits from before get one too.
+            try execute("""
+                BEGIN;
+                ALTER TABLE visits ADD COLUMN sync_id TEXT;
+                UPDATE visits SET sync_id = lower(hex(randomblob(16))) WHERE sync_id IS NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS visits_sync_id ON visits(sync_id);
+                PRAGMA user_version = 2;
+                COMMIT;
+                """)
+        }
+        // The next layout: `if version < 3 { … PRAGMA user_version = 3 }`.
     }
 
-    func insert(url: String, site: String, title: String, at time: Double) throws -> Int64 {
+    func insert(url: String, site: String, title: String, at time: Double, syncID: String? = nil) throws -> Int64 {
         try run(
-            "INSERT INTO visits (url, site, title, visited_at) VALUES (?, ?, ?, ?)",
-            .text(url), .text(site), .text(title), .real(time)
+            "INSERT INTO visits (url, site, title, visited_at, sync_id) VALUES (?, ?, ?, ?, ?)",
+            .text(url), .text(site), .text(title), .real(time), .text(syncID ?? HistoryStore.newSyncID())
         )
         return sqlite3_last_insert_rowid(handle)
     }

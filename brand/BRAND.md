@@ -44,7 +44,9 @@ hand. Quiet, cold air, warm light coming up.
 The sky is one plain vertical gradient. On home it runs over the whole page
 (px from the top):
 
-- **Light:** `#1C2130` 0 → `#252C3E` 520 → `#343E57` 1000 → `#556079` 1420 →
+- **Light** (lightened on the site, 2026-11-13; lighter at the top and warm
+  sooner): `#36415D` → `#3E4966` → `#4C5774` → `#69728E` → `#9894A6` →
+  then the warm stops as before. Before: `#1C2130` 0 → `#252C3E` 520 → `#343E57` 1000 → `#556079` 1420 →
   `#8D8C9E` 1760 → `#CDB8B4` 1960 → `#EAD3C5` 2200 → `#F4E5DA` 2700 →
   `#F7F0E8` 3200 → `#F6F3EE` 3800
 - **Dark:** stays blue hour all the way: `#1A1F2D` → `#212839` → `#283043` →
@@ -58,7 +60,10 @@ Top-of-screen colour (status bar, theme-color, window background behind the
 sky): `#1C2130` light, `#1A1F2D` dark.
 
 **Text on the dark sky** is always light, in both modes: `#F5F1EC` (15:1),
-muted `#D4CDC5` (11:1), small print `#B9B2AA` (8:1). Logo: the on-dark lockup.
+muted `#D4CDC5` (11:1). Every line needs at least 4.5:1 where it sits: on the
+lightened light-mode sky the site swapped small print `#B9B2AA` for `#D4CDC5`,
+and the Mac welcome uses `#F5F1EC` for its paragraph too (the muted grey
+falls under 4.5:1 that low on the sky). Logo: the on-dark lockup.
 
 ### The sun
 

@@ -140,15 +140,14 @@ private struct Welcome: View {
                         card
                     }
                 }
-                // Hello sits above the middle, on the dark part of the sky:
-                // its light words would fade into the warm band low on it.
-                // The cards hang from one fixed line, so the dots and titles
-                // stay put while each step's card grows or shrinks below them.
-                .padding(EdgeInsets(top: step == .hello ? 24 : max(24, proxy.size.height * 0.18),
-                                    leading: 24,
-                                    bottom: step == .hello ? max(134, proxy.size.height * 0.32) : 134,
-                                    trailing: 24))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: step == .hello ? .center : .top)
+                // Hello hangs high, on the cool part of the sky: its light
+                // words need 4.5:1, and the sky warms (and lightens) as it
+                // nears the snow. The cards hang from one fixed line, so the
+                // dots and titles stay put while each step's card grows or
+                // shrinks below them.
+                .padding(EdgeInsets(top: max(24, proxy.size.height * (step == .hello ? 0.06 : 0.18)),
+                                    leading: 24, bottom: 134, trailing: 24))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .modifier(FinishFade(finishing: finish != nil))
             // Faded, it isn't there for VoiceOver either.
@@ -330,7 +329,9 @@ private struct HelloScreen: View {
             Text("A calm place for the web. Ads and trackers are blocked, and Firn never tracks you. Let’s set up a few things; it takes a minute, and you can change any of it later.")
                 .font(.system(size: 17))
                 .lineSpacing(4)
-                .foregroundStyle(Theme.Welcome.skyMuted)
+                // Not the muted grey: low on the light-mode sky it falls
+                // under 4.5:1 (BRAND.md swapped its faintest grey for the same reason).
+                .foregroundStyle(Theme.Welcome.skyInk)
                 .frame(maxWidth: 480)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 16)

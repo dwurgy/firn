@@ -322,8 +322,10 @@ enum Theme {
             let stops: [(UInt32, CGFloat)] = dark
                 ? [(0x1A1F2D, 0), (0x212839, 0.22), (0x283043, 0.42), (0x2E3548, 0.60),
                    (0x34394B, 0.76), (0x373A48, 0.88), (0x383733, 1)]
-                : [(0x1C2130, 0), (0x252C3E, 0.22), (0x343E57, 0.42), (0x556079, 0.60),
-                   (0x8D8C9E, 0.76), (0xCDB8B4, 0.87), (0xEAD3C5, 1)]
+                // Light: the site's lightened sky (2026-11-13), lighter at
+                // the top and warm sooner; the warm stops are unchanged.
+                : [(0x36415D, 0), (0x3E4966, 0.22), (0x4C5774, 0.42), (0x69728E, 0.60),
+                   (0x9894A6, 0.76), (0xCDB8B4, 0.87), (0xEAD3C5, 1)]
             return Sky(
                 stops: stops.map { Gradient.Stop(color: plain($0.0), location: $0.1) },
                 apricot: dark ? plain(0xF2C4A0, 0.16) : plain(0xF2C4A0, 0.55),
@@ -388,10 +390,10 @@ enum Theme {
 
         // Words and buttons on the blue-hour sky: light in both looks
         // (BRAND.md, "Text on the dark sky" and "Buttons, links and focus").
-        /// Headlines and words on the sky (15:1).
+        /// Headlines and words on the sky: 15:1 at the top, at least 4.5:1
+        /// where the welcome's words sit. No muted grey: low on the
+        /// light-mode sky it fails 4.5:1.
         static let skyInk = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
-        /// Muted words on the sky (11:1).
-        static let skyMuted = Color(light: 0xD4CDC5, dark: 0xD4CDC5)
         /// The main button on the sky: a light pill, dark words.
         static let skyButton = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
         static let skyButtonText = Color(light: 0x2B2826, dark: 0x2B2826)

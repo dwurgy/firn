@@ -326,6 +326,8 @@ The welcome (iOS version of the Mac's steps, without Arc and Mac-only tips), the
 
 ### Phase 9: Sync (its own plan, its own approval)
 
+**Planned (2026-11-13): `docs/SYNC-PLAN.md`,** built now, ahead of phases 4 to 8 (David). The notes below are the first sketch.
+
 Planned separately before any code, with you, on Opus. This is the first phase that changes the Mac app (the Mac needs sync too), so it needs your explicit go-ahead for each Mac change. It covers: CloudKit in your own iCloud (off by default), what syncs per the brief's tables, delete confirmations and Undo, offline and "latest change wins", "On your Mac" / "On your iPhone", Handoff, passwords through iCloud Keychain, and the new privacy wording (needs your OK).
 **Done (to be refined in its plan):** with sync on, a group made on the Mac appears on the iPhone, renaming it on the iPhone renames it on the Mac, a separate space stays signed out on the new device, and with sync off nothing leaves either device.
 

@@ -86,7 +86,11 @@ struct SyncTests {
         // The name is nowhere in what iCloud holds.
         #expect(record.sealed.range(of: Data("Trip".utf8)) == nil)
         let other = try #require(SyncSeal(keyData: SyncSeal.makeKeyData()))
-        #expect(throws: SyncSeal.Failure.unreadable) { try other.open(record) }
+        // Another key's record is told apart from a damaged one, by its key id.
+        #expect(throws: SyncSeal.Failure.otherKey) { try other.open(record) }
+        #expect(SyncSeal.keyID(of: record) == seal.keyID)
+        #expect(seal.keyID.count == 8 && seal.keyID != other.keyID)
+        #expect(try #require(SyncSeal(keyData: key)).keyID == seal.keyID)
     }
 
     @Test func aSealedRecordCantPassAsAnother() throws {
@@ -362,5 +366,26 @@ struct SyncTests {
         let back = try JSONDecoder().decode(SyncState.self, from: data)
         #expect(back == mac.state)
         #expect(back.item(for: SyncRecordID(kind: .space, name: personal.id.uuidString)) != nil)
+    }
+}
+
+@Suite struct SyncFileTests {
+    @Test func savedSyncComesBackExactly() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = SyncFile(url: folder.appending(path: "sync.json"))
+        #expect(file.load() == SyncSaved())
+
+        var saved = SyncSaved()
+        saved.engineState = Data([1, 2, 3])
+        // A fraction of a second must survive: latest change wins by it.
+        saved.waiting = [.group(SyncedGroup(id: UUID(), spaceID: UUID(), name: "Trip",
+                                            changedAt: Date(timeIntervalSinceReferenceDate: 1000.25)))]
+        try file.save(saved)
+        #expect(file.load() == saved)
+
+        try Data("not json".utf8).write(to: file.url)
+        #expect(file.load() == SyncSaved())
+        #expect(!FileManager.default.fileExists(atPath: file.url.path(percentEncoded: false)))
     }
 }

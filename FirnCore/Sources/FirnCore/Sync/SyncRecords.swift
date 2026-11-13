@@ -120,7 +120,7 @@ public struct SyncedVisit: Codable, Equatable, Sendable {
 }
 
 /// Any one record's fields.
-public enum SyncItem: Equatable, Sendable {
+public enum SyncItem: Codable, Equatable, Sendable {
     case space(SyncedSpace)
     case group(SyncedGroup)
     case tab(SyncedTab)

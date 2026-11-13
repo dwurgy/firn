@@ -270,6 +270,13 @@ Steps:
 Create, rename, color, reorder, and delete spaces; each with its own data store, Basecamp, groups, and tabs; the "Share sign-ins" choice; swiping sideways on the overview's bottom bar changes space, with a dot per space under the space's name, and tapping the name opens the space menu (as on the Mac); the tint cross-fades.
 **Done:** two spaces signed into two different Google accounts at once on your iPhone; a new space that shares sign-ins is already signed in; deleting a space signs it out for good. (Same test as the Mac's Phase 4.)
 
+Planned (David, 2026-11-13), built before sync's step 3 (`docs/SYNC-PLAN.md`), which needs the iPhone to switch spaces. FirnCore already does everything (add, share, switch, rename, reorder, stop sharing, delete), so this phase is only screens. Four steps:
+
+1. **The switcher.** Tapping the space's name in the overview's bar opens Firn's own frosted menu (`FrostMenu`, as the hold menus): the spaces, the one on screen checked, then New Space… and Space Settings…. A dot per space under the name, as on the Mac. Swiping sideways on the overview's bar changes space, **with the address bar's sliding pills** (David, 2026-11-13: the same movement as swiping between tabs on the address bar, 2d): the leaving space's name pill and the coming one's share the bar's middle, sliding with the finger. The glow and tint cross-fade. The command bar gets "Switch to (space)".
+2. **New Space.** A sheet with the name, the eight colors, and "Keep this space separate" or "Share sign-ins with…", in the Mac's words.
+3. **Settings › Spaces.** A small Settings sheet (sync's switch joins it later): the spaces, drag to reorder; rename, color, Stop Sharing, and Delete, each with the Mac's confirmations.
+4. **A look over.** Light, dark, Reduce Motion, VoiceOver, and the done test.
+
 ### Phase 5: The address bar's glide (its own plan first)
 
 Scrolling down shrinks the bar to a domain-only pill; scrolling up or tapping brings it back (reaching the end doesn't: Safari leaves the pill small there); swiping along the bar or pill switches tabs. Reduce Motion simply fades.

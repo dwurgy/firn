@@ -6,7 +6,7 @@ The aim (David): Apple users should find it seamless, using every piece of Apple
 
 ## What syncs (David, 2026-11-13)
 
-Sync is off until the person turns it on, and goes only to their own iCloud, never to Firn or any server of ours. No account.
+Sync is off until the person says yes, and goes only to their own iCloud, never to Firn or any server of ours. No account.
 
 | Syncs | Found in the command bar | Never |
 | --- | --- | --- |
@@ -17,7 +17,9 @@ Sync is off until the person turns it on, and goes only to their own iCloud, nev
 | | | Page pictures, downloads, and a tab's back history |
 
 - **Spaces sync, and stay what they are.** A space arrives on a new device with its data store id, so a separate space is still separate there, and starts signed out (its cookies can't travel). A shared space still shares. Its passwords and history come with it, because both are kept per data store id.
-- **One switch, no other options** (David, 2026-11-13: intuitive and polished, not many options; "whatever is best"). Sync on or off, and that's all. An earlier draft had a "Tabs" choice; it's gone.
+- **Two switches, no other options** (David, 2026-11-13: intuitive and polished, not many options), as in Apple's own iCloud settings, where Safari and Passwords are separate. **Sync with iCloud:** spaces, groups, history, and "On your Mac". **Passwords:** just under it, on when sync is turned on, easy to turn off (for people who use another password manager; turning on sync never quietly moves passwords). An earlier draft had a "Tabs" choice; it's gone.
+- **Asked once, in the welcome** (David, 2026-11-13), on the Mac and the iPhone, not switched on silently (Firn's promise: data stays on the device unless you choose otherwise). "Keep your spaces on all your devices?", a line saying it goes through your own iCloud, encrypted so only your devices can read it, and **Use iCloud** (the main button, turning on both switches) or Not Now. Skipped when the device isn't signed in to iCloud (Settings says why). People past the welcome find the switches in Settings › Sync, and one line in the release notes; no pop-up.
+- **"On your Mac" shows only with sync on.** With it off, the command bar has no such section and nothing leaves the device.
 - **Loose tabs work as in Arc** (David, 2026-11-13). Arc synced what you deliberately kept (spaces, pinned tabs, favorites), never the day's unpinned tabs. In Firn, keeping a tab is putting it in a group, so groups sync and loose tabs don't, on any device (iPhone and iPad included). A loose tab on another device is found by going to it: the command bar lists it under "On your Mac" (or iPhone, or iPad), read-only; picking one opens your own copy. They never appear in the sidebar or the overview. Their addresses and titles go to iCloud, encrypted, so the command bar can show them.
 - **Settings stay on each device** (Claude's call, 2026-11-13, for less to think about): the tidy-away timing, where new tabs go, and the address bar's place often differ between a Mac and a phone anyway.
 - **History:** whatever Safari does (David). To check in step 1: how far back Safari's synced history reaches. If it's the whole year Firn keeps and that proves too much to sync, the fallback is the last 30 days.
@@ -38,13 +40,13 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
 
 1. **Groundwork.** Check the facts above: Developer ID Mac apps with CloudKit and push notifications, what `encryptedValues` promises, and how far back Safari syncs history. Then the iCloud container (`iCloud.com.firnbrowser.firn`), and the iCloud and push entitlements on both apps. David makes the new provisioning profiles in the developer portal. *Mac change:* two entitlements and a new profile. *Done:* both apps launch signed, and nothing is sent yet.
 2. **Records in FirnCore.** Spaces, groups, tabs, and visits to and from records, with the merge rules (latest wins, per-device fields kept apart, a deleted group's tabs). Tested without iCloud.
-3. **The engine and spaces.** A sync engine in both apps, and Settings › Sync: one switch, off by default. Spaces sync. *Mac change:* the new Settings section. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there.
+3. **The engine and spaces.** A sync engine in both apps, and Settings › Sync: the two switches, off until turned on. Spaces sync. *Mac change:* the new Settings section. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there.
 4. **Groups.** Groups and their tabs. Deleting a group or space asks "from all your devices", and a group's delete has an Undo. *Done:* a group made on the Mac appears on the iPhone, and renaming it on the iPhone renames it on the Mac.
 5. **"On your Mac" and "On your iPhone":** each device shares its open loose tabs' addresses and titles (kept current, removed as they close), and the command bar lists the other devices' under their names. *Mac change:* a command bar section.
 6. **History.**
 7. **Handoff.**
 8. **Passwords to iCloud Keychain.** Its own short plan first: it moves where people's passwords live, so never a quiet switch.
-9. **A look over.** The privacy wording (David's OK; `docs/privacy-page.md` and the README), "Turn off and delete from iCloud", the security check, VoiceOver, and the two-device test. *Done:* with sync off, nothing leaves either device.
+9. **A look over.** The privacy wording (David's OK; `docs/privacy-page.md` and the README), "Turn off and delete from iCloud", the welcome's "Use iCloud" step (Mac and iPhone), the security check, VoiceOver, and the two-device test. *Done:* with sync off, nothing leaves either device.
 
 ## Open
 

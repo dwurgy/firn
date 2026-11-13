@@ -87,7 +87,7 @@ The overview follows David's sketch: the Mac's sidebar order on a phone, with ta
 
 Sync is off by default and goes only through the person's own iCloud, encrypted, never to Firn or any server of ours. No account.
 
-**Replaced by `docs/SYNC-PLAN.md` (David, 2026-11-13):** spaces, saved passwords, and history always sync; groups sync; loose tabs don't anywhere, as in Arc, but are found in the command bar ("On your Mac"); one switch, no other options; Basecamp never syncs, not even between iPhone and iPad; settings stay on each device. The table below is the 2026-11-03 version, kept for the reasoning.
+**Replaced by `docs/SYNC-PLAN.md` (David, 2026-11-13):** spaces, saved passwords, and history always sync; groups sync; loose tabs don't anywhere, as in Arc, but are found in the command bar ("On your Mac"); two switches (sync, and passwords), asked once in the welcome; Basecamp never syncs, not even between iPhone and iPad; settings stay on each device. The table below is the 2026-11-03 version, kept for the reasoning.
 
 | Syncs everywhere | Syncs between iPhone and iPad only | Stays on each device |
 | --- | --- | --- |

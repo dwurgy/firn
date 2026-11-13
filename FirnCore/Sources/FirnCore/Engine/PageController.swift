@@ -50,6 +50,13 @@ public protocol PageController: AnyObject, Observable {
     /// The text selected on the page, at most `FindOnPage.maxLength`
     /// characters; "" if none.
     func selectedText() async -> String
+    /// Whether the page on screen reads as an article, so Reader can show
+    /// it (see `Reader`). Checked as each page finishes loading; false
+    /// while loading, and for anything but web pages.
+    var isArticle: Bool { get }
+    /// The page's article, read in Firn's world from a copy of the page;
+    /// nil if it isn't one, or the page moved on while reading.
+    func readArticle() async -> ReaderArticle?
     /// Demo shots only (`DemoShot`): turns down a site's cookie banner, so
     /// the website's screenshots show the page, not the banner. Waits up to
     /// `seconds` for one to appear; does nothing if none does.
@@ -193,5 +200,7 @@ public enum BrowserEngine {
 
 public extension PageController {
     func declineCookieBanner(waiting seconds: Double) async {}
+    var isArticle: Bool { false }
+    func readArticle() async -> ReaderArticle? { nil }
     var topColor: CGColor? { nil }
 }

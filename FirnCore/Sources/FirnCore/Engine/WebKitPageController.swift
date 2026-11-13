@@ -25,6 +25,7 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var sound: PageSound = .silent
     private(set) var isPausedByFirn = false
     private(set) var isResuming = false
+    private(set) var isArticle = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
@@ -67,6 +68,8 @@ final class WebKitPageController: NSObject, PageController {
     /// A sign-in just sent, held (in memory only) until it seems to have
     /// worked, for at most `SignInScript.pendingLimit` seconds.
     @ObservationIgnored private var pendingSignIn: (login: SubmittedLogin, at: TimeInterval)?
+    /// The Reader check in progress (see `checkArticle`).
+    @ObservationIgnored private var articleCheck: Task<Void, Never>?
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -327,6 +330,13 @@ final class WebKitPageController: NSObject, PageController {
               Self.sameOrigin(newURL, current), newURL != current else { return }
         url = newURL
         onVisit?(newURL, title)
+        // A site that changes pages without loading (pushState) may show a
+        // new article, or none; check again once it has drawn it.
+        if newURL.path() != current.path() {
+            articleCheck?.cancel()
+            isArticle = false
+            checkArticle(after: 1)
+        }
     }
 
     /// Tells history the page's title, once it has one.
@@ -480,6 +490,9 @@ extension WebKitPageController: WKNavigationDelegate {
         dialogsBlocked = false
         let previous = url
         url = webView.url
+        // A new page isn't an article until it has loaded and been checked.
+        articleCheck?.cancel()
+        isArticle = false
         // The title may still be the old page's until the new one says.
         if let url { onVisit?(url, "") }
         // The old page's frames are gone, and their sound with them.
@@ -503,6 +516,7 @@ extension WebKitPageController: WKNavigationDelegate {
         // A new page with the same title as the last never changes it.
         reportTitle()
         findIcon()
+        checkArticle()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
@@ -519,6 +533,38 @@ extension WebKitPageController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
         if let failure = LoadError(error, fallbackURL: url) { loadError = failure }
         syncState()
+    }
+}
+
+// MARK: - Reader
+
+extension WebKitPageController {
+    /// Runs Firefox's article check (`Reader.readerableScript`) in Firn's
+    /// world on the main frame, after `delay` seconds; the answer counts
+    /// only if the page is still the same one.
+    fileprivate func checkArticle(after delay: Double = 0) {
+        articleCheck?.cancel()
+        guard Reader.canRead(url), loadError == nil, let script = Reader.readerableScript else { return }
+        let pageURL = url
+        articleCheck = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let self, !Task.isCancelled, self.url == pageURL else { return }
+            let result = try? await self.webView.callAsyncJavaScript(
+                script, arguments: [:], in: nil, contentWorld: Self.firnWorld)
+            guard !Task.isCancelled, self.url == pageURL, self.loadError == nil else { return }
+            self.isArticle = (result as? NSNumber)?.boolValue == true
+        }
+    }
+
+    /// Readability, in Firn's world on the main frame, on a copy of the
+    /// page; nothing from the page is passed in as code.
+    func readArticle() async -> ReaderArticle? {
+        guard let pageURL = url, Reader.canRead(pageURL), loadError == nil,
+              let script = Reader.articleScript else { return nil }
+        let result = try? await webView.callAsyncJavaScript(
+            script, arguments: [:], in: nil, contentWorld: Self.firnWorld)
+        guard url == pageURL, loadError == nil else { return nil }
+        return ReaderArticle(scriptResult: result, pageURL: pageURL)
     }
 }
 

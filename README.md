@@ -132,3 +132,5 @@ Firn's code is open source under the [Mozilla Public License 2.0](LICENSE), the 
 **The Firn name, logo, and app icons are not covered by the license.** They identify Firn itself, so please don't use them for your own version or anything that could be mistaken for Firn; give a version you share its own name and look. (That covers `brand/` and the app icon.)
 
 Firn includes the Fraunces typeface, under the [SIL Open Font License](Firn/Fonts/Fraunces-OFL.txt).
+
+Firn's reader uses Mozilla's [Readability.js](https://github.com/mozilla/readability), under the [Apache License 2.0](FirnCore/Sources/FirnCore/Reader/Readability/LICENSE.md).

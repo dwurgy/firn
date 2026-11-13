@@ -181,6 +181,12 @@ struct AddressBar: View {
             }
             add("close", "Close Tab", []) { store.close(tab) }
         }
+        // The Mac's words; the space on screen isn't offered.
+        for space in store.spaces where space.id != store.activeSpaceID {
+            add("space-\(space.id.uuidString)", "Switch to \(space.name)", ["space", "go to"]) {
+                store.selectSpace(space)
+            }
+        }
         add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
             ["undo", "restore", "bring back"], when: store.nextToReopen != nil) { store.reopenClosed() }
         return list

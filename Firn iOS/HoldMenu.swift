@@ -1,3 +1,4 @@
+import FirnCore
 import SwiftUI
 
 /// One choice in a hold menu (Firn's own, `FrostMenu`): plain words and an
@@ -10,11 +11,25 @@ struct HoldMenuItem {
     /// Closes something (Close Tab, Close Group, Remove from Basecamp):
     /// Firn's menu shows it in muted terracotta.
     var closes = false
+    /// A space in the space menu: a dot in its color instead of a symbol.
+    var dot: String?
+    /// The space on screen, checked.
+    var checked = false
 
     init(title: String, systemImage: String?, closes: Bool = false, action: @escaping @MainActor () -> Void) {
         self.title = title
         self.systemImage = systemImage
         self.closes = closes
+        self.action = action
+        children = []
+    }
+
+    /// A space in the space menu (phase 4): its dot, checked if on screen.
+    init(space: Space, checked: Bool, action: @escaping @MainActor () -> Void) {
+        title = space.name
+        systemImage = nil
+        dot = space.color
+        self.checked = checked
         self.action = action
         children = []
     }

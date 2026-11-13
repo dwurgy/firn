@@ -21,6 +21,9 @@ struct OpenHoldMenu {
     /// Above the tile when there's room (a group's name line: below it are
     /// the group's own tabs, David, 2026-11-09); else below, as any tile.
     var prefersAbove = false
+    /// Centered over the tile (the space menu over its name), not lined up
+    /// with a side.
+    var centered = false
 }
 
 /// The held finger pointing at the menu's rows, as in iOS's own menus: it
@@ -122,14 +125,14 @@ struct HoldMenuPlacement: View {
         let leading = menu.fingerX < tile.midX
         let minX = safe.minX + Self.margin
         let maxX = safe.maxX - Self.margin - width
-        let x = min(max(leading ? tile.minX : tile.maxX - width, minX), maxX)
+        let x = min(max(menu.centered ? tile.midX - width / 2 : leading ? tile.minX : tile.maxX - width, minX), maxX)
         let top = safe.minY + Self.margin
         let bottom = safe.maxY - Self.margin
         let roomBelow = bottom - (tile.maxY + Self.gap)
         let roomAbove = (tile.minY - Self.gap) - top
         let below = menu.prefersAbove && roomAbove >= height ? false
             : roomBelow >= height || (roomAbove < height && roomBelow >= roomAbove)
-        let ox: CGFloat = leading ? 0.2 : 0.8
+        let ox: CGFloat = menu.centered ? 0.5 : leading ? 0.2 : 0.8
         if below {
             // Too little room either way: it covers the tile's end rather
             // than leave the screen.
@@ -223,8 +226,10 @@ struct FrostMenu: View {
                         ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                             menuButton("\(s) \(i)", lit: lit) {
                                 MenuRow(title: item.title, symbol: item.systemImage, closes: item.closes,
-                                        more: !item.children.isEmpty)
+                                        more: !item.children.isEmpty,
+                                        dot: item.dot.map(Theme.spaceColor), checked: item.checked)
                             }
+                            .accessibilityAddTraits(item.checked ? .isSelected : [])
                         }
                     }
                 }
@@ -373,6 +378,8 @@ private struct MenuRow: View {
     var more = false
     var back = false
     var dot: Color?
+    /// The space on screen, in the space menu.
+    var checked = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -395,6 +402,12 @@ private struct MenuRow: View {
                 // Tightens a little before it's cut off ("New Group with This Tab").
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
+            if checked {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.muted)
+                    .accessibilityHidden(true)
+            }
             if more {
                 // Muted, as the symbols: faint read too pale on the frost.
                 Image(systemName: "chevron.right")

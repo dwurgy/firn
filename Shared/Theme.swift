@@ -175,11 +175,11 @@ enum Theme {
     /// white to read (about 3.5:1 or better); the same in light and dark.
     static func spaceVivid(_ name: String) -> Color {
         let hex: UInt32 = switch name {
-        case "sand": 0xB87C46
-        case "sage": 0x55994C
-        case "heather": 0xB85C84
+        case "sand": 0xAA8253
+        case "sage": 0x64955F
+        case "heather": 0xB16C8A
         case "ochre": 0xA1873D
-        case "dusk": 0x5C5EB8
+        case "dusk": 0x7978B7
         case "clay": 0xB86846
         case "lagoon": 0x3C9994
         default: 0x5690B8

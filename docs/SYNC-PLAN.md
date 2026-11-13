@@ -51,6 +51,16 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
      - **The last space stays** if another device deleted it (Firn always has one).
      - **For step 3:** the key in iCloud Keychain; persisting `SyncState`; the engine (`CKSyncEngine`) handing sealed bytes in and out; and a first sync between two devices that each start with an untouched space of their own (likely: an untouched only space gives way to the synced ones, as Arc import does).
 3. **The engine and spaces.** A sync engine in both apps, and Settings › Sync: the two switches, off until turned on. Spaces sync. *Mac change:* the new Settings section. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there.
+   - **Waits for the iPhone's phase 4** (David, 2026-11-13): the iPhone can't switch spaces yet, so a space from the Mac couldn't be reached there. Build phase 4 (`docs/IOS-PLAN.md`) first, then this step.
+   - **Decided (David, 2026-11-13):**
+     - **The iPhone's switch:** a small Settings sheet with only a Sync section for now, opened from the space menu; phase 6 fills it in.
+     - **Only "Sync with iCloud" in step 3.** The Passwords switch comes in step 8, since before then it would do nothing.
+     - **The first sync, same name joins:** a space that never synced joins another device's space with the same name. Its tabs, groups, and Basecamp stay, but it takes that space's id and data store, so it starts signed out on this device (sign-ins can't travel). A never-synced space with no tabs, groups, or tiles simply gives way. Every other space arrives as a new one.
+   - **Found while planning (2026-11-13), to handle in this step:**
+     - **One CloudKit environment for both apps.** The Mac (Developer ID) must use Production; the iPhone's builds from Xcode default to Development, a separate database, so they'd never see each other. The iPhone's entitlements name Production too (`com.apple.developer.icloud-container-environment`).
+     - **Production needs its schema deployed.** CloudKit only makes record types on the fly in Development. Run once against Development to create `Space`, `TabGroup`, `Tab`, and `Visit` (each one encrypted bytes field), then David deploys the schema to Production in the CloudKit Console (a few clicks; Claude writes them out).
+     - **Two devices can make two keys** if both turn sync on before iCloud Keychain has carried the first key across. Each record gets a short key id (a hash of the key, which says nothing about its contents); a record sealed with a key this device doesn't have waits, the Keychain is read again, and a device whose key lost re-seals and re-sends what it has.
+     - **Kept between launches:** `SyncState`, the engine's own state, and records still waiting for their space or group, in one file next to the session.
 4. **Groups.** Groups and their tabs. Deleting a group or space asks "from all your devices", and a group's delete has an Undo. *Done:* a group made on the Mac appears on the iPhone, and renaming it on the iPhone renames it on the Mac.
 5. **"On your Mac" and "On your iPhone":** each device shares its open loose tabs' addresses and titles (kept current, removed as they close), and the command bar lists the other devices' under their names. *Mac change:* a command bar section.
 6. **History.**

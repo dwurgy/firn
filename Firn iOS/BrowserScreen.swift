@@ -152,6 +152,11 @@ struct BrowserScreen: View {
     @State private var barTop: CGFloat = 0
     /// Scrolling down to read has shrunk the bar to a small pill (phase 5).
     @State private var barShrunk = false
+    /// The New Space sheet is up. An object, not a plain flag: the action
+    /// that sets it lives on in the environment (always equal, so it never
+    /// redraws the overview), and a flag set through it didn't wake the
+    /// screen until something else did.
+    @State private var newSpace = NewSpaceRequest()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// VoiceOver always has the whole bar (phase 5): its buttons stay where
     /// a swipe through them finds them.
@@ -333,6 +338,10 @@ struct BrowserScreen: View {
                 .accessibilityHidden(!barShown)
         }
         .background(Theme.page.ignoresSafeArea())
+        // New Space…, from the space menu or the command bar (phase 4, step 2).
+        .environment(\.newSpace, NewSpaceAction { [newSpace] in newSpace.shown = true })
+        .onChange(of: newSpace.shown) { if newSpace.shown { editing = false } }
+        .sheet(isPresented: $newSpace.shown) { NewSpaceSheet(store: store) }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }

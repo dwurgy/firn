@@ -155,6 +155,14 @@ enum Theme {
     /// Firn's space colors, by name, in the order new spaces take them.
     static let spaceColorNames = ["glacier", "sand", "sage", "heather", "ochre", "dusk", "clay", "lagoon"]
 
+    /// A new space's color, given `spaces`: the first no space has yet
+    /// (or, with all taken, the next in turn). An import asks once per
+    /// space, so each one it adds takes the next.
+    static func freeSpaceColor(among spaces: [Space]) -> String {
+        let taken = Set(spaces.map(\.color))
+        return spaceColorNames.first { !taken.contains($0) } ?? spaceColorNames[spaces.count % spaceColorNames.count]
+    }
+
     /// How strongly the active space tints the frame: 16% light, 14% dark.
     static func frameTint(_ name: String) -> Color {
         Color(light: spaceHex(name), lightOpacity: 0.16, dark: spaceHex(name), darkOpacity: 0.14)

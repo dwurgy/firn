@@ -108,6 +108,7 @@ struct TabOverview: View {
     @State private var forms = 0
     /// Add to Basecamp was picked with 12 tiles already there.
     @State private var basecampFull = false
+    @Environment(\.newSpace) private var newSpace
     /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
@@ -959,17 +960,22 @@ struct TabOverview: View {
 
     /// A tap on the space's name: the spaces (the one on screen checked),
     /// over the name, centered. Firn's frost menu, as the hold menus, with
-    /// nothing lifted. New Space… and Space Settings… come with steps 2
-    /// and 3 (docs/IOS-PLAN.md, phase 4).
+    /// nothing lifted, then New Space… (Space Settings… comes with step 3,
+    /// docs/IOS-PLAN.md, phase 4).
     private func openSpaceMenu(over pill: CGRect) {
         guard heldMenu == nil, drag == nil, gliding == nil else { return }
         let backdrop = ScreenPicture.take()
         let spaces = store.spaces.map { space in
             HoldMenuItem(space: space, checked: space.id == store.activeSpaceID) { showSpace(space) }
         }
+        var more: [HoldMenuItem] = []
+        if let newSpace {
+            more.append(HoldMenuItem(title: "New Space…", systemImage: "plus") { newSpace() })
+        }
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.2)) {
             heldMenu = OpenHoldMenu(id: store.activeSpaceID, tile: pill, fingerX: pill.midX,
-                                    sections: [spaces], backdrop: backdrop, prefersAbove: true, centered: true)
+                                    sections: [spaces, more].filter { !$0.isEmpty }, backdrop: backdrop,
+                                    prefersAbove: true, centered: true)
         }
     }
 

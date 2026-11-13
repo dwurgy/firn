@@ -42,6 +42,7 @@ struct AddressBar: View {
     @State private var keyboardShown = false
     /// Add to Basecamp was picked with 12 tiles already there.
     @State private var basecampFull = false
+    @Environment(\.newSpace) private var newSpace
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -187,6 +188,7 @@ struct AddressBar: View {
                 store.selectSpace(space)
             }
         }
+        if let newSpace { add("new-space", "New Space…", ["space", "create"]) { newSpace() } }
         add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
             ["undo", "restore", "bring back"], when: store.nextToReopen != nil) { store.reopenClosed() }
         return list

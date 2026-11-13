@@ -283,13 +283,8 @@ final class WindowModel {
     /// The first space color no space has yet (or, with all taken, the next in turn).
     var freeSpaceColor: String { Self.freeColor(among: store.spaces) }
 
-    /// A new space's color, given `spaces`; an import asks once per space,
-    /// so each one it adds takes the next.
-    static func freeColor(among spaces: [Space]) -> String {
-        let taken = Set(spaces.map(\.color))
-        let names = Theme.spaceColorNames
-        return names.first { !taken.contains($0) } ?? names[spaces.count % names.count]
-    }
+    /// A new space's color, given `spaces` (shared with the iPhone).
+    static func freeColor(among spaces: [Space]) -> String { Theme.freeSpaceColor(among: spaces) }
 
     /// File › Import from Arc…: reads Arc's file and shows the sheet (`ArcImportFlow`).
     var startingArcImport = false

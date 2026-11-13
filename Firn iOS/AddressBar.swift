@@ -467,14 +467,15 @@ private struct AddressField: View {
         HStack(spacing: 0) {
             // The page menu also balances the button on the right, so the
             // site sits centered.
-            if !isEditing, !compact, frontURL != nil {
+            if !isEditing, frontURL != nil, !(reduceMotion && compact) {
                 BarButton(symbol: "ellipsis", label: "Page Menu") { menuOpen.toggle() }
                     .accessibilityHint("Share or copy this page's link")
                     // Safari's icon sits this much further in from the
                     // field's rounded end.
-                    .padding(.leading, 3.5)
+                    .padding(.leading, compact ? 0 : 3.5)
                     .opacity(menuOpen || settling ? 0 : 1)
                     .animation(.easeOut(duration: 0.1), value: menuOpen)
+                    .modifier(RidesThePill(compact: compact, drop: compactDrop))
                     .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
             }
             // Typing for a new tab (the overview's +, or swiping past the
@@ -547,13 +548,14 @@ private struct AddressField: View {
                             .accessibilityHint("Edit the address or search")
                     }
                 }
-            if !compact {
+            if !(reduceMotion && compact) {
                 trailingButton
                 // Reload and Stop cross-fade rather than snap (a fade, so
                 // it stays with Reduce Motion).
                 .animation(.easeOut(duration: 0.15), value: page?.isLoading)
                 .opacity(menuOpen || (settling && !isEditing) ? 0 : 1)
                 .animation(.easeOut(duration: 0.1), value: menuOpen)
+                .modifier(RidesThePill(compact: compact, drop: compactDrop))
                 .transition(reduceMotion ? AddressBar.shrinkFade : .opacity)
             }
         }
@@ -932,6 +934,28 @@ struct BarSlide: Equatable {
 
 /// A rectangle that reaches further down than its frame: the field's clip,
 /// so the small pill's name, hanging below the field, isn't cut off.
+/// The page menu and Reload as the bar shrinks into the small pill and back:
+/// they stay in the field's row, so they ride its edges inward, smaller and
+/// lower with the site's name, as Back and Tabs ride their own pills. Removed
+/// instead, they faded where they stood while the glass slid out from under
+/// them (David's recording, 2026-11-13). They fade out quickly, before the
+/// edges reach the name, and back in only once the bar has mostly grown.
+private struct RidesThePill: ViewModifier {
+    let compact: Bool
+    let drop: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(compact ? 0 : 1)
+            .animation(compact ? .easeOut(duration: 0.12)
+                               : .easeOut(duration: 0.16).delay(0.14), value: compact)
+            .scaleEffect(compact ? AddressBar.compactTextScale : 1)
+            .offset(y: compact ? drop : 0)
+            .allowsHitTesting(!compact)
+            .accessibilityHidden(compact)
+    }
+}
+
 private struct ReachingDown: Shape {
     let by: CGFloat
     func path(in rect: CGRect) -> Path {

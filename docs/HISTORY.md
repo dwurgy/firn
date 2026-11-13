@@ -460,6 +460,12 @@ Steps, each checked by David:
 
 As in Dia: a group a link made (not yet kept by renaming or putting a tab in by hand) ends when it's down to one tab, by closing, dragging or taking a tab out, tidying, Basecamp, or split view; the last tab goes back to being loose right where it is. Kept groups may still be a group of one. A tab reopened with ⇧⌘T comes back loose (the group is gone). A split pair counts as two tabs. All in `endIfEmpty` (`BrowserStore+Groups.swift`), which every way out of a group already calls; six tests in `GroupsTests`. Apps unchanged; not yet checked by David.
 
+**Next (David, 2026-11-13): the card must go exactly as Ungroup's does.** Today the store ends the group at once, so the card just vanishes. Ungroup thaws it away on the Mac (`release(_:)` in `Firn/Sidebar.swift`: `Theme.thaw`, then `store.ungroup` after `afterThaw`'s 0.3s; Reduce Motion a 0.2s fade) and glides it on the iPhone (`TabOverview.swift`, the group menu's ungroup: `.smooth(duration: 0.25)`). Plan, agreed in outline, not built:
+1. FirnCore: a temporary group down to one tab is marked ending (observed) instead of removed; a call from the apps ends it only if it's still temporary with one tab (a link adding a tab back, a rename, or a tab put in cancels it); the last tab closing removes it as before.
+2. The apps: the Mac sidebar and iPhone overview watch the mark and run their own Ungroup animation, then end it.
+3. Fallback: the store ends it itself after about 1s if no window did (another space, no view), and a temporary group of one ends on load.
+Tests to update: the six in `GroupsTests` expect the mark, then the end.
+
 ## Sunrise replaces First light (2026-11-13)
 
 The welcome and the empty page moved from "First light" to "Sunrise", the look of firnbrowser.com; the plan and every step's notes are in `docs/SUNRISE-PLAN.md`. Step 6 renamed the code to match (`Shared/Sunrise.swift`, `SunriseScene`, `Theme.Sunrise`, `PaperGrain`), so older entries above that say First light mean the same scene by its old name.

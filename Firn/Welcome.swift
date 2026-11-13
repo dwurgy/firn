@@ -49,7 +49,7 @@ struct WelcomeBackdrop: View {
                     FirstLightScene(spaceColor: "glacier", part: .back, sunUp: finishing)
                     // "Welcome in." sits in the sky; the window rises over it.
                     Text("Welcome in.")
-                        .font(Theme.fraunces(44, weight: 360))
+                        .font(BrandFont.gooper(44))
                         .foregroundStyle(Theme.Welcome.skyInk)
                         .padding(.top, proxy.size.height * 0.15)
                         .opacity(finishing ? 1 : 0)
@@ -323,7 +323,7 @@ private struct HelloScreen: View {
             .padding(.bottom, 24)
             .accessibilityHidden(true)
             Text("Welcome to Firn")
-                .font(Theme.fraunces(64, weight: 360))
+                .font(BrandFont.gooper(64))
                 .tracking(-0.9)
                 .foregroundStyle(Theme.Welcome.skyInk)
                 .accessibilityAddTraits(.isHeader)
@@ -897,14 +897,14 @@ private enum DefaultBrowser {
 
 // MARK: - Pieces
 
-/// A step's title (Fraunces) and its few words.
+/// A step's title (Gooper Deck) and its few words.
 private struct StepHeading: View {
     let title: String
     let words: String
 
     var body: some View {
         Text(title)
-            .font(Theme.fraunces(28, weight: 360))
+            .font(BrandFont.gooper(28))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 8)
             .accessibilityAddTraits(.isHeader)

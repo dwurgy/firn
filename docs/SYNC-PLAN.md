@@ -8,20 +8,22 @@ The aim (David): Apple users should find it seamless, using every piece of Apple
 
 Sync is off until the person turns it on, and goes only to their own iCloud, never to Firn or any server of ours. No account.
 
-| With sync on, always | One choice: "Tabs" | Never |
+| Syncs | Found in the command bar | Never |
 | --- | --- | --- |
-| Spaces: name, color, order, separate or shared | Groups and loose tabs | Basecamp (no sync at all, not even iPhone to iPad) |
-| Saved passwords (iCloud Keychain) | Only groups | Sign-ins, cookies, and site data (WebKit can't sync them) |
-| History, as Safari does | No tabs | Settings (each device keeps its own) |
+| Spaces: name, color, order, separate or shared | Other devices' loose tabs ("On your Mac", "On your iPhone", "On your iPad") | Basecamp (no sync at all, not even iPhone to iPad) |
+| Groups and the tabs in them | | Loose tabs as a list (each device keeps its own) |
+| Saved passwords (iCloud Keychain) | | Sign-ins, cookies, and site data (WebKit can't sync them) |
+| History, as Safari does | | Settings (each device keeps its own) |
 | | | Page pictures, downloads, and a tab's back history |
 
 - **Spaces sync, and stay what they are.** A space arrives on a new device with its data store id, so a separate space is still separate there, and starts signed out (its cookies can't travel). A shared space still shares. Its passwords and history come with it, because both are kept per data store id.
-- **"Tabs"** is the only extra setting (David: no long list of what syncs). The default and the exact meaning of "Groups and loose tabs" between the Mac and the iPhone are still open; see "Open".
+- **One switch, no other options** (David, 2026-11-13: intuitive and polished, not many options; "whatever is best"). Sync on or off, and that's all. An earlier draft had a "Tabs" choice; it's gone.
+- **Loose tabs work as in Arc** (David, 2026-11-13). Arc synced what you deliberately kept (spaces, pinned tabs, favorites), never the day's unpinned tabs. In Firn, keeping a tab is putting it in a group, so groups sync and loose tabs don't, on any device (iPhone and iPad included). A loose tab on another device is found by going to it: the command bar lists it under "On your Mac" (or iPhone, or iPad), read-only; picking one opens your own copy. They never appear in the sidebar or the overview. Their addresses and titles go to iCloud, encrypted, so the command bar can show them.
 - **Settings stay on each device** (Claude's call, 2026-11-13, for less to think about): the tidy-away timing, where new tabs go, and the address bar's place often differ between a Mac and a phone anyway.
 - **History:** whatever Safari does (David). To check in step 1: how far back Safari's synced history reaches. If it's the whole year Firn keeps and that proves too much to sync, the fallback is the last 30 days.
 - **Handoff** works with sync on or off and stores nothing in iCloud.
 
-This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp no longer syncs between iPhone and iPad; loose tabs follow the Tabs choice).
+This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no longer sync between iPhone and iPad).
 
 ## Apple's technology
 
@@ -36,9 +38,9 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp no longer syncs b
 
 1. **Groundwork.** Check the facts above: Developer ID Mac apps with CloudKit and push notifications, what `encryptedValues` promises, and how far back Safari syncs history. Then the iCloud container (`iCloud.com.firnbrowser.firn`), and the iCloud and push entitlements on both apps. David makes the new provisioning profiles in the developer portal. *Mac change:* two entitlements and a new profile. *Done:* both apps launch signed, and nothing is sent yet.
 2. **Records in FirnCore.** Spaces, groups, tabs, and visits to and from records, with the merge rules (latest wins, per-device fields kept apart, a deleted group's tabs). Tested without iCloud.
-3. **The engine and spaces.** A sync engine in both apps, and Settings › Sync: one switch (off by default) and the Tabs choice. Spaces sync. *Mac change:* the new Settings section. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there.
+3. **The engine and spaces.** A sync engine in both apps, and Settings › Sync: one switch, off by default. Spaces sync. *Mac change:* the new Settings section. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there.
 4. **Groups.** Groups and their tabs. Deleting a group or space asks "from all your devices", and a group's delete has an Undo. *Done:* a group made on the Mac appears on the iPhone, and renaming it on the iPhone renames it on the Mac.
-5. **Loose tabs,** following the Tabs choice.
+5. **"On your Mac" and "On your iPhone":** each device shares its open loose tabs' addresses and titles (kept current, removed as they close), and the command bar lists the other devices' under their names. *Mac change:* a command bar section.
 6. **History.**
 7. **Handoff.**
 8. **Passwords to iCloud Keychain.** Its own short plan first: it moves where people's passwords live, so never a quiet switch.
@@ -46,5 +48,4 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp no longer syncs b
 
 ## Open
 
-- **"Groups and loose tabs" between the Mac and the iPhone:** one shared list of loose tabs everywhere, or loose tabs synced only between devices of the same kind (Macs together, iPhone and iPad together), with the other kind's found in the command bar ("On your Mac", "On your iPhone"), as decided on 2026-11-03? Needed by step 5.
-- **The Tabs default:** "Only groups" matches the 2026-11-03 decision. Needed by step 3.
+Nothing yet. (Settled 2026-11-13: loose tabs as in Arc, and no Tabs setting.)

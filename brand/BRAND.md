@@ -1,5 +1,12 @@
 # Firn brand sheet: Sunrise
 
+> **A copy from `dwurgy/firn-site`.** The file paths below (`public/*.css`,
+> `public/assets/…`, `design/firn-sunrise/…`, `design/share-preview/…`,
+> `snow-edges.json`, `snow-fresh.webp`, `snow-packed.webp`, the `make-*.py`
+> tools, `SUNRISE-BRIEF.md`, `DIG-DOWN-PLAN.md`) live in that repo, not this
+> one. If this copy and the site's CSS disagree, the site's CSS wins. The
+> app's move to Sunrise is planned in `docs/SUNRISE-PLAN.md`.
+
 The look of firnbrowser.com since November 2026, written down in one place
 so the app (welcome screens, empty tab page), Claude Design and anything new
 can start from the same rules. Values are copied from the live site:

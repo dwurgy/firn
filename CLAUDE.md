@@ -97,16 +97,15 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 
 **Logo and icons:** use only the final files from the brand kit (`brand/`). Never redraw or re-type the logo or wordmark. The app icon is the glacier tile; on macOS 26 it's the `Firn.icon` from Icon Composer.
 
-### First light (the welcome and the empty page)
+### Sunrise (the welcome and the empty page)
 
-Firn's brand moments use the "First light" look: sunrise in a snowy cabin near Sisters, Oregon, coffee in hand. Cool glacier haze high, warm apricot sunrise low, snow at the bottom, a faint paper grain, and a few drifting flakes (the small-cut mark, never on text).
+Firn's brand moments use the "Sunrise" look, the same as firnbrowser.com: sunrise at a snowy cabin near Sisters, Oregon, coffee in hand. A blue-hour sky warming to dawn at the horizon, the sun just peeking over textured snow, and a few drifting flakes. **Every value lives in `brand/BRAND.md`** (a copy from `dwurgy/firn-site`; the site's CSS wins); don't copy numbers here. It replaces "First light"; the move is planned in `docs/SUNRISE-PLAN.md`, and until it's built the code still draws First light (`Shared/FirstLight.swift`).
 
-- **Where:** the full-window welcome and the empty page (no open tabs). Never everyday browsing, settings, Lookout, the command bar, menus, downloads, or scam warnings.
-- **Only the snow and the mark take the space's color.** The sky and sunrise are always Firn's own.
-- **Snow:** five wavy bands; glacier blues by default and for a Glacier space; with another space color, mix page with the space color at 20/33/47/62/78% (light) or #2B2826 with it at 12/20/29/38/48% (dark). Color changes cross-fade (about 400ms).
-- **Dark = "blue hour":** a dark sky with a deep glacier haze, a faint ember low down, and dark snow.
+- **Where:** only the full-window welcome and the empty page (no open tabs). Never everyday browsing, Settings, Lookout, the command bar, menus, downloads, or scam warnings. Everyday screens are plain warm paper.
+- **Only the snow and the mark take the space's color.** The sky and the sun are always Firn's own.
+- **Dark is "blue hour":** the sun never clears the snow, only a cap and a faint glow.
 - **The welcome's finish** ("Welcome in."): about 2.4s, unhurried; the words hold a moment, the browser rises over them (about 1.1s), then the scene fades to the real browser. Reduce Motion: a plain 300ms fade.
-- **Performance (required):** gradients and shapes, not heavy filters; the grain is a static image under the content; nothing animates or redraws while idle (no `TimelineView` running in the background); motion uses transforms and opacity; everything stops with Reduce Motion.
+- **Performance (required):** gradients and shapes, not heavy filters; textures are static images; nothing animates or redraws while idle (no `TimelineView` running in the background); motion uses transforms and opacity; everything moving is off with Reduce Motion.
 
 ---
 

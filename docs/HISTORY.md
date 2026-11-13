@@ -471,3 +471,19 @@ Tests to update: the six in `GroupsTests` expect the mark, then the end.
 ## Sunrise replaces First light (2026-11-13)
 
 The welcome and the empty page moved from "First light" to "Sunrise", the look of firnbrowser.com; the plan and every step's notes are in `docs/SUNRISE-PLAN.md`. Step 6 renamed the code to match (`Shared/Sunrise.swift`, `SunriseScene`, `Theme.Sunrise`, `PaperGrain`), so older entries above that say First light mean the same scene by its old name.
+
+## Plan: Reader (David, 2026-11-13)
+
+A calm, text-only view of an article, on the Mac and the iPhone together.
+
+- **Finding the article:** Mozilla's Readability.js (Apache 2.0, the heart of Firefox's Reader View; David approved the dependency). Bundled at a pinned version, never downloaded, its license file beside it. It runs in Firn's own `WKContentWorld` on a copy of the page's document, so the page can't see it or tamper with it, and the page's own scripts never run in the reader.
+- **Showing it:** a separate view Firn draws itself, in the same space's data store, with page scripts off and a strict content policy; only the article's text, pictures, and links come along. Everything from the page is hostile input (escaped, links http and https only).
+- **Getting in and out:** a quiet book icon fades into the address bar on pages that read as articles; View › Reader (⇧⌘R, as Safari) on the Mac; "Reader" in the command bar on both. Always off when a page opens; never remembered per site (David). The page cross-fades into the reader; with Reduce Motion, a plain fade.
+- **The look:** warm paper, one narrow column (about 65 characters), generous margins; a quiet line under the title with the site, the author, and minutes to read. Two choices only: text size, and Serif or Sans, both Apple's system fonts (New York and SF; David). Follows the system's light and dark. No Gooper Deck: the reader is not a brand moment.
+
+**Steps (each its own conversation, Opus):**
+1. The design: an HTML draft (`docs/reader-design.html`), light and dark, for David to approve.
+2. Finding the article: Readability.js added and run in Firn's content world, and the rule for when a page counts as an article; shared code in FirnCore or `Shared/`, tested.
+3. The reader: the approved look, the address bar icon, View › Reader, and the command bar, on the Mac and the iPhone.
+4. A look over: the security check, VoiceOver, Reduce Motion, light and dark, and a test page in `docs/`.
+5. Summarize (David: last): an on-device summary from Apple's model, only on macOS and iOS 26 with Apple Intelligence, otherwise simply absent; nothing leaves the device.

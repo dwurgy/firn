@@ -69,9 +69,8 @@ Page inset:           the page floats 8pt inside the frame, 12pt corners
                       (8pt on macOS 26+, matching Liquid Glass window corners)
 Traffic lights:       placed by macOS (empty toolbar); the top row lines up with them
 Font:                 system font (SF): 13pt tabs, 12pt labels, 11pt hints;
-                      Fraunces (soft) only for brand moments: the welcome
-                      (30pt), the scam warning (27pt), the empty page (24pt),
-                      and panel titles (22pt)
+                      Gooper Deck only for brand moments (the welcome and
+                      the empty page); see "Brand font" below
 Motion:               about 200ms, ease-out or bounce-free spring
 Light and dark:       both, following the system
 ```
@@ -93,7 +92,7 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 - Blue is branding, never text. Sand never carries text. Buttons are ink. Shadows are warm brown, never grey.
 - Glacier stays #7F9CB0 / #6E98B2; no darker "contrast-fixed" versions. The one exception is the system accent (switches, radio buttons, selection, focus rings): a slightly more saturated Glacier, #689ABB light and #5F98BB dark, so controls don't look washed out (David, 2026-10-24).
 
-**Fraunces:** bundled in the app (SIL Open Font License, keep the license file next to it), never downloaded. Soft corners on, wonky letters off (`SOFT` 100, `WONK` 0, optical size automatic). SwiftUI can't set custom font axes directly, so build the font through Core Text font variations in one helper and use it everywhere. Emphasis in Fraunces headlines is weight (360, then 600), never color, never heavier than 600.
+**Brand font: Gooper Deck** (David, 2026-11-13: Fraunces is no more). Brand moments only, the same rule as before. Licensed: it lives in the git-ignored `PrivateFonts/`, is copied in by a build step when present, and is never committed (the repo is public). Emphasis is weight (Regular, then SemiBold), never color. Everything else, reader mode included, is Apple's system fonts. *Left over:* the Mac's Settings and History titles (`FrauncesWindowTitle`, `Theme.panelTitleFont`) and the welcome's fallback in a clone without Gooper still use the bundled Fraunces; moving them off is its own step.
 
 **Logo and icons:** use only the final files from the brand kit (`brand/`). Never redraw or re-type the logo or wordmark. The app icon is the glacier tile; on macOS 26 it's the `Firn.icon` from Icon Composer.
 
@@ -145,7 +144,7 @@ Each space is its own browser. This is the heart of the new Firn; get it right b
 - **Command bar:** ⌘T opens a floating bar, Zen style, and no tab exists until you pick something (decided, David, 2026-10-23). The bar: type an address, search, jump to an open tab in this space, or run an action by name.
 - **Later, as on Electron:** sleeping tabs, sound and the mini player, downloads, find in page, zoom, permissions, saved passwords, ad and tracker blocking, and scam warnings.
 - **Later, new ideas (each its own step, ask first):**
-  - **Reading mode:** a calm, text-only view of an article. WebKit has no built-in reader for other browsers, so this likely needs an open-source article parser (a dependency: ask).
+  - **Reader** (planned, David, 2026-11-13; five steps in `docs/HISTORY.md`, "Plan: Reader"): a calm, text-only view of an article, Mac and iPhone together, using Mozilla's Readability.js (approved).
   - **Back and skip in the mini player:** left out for now (David, 2026-10-23: maybe unnecessary; play and pause first). Investigated: a site's own previous and next (Media Session) can't be reached from Firn's world, only by a small script in the page's own world, an exception to the content-world rule that David would have to approve.
   - **Import passwords** from the export file other browsers and password managers make, then offer to delete that file (it holds every password as plain text). Opus.
   - **Saved passwords, then imports from Arc** (David, 2026-10-24: passwords are a must): plan saved passwords first, then CSV import, then Arc's sidebar (spaces, favorites as Basecamp, pinned as groups). Research in `docs/HISTORY.md`. Opus.

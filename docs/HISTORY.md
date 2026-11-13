@@ -482,7 +482,7 @@ A calm, text-only view of an article, on the Mac and the iPhone together.
 - **The look:** warm paper, one narrow column (about 65 characters), generous margins; a quiet line under the title with the site, the author, and minutes to read. Two choices only: text size, and Serif or Sans, both Apple's system fonts (New York and SF; David). Follows the system's light and dark. No Gooper Deck: the reader is not a brand moment.
 
 **Steps (each its own conversation, Opus):**
-1. The design: an HTML draft (`docs/reader-design.html`), light and dark, for David to approve.
+1. The design: an HTML draft (`docs/reader-design.html`), light and dark, for David to approve. *Done (2026-11-13): David approved it.* The Aa button in the reader's corner holds Serif or Sans and text size; the space's color shows only in the book icon when on, link underlines, and a quote's line; the book sits in the Mac's address field and at the start of the iPhone's pill.
 2. Finding the article: Readability.js added and run in Firn's content world, and the rule for when a page counts as an article; shared code in FirnCore or `Shared/`, tested.
 3. The reader: the approved look, the address bar icon, View › Reader, and the command bar, on the Mac and the iPhone.
 4. A look over: the security check, VoiceOver, Reduce Motion, light and dark, and a test page in `docs/`.

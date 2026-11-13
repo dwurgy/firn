@@ -188,11 +188,15 @@ struct AddressBar: View {
         return PageZoom.percent(zoom)
     }
 
-    /// Room kept clear at the right for the zoom and reload buttons.
+    /// The book, on pages that read as articles (and while Reader is on).
+    private var showsBook: Bool { !focused && window.canToggleReader }
+
+    /// Room kept clear at the right for the book, zoom, and reload buttons.
     private var trailingRoom: CGFloat {
+        let book: CGFloat = showsBook ? 28 : 0
         let reload: CGFloat = reloadablePage == nil ? 0 : 24
         let zoom: CGFloat = zoomLabel == nil ? 0 : 40
-        return Theme.rowPadding + reload + zoom
+        return Theme.rowPadding + book + reload + zoom
     }
 
     var body: some View {
@@ -226,6 +230,14 @@ struct AddressBar: View {
             }
             .overlay(alignment: .trailing) {
                 HStack(spacing: 0) {
+                    if showsBook {
+                        ReaderBookButton(isOn: window.isReading, space: store.activeSpace.color) {
+                            window.toggleReader()
+                            window.focusPage()
+                        }
+                        .padding(.trailing, 2)
+                        .transition(.opacity)
+                    }
                     if let zoomLabel {
                         ZoomLabel(text: zoomLabel) { window.zoomFront(.actualSize) }
                     }
@@ -238,6 +250,7 @@ struct AddressBar: View {
                     }
                 }
                 .padding(.trailing, 4)
+                .animation(.easeOut(duration: 0.2), value: showsBook)
             }
             .onHover { hovering = $0 }
             .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")

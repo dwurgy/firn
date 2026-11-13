@@ -290,6 +290,11 @@ private struct CommandBar: View {
             window.zoomFront(.actualSize)
             window.focusPage()
         }
+        add("reader", window.isReading ? "Hide Reader" : "Show Reader",
+            ["reader", "reading", "article", "text only", "book"], "⇧⌘R", when: window.canToggleReader) {
+            window.toggleReader()
+            window.focusPage()
+        }
         if let name = window.frontBlockingName(enabled: blocksContent) {
             add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
                 window.toggleFrontBlocking()

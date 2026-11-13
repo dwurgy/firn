@@ -207,7 +207,9 @@ final class WebKitPageController: NSObject, PageController {
 
     #if os(macOS)
     func focus() {
-        webView.window?.makeFirstResponder(webView)
+        // Reader's view while Reader is on, so the keys scroll the article.
+        let view = reader?.webView.window != nil ? reader!.webView : webView
+        view.window?.makeFirstResponder(view)
     }
 
     func snapshot(width: CGFloat) async -> CGImage? {

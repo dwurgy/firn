@@ -855,25 +855,6 @@ private struct TabsButton: View {
     }
 }
 
-/// Firn's frost on the iPhone's bars, washed with the space's color, over
-/// iOS's thinnest material blur, so the live page's shapes don't show
-/// through. A trial (David, 2026-11-09): iOS's soft edge blur, as under
-/// Safari's bar, never appeared under a web page (`docs/IOS-PLAN.md`).
-/// Reduce Transparency: solid.
-struct BarFrost<S: InsettableShape>: View {
-    let shape: S
-    let space: String
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    var body: some View {
-        FirnFrost(shape: shape, fill: Theme.barFrost,
-                  tint: Theme.spaceColor(space).opacity(Theme.groupTint),
-                  solid: reduceTransparency) {
-            shape.fill(.ultraThinMaterial)
-        }
-    }
-}
-
 /// A round 44pt tap target with an SF Symbol, in Firn's ink. Every symbol
 /// on Firn's bars, the overview's included, takes `symbolFont`, so they all
 /// read as one set (step 2c).

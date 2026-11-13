@@ -147,6 +147,18 @@ struct PagePane: View {
                     // A plain fade either way; quicker with Reduce Motion.
                     .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: page.loadError)
                     .overlay(alignment: .topLeading) { fillList(on: tab, page: page) }
+                    .overlay(alignment: .topTrailing) {
+                        if page.isReading {
+                            ReaderTextButton(space: store.activeSpace.color)
+                                .padding(14)
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: page.isReading)
+                    // Every reader follows the one look, on screen or coming back to it.
+                    .task(id: ReaderStyle.shared.look) {
+                        if page.isReading { page.setReaderLook(ReaderStyle.shared.look) }
+                    }
                     .onChange(of: page.url) {
                         if store.fillOffer?.tabID == tab.id { store.dismissFillOffer() }
                     }

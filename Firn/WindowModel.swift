@@ -428,6 +428,35 @@ final class WindowModel {
         frontPage?.setZoom(zoom)
     }
 
+    // MARK: Reader
+
+    /// The page Reader can act on: the tab on screen's (in split view, the
+    /// half in use). Not a Lookout's, which is for a glance.
+    var readerPage: (any PageController)? {
+        store.lookout == nil ? store.activeTab?.page : nil
+    }
+
+    /// Whether the book shows and View › Show Reader works: the page reads
+    /// as an article, or Reader is already on.
+    var canToggleReader: Bool {
+        readerPage.map { $0.isArticle || $0.isReading } ?? false
+    }
+
+    var isReading: Bool { readerPage?.isReading ?? false }
+
+    /// The book, ⇧⌘R, or the command bar: Reader on or off for the tab on
+    /// screen. A page that turns out too short just loses its book.
+    func toggleReader() {
+        guard let page = readerPage else { return }
+        if page.isReading {
+            page.closeReader()
+            return
+        }
+        guard page.isArticle else { return }
+        let accent = Theme.spaceHex(store.activeSpace.color)
+        Task { _ = await page.openReader(look: ReaderStyle.shared.look, accent: accent) }
+    }
+
     // MARK: Blocking
 
     /// What turning blocking on or off for the page in front is called

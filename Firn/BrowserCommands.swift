@@ -125,6 +125,14 @@ struct BrowserCommands: Commands {
             Button(window.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar") { window.toggleSidebar() }
                 .keyboardShortcut("s")
             Divider()
+            // As in Safari.
+            Button(window.isReading ? "Hide Reader" : "Show Reader") {
+                window.toggleReader()
+                window.focusPage()
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(!window.canToggleReader)
+            Divider()
             // The page in front, as with Print. ⌘= also zooms in (TabShortcuts).
             Button("Zoom In") { window.zoomFront(.larger) }
                 .keyboardShortcut("+")

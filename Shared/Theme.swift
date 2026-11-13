@@ -248,7 +248,8 @@ enum Theme {
         return channel(16) | channel(8) | channel(0)
     }
 
-    private static func spaceHex(_ name: String) -> UInt32 {
+    /// A space's color as 0xRRGGBB (Reader's accent takes it this way).
+    static func spaceHex(_ name: String) -> UInt32 {
         switch name {
         case "sand": 0xC9A27E
         case "sage": 0x8FAE8B

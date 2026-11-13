@@ -7,13 +7,13 @@ import FirnCore
 import SwiftUI
 
 /// "First light": sunrise in a snowy cabin. Cool glacier sky high, warm
-/// sunrise low, snow at the bottom, a faint paper grain, and a few drifting
-/// flakes. Shown on the empty page now, and behind the welcome later.
+/// sunrise low, Sunrise's textured snow at the bottom (docs/SUNRISE-PLAN.md,
+/// step 3; the sky and sun follow in step 4), and a few drifting flakes. Shown on the empty page now, and behind the welcome later.
 /// Ported from the Electron app (docs/electron-welcome: FirstLight.tsx and
 /// styles.css, "First light"), never redrawn from a description.
 ///
-/// Performance (CLAUDE.md): gradients and shapes, no filters; the grain is a
-/// static image; the sky draws once per size and look; the flakes drift in
+/// Performance (CLAUDE.md): gradients and shapes, no filters; the snow's
+/// texture is a static image; the sky and snow draw once per size and look; the flakes drift in
 /// Core Animation, so nothing in Firn redraws while the scene sits idle.
 struct FirstLightScene: View {
     /// The space's color name (`Space.color`); only the snow takes it.
@@ -23,10 +23,13 @@ struct FirstLightScene: View {
     var part = Part.whole
     /// The welcome's finish: the sun brightens and rises.
     var sunRises = false
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Part { case whole, back, front }
+
+    /// How much of the scene's height the snow takes (a first guess, judged
+    /// on screen: docs/SUNRISE-PLAN.md, question 1).
+    static let snowShare: CGFloat = 0.3
 
     var body: some View {
         GeometryReader { proxy in
@@ -37,14 +40,8 @@ struct FirstLightScene: View {
                     FirstLightFlakes(reduceMotion: reduceMotion)
                 }
                 if part != .back {
-                    FirstLightSnow(colors: Theme.FirstLight.snow(spaceColor))
-                        .frame(height: proxy.size.height * 0.25)
-                        // A new space's snow fades in over about 400ms.
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.4), value: spaceColor)
-                    Image("FirstLightGrain")
-                        .resizable(resizingMode: .tile)
-                        .opacity(Theme.FirstLight.grainOpacity(dark: colorScheme == .dark))
-                        .blendMode(colorScheme == .dark ? .softLight : .multiply)
+                    FirstLightSnow(spaceColor: spaceColor, reduceMotion: reduceMotion)
+                        .frame(height: proxy.size.height * Self.snowShare)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -139,34 +136,192 @@ private struct FirstLightSun: View {
     }
 }
 
-/// The five snow bands, stretched to the width.
+/// Sunrise's snow: five layers, surface first, each cut along one of the
+/// site's hand-cut edges (`SnowEdges`) and drawn as the site's `.lay` is.
+/// A new space's snow fades in over the old one over 600ms, as the site's
+/// does (instantly with Reduce Motion).
 private struct FirstLightSnow: View {
-    let colors: [Color]
+    let spaceColor: String
+    let reduceMotion: Bool
+    /// The snow underneath, and the one fading in over it.
+    @State private var shown: String
+    @State private var incoming: String?
+
+    init(spaceColor: String, reduceMotion: Bool) {
+        self.spaceColor = spaceColor
+        self.reduceMotion = reduceMotion
+        _shown = State(initialValue: spaceColor)
+    }
 
     var body: some View {
         ZStack {
-            ForEach(SnowBand.paths.indices, id: \.self) { index in
-                SnowBand(index: index).fill(colors[index])
+            SnowLayers(space: shown)
+            if let incoming {
+                SnowLayers(space: incoming)
+                    .id(incoming)
+                    .transition(.opacity)
+            }
+        }
+        .onChange(of: spaceColor) { _, new in
+            var still = Transaction()
+            still.disablesAnimations = true
+            // A fade already running finishes at once.
+            withTransaction(still) {
+                if let incoming { shown = incoming }
+                incoming = nil
+            }
+            guard new != shown else { return }
+            if reduceMotion {
+                withTransaction(still) { shown = new }
+                return
+            }
+            withAnimation(.easeOut(duration: 0.6)) {
+                incoming = new
+            } completion: {
+                guard incoming == new else { return }
+                withTransaction(still) {
+                    shown = new
+                    incoming = nil
+                }
             }
         }
     }
 }
 
-private struct SnowBand: Shape {
-    let index: Int
+/// The five layers in one `Canvas`, drawn once per size, look, and space.
+private struct SnowLayers: View {
+    let space: String
+    @Environment(\.colorScheme) private var colorScheme
 
-    /// Drawn in a 1280 × 200 box (FirstLight.tsx, `SNOW_BANDS`).
-    static let paths: [Path] = [
-        "M0,200 L0,26.6 C106.7,26.6 106.7,42.3 213.3,42.3 C320,42.3 320,33.3 426.7,33.3 C533.3,33.3 533.3,45.3 640,45.3 C746.7,45.3 746.7,46.4 853.3,46.4 C960,46.4 960,17.8 1066.7,17.8 C1173.3,17.8 1173.3,15.1 1280,15.1 L1280,200 Z",
-        "M0,200 L0,76.2 C106.7,76.2 106.7,81.2 213.3,81.2 C320,81.2 320,97.9 426.7,97.9 C533.3,97.9 533.3,76.8 640,76.8 C746.7,76.8 746.7,78.8 853.3,78.8 C960,78.8 960,82.4 1066.7,82.4 C1173.3,82.4 1173.3,63.9 1280,63.9 L1280,200 Z",
-        "M0,200 L0,121.8 C106.7,121.8 106.7,126.7 213.3,126.7 C320,126.7 320,128.9 426.7,128.9 C533.3,128.9 533.3,134.9 640,134.9 C746.7,134.9 746.7,126.6 853.3,126.6 C960,126.6 960,134.1 1066.7,134.1 C1173.3,134.1 1173.3,97.5 1280,97.5 L1280,200 Z",
-        "M0,200 L0,152.8 C106.7,152.8 106.7,163 213.3,163 C320,163 320,168.5 426.7,168.5 C533.3,168.5 533.3,144.5 640,144.5 C746.7,144.5 746.7,161.5 853.3,161.5 C960,161.5 960,159.3 1066.7,159.3 C1173.3,159.3 1173.3,157.8 1280,157.8 L1280,200 Z",
-        "M0,200 L0,191.7 C106.7,191.7 106.7,192.3 213.3,192.3 C320,192.3 320,190.8 426.7,190.8 C533.3,190.8 533.3,170.1 640,170.1 C746.7,170.1 746.7,183.2 853.3,183.2 C960,183.2 960,178.8 1066.7,178.8 C1173.3,178.8 1173.3,181.6 1280,181.6 L1280,200 Z",
-    ].map { Path(SVGPath.cgPath($0)) }
+    var body: some View {
+        let snow = Theme.FirstLight.snow(space, dark: colorScheme == .dark)
+        let textures = [SnowTexture.fresh, SnowTexture.fresh, SnowTexture.packed,
+                        SnowTexture.packed, SnowTexture.packed]
+        Canvas { context, size in
+            Self.draw(in: &context, size: size, snow: snow, textures: textures)
+        }
+    }
 
-    func path(in rect: CGRect) -> Path {
-        Self.paths[index].applying(CGAffineTransform(translationX: rect.minX, y: rect.minY)
-            .scaledBy(x: rect.width / 1280, y: rect.height / 200))
+    /// Where each layer's edge starts and how tall its ridge is.
+    struct Layout {
+        var tops: [CGFloat]
+        var edges: [CGFloat]
+    }
+
+    /// The site's edge heights (64pt, the surface 96pt; 36pt and 56pt under
+    /// 600pt wide). Each layer shows a little more than its ridge and the
+    /// deepest at least 0.6 of one; room left over is shared out evenly, and
+    /// if there isn't enough, the ridges shrink with the layers.
+    static func layout(width: CGFloat, height: CGFloat) -> Layout {
+        var edges: [CGFloat] = width < 600 ? [56, 36, 36, 36, 36] : [96, 64, 64, 64, 64]
+        var gaps = edges.prefix(4).map { $0 * 1.15 } + [edges[4] * 0.6]
+        let needed = gaps.reduce(0, +)
+        if needed > height {
+            let shrink = height / needed
+            edges = edges.map { $0 * shrink }
+            gaps = gaps.map { $0 * shrink }
+        } else {
+            let extra = (height - needed) / CGFloat(gaps.count)
+            gaps = gaps.map { $0 + extra }
+        }
+        var tops: [CGFloat] = [0]
+        for gap in gaps.dropLast() { tops.append(tops.last! + gap) }
+        return Layout(tops: tops, edges: edges)
+    }
+
+    static func draw(in context: inout GraphicsContext, size: CGSize,
+                     snow: Theme.FirstLight.Snow, textures: [Image?]) {
+        let w = size.width, height = size.height
+        guard w > 0, height > 0 else { return }
+        let layout = layout(width: w, height: height)
+        // How much the ridges shrank, for the surface's warm light.
+        let shrink = layout.edges[1] / (w < 600 ? 36 : 64)
+
+        func edge(_ index: Int, shift: CGFloat = 0) -> [CGPoint] {
+            let top = layout.tops[index], rise = layout.edges[index]
+            return SnowEdges.layers[index].map { CGPoint(x: $0.x * w, y: top + $0.y * rise + shift) }
+        }
+        /// The edge, closed straight down (or up) to `y`.
+        func closed(_ points: [CGPoint], to y: CGFloat) -> Path {
+            var path = Path()
+            path.addLines(points)
+            path.addLine(to: CGPoint(x: w, y: y))
+            path.addLine(to: CGPoint(x: 0, y: y))
+            path.closeSubpath()
+            return path
+        }
+
+        for index in 0..<5 {
+            let top = layout.tops[index], rise = layout.edges[index]
+            let surface = index == 0
+            // Down to the lowest point of the next layer's edge, which covers the rest.
+            let bottom = index < 4 ? min(height, layout.tops[index + 1] + layout.edges[index + 1]) : height
+            let tall = bottom - top
+            let points = edge(index)
+            let shape = closed(points, to: bottom)
+            let box = Path(CGRect(x: 0, y: top, width: w, height: tall))
+
+            var layer = context
+            layer.clip(to: shape)
+            // 1. The base color, 2. the texture (white, only its alpha
+            // changing), 3. the veil.
+            layer.fill(box, with: .color(snow.bases[index]))
+            if let texture = textures[index] {
+                let tile = layer.resolve(texture)
+                if tile.size.width > 0 {
+                    layer.fill(box, with: .tiledImage(texture, scale: 256 / tile.size.width))
+                }
+            }
+            layer.fill(box, with: .color(snow.veils[index]))
+            // 4. Deeper toward the bottom, 5. brighter at the top.
+            layer.fill(box, with: .linearGradient(
+                Gradient(colors: [snow.deeps[index].opacity(0), snow.deeps[index]]),
+                startPoint: CGPoint(x: 0, y: top + 0.3 * tall), endPoint: CGPoint(x: 0, y: bottom)))
+            layer.fill(box, with: .linearGradient(
+                Gradient(colors: [snow.lift, snow.lift.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: top), endPoint: CGPoint(x: 0, y: top + min(280, tall))))
+            // 6. The surface's warm light where the sun is.
+            if surface {
+                FirstLightSky.ellipse(layer, size, Gradient(colors: [snow.wash, snow.wash.opacity(0)]),
+                                      center: CGPoint(x: 0.62 * w, y: top),
+                                      radii: CGSize(width: 0.7 * w, height: snow.washHeight * shrink))
+            }
+            // 7. The crest: five soft lip bands under the edge, then the rim
+            // (stroked twice as wide, half of it clipped away outside the snow).
+            for depth in [0.05, 0.11, 0.19, 0.30, 0.45] as [CGFloat] {
+                layer.fill(closed(edge(index, shift: depth * rise), to: top - 1),
+                           with: .color(surface ? snow.surfaceLip : snow.lip))
+            }
+            var rim = Path()
+            rim.addLines(points)
+            layer.stroke(rim, with: .color(surface ? snow.surfaceRim : snow.rim),
+                         style: StrokeStyle(lineWidth: surface ? 8 : 6, lineJoin: .round))
+            // 8. The shadow the next edge casts on this layer: ten copies of
+            // it, each a little higher and fainter in sum, so it fades smoothly.
+            if index < 4 {
+                let next = layout.edges[index + 1]
+                for step in 1...10 {
+                    let lift = 0.6 * pow(CGFloat(step) / 10, 1.6) * next
+                    layer.fill(closed(edge(index + 1, shift: -lift), to: bottom), with: .color(snow.shadow))
+                }
+            }
+        }
+    }
+}
+
+/// The two snow textures (512px tiles shown at 256pt), bundled from
+/// firn-site's (`Shared/Sunrise/`), loaded once.
+@MainActor private enum SnowTexture {
+    static let fresh = load("snow-fresh")
+    static let packed = load("snow-packed")
+
+    private static func load(_ name: String) -> Image? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "webp") else { return nil }
+        #if os(macOS)
+        return NSImage(contentsOf: url).map { Image(nsImage: $0) }
+        #else
+        return UIImage(contentsOfFile: url.path).map { Image(uiImage: $0) }
+        #endif
     }
 }
 

@@ -270,25 +270,64 @@ enum Theme {
         /// The paper grain: multiplied in light, soft light in dark.
         static func grainOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.13 }
 
-        /// The five snow bands, back to front: Firn's glacier blues for a
-        /// Glacier space, otherwise the space's color mixed into the page.
-        static func snow(_ space: String) -> [Color] {
-            let tint = spaceHex(space)
-            if tint == spaceHex("glacier") {
-                return zip([0xDCE5EB, 0xC3D3DE, 0xA6BFCF, 0x8AABC0, 0x6E98B2] as [UInt32],
-                           [0x34353A, 0x3A3F46, 0x414B55, 0x495865, 0x536777] as [UInt32])
-                    .map { Color(light: $0, dark: $1) }
-            }
-            return zip([0.20, 0.33, 0.47, 0.62, 0.78], [0.12, 0.20, 0.29, 0.38, 0.48])
-                .map { Color(light: mix(0xFBFAF8, tint, $0), dark: mix(0x2B2826, tint, $1)) }
+        /// Sunrise's snow for a space in one look (docs/SUNRISE-PLAN.md, "The
+        /// snow"; the site's `.lay` in firn-site's home.css). Glacier's snow
+        /// with its hue turned a little toward the space's color (`SnowColors`).
+        /// Plain colors, not light-and-dark pairs: the snow's `Canvas` draws
+        /// once per look and picks its own.
+        static func snow(_ space: String, dark: Bool) -> Snow {
+            let layers = SnowColors.layers(space: space, spaceHex: spaceHex(space))
+            let colors = dark ? layers.dark : layers.light
+            return Snow(
+                // Each layer's color pushed a little darker, so the texture's
+                // white crystals bring it back up.
+                bases: colors.enumerated().map { index, hex in
+                    let amount = dark ? (index == 1 ? 0.16 : 0.10) : 0.20
+                    return plain(mix(hex, dark ? 0x0B121B : 0x26394B, amount))
+                },
+                veils: colors.map { plain($0, dark ? 0.42 : 0) },
+                deeps: dark
+                    ? [0.20, 0.20, 0.24, 0.24, 0.24].map { plain(0x04080E, $0) }
+                    : [0.13, 0.13, 0.16, 0.18, 0.20].map { plain(0x0E2032, $0) },
+                lift: plain(0xFFFFFF, dark ? 0.07 : 0.2),
+                wash: dark ? plain(0xF2AA78, 0.14) : plain(0xFFCEA0, 0.42),
+                washHeight: dark ? 380 : 420,
+                lip: dark ? plain(0xDCEAF6, 0.04) : plain(0xFFFFFF, 0.06),
+                surfaceLip: dark ? plain(0xFFD6B4, 0.05) : plain(0xFFECD6, 0.1),
+                rim: dark ? plain(0xD6E6F4, 0.38) : plain(0xFFFFFF, 0.85),
+                surfaceRim: dark ? plain(0xFFDEC4, 0.5) : plain(0xFFF0DE, 0.95),
+                shadow: dark ? plain(0x02060C, 0.06) : plain(0x102234, 0.032)
+            )
         }
 
-        /// Sunrise's five snow layers, surface first: Glacier's snow with its
-        /// hue turned a little toward the space's color (`SnowColors`).
-        /// Not drawn yet; it replaces `snow(_:)` in Sunrise step 3.
-        static func sunriseSnow(_ space: String) -> [Color] {
-            let snow = SnowColors.layers(space: space, spaceHex: spaceHex(space))
-            return zip(snow.light, snow.dark).map { Color(light: $0, dark: $1) }
+        /// The colors of the five snow layers, surface first, and their light.
+        struct Snow {
+            /// The layer's own color, a little darker, under the texture.
+            let bases: [Color]
+            /// The layer's color again over the texture, softening its grain
+            /// (clear in light).
+            let veils: [Color]
+            /// The darkening at each layer's bottom.
+            let deeps: [Color]
+            /// The brightening at each layer's top.
+            let lift: Color
+            /// The warm light on the surface where the sun is, and how tall it reaches.
+            let wash: Color
+            let washHeight: CGFloat
+            /// The soft bands just under each edge.
+            let lip: Color
+            let surfaceLip: Color
+            /// The bright line along each edge (3pt, 4pt on the surface).
+            let rim: Color
+            let surfaceRim: Color
+            /// Each edge's faint shadow on the layer above it.
+            let shadow: Color
+        }
+
+        /// One color, the same in both looks.
+        private static func plain(_ hex: UInt32, _ opacity: Double = 1) -> Color {
+            Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
+                  blue: Double(hex & 0xFF) / 255, opacity: opacity)
         }
     }
 

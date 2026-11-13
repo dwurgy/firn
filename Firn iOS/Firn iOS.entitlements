@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iCloud sync (off until the person turns it on): Firn's own CloudKit container, in the person's private iCloud
+	     database. Everything Firn puts there is sealed on the phone first (docs/SYNC-PLAN.md). -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.firnbrowser.firn</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<!-- Silent pushes from iCloud, so a change made on another device arrives without waiting. Development for builds
+	     from Xcode; Xcode switches it to production when exporting for the App Store. Nothing registers for them
+	     until sync is turned on. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

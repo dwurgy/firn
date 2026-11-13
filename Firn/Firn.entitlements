@@ -28,6 +28,23 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.firnbrowser.firn</string>
 	</array>
+	<!-- iCloud sync (off until the person turns it on): Firn's own CloudKit container, in the person's private iCloud
+	     database. Production, because a Developer ID app must name its environment. Everything Firn puts there is
+	     sealed on the Mac first (docs/SYNC-PLAN.md). -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.firnbrowser.firn</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
+	<!-- Silent pushes from iCloud, so a change made on another device arrives without waiting. Nothing registers for
+	     them until sync is turned on. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>production</string>
 	<!-- WebKit's Deceptive Website Warning, then updates. The first lets WebKit ask the Mac's own Safe Browsing service (the one Safari uses)
 	     about a page; without it the sandbox blocks the check and scam pages load with no warning. The other two let Firn
 	     reach only Sparkle's installer helper (inside Firn), which puts a downloaded, signature-checked update in place. -->

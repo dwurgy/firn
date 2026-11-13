@@ -321,8 +321,15 @@ extension BrowserStore {
     }
 
     /// A group with no tabs left ends.
+    /// Ends a group a tab just left if nothing's left in it, or, if a link
+    /// made it and it isn't kept yet, if one tab is left (as in Dia): that
+    /// tab goes back to being loose, right where it is (David, 2026-11-13).
+    /// A group someone kept may be a group of one.
     func endIfEmpty(_ groupID: UUID?) {
-        guard let groupID, !tabs.contains(where: { $0.groupID == groupID }) else { return }
-        groups.removeAll { $0.id == groupID }
+        guard let groupID, let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        let members = tabs.filter { $0.groupID == groupID }
+        guard members.isEmpty || (groups[index].tidies && members.count == 1) else { return }
+        for tab in members { tab.groupID = nil }
+        groups.remove(at: index)
     }
 }

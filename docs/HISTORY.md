@@ -456,6 +456,10 @@ Steps, each checked by David:
 2. **The apps:** the new name fades in over the old one (Mac sidebar, iPhone overview); the typing dots only for a group's first name; VoiceOver hears "Group named …"; Reduce Motion just swaps it. *Built 2026-11-13:* the name's text cross-fades in place (`.contentTransition(.opacity)`) and the chevron glides to its end, in `Firn/SidebarGroups.swift` and `Firn iOS/OverviewGroups.swift`; only names Firn chose fade (a rename by hand just shows). The dots were already only for a first name (renames never touch `unnamedGroups`). `GroupNameState` (`Shared/NamingDots.swift`) tells VoiceOver "Group named …" for a first name or a new one, never a rename by hand. Reduce Motion swaps it. Both apps build; not yet checked by David.
 3. **A look over:** security check, light and dark, VoiceOver; David tries it on the Mac and iPhone.
 
+## A link-made pair ends when one goes (David, 2026-11-13)
+
+As in Dia: a group a link made (not yet kept by renaming or putting a tab in by hand) ends when it's down to one tab, by closing, dragging or taking a tab out, tidying, Basecamp, or split view; the last tab goes back to being loose right where it is. Kept groups may still be a group of one. A tab reopened with ⇧⌘T comes back loose (the group is gone). A split pair counts as two tabs. All in `endIfEmpty` (`BrowserStore+Groups.swift`), which every way out of a group already calls; six tests in `GroupsTests`. Apps unchanged; not yet checked by David.
+
 ## Sunrise replaces First light (2026-11-13)
 
 The welcome and the empty page moved from "First light" to "Sunrise", the look of firnbrowser.com; the plan and every step's notes are in `docs/SUNRISE-PLAN.md`. Step 6 renamed the code to match (`Shared/Sunrise.swift`, `SunriseScene`, `Theme.Sunrise`, `PaperGrain`), so older entries above that say First light mean the same scene by its old name.

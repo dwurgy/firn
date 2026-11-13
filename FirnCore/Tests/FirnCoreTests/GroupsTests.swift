@@ -132,6 +132,70 @@ struct GroupsTests {
         #expect(store.tabGroups.allSatisfy { !$0.tidies })
     }
 
+    // A link-made group left with one tab ends, the tab loose where it was
+    // (as in Dia; David, 2026-11-13).
+
+    @Test func closingEitherTabOfALinkMadePairEndsTheGroup() throws {
+        for closingOpener in [true, false] {
+            let store = makeStore()
+            let tabs = open("a", "b", in: store)
+            let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+            store.close(closingOpener ? tabs[0] : link)
+            #expect(store.tabGroups.isEmpty)
+            #expect(hosts(store.looseTabs) == [closingOpener ? "link.example" : "a.example", "b.example"])
+        }
+    }
+
+    @Test func takingATabOutOfALinkMadePairEndsTheGroup() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.takeOutOfGroup(link)
+        #expect(store.tabGroups.isEmpty)
+        #expect(hosts(store.looseTabs) == ["a.example", "link.example", "b.example"])
+    }
+
+    @Test func tidyingATabOfALinkMadePairEndsTheGroup() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.drift(link)
+        #expect(store.tabGroups.isEmpty)
+        #expect(tabs[0].groupID == nil)
+    }
+
+    @Test func aLinkMadeGroupOfThreeLosingOneStays() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link1"), opener: tabs[0], inBackground: true)
+        store.openTab(url("link2"), opener: tabs[0], inBackground: true)
+        store.close(link)
+        let group = try #require(store.tabGroups.first)
+        #expect(hosts(store.tabs(in: group)) == ["a.example", "link2.example"])
+        #expect(group.tidies)
+    }
+
+    @Test func aKeptGroupOfOneStays() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.rename(try #require(store.tabGroups.first), to: "Trip")
+        store.close(link)
+        #expect(store.tabGroups.map(\.name) == ["Trip"])
+        let byHand = try #require(store.newGroup(with: tabs[1]))
+        #expect(store.tabs(in: byHand).count == 1)
+    }
+
+    @Test func reopeningATabOfAnEndedPairBringsItBackLoose() throws {
+        let store = makeStore()
+        let tabs = open("a", "b", in: store)
+        let link = store.openTab(url("link"), opener: tabs[0], inBackground: true)
+        store.close(link)
+        store.reopenClosed()
+        #expect(store.tabGroups.isEmpty)
+        #expect(Set(hosts(store.looseTabs)) == ["a.example", "b.example", "link.example"])
+    }
+
     @Test func aLinkMadeGroupStillTidiesAfterARelaunch() throws {
         let store = makeStore()
         let tabs = open("a", in: store)

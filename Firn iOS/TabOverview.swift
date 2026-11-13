@@ -409,6 +409,7 @@ struct TabOverview: View {
                                              onScreen: tab.id == (heldCard ?? store.activeTab?.id),
                                              solid: drag.lifted)
                             .opacity(shaped ? 1 : 0)
+                            .modifier(ReduceMotionFade(value: shaped))
                             .overlay {
                                 ScaledRow(size: drag.rowSize) { tile(tab, spot: { _ in }) }
                                     .mask {
@@ -416,6 +417,7 @@ struct TabOverview: View {
                                             .padding(shaped ? 0 : -40)
                                     }
                                     .opacity(shaped ? 0 : 1)
+                                    .modifier(ReduceMotionFade(value: shaped))
                             }
                     }
                     .transition(.identity)
@@ -433,6 +435,7 @@ struct TabOverview: View {
                         BasecampTiles.lifted(tab, space: space, onScreen: isOnScreen(tab),
                                              solid: drag.lifted)
                             .opacity(shaped ? 1 : 0)
+                            .modifier(ReduceMotionFade(value: shaped))
                             .overlay {
                                 ScaledRow(size: drag.rowSize) { tile(tab, spot: { _ in }) }
                                     // Kept to the shrinking shape; loose
@@ -442,6 +445,7 @@ struct TabOverview: View {
                                             .padding(shaped ? 0 : -40)
                                     }
                                     .opacity(shaped ? 0 : 1)
+                                    .modifier(ReduceMotionFade(value: shaped))
                             }
                     }
                     // There or not, never faded in or out.

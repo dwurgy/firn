@@ -212,6 +212,23 @@ struct LiftedTile<Content: View>: View {
     }
 }
 
+/// With Reduce Motion, a held tab changing shape (a row carried up into
+/// Basecamp becomes a tile, a tile carried down becomes a card) changes
+/// size at once, with no glide, and the two looks fade one into the other
+/// in place. Otherwise nothing here: the shape's own glide carries the fade.
+struct ReduceMotionFade<Value: Equatable>: ViewModifier {
+    let value: Value
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content.animation(.easeOut(duration: 0.15), value: value)
+        } else {
+            content
+        }
+    }
+}
+
 /// The held tile's size, worked out afresh on every frame of a glide. A
 /// plain `.frame` lays the row out at its new width at once and only
 /// eases the picture, and the row's left edge jumped as it moved into or

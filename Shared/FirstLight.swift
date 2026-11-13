@@ -21,8 +21,12 @@ struct FirstLightScene: View {
     /// The whole scene, or one half of it: the welcome's finish lifts the
     /// real window between the sky (back) and the snow (front).
     var part = Part.whole
-    /// The welcome's finish: the sun brightens and rises.
+    /// The welcome's finish: the sun brightens and rises (the old sky only).
     var sunRises = false
+    /// First light's pale sky and sun instead of Sunrise's: the Mac welcome
+    /// only, whose dark words don't read on the blue-hour sky until it moves
+    /// over (docs/SUNRISE-PLAN.md, step 5, which deletes this).
+    var oldSky = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Part { case whole, back, front }
@@ -35,9 +39,16 @@ struct FirstLightScene: View {
         GeometryReader { proxy in
             ZStack(alignment: .bottom) {
                 if part != .front {
-                    FirstLightSky()
-                    FirstLightSun(rises: sunRises)
-                    FirstLightFlakes(reduceMotion: reduceMotion)
+                    if oldSky {
+                        FirstLightSky()
+                        FirstLightSun(rises: sunRises)
+                    } else {
+                        SunriseSky()
+                    }
+                    // Never on small screens (BRAND.md).
+                    if oldSky || proxy.size.width >= 600 {
+                        FirstLightFlakes(reduceMotion: reduceMotion, onDarkSky: !oldSky)
+                    }
                 }
                 if part != .back {
                     FirstLightSnow(spaceColor: spaceColor, reduceMotion: reduceMotion)
@@ -93,6 +104,66 @@ private struct FirstLightSky: View {
         let whole = CGRect(x: -center.x / radii.width, y: -center.y / radii.height,
                            width: size.width / radii.width, height: size.height / radii.height)
         layer.fill(Path(whole), with: .radialGradient(gradient, center: .zero, startRadius: 0, endRadius: 1))
+    }
+}
+
+/// Sunrise's sky and sun (docs/SUNRISE-PLAN.md, "What changes"; the site's
+/// `.sunrise` in home.css), drawn once per size and look: the blue-hour
+/// gradient, two soft apricot glows low on it, and the sun at 62% across,
+/// in the lowest dip of the surface's edge, so the snow (drawn over it)
+/// hides the disc's lower part. Always risen, as the site with Reduce Motion.
+private struct SunriseSky: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let sky = Theme.FirstLight.sky(dark: colorScheme == .dark)
+        Canvas { context, size in
+            Self.draw(in: context, size: size, sky: sky)
+        }
+    }
+
+    static func draw(in context: GraphicsContext, size: CGSize, sky: Theme.FirstLight.Sky) {
+        let (w, h) = (size.width, size.height)
+        guard w > 0, h > 0 else { return }
+        // Where the snow's surface sits: its highest point, and the dip.
+        let snowHeight = h * FirstLightScene.snowShare
+        let ridge = SnowLayers.layout(width: w, height: snowHeight).edges[0]
+        let top = h - snowHeight
+        let dip = top + ridge
+        // The sky ends mid-ridge; its last color carries on behind the snow.
+        context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
+            Gradient(stops: sky.stops), startPoint: .zero, endPoint: CGPoint(x: 0, y: top + 0.5 * ridge)))
+        // The two soft glows on the sky, around the sun and to its left.
+        FirstLightSky.ellipse(context, size, Gradient(colors: [sky.peach, sky.peach.opacity(0)]),
+                              center: CGPoint(x: 0.2 * w, y: dip), radii: CGSize(width: 0.45 * w, height: 0.3 * top))
+        FirstLightSky.ellipse(context, size, Gradient(colors: [sky.apricot, sky.apricot.opacity(0)]),
+                              center: CGPoint(x: 0.62 * w, y: dip), radii: CGSize(width: 0.55 * w, height: 0.42 * top))
+
+        // The sun, the site's sizes scaled down a little on smaller windows
+        // (a first guess, judged on screen).
+        let scale = w < 600 ? 0.5 : min(1, max(0.75, h / 900))
+        let x = 0.62 * w
+        let drop = sky.sunDrop * scale
+        // The warm band: a 300pt strip on the sky, ending at the dip.
+        let strip = 300 * scale
+        context.fill(Path(CGRect(x: 0, y: dip - strip, width: w, height: strip)), with: .linearGradient(
+            Gradient(colors: [sky.band.opacity(0), sky.band]),
+            startPoint: CGPoint(x: 0, y: dip - strip), endPoint: CGPoint(x: 0, y: dip)))
+        // The halo, wide and soft.
+        FirstLightSky.ellipse(context, size, Gradient(colors: [sky.halo, sky.halo.opacity(0)]),
+                              center: CGPoint(x: x, y: dip), radii: CGSize(width: 0.45 * w, height: 360 * scale))
+        // The glow (550pt) and the disc (150pt): their bottoms 244pt and
+        // 44pt below the dip, so they share a middle.
+        let center = CGPoint(x: x, y: dip + 44 * scale - 75 * scale + drop)
+        let glow = 275 * scale
+        context.fill(Path(ellipseIn: CGRect(x: center.x - glow, y: center.y - glow, width: 2 * glow, height: 2 * glow)),
+                     with: .radialGradient(Gradient(stops: sky.glow), center: center, startRadius: 0, endRadius: glow))
+        let disc = 75 * scale
+        // Lit at 50% 40%, out to the square's farthest corner, as CSS does.
+        let lit = CGPoint(x: center.x, y: center.y - 0.2 * disc)
+        context.fill(Path(ellipseIn: CGRect(x: center.x - disc, y: center.y - disc, width: 2 * disc, height: 2 * disc)),
+                     with: .radialGradient(Gradient(stops: sky.disc), center: lit,
+                                           startRadius: 0, endRadius: disc * (1 + 1.2 * 1.2).squareRoot()))
     }
 }
 
@@ -332,11 +403,14 @@ private struct SnowLayers: View {
 /// frame (a repeating SwiftUI animation would).
 private struct FirstLightFlakes: NSViewRepresentable {
     let reduceMotion: Bool
+    /// Sunrise's blue-hour sky: the flakes in a lighter glacier.
+    var onDarkSky = false
 
     func makeNSView(context: Context) -> FlakesView { FlakesView() }
 
     func updateNSView(_ view: FlakesView, context: Context) {
         view.drifts = !reduceMotion
+        view.onDarkSky = onDarkSky
     }
 }
 
@@ -357,6 +431,17 @@ private final class FlakesView: NSView {
 
     var drifts = false {
         didSet { if drifts != oldValue { updateDrift() } }
+    }
+
+    var onDarkSky = false {
+        didSet {
+            guard onDarkSky != oldValue else { return }
+            typealias FL = Theme.FirstLight
+            for layer in layers {
+                layer.backgroundColor = (onDarkSky ? FL.skyFlake : FL.flake).cgColor
+                layer.opacity = onDarkSky ? FL.skyFlakeOpacity : FL.flakeOpacity
+            }
+        }
     }
 
     override init(frame: NSRect) {
@@ -430,11 +515,14 @@ private final class FlakesView: NSView {
 /// Core Animation drift, placed in UIKit's coordinates (y points down).
 private struct FirstLightFlakes: UIViewRepresentable {
     let reduceMotion: Bool
+    /// Sunrise's blue-hour sky: the flakes in a lighter glacier.
+    var onDarkSky = false
 
     func makeUIView(context: Context) -> FlakesView { FlakesView() }
 
     func updateUIView(_ view: FlakesView, context: Context) {
         view.drifts = !reduceMotion
+        view.onDarkSky = onDarkSky
     }
 }
 
@@ -451,6 +539,17 @@ private final class FlakesView: UIView {
 
     var drifts = false {
         didSet { if drifts != oldValue { updateDrift() } }
+    }
+
+    var onDarkSky = false {
+        didSet {
+            guard onDarkSky != oldValue else { return }
+            typealias FL = Theme.FirstLight
+            for layer in flakeLayers {
+                layer.backgroundColor = (onDarkSky ? FL.skyFlake : FL.flake).cgColor
+                layer.opacity = onDarkSky ? FL.skyFlakeOpacity : FL.flakeOpacity
+            }
+        }
     }
 
     override init(frame: CGRect) {

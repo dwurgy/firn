@@ -433,6 +433,8 @@ struct BrowserScreen: View {
             // page (no words, no centered mark; only the snow takes the
             // space's color).
             FirstLightScene(spaceColor: store.activeSpace.color)
+                // The clock goes light over the blue-hour sky, in both looks.
+                .background(LightStatusBar(on: !showingTabs && !pageHidden))
                 .transition(.opacity)
         } else {
             Theme.page

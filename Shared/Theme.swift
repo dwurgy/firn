@@ -324,6 +324,63 @@ enum Theme {
             let shadow: Color
         }
 
+        /// Sunrise's sky and sun in one look (docs/SUNRISE-PLAN.md, step 4;
+        /// BRAND.md, "Blue-hour sky" and "The sun"). Plain colors: the sky's
+        /// `Canvas` draws once per look and picks its own.
+        static func sky(dark: Bool) -> Sky {
+            // BRAND.md's blue hour, compressed for one screen: the warm stops
+            // packed into the stretch just above the snow (light), or blue
+            // hour all the way down (dark). Locations run from the window's
+            // top (0) to the middle of the surface's ridge (1).
+            let stops: [(UInt32, CGFloat)] = dark
+                ? [(0x1A1F2D, 0), (0x212839, 0.22), (0x283043, 0.42), (0x2E3548, 0.60),
+                   (0x34394B, 0.76), (0x373A48, 0.88), (0x383733, 1)]
+                : [(0x1C2130, 0), (0x252C3E, 0.22), (0x343E57, 0.42), (0x556079, 0.60),
+                   (0x8D8C9E, 0.76), (0xCDB8B4, 0.87), (0xEAD3C5, 1)]
+            return Sky(
+                stops: stops.map { Gradient.Stop(color: plain($0.0), location: $0.1) },
+                apricot: dark ? plain(0xF2C4A0, 0.16) : plain(0xF2C4A0, 0.55),
+                peach: dark ? plain(0xECCEBA, 0.12) : plain(0xECCEBA, 0.45),
+                band: dark ? plain(0xF2BE96, 0.2) : plain(0xF0AA80, 0.5),
+                halo: dark ? plain(0xF4B88C, 0.2) : plain(0xF4B88C, 0.55),
+                glow: dark
+                    ? [.init(color: plain(0xF2AA78, 0.3), location: 0), .init(color: plain(0xF2AA78, 0.1), location: 0.45),
+                       .init(color: plain(0xF2AA78, 0), location: 1)]
+                    : [.init(color: plain(0xF4A068, 0.7), location: 0), .init(color: plain(0xF6B488, 0.32), location: 0.4),
+                       .init(color: plain(0xF6B488, 0), location: 1)],
+                disc: [.init(color: plain(0xFFF0DA), location: 0), .init(color: plain(0xFAC690), location: 0.36),
+                       .init(color: plain(0xF29A5C), location: 0.8), .init(color: plain(0xEA8A50), location: 1)],
+                // Dark is blue hour: the sun never clears the snow.
+                sunDrop: dark ? 78 : 0
+            )
+        }
+
+        /// The sky's gradient, its two soft glows, and the sun's colors.
+        struct Sky {
+            let stops: [Gradient.Stop]
+            /// The soft apricot and peach glows low on the sky.
+            let apricot: Color
+            let peach: Color
+            /// The warm band on the sky above the snow, at its strongest.
+            let band: Color
+            /// The wide halo around the sun.
+            let halo: Color
+            /// The glow around the disc.
+            let glow: [Gradient.Stop]
+            /// The disc, lit a little above its middle.
+            let disc: [Gradient.Stop]
+            /// How much lower the disc and glow sit (at full size), so only a cap shows.
+            let sunDrop: CGFloat
+        }
+
+        /// Sunrise's flakes on the dark sky: Glow's glacier, faint.
+        #if os(macOS)
+        static let skyFlake = NSColor(hex: 0x9DB7C8, opacity: 1)
+        #else
+        static let skyFlake = UIColor(hex: 0x9DB7C8, opacity: 1)
+        #endif
+        static let skyFlakeOpacity: Float = 0.3
+
         /// One color, the same in both looks.
         private static func plain(_ hex: UInt32, _ opacity: Double = 1) -> Color {
             Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,

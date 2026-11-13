@@ -45,7 +45,7 @@ struct WelcomeBackdrop: View {
             let finishing = window.welcomeFinish != nil
             GeometryReader { proxy in
                 ZStack(alignment: .top) {
-                    FirstLightScene(spaceColor: "glacier", part: .back, sunRises: finishing)
+                    FirstLightScene(spaceColor: "glacier", part: .back, sunRises: finishing, oldSky: true)
                     // "Welcome in." sits in the sky; the window rises over it.
                     Text("Welcome in.")
                         .font(Theme.fraunces(44, weight: 360))
@@ -125,7 +125,7 @@ private struct Welcome: View {
             // space's color from the space step on. At the finish only the
             // snow stays here, in front of the rising window; the sky is
             // behind it (`WelcomeBackdrop`).
-            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front)
+            FirstLightScene(spaceColor: colorName, part: finish == nil ? .whole : .front, oldSky: true)
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             GeometryReader { proxy in

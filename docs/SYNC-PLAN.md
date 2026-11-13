@@ -13,7 +13,7 @@ Sync is off until the person says yes, and goes only to their own iCloud, never 
 | Spaces: name, color, order, separate or shared | Other devices' loose tabs ("On your Mac", "On your iPhone", "On your iPad") | Basecamp (no sync at all, not even iPhone to iPad) |
 | Groups and the tabs in them | | Loose tabs as a list (each device keeps its own) |
 | Saved passwords (iCloud Keychain) | | Sign-ins, cookies, and site data (WebKit can't sync them) |
-| History, as Safari does | | Settings (each device keeps its own) |
+| History, the last 30 days | | Settings (each device keeps its own) |
 | | | Page pictures, downloads, and a tab's back history |
 
 - **Spaces sync, and stay what they are.** A space arrives on a new device with its data store id, so a separate space is still separate there, and starts signed out (its cookies can't travel). A shared space still shares. Its passwords and history come with it, because both are kept per data store id.
@@ -22,7 +22,7 @@ Sync is off until the person says yes, and goes only to their own iCloud, never 
 - **"On your Mac" shows only with sync on.** With it off, the command bar has no such section and nothing leaves the device.
 - **Loose tabs work as in Arc** (David, 2026-11-13). Arc synced what you deliberately kept (spaces, pinned tabs, favorites), never the day's unpinned tabs. In Firn, keeping a tab is putting it in a group, so groups sync and loose tabs don't, on any device (iPhone and iPad included). A loose tab on another device is found by going to it: the command bar lists it under "On your Mac" (or iPhone, or iPad), read-only; picking one opens your own copy. They never appear in the sidebar or the overview. Their addresses and titles go to iCloud, encrypted, so the command bar can show them.
 - **Settings stay on each device** (Claude's call, 2026-11-13, for less to think about): the tidy-away timing, where new tabs go, and the address bar's place often differ between a Mac and a phone anyway.
-- **History:** whatever Safari does (David). To check in step 1: how far back Safari's synced history reaches. If it's the whole year Firn keeps and that proves too much to sync, the fallback is the last 30 days.
+- **History: the last 30 days** (David, 2026-11-13, as Safari seems to do). Each device still keeps its own full year; only the last 30 days go to iCloud, and older visits leave iCloud as they age out.
 - **Handoff** works with sync on or off and stores nothing in iCloud.
 
 This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no longer sync between iPhone and iPad).
@@ -59,6 +59,4 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
 
 ## Open
 
-- History: the last 30 days (as Safari seems to), or the whole year.
-
-(Settled 2026-11-13: loose tabs as in Arc, and no Tabs setting.)
+Nothing yet. (Settled 2026-11-13: loose tabs as in Arc, no Tabs setting, Firn's own encryption, and 30 days of history.)

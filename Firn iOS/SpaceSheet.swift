@@ -4,17 +4,21 @@ import SwiftUI
 extension EnvironmentValues {
     /// Opens the New Space sheet (`BrowserScreen` shows it): from the space
     /// menu in the overview and from the command bar.
-    @Entry var newSpace: NewSpaceAction? = nil
+    @Entry var newSpace: SheetAction? = nil
+    /// Opens Settings, on its Spaces (`BrowserScreen` shows it): Space
+    /// Settings… in the space menu.
+    @Entry var spaceSettings: SheetAction? = nil
 }
 
-/// Whether the New Space sheet is up (`BrowserScreen` owns one).
-@MainActor @Observable final class NewSpaceRequest {
-    var shown = false
+/// Which of the spaces' sheets is up (`BrowserScreen` owns one).
+@MainActor @Observable final class SpaceSheets {
+    var newSpace = false
+    var settings = false
 }
 
-/// Opens the New Space sheet. Always equal to itself, so setting it never
-/// makes the overview draw again (a bare closure can't be compared).
-struct NewSpaceAction: Equatable {
+/// Opens a sheet. Always equal to itself, so setting it never makes the
+/// overview draw again (a bare closure can't be compared).
+struct SheetAction: Equatable {
     let open: @MainActor () -> Void
     @MainActor func callAsFunction() { open() }
     static func == (_: Self, _: Self) -> Bool { true }
@@ -122,28 +126,7 @@ struct NewSpaceSheet: View {
             .accessibilityLabel("Name")
     }
 
-    /// The eight colors, spread across the width (each at least 44pt to tap).
-    private var swatches: some View {
-        HStack(spacing: 0) {
-            ForEach(Theme.spaceColorNames, id: \.self) { name in
-                Button { color = name } label: {
-                    Circle()
-                        .fill(Theme.spaceColor(name))
-                        .frame(width: 28, height: 28)
-                        .padding(4)
-                        .overlay {
-                            Circle().strokeBorder(Theme.spaceColor(name).opacity(name == color ? 1 : 0), lineWidth: 2)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: color)
-                .accessibilityLabel(name.capitalized)
-                .accessibilityAddTraits(name == color ? .isSelected : [])
-            }
-        }
-    }
+    private var swatches: some View { SpaceSwatches(selection: $color) }
 
     /// Separate (recommended), or sharing another space's sign-ins.
     private var sharingChoice: some View {
@@ -217,6 +200,36 @@ struct NewSpaceSheet: View {
         dismiss()
         withAnimation(.easeOut(duration: 0.25)) {
             _ = store.addSpace(name: name, color: color, sharingWith: sharing)
+        }
+    }
+}
+
+/// The eight colors, spread across the width (each at least 44pt to tap);
+/// the one picked wears a ring of its own color. Shared by New Space and
+/// Settings.
+struct SpaceSwatches: View {
+    @Binding var selection: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Theme.spaceColorNames, id: \.self) { name in
+                Button { selection = name } label: {
+                    Circle()
+                        .fill(Theme.spaceColor(name))
+                        .frame(width: 28, height: 28)
+                        .padding(4)
+                        .overlay {
+                            Circle().strokeBorder(Theme.spaceColor(name).opacity(name == selection ? 1 : 0), lineWidth: 2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: selection)
+                .accessibilityLabel(name.capitalized)
+                .accessibilityAddTraits(name == selection ? .isSelected : [])
+            }
         }
     }
 }

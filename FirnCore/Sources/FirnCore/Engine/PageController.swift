@@ -57,6 +57,18 @@ public protocol PageController: AnyObject, Observable {
     /// The page's article, read in Firn's world from a copy of the page;
     /// nil if it isn't one, or the page moved on while reading.
     func readArticle() async -> ReaderArticle?
+    /// Whether Reader is showing this page's article. Never saved: a page
+    /// always opens with Reader off, and leaving the page leaves Reader.
+    var isReading: Bool { get }
+    /// Reads the article and shows it in Reader, in `look`, with the
+    /// space's color (0xRRGGBB) as `accent`. False if the page turned out
+    /// not to be an article after all; it then stops counting as one, so
+    /// the book goes away.
+    func openReader(look: ReaderLook, accent: UInt32) async -> Bool
+    /// Back to the page itself.
+    func closeReader()
+    /// A new look for the reader on screen, without reloading it.
+    func setReaderLook(_ look: ReaderLook)
     /// Demo shots only (`DemoShot`): turns down a site's cookie banner, so
     /// the website's screenshots show the page, not the banner. Waits up to
     /// `seconds` for one to appear; does nothing if none does.
@@ -202,5 +214,9 @@ public extension PageController {
     func declineCookieBanner(waiting seconds: Double) async {}
     var isArticle: Bool { false }
     func readArticle() async -> ReaderArticle? { nil }
+    var isReading: Bool { false }
+    func openReader(look: ReaderLook, accent: UInt32) async -> Bool { false }
+    func closeReader() {}
+    func setReaderLook(_ look: ReaderLook) {}
     var topColor: CGColor? { nil }
 }

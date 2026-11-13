@@ -25,7 +25,9 @@ final class WebKitPageController: NSObject, PageController {
     private(set) var sound: PageSound = .silent
     private(set) var isPausedByFirn = false
     private(set) var isResuming = false
-    private(set) var isArticle = false
+    // Set by Reader too, when an article turns out too short (WebKitReader.swift).
+    var isArticle = false
+    private(set) var isReading = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
@@ -70,6 +72,10 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var pendingSignIn: (login: SubmittedLogin, at: TimeInterval)?
     /// The Reader check in progress (see `checkArticle`).
     @ObservationIgnored private var articleCheck: Task<Void, Never>?
+    /// Reader's own view, while Reader is on (WebKitReader.swift).
+    @ObservationIgnored var reader: ReaderPage? {
+        didSet { isReading = reader != nil }
+    }
 
     convenience init(dataStoreID: UUID) {
         let configuration = WKWebViewConfiguration()
@@ -113,6 +119,7 @@ final class WebKitPageController: NSObject, PageController {
     }
 
     func load(_ url: URL) {
+        closeReader()
         if OpenedFiles.contains(url) {
             // Read access to that one file only, not the folder around it.
             webView.loadFileURL(url, allowingReadAccessTo: url)
@@ -333,6 +340,7 @@ final class WebKitPageController: NSObject, PageController {
         // A site that changes pages without loading (pushState) may show a
         // new article, or none; check again once it has drawn it.
         if newURL.path() != current.path() {
+            closeReader()
             articleCheck?.cancel()
             isArticle = false
             checkArticle(after: 1)
@@ -351,7 +359,7 @@ final class WebKitPageController: NSObject, PageController {
             && a.port == b.port
     }
 
-    private static var safariUserAgentSuffix: String {
+    static var safariUserAgentSuffix: String {
         // Safari's version follows macOS from 26 on; before that it was macOS + 3.
         let macOS = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
         let safari = macOS >= 26 ? macOS : macOS + 3
@@ -490,7 +498,9 @@ extension WebKitPageController: WKNavigationDelegate {
         dialogsBlocked = false
         let previous = url
         url = webView.url
-        // A new page isn't an article until it has loaded and been checked.
+        // A new page isn't an article until it has loaded and been checked,
+        // and Reader is always off when a page opens.
+        closeReader()
         articleCheck?.cancel()
         isArticle = false
         // The title may still be the old page's until the new one says.
@@ -1282,7 +1292,7 @@ extension WebKitPageController {
 // MARK: - ⌘-click, middle-click, and Shift-click
 
 extension WebKitPageController {
-    private enum SpecialClick {
+    enum SpecialClick {
         /// ⌘-click or middle-click; in the background unless Shift is held.
         case newTab(inBackground: Bool)
         /// Shift-click, as in Arc.
@@ -1292,10 +1302,10 @@ extension WebKitPageController {
     /// Whether a link click should open somewhere else. A page can fake a
     /// modified click in script, so the modifiers WebKit reports only count if
     /// a real click on this page just happened. Nil for an ordinary click.
-    private func specialClick(for action: WKNavigationAction) -> SpecialClick? {
+    func specialClick(for action: WKNavigationAction, in view: WKWebView? = nil) -> SpecialClick? {
         #if os(macOS)
         // Taken on every link click, so a stale click can't be used later.
-        guard let click = ClickRecorder.shared.takeRecentClick(in: webView) else { return nil }
+        guard let click = ClickRecorder.shared.takeRecentClick(in: view ?? webView) else { return nil }
         // WebKit and AppKit number the middle button differently (a mask, 4,
         // or an index, 2); either counts, as long as the real click agrees.
         let isMiddleClick = click.type == .otherMouseUp && click.buttonNumber == 2

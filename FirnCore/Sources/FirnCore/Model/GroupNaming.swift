@@ -138,11 +138,16 @@ struct OnDeviceGroupNamer: GroupNamer {
 
 extension GroupNaming {
     /// What the namer is asked: the tabs, and when it's named again, its
-    /// current name to keep if it still fits. The current name was this
-    /// device's own answer (cleaned), never a page's words.
+    /// current name to keep if it still fits. The current name is the
+    /// namer's own earlier answer (this device's or, with sync, another of
+    /// the person's), so a page's title can have steered it, but only within
+    /// `cleaned`'s 3 words and 32 characters. Quotes inside it are dropped
+    /// so it can't step out of its own quotes here.
     static func request(_ tabs: [GroupNamingTab], current: String?) -> String {
         let listing = "Tabs:\n" + listing(tabs)
-        guard let current = current.flatMap(cleaned) else { return listing }
+        guard let current = current.flatMap(cleaned)?
+                .filter({ !"\"“”«»".contains($0) }),
+              !current.isEmpty else { return listing }
         return listing + "\n\nThe group is called \"\(current)\" now. "
             + "Reply with that same name if it still fits these tabs; only if it no longer does, reply with a better one."
     }

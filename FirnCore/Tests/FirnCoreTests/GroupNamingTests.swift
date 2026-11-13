@@ -287,6 +287,8 @@ struct GroupNamingTests {
         #expect(GroupNaming.request(tabs, current: nil) == "Tabs:\n- Soup (food.example)")
         #expect(GroupNaming.request(tabs, current: "New Group") == "Tabs:\n- Soup (food.example)")
         #expect(GroupNaming.request(tabs, current: "Recipes").contains("\"Recipes\""))
+        // Quotes inside a name can't step out of the request's own.
+        #expect(GroupNaming.request(tabs, current: "Say \"hi\" now").contains("\"Say hi now\""))
     }
 
     // MARK: - Cleaning

@@ -263,7 +263,8 @@ extension BrowserStore {
     /// (sync), so two devices can't keep renaming each other's groups.
     func membersChanged(_ groupID: UUID?) {
         guard let groupID, groupNamer?.isAvailable == true,
-              let group = groups.first(where: { $0.id == groupID }), !group.namedByHand else { return }
+              let group = groups.first(where: { $0.id == groupID }), !group.namedByHand,
+              !endingGroupIDs.contains(groupID) else { return }
         // Its first name is still waiting for titles: the newcomer is in it.
         guard unnamedGroups[groupID] != .waiting else { return }
         let round = (renameRounds[groupID] ?? 0) + 1
@@ -281,16 +282,21 @@ extension BrowserStore {
     /// Asks the namer again, with the group's current name to keep if it
     /// still fits, once per round.
     func renameIfReady(_ groupID: UUID, round: Int, waitedLongEnough: Bool = false) {
-        guard renameRounds[groupID] == round, renameAsked[groupID] != round,
-              let group = groups.first(where: { $0.id == groupID }), !group.namedByHand,
-              let namer = groupNamer else { return }
+        guard renameRounds[groupID] == round, renameAsked[groupID] != round else { return }
+        // Ended, renamed by hand, or ending (a link-made pair down to one
+        // tab, thawing away): nothing to name, so forget the round.
+        let members = tabs.filter { $0.groupID == groupID }
+        guard let group = groups.first(where: { $0.id == groupID }), !group.namedByHand,
+              !endingGroupIDs.contains(groupID), !members.isEmpty, let namer = groupNamer else {
+            renameRounds[groupID] = nil
+            renameAsked[groupID] = nil
+            return
+        }
         // Its first name is still on the way: try again once it's there.
         guard unnamedGroups[groupID] == nil else {
             if waitedLongEnough { membersChanged(groupID) }
             return
         }
-        let members = tabs.filter { $0.groupID == groupID }
-        guard !members.isEmpty else { return }
         guard waitedLongEnough || members.allSatisfy({ !$0.savedTitle.isEmpty || $0.page == nil }) else { return }
         renameAsked[groupID] = round
         let named = members.map { GroupNamingTab(title: $0.savedTitle, site: $0.url?.host() ?? "") }

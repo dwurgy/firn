@@ -56,6 +56,7 @@ final class Browser {
     let saver: SessionSaver
     let sleeper: TabSleeper
     let pictures: PagePictures
+    let sync: ICloudSync
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -96,6 +97,11 @@ final class Browser {
         saver.start()
         sleeper = TabSleeper(store: store)
         sleeper.start()
+        // iCloud sync, only if it's been turned on.
+        let sync = ICloudSync(store: store)
+        self.sync = sync
+        saver.afterSave = { sync.takeChanges() }
+        sync.start()
     }
 }
 

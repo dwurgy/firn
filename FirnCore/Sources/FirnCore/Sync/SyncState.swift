@@ -68,6 +68,18 @@ public struct SyncState: Codable, Equatable, Sendable {
         }
     }
 
+    /// Every record of these kinds this device knows, by iCloud's id: to
+    /// send all again after the key changed, or when a kind starts syncing.
+    public func recordIDs(of kinds: Set<SyncKind>) -> [SyncRecordID] {
+        var ids: [SyncRecordID] = []
+        if kinds.contains(.space) {
+            ids += spaces.keys.map { toCloud(SyncRecordID(kind: .space, name: $0.uuidString)) }
+        }
+        if kinds.contains(.group) { ids += groups.keys.map { SyncRecordID(kind: .group, name: $0.uuidString) } }
+        if kinds.contains(.tab) { ids += tabs.keys.map { SyncRecordID(kind: .tab, name: $0.uuidString) } }
+        return ids.filter { item(for: $0) != nil }
+    }
+
     // MARK: - iCloud's terms and this device's
 
     func localSpace(_ id: UUID) -> UUID { joinedSpaces[id] ?? id }

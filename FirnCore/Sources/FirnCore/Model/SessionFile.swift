@@ -89,6 +89,9 @@ public final class SessionSaver {
     private var pendingSave: Task<Void, Never>?
     private var lastSaved: Session?
     private var lastSavedPlaces: [UUID: PagePlace]?
+    /// Runs after each session save: iCloud sync takes this device's
+    /// changes then, so each is stamped close to when it was made.
+    public var afterSave: (@MainActor () -> Void)?
 
     /// - Parameters:
     ///   - snapshot: The session as it is now. Whatever it reads is
@@ -132,6 +135,7 @@ public final class SessionSaver {
                 try file.save(session)
                 lastSaved = session
                 prunePictures(session)
+                afterSave?()
             } catch {
                 SessionFile.log.error("The session couldn't be saved")
             }

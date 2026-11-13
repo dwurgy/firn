@@ -7,6 +7,7 @@ struct FirnApp: App {
     @State private var window: WindowModel
     private let saver: SessionSaver
     private let sleeper: TabSleeper
+    private let sync: ICloudSync
 
     /// Picks up where the last session left off, then saves as things change
     /// and once more at quit.
@@ -56,6 +57,13 @@ struct FirnApp: App {
         saver.start()
         sleeper = TabSleeper(store: store)
         sleeper.start()
+        // iCloud sync, only if it's been turned on, and never in a demo.
+        let sync = ICloudSync(store: store)
+        self.sync = sync
+        if !DemoMode.isOn {
+            saver.afterSave = { sync.takeChanges() }
+            sync.start()
+        }
         // Starts Sparkle, so its scheduled checks (once allowed) run.
         if !DemoMode.isOn { _ = Updater.shared }
         NotificationCenter.default.addObserver(

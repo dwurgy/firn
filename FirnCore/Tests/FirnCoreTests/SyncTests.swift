@@ -391,6 +391,18 @@ struct SyncTests {
         #expect(phone.store.activeSpaceID == personal.id)
     }
 
+    @Test func everythingCanBeSentAgainByICloudsIDs() throws {
+        let phonePersonal = Space(name: "Personal", color: "sand", order: 0, dataStoreID: UUID())
+        let (mac, phone) = firstSync(phoneSpaces: [phonePersonal])
+        let work = mac.store.addSpace(name: "Work", color: "sage")
+        send(from: mac, to: phone)
+        phone.state.finishFirstSync()
+        // The phone's own Personal joined the Mac's: it goes by iCloud's id.
+        let ids = Set(phone.state.recordIDs(of: [.space]))
+        #expect(ids == Set([personal.id, work.id].map { SyncRecordID(kind: .space, name: $0.uuidString) }))
+        #expect(phone.state.recordIDs(of: [.group, .tab]).isEmpty)
+    }
+
     @Test func aSharedSpaceStillShares() throws {
         let (mac, phone) = devices()
         let shared = mac.store.addSpace(name: "Also Personal", color: "sand", sharingWith: personal)

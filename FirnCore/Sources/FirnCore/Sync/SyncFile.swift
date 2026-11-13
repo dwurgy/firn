@@ -13,6 +13,15 @@ public struct SyncSaved: Codable, Equatable, Sendable {
     /// The engine's state, as opaque bytes (CloudKit's own encoding).
     public var engineState: Data?
     public var waiting: [SyncItem] = []
+    /// Each record's CloudKit change tag and such (its "system fields", as
+    /// CloudKit encodes them), by record name, so a save isn't taken for a
+    /// clash. No fields of Firn's are in them.
+    public var systemFields: [String: Data] = [:]
+    /// The kinds that have synced so far: a kind that starts syncing later
+    /// catches up.
+    public var kinds: Set<SyncKind> = []
+    /// The id of the key what's in iCloud was sealed with.
+    public var keyID: Data?
 
     public init() {}
 }

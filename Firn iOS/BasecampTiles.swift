@@ -189,6 +189,17 @@ struct BasecampTiles: View {
             }
     }
 
+    /// The tile as a picture, for a page landing in it to turn into on the
+    /// way (`BrowserScreen`'s stand-in, as iOS's app icon forms inside a
+    /// closing app): the same glass and mark, at `size`, with corners of
+    /// `cornerRadius`, so it matches the shrinking picture's shape. Not a
+    /// button: nothing on the flying picture takes touches.
+    static func face(_ tab: FirnCore.Tab, space: String, onScreen: Bool, cornerRadius: CGFloat) -> some View {
+        BasecampTile(tab: tab, space: space, isOnScreen: onScreen, cornerRadius: cornerRadius, open: {})
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     /// Every tile the same width: the longest row fills the list's width.
     private func tileWidth(for layout: BasecampLayout) -> CGFloat {
         Self.tileSize(count: layout.rows.reduce(0, +), width: width).width
@@ -248,6 +259,7 @@ private struct BasecampTile: View {
     let tab: FirnCore.Tab
     let space: String
     let isOnScreen: Bool
+    var cornerRadius: CGFloat = BasecampTiles.cornerRadius
     let open: () -> Void
 
     private var site: String { WebAddress.site(of: tab.homeURL ?? tab.url) }
@@ -257,7 +269,8 @@ private struct BasecampTile: View {
             TileMark(site: site, icon: tab.icon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TileButtonStyle(isActive: isOnScreen, accent: Theme.tileAccent(site: site, icon: tab.icon)))
+        .buttonStyle(TileButtonStyle(isActive: isOnScreen, accent: Theme.tileAccent(site: site, icon: tab.icon),
+                                     cornerRadius: cornerRadius))
         .accessibilityLabel("\(site.isEmpty ? tab.title : site), Basecamp")
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
@@ -296,12 +309,13 @@ private struct TileMark: View {
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let accent: Theme.TileAccent
+    var cornerRadius: CGFloat = BasecampTiles.cornerRadius
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: BasecampTiles.cornerRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
     private var dark: Bool { colorScheme == .dark }
@@ -309,7 +323,7 @@ private struct TileButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
-                if isActive { chosen } else { TileGlass() }
+                if isActive { chosen } else { TileGlass(cornerRadius: cornerRadius) }
             }
             .contentShape(shape)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
@@ -319,7 +333,7 @@ private struct TileButtonStyle: ButtonStyle {
     /// The page on screen: the same glass, washed in the icon's main color
     /// (stronger at the top, like light through ice), ringed in its colors.
     private var chosen: some View {
-        TileGlass()
+        TileGlass(cornerRadius: cornerRadius)
             .overlay {
                 shape.fill(LinearGradient(
                     colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
@@ -346,10 +360,11 @@ private struct TileButtonStyle: ButtonStyle {
 
 /// The Mac's `TileGlass`: frosted ice with a lit rim and a hairline.
 private struct TileGlass: View {
+    var cornerRadius: CGFloat = BasecampTiles.cornerRadius
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: BasecampTiles.cornerRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
     var body: some View {
@@ -383,7 +398,7 @@ extension View {
 /// A tile's set-down shadow: the card's warm shadow (`Theme.shadowPageFar`),
 /// scaled to a tile, with the tile's own shape cut out of it, so nothing
 /// shows through the glass. `lift` 0 to 1, how far it's lifted.
-private struct SetDownShadow: View {
+struct SetDownShadow: View {
     let radius: CGFloat
     let lift: Double
 

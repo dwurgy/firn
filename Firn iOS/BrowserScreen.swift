@@ -28,6 +28,15 @@ struct BrowserScreen: View {
     @State private var standIn: UIImage?
     /// The stand-in's size.
     private var standInSize: CGSize? { standIn?.size }
+
+    /// The tile a landing page forms into (`CardGlide.face`): only while
+    /// landing in one (`tileCrop` is set only then).
+    private var tileFace: ((CGFloat) -> AnyView)? {
+        guard tileCrop != nil, let tab = standInTab, tab.place == .basecamp else { return nil }
+        let space = store.activeSpace.color
+        let onScreen = tab.id == store.activeTab?.id
+        return { radius in AnyView(BasecampTiles.face(tab, space: space, onScreen: onScreen, cornerRadius: radius)) }
+    }
     /// A pull has the live page itself following the finger, until its
     /// picture comes (WebKit takes 50–100ms) and takes its place in the
     /// same spot, in one frame. Moved by its layer only (`PageHold`), so
@@ -261,6 +270,15 @@ struct BrowserScreen: View {
                         }
                         // The set-down's shadow: there only while the page is
                         // lifted above its card, sinking in as it settles.
+                        // A tile's is cut out of it (the glass shows through)
+                        // and hands over to the real tile's with the swap.
+                        if let standInTab, standInTab.place == .basecamp {
+                            SetDownShadow(radius: boxRadius,
+                                          lift: Double((settle - 1) / (BasecampTiles.settleLift - 1)))
+                                .frame(width: box.width, height: box.height)
+                                .offset(x: box.minX, y: box.minY)
+                                .modifier(ArrivalBand(arrival: tileReveal, range: BasecampTiles.glideSwap, fadesIn: false))
+                        }
                         if let standInTab, standInTab.place != .basecamp {
                             RoundedRectangle(cornerRadius: boxRadius, style: .continuous)
                                 .fill(Theme.page)
@@ -274,7 +292,8 @@ struct BrowserScreen: View {
                         }
                         .frame(width: width, height: height)
                         .modifier(CardGlide(width: width, box: box, radius: boxRadius,
-                                            cropFrom: tileCrop?.from, cropTo: tileCrop?.to))
+                                            cropFrom: tileCrop?.from, cropTo: tileCrop?.to,
+                                            face: tileFace))
                         .modifier(ArrivalBand(arrival: standInTab?.place == .basecamp ? tileReveal : 0,
                                               range: BasecampTiles.glideSwap, fadesIn: false))
                         if ringOnGlide, let standInTab, standInTab.place != .basecamp {
@@ -641,14 +660,17 @@ struct BrowserScreen: View {
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
             withAnimation(Self.listComes) { listIn = 1 }
             if tile {
-                // Into a tile: the picture and the tile swap over the same
-                // last stretch as before (`BasecampTiles.glideSwap`), but on
-                // a short clock of their own, from 90% of the way to 99%
-                // (0.64 to 0.88 of the glide's time), so the glass tile is there as the
-                // picture closes the last points. On the glide's own curve, the swap waited for its
-                // slow tail and a tiny page sat in the tile's spot for about
-                // 200ms (David's recording, 2026-11-13).
-                withAnimation(.easeInOut(duration: duration * 0.24).delay(duration * 0.64)) { tileReveal = 1 }
+                // Into a tile: the flying tile and the real one swap
+                // (`BasecampTiles.glideSwap`) on a short clock of their own,
+                // not the glide's curve, whose slow tail kept a tiny page in
+                // the tile's spot for about 200ms (David's recording,
+                // 2026-11-13).
+                // Since the picture now becomes the tile on the way
+                // (`CardGlide.face`), the two look the same by then, so the
+                // swap is quick (two or three frames), as the picture
+                // reaches the spot: a long cross-fade of two glass tiles dips
+                // in strength midway.
+                withAnimation(.easeInOut(duration: duration * 0.1).delay(duration * 0.82)) { tileReveal = 1 }
             }
             // Cards and tiles are set down (`settle`, David, 2026-11-13). A
             // tile turns to glass before it lands, so the glass tile takes
@@ -1344,6 +1366,15 @@ private struct CardGlide: ViewModifier, Animatable {
     /// 2026-11-09).
     var cropFrom: CGRect? = nil
     var cropTo: CGSize? = nil
+    /// Into a tile: the tile itself, given its corner radius, drawn at the
+    /// tile's size. It forms inside the shrinking picture as the picture
+    /// fades under it, as an app's icon forms inside a closing app, so the
+    /// page has already become the tile when it lands (David, 2026-11-13:
+    /// a page slice swapped for an icon in one frame read as a cut).
+    var face: ((CGFloat) -> AnyView)? = nil
+    /// The part of the way (`travel`) over which the tile forms: from about
+    /// 2.5 times the tile's width to just above it.
+    static let faceForms: ClosedRange<CGFloat> = 0.55...0.9
 
     // Worked out on every frame, so the shown part, the ring, and the line
     // all agree on the box mid-glide.
@@ -1353,9 +1384,21 @@ private struct CardGlide: ViewModifier, Animatable {
     }
 
     /// The shown part's height on screen.
+    /// How far the picture has shrunk toward the tile, 0 to 1, by width.
+    private var travel: CGFloat {
+        guard let cropFrom, let cropTo, cropFrom.width > cropTo.width else { return 0 }
+        return min(max((cropFrom.width - box.width) / (cropFrom.width - cropTo.width), 0), 1)
+    }
+
+    /// How far the tile has formed, eased at both ends.
+    private var formed: CGFloat {
+        let range = Self.faceForms
+        let t = min(max((travel - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
     private var shownHeight: CGFloat {
         guard let cropFrom, let cropTo, cropTo.width > 0, cropFrom.width > cropTo.width else { return box.height }
-        let travel = min(max((cropFrom.width - box.width) / (cropFrom.width - cropTo.width), 0), 1)
         let eased = 1 - pow(1 - min(travel / 0.6, 1), 2)
         let tileShaped = min(box.width * cropTo.height / cropTo.width, box.height)
         return box.height + (tileShaped - box.height) * eased
@@ -1363,7 +1406,22 @@ private struct CardGlide: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         let scale = width > 0 && box.width > 0 ? box.width / width : 1
+        let formed = face == nil ? 0 : formed
         content
+            .opacity(1 - Double(formed))
+            .overlay(alignment: .topLeading) {
+                if let face, let cropTo, cropTo.width > 0, box.width > 0, formed > 0 {
+                    // Drawn at the tile's own size (its mark stays 24pt
+                    // there) and the shown part's shape, then scaled up to
+                    // the picture's, so the two shrink as one.
+                    let up = width / cropTo.width
+                    face(radius * cropTo.width / box.width)
+                        .frame(width: cropTo.width, height: shownHeight * cropTo.width / box.width)
+                        .scaleEffect(up, anchor: .topLeading)
+                        .frame(width: width, height: shownHeight / scale, alignment: .topLeading)
+                        .opacity(Double(formed))
+                }
+            }
             // One shape throughout, so its size and corners glide.
             .mask(alignment: .top) {
                 RoundedRectangle(cornerRadius: radius / scale, style: .continuous)

@@ -433,6 +433,17 @@ struct BrowserScreen: View {
     /// carried a flick on at full speed, halfway in about 45ms, and read as
     /// a snap; David, 2026-11-13).
     private static let closeStartLimit = 0.45
+    /// Into a Basecamp tile: slower and more even (2g, step 2). A page
+    /// going down to 56pt travels much further than one landing in a card,
+    /// and on the card's curve the whole landing showed for about 6 frames,
+    /// the tile forming in 2 or 3 (David's recording, 2026-11-13). A flick
+    /// may quicken its start only a little.
+    private static let tileCloseDuration = 0.46
+    private static let tileCloseStart = 0.2
+    private static let tileCloseStartLimit = 0.3
+    private static let tileCloseTail = 0.55
+    private static let tileCloseGlide = Animation.timingCurve(0.3, tileCloseStart, tileCloseTail, 1,
+                                                              duration: tileCloseDuration)
     private static let fade = Animation.easeOut(duration: 0.2)
     /// The cards coming in around a landing page: started with the glide,
     /// mostly there by its middle, so the page lands among them.
@@ -585,7 +596,11 @@ struct BrowserScreen: View {
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             SwipeTiming.mark("picture set")
-            land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
+            if tab.place == .basecamp {
+                land(inCardOf: tab, curve: Self.tileCloseGlide, duration: Self.tileCloseDuration)
+            } else {
+                land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
+            }
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -1103,10 +1118,18 @@ struct BrowserScreen: View {
             }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
-                land(inCardOf: pull.tab,
-                     curve: carrying(velocity, to: spot, duration: Self.closeDuration, x1: 0.25,
-                                     least: Self.closeStart, most: Self.closeStartLimit, tail: 0.35),
-                     duration: Self.closeDuration)
+                if pull.tab.place == .basecamp {
+                    land(inCardOf: pull.tab,
+                         curve: carrying(velocity, to: spot, duration: Self.tileCloseDuration, x1: 0.3,
+                                         least: Self.tileCloseStart, most: Self.tileCloseStartLimit,
+                                         tail: Self.tileCloseTail),
+                         duration: Self.tileCloseDuration)
+                } else {
+                    land(inCardOf: pull.tab,
+                         curve: carrying(velocity, to: spot, duration: Self.closeDuration, x1: 0.25,
+                                         least: Self.closeStart, most: Self.closeStartLimit, tail: 0.35),
+                         duration: Self.closeDuration)
+                }
             } else {
                 let page = pageBox(size: standInSize!)
                 land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)

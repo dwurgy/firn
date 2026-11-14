@@ -381,6 +381,17 @@ struct BrowserScreen: View {
     /// (David's recording, 2026-11-13).
     private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.45, 1, duration: tileDuration)
     private static let tileDuration = 0.38
+    /// Into a tab's card: calmer than the glide back to a page, the same
+    /// shape as the tile's. On the quick glide (half the way in about 45ms,
+    /// a flick's speed carried on), the page reached its card in about six
+    /// frames and read as a snap once the frames stopped dropping (David,
+    /// 2026-11-13: "too fast"). Opening a tab keeps the quick one, so a
+    /// page never waits.
+    private static let cardDuration = 0.4
+    private static let cardGlide = Animation.timingCurve(0.25, 0.7, 0.35, 1, duration: cardDuration)
+    /// The most a let-go's speed may quicken a landing's start: a flick
+    /// still starts it briskly, never as a jump.
+    private static let landingStartLimit = 0.7
     private static let fade = Animation.easeOut(duration: 0.2)
     /// The cards coming in around a landing page: started with the glide,
     /// mostly there by its middle, so the page lands among them.
@@ -533,8 +544,8 @@ struct BrowserScreen: View {
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             SwipeTiming.mark("picture set")
-            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.glide,
-                 duration: tab.place == .basecamp ? Self.tileDuration : 0.32)
+            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.cardGlide,
+                 duration: tab.place == .basecamp ? Self.tileDuration : Self.cardDuration)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -1014,9 +1025,10 @@ struct BrowserScreen: View {
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
                 let tile = pull.tab.place == .basecamp
-                let duration = tile ? Self.tileDuration : 0.34
+                let duration = tile ? Self.tileDuration : Self.cardDuration
                 land(inCardOf: pull.tab, curve: carrying(velocity, to: spot, duration: duration,
-                                                         tail: tile ? 0.45 : 0.25),
+                                                         tail: tile ? 0.45 : 0.35,
+                                                         startLimit: Self.landingStartLimit),
                      duration: duration)
             } else {
                 let page = pageBox(size: standInSize!)
@@ -1223,7 +1235,7 @@ struct BrowserScreen: View {
     /// where it's going: a fast flick carries straight on, a slow let-go
     /// starts gently. A curve, not a spring, so it lands exactly on time.
     private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34,
-                          tail: Double = 0.25) -> Animation {
+                          tail: Double = 0.25, startLimit: Double = 1) -> Animation {
         let dx = target.midX - box.midX
         let dy = target.midY - box.midY
         let distance = max(hypot(dx, dy), 1)
@@ -1231,7 +1243,7 @@ struct BrowserScreen: View {
         // The curve's starting slope is y1 / x1, in distance per duration.
         let slope = max(0, toward) * duration / distance
         let x1 = 0.2
-        let y1 = min(max(slope * x1, 0.16), 1)
+        let y1 = min(max(slope * x1, 0.16), startLimit)
         return .timingCurve(x1, y1, tail, 1, duration: duration)
     }
 

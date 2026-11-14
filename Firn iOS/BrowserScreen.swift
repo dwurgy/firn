@@ -189,6 +189,7 @@ struct BrowserScreen: View {
             // launch (David's iPhone, 2026-11-10).
             TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
                         settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn,
+                        screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
                         open: openTab,
                         done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
                         newTab: startNewTab, typing: editing, shown: showingTabs)
@@ -626,7 +627,7 @@ struct BrowserScreen: View {
         // can later run on its own clock from here (`land(inCardOf:)`).
         if tab.place == .basecamp { tileReveal = BasecampTiles.glideSwap.lowerBound }
         ringOnGlide = true
-        standInCardWidth = spots.frames[tab.id]?.width
+        standInCardWidth = spots.frames[tab.id].map { fullSize($0).width }
         lineShown = false
         lineOnPicture = 0
         showingTabs = true
@@ -1366,8 +1367,20 @@ struct BrowserScreen: View {
 
     /// The spot, if it's on screen (a card scrolled away has no glide).
     private func visible(_ frame: CGRect) -> CGRect? {
+        let frame = fullSize(frame)
         guard frame.width > 0, frame.height > 0, pageFrame.intersects(frame) else { return nil }
         return frame
+    }
+
+    /// A spot as it will be at full size: the overview comes forward from a
+    /// little smaller as a tab lands (`ComesForward`), and its spots are
+    /// measured as drawn, so the page would land short of its card.
+    private func fullSize(_ frame: CGRect) -> CGRect {
+        let scale = ComesForward.scale(listIn, off: reduceMotion)
+        guard scale != 1, pageFrame.width > 0 else { return frame }
+        let x = pageFrame.midX, y = pageFrame.midY
+        return CGRect(x: x + (frame.minX - x) / scale, y: y + (frame.minY - y) / scale,
+                      width: frame.width / scale, height: frame.height / scale)
     }
 
     /// + types right on the overview: an empty address field over it, and

@@ -225,6 +225,7 @@ Don't add these without David asking again.
 
 - **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups (decided and planned, David, 2026-11-06: always on, see Groups). Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
 - **iCloud sync: decided** (David, 2026-11-13); see "Where we are" and `docs/SYNC-PLAN.md`.
+- **Dark mode a little darker** (David, 2026-11-14): the space-tinted dark backgrounds, the iPhone overview's and the Mac window's frame, read too pale grey. Darker across the board, still warm, never pure black. Not started; its own step on Opus, after 2i, with light and dark checked side by side.
 
 ---
 

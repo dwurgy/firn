@@ -140,8 +140,15 @@ struct OverviewRow: View {
     /// 1 a tall card with the page's picture (the tab on screen, and tabs
     /// looked at in the last day), 0 a slim row, between while a pinch moves.
     let tallness: CGFloat
-    /// The page's picture, for a tall card, if it's in memory.
-    let picture: UIImage?
+    /// Where the page's picture comes from, for a tall card (read here, so
+    /// a picture arriving runs only its own card), and whether it may be
+    /// read from disk on the spot (the tab on screen, while shown);
+    /// otherwise only if it's in memory.
+    let pictures: PagePictures
+    var readsDisk = false
+    private var picture: UIImage? {
+        readsDisk ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id)
+    }
     /// Reads the picture from disk when a card comes into view without one.
     let loadPicture: () async -> Void
     /// The ring around the tab on screen: the space's color.
@@ -158,6 +165,11 @@ struct OverviewRow: View {
     var moveDown: (() -> Void)?
     /// The group it's in, for VoiceOver ("<title>, in <group>"); nil when loose.
     var groupName: String?
+    /// What the actions above were made from that the rest doesn't show
+    /// (the row's place for Move Up and Move Down, Reduce Motion): rows
+    /// are compared on what they show (`==`), and a row found unchanged
+    /// keeps its old actions.
+    var actionsKey: [Int] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far the finger has pulled the row left (0 or less).
@@ -609,5 +621,23 @@ struct LetterMark: View {
             .frame(width: size, height: size)
             .background(Theme.siteColor(for: site), in: .rect(cornerRadius: size / 4))
             .accessibilityHidden(true)
+    }
+}
+
+/// A row runs again only when what it shows changes (2i step 3, part 2): the
+/// overview makes every row anew each time it runs, with new actions, and a
+/// closure never compares equal, so all of them ran (the SwiftUI template,
+/// 2026-11-14: `OverviewRow` 40 times in 50ms at a gesture's turn, 5 rows).
+/// Its actions aren't compared: they act on the same tab through state that
+/// stays current, and what they were made from is in `actionsKey`. A tab's
+/// title, address, and icon aren't compared either: the row reads them from
+/// the tab itself, so it hears of their changes on its own.
+extension OverviewRow: @MainActor Equatable {
+    static func == (a: Self, b: Self) -> Bool {
+        a.tab === b.tab && a.isOnScreen == b.isOnScreen && a.tallness == b.tallness
+            && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.ring == b.ring && a.space == b.space
+            && a.lineShown == b.lineShown && a.groupName == b.groupName
+            && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
+            && a.actionsKey == b.actionsKey
     }
 }

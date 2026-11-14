@@ -374,10 +374,7 @@ struct TabOverview: View {
         .background {
             // Hidden, only a picture already in memory: browsing never
             // waits on the disk.
-            OverviewHaze(tab: store.activeTab?.id,
-                         picture: store.activeTab.flatMap {
-                             shown ? pictures.image(for: $0.id) : pictures.cachedImage(for: $0.id)
-                         }, space: space)
+            OverviewHazeLayer(tab: store.activeTab?.id, pictures: pictures, readsDisk: shown, space: space)
         }
         // Only while shown: it takes the keyboard's focus to hear a shake.
         .background { if shown { ShakeToUndo(undoManager: undoManager, closes: closes) } }
@@ -681,14 +678,15 @@ struct TabOverview: View {
     }
 
     /// A tab's tile: in the list, or lifted under the finger.
-    private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void,
-                      moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil) -> OverviewRow {
+    private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
+                      moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
             tab: tab,
             isOnScreen: onScreen,
             tallness: tallness(tab, onScreen: onScreen),
-            picture: onScreen && shown ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id),
+            pictures: pictures,
+            readsDisk: onScreen && shown,
             loadPicture: { await pictures.loadImage(for: tab.id) },
             ring: Theme.spaceColor(space),
             space: space,
@@ -700,8 +698,11 @@ struct TabOverview: View {
             moveDown: moveDown,
             // From every group directly: `tabGroups` walks the whole tab
             // list, and this runs for every tile on every redraw.
-            groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name }
+            groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
+            actionsKey: [index ?? -1, reduceMotion ? 1 : 0]
         )
+        // Runs again only when what it shows changes (`OverviewRow.==`).
+        .equatable()
     }
 
     /// A group: a flat tint in the space's color behind its name line and
@@ -854,7 +855,7 @@ struct TabOverview: View {
         }
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
-        return tile(tab, spot: spot, moveUp: up, moveDown: down)
+        return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down)
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))

@@ -13,9 +13,12 @@ final class PagePictures {
     @ObservationIgnored private let store: PagePictureStore
     /// Pictures read or taken since launch, at most `memoryLimit` of them:
     /// the least recently shown go first, and all of them when memory is
-    /// short. They come back from disk when next asked for.
-    private var images: [UUID: UIImage] = [:]
-    /// The tabs in `images`, least recently shown first.
+    /// short. They come back from disk when next asked for. Each tab's in
+    /// its own slot, watched on its own: one dictionary watched whole made
+    /// one picture arriving run the whole overview, every card again (the
+    /// SwiftUI template, 2026-11-14; 2i step 3, part 3).
+    @ObservationIgnored private var slots: [UUID: PictureSlot] = [:]
+    /// The tabs with a picture in memory, least recently shown first.
     @ObservationIgnored private var recent: [UUID] = []
     /// About 5MB each once drawn (a page twice its width in pixels), so
     /// two dozen stay near 120MB however many tabs are open; far more than
@@ -34,7 +37,7 @@ final class PagePictures {
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.images.removeAll()
+                self?.slots.values.forEach { $0.image = nil }
                 self?.recent.removeAll()
                 PillBackdrop.forgetAll()
             }
@@ -53,7 +56,7 @@ final class PagePictures {
     /// The tab's picture if it's already in memory; never reads the disk,
     /// so a list of cards can ask while it draws.
     func cachedImage(for tabID: UUID) -> UIImage? {
-        guard let image = images[tabID] else { return nil }
+        guard let image = slot(for: tabID).shown else { return nil }
         markShown(tabID)
         return image
     }
@@ -61,19 +64,28 @@ final class PagePictures {
     /// Keeps `image` in memory as the tab's, letting the least recently
     /// shown picture go once there are more than `memoryLimit`.
     private func keep(_ image: UIImage, for tabID: UUID) {
-        images[tabID] = image
+        slot(for: tabID).image = image
         markShown(tabID)
         while recent.count > Self.memoryLimit {
-            images[recent.removeFirst()] = nil
+            slots[recent.removeFirst()]?.image = nil
         }
         // Read from disk on the spot: its pills' blur comes a moment later,
         // and the cards are drawn again to use it.
         if PillBackdrop.band(for: image, dark: false) == nil {
             Task {
                 await PillBackdrop.prepare(image)
-                if images[tabID] === image { images[tabID] = image }
+                if let slot = slots[tabID], slot.image === image { slot.blurs += 1 }
             }
         }
+    }
+
+    /// The tab's slot, made the first time it's asked for (never watched
+    /// itself: only what's in it).
+    private func slot(for tabID: UUID) -> PictureSlot {
+        if let slot = slots[tabID] { return slot }
+        let slot = PictureSlot()
+        slots[tabID] = slot
+        return slot
     }
 
     private func markShown(_ tabID: UUID) {
@@ -86,7 +98,7 @@ final class PagePictures {
     /// (for the overview's older cards, as they come into view), so
     /// scrolling never waits on it.
     func loadImage(for tabID: UUID) async {
-        guard images[tabID] == nil else { return }
+        guard slots[tabID]?.image == nil else { return }
         let store = store
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
             guard let picture = store.load(for: tabID) else { return nil }
@@ -94,7 +106,7 @@ final class PagePictures {
         }.value
         guard let image else { return }
         await PillBackdrop.prepare(image)
-        if images[tabID] == nil { keep(image, for: tabID) }
+        if slots[tabID]?.image == nil { keep(image, for: tabID) }
     }
 
     /// Takes a picture of the tab's page as it is now and saves it. A
@@ -128,6 +140,21 @@ final class PagePictures {
             }
             return image
         }
+    }
+}
+
+/// One tab's picture in memory, watched on its own, so a view that shows it
+/// runs again when it changes, and no other.
+@MainActor @Observable
+final class PictureSlot {
+    var image: UIImage?
+    /// Counts the picture's pill blurs made after it was shown, so its card
+    /// is drawn again to use them.
+    var blurs = 0
+    /// The picture, for a view: reading this watches the blurs too.
+    var shown: UIImage? {
+        _ = blurs
+        return image
     }
 }
 

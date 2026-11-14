@@ -11,6 +11,22 @@ import SwiftUI
 /// tinted frame. Nothing redraws while idle or scrolling; the haze is
 /// remade only when the tab on screen or its picture changes, and a space
 /// change cross-fades the tint.
+/// The haze, reading the tab's picture itself, so a picture arriving runs
+/// only this, never the overview it's behind (2i step 3, part 3).
+struct OverviewHazeLayer: View {
+    let tab: UUID?
+    let pictures: PagePictures
+    /// The picture may be read from disk (the overview is shown).
+    let readsDisk: Bool
+    let space: String
+
+    var body: some View {
+        OverviewHaze(tab: tab, picture: tab.flatMap {
+            readsDisk ? pictures.image(for: $0) : pictures.cachedImage(for: $0)
+        }, space: space)
+    }
+}
+
 struct OverviewHaze: View {
     let tab: UUID?
     let picture: UIImage?

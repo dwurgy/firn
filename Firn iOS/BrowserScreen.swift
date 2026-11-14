@@ -368,30 +368,25 @@ struct BrowserScreen: View {
 
     private var barShown: Bool { arrival < 1 || editing }
 
-    /// The glide: quick, then easing gently into place (about 0.3s, as
-    /// Safari's). A curve rather than a spring: a spring's last frames
-    /// creep (about 0.4s on David's iPhone), and it reports done before it
-    /// has landed, so the swap with the page jumped the last few points.
-    private static let glide = Animation.timingCurve(0.2, 0.85, 0.25, 1, duration: 0.32)
-    /// Into a Basecamp tile, a far bigger change (the whole screen down to
-    /// 56pt): a little longer and a gentler start, so it reads as a glide
-    /// rather than a snap (David's recording, 2026-11-09).
-    /// Its tail is shorter than the glide's (0.45, not 0.25): the last few
-    /// points took about 200ms, a tiny page creeping into the tile's spot
-    /// (David's recording, 2026-11-13).
-    private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.45, 1, duration: tileDuration)
-    private static let tileDuration = 0.38
-    /// Into a tab's card: calmer than the glide back to a page, the same
-    /// shape as the tile's. On the quick glide (half the way in about 45ms,
-    /// a flick's speed carried on), the page reached its card in about six
-    /// frames and read as a snap once the frames stopped dropping (David,
-    /// 2026-11-13: "too fast"). Opening a tab keeps the quick one, so a
-    /// page never waits.
-    private static let cardDuration = 0.4
-    private static let cardGlide = Animation.timingCurve(0.25, 0.7, 0.35, 1, duration: cardDuration)
-    /// The most a let-go's speed may quicken a landing's start: a flick
-    /// still starts it briskly, never as a jump.
-    private static let landingStartLimit = 0.7
+    /// Opening a tab (a card or tile growing into the page) and closing
+    /// one (the page landing in its card or tile) at Safari's own pace, so
+    /// they feel as people expect (David, 2026-11-13). Both measured from
+    /// his recording of Safari, frame by frame, on the page's width:
+    /// opening is halfway at 77ms, 90% at 200ms, 97% at 275ms, about 0.4s
+    /// in all; closing is quicker and starts gently, halfway at 83ms, 90% at
+    /// 180ms, 97% at 220ms, about 0.28s. These curves match each within a
+    /// few milliseconds. Curves, not springs: a spring's last frames creep
+    /// and it reports done before it has landed, so the swap with the page
+    /// jumped the last few points.
+    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: 0.4)
+    private static let closeDuration = 0.28
+    private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
+    private static let closeStart = 0.25
+    /// The most a let-go's speed may quicken a close's start: a flick
+    /// starts it a little briskly, never as a jump (Firn's first curve
+    /// carried a flick on at full speed, halfway in about 45ms, and read as
+    /// a snap; David, 2026-11-13).
+    private static let closeStartLimit = 0.45
     private static let fade = Animation.easeOut(duration: 0.2)
     /// The cards coming in around a landing page: started with the glide,
     /// mostly there by its middle, so the page lands among them.
@@ -544,8 +539,7 @@ struct BrowserScreen: View {
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             SwipeTiming.mark("picture set")
-            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.cardGlide,
-                 duration: tab.place == .basecamp ? Self.tileDuration : Self.cardDuration)
+            land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -621,12 +615,12 @@ struct BrowserScreen: View {
             if tile {
                 // Into a tile: the picture and the tile swap over the same
                 // last stretch as before (`BasecampTiles.glideSwap`), but on
-                // a short clock of their own in the glide's second half, so
-                // the glass tile is there as the picture closes the last
-                // points. On the glide's own curve, the swap waited for its
+                // a short clock of their own, from 90% of the way to 99%
+                // (about 180 to 245ms), so the glass tile is there as the
+                // picture closes the last points. On the glide's own curve, the swap waited for its
                 // slow tail and a tiny page sat in the tile's spot for about
                 // 200ms (David's recording, 2026-11-13).
-                withAnimation(.easeInOut(duration: duration * 0.32).delay(duration * 0.6)) { tileReveal = 1 }
+                withAnimation(.easeInOut(duration: duration * 0.24).delay(duration * 0.64)) { tileReveal = 1 }
             }
             withAnimation(curve) {
                 box = spot
@@ -1024,12 +1018,10 @@ struct BrowserScreen: View {
             }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
-                let tile = pull.tab.place == .basecamp
-                let duration = tile ? Self.tileDuration : Self.cardDuration
-                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot, duration: duration,
-                                                         tail: tile ? 0.45 : 0.35,
-                                                         startLimit: Self.landingStartLimit),
-                     duration: duration)
+                land(inCardOf: pull.tab,
+                     curve: carrying(velocity, to: spot, duration: Self.closeDuration, x1: 0.25,
+                                     least: Self.closeStart, most: Self.closeStartLimit, tail: 0.35),
+                     duration: Self.closeDuration)
             } else {
                 let page = pageBox(size: standInSize!)
                 land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)
@@ -1235,15 +1227,15 @@ struct BrowserScreen: View {
     /// where it's going: a fast flick carries straight on, a slow let-go
     /// starts gently. A curve, not a spring, so it lands exactly on time.
     private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34,
-                          tail: Double = 0.25, startLimit: Double = 1) -> Animation {
+                          x1: Double = 0.2, least: Double = 0.16, most: Double = 1,
+                          tail: Double = 0.25) -> Animation {
         let dx = target.midX - box.midX
         let dy = target.midY - box.midY
         let distance = max(hypot(dx, dy), 1)
         let toward = (velocity.width * dx + velocity.height * dy) / distance
         // The curve's starting slope is y1 / x1, in distance per duration.
         let slope = max(0, toward) * duration / distance
-        let x1 = 0.2
-        let y1 = min(max(slope * x1, 0.16), startLimit)
+        let y1 = min(max(slope * x1, least), most)
         return .timingCurve(x1, y1, tail, 1, duration: duration)
     }
 

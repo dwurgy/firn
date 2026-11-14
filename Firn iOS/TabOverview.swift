@@ -36,6 +36,8 @@ struct TabOverview: View {
     /// How much of the list shows (0 to 1): none while a page is held,
     /// coming in from the moment it's let go, gliding with it.
     var listIn: CGFloat = 1
+    /// How far the list and bar have come forward (`ComesForward`).
+    var forward: CGFloat = 1
     /// The screen's middle (global points), which the list and bar grow
     /// around as they come forward (`ComesForward`).
     var screenMiddle: CGPoint?
@@ -283,7 +285,7 @@ struct TabOverview: View {
             // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
             // and rebuilt mid-glide.
             .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
-            .modifier(ComesForward(through: listIn, middle: screenMiddle, off: reduceMotion))
+            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {
@@ -307,7 +309,7 @@ struct TabOverview: View {
                     // a hair above 0 while gliding keeps its glass ready.
                     .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
                                           floor: !typing && gliding != nil ? 0.002 : 0))
-                    .modifier(ComesForward(through: listIn, middle: screenMiddle, off: reduceMotion))
+                    .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion))
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
             // to the tab on screen, so the page's card is in place the
@@ -1968,8 +1970,9 @@ struct ArrivalBand: ViewModifier, Animatable {
 
 /// The overview comes forward as a tab lands, as Safari's does (2h, David,
 /// 2026-11-13): the list and the bar start a little smaller and grow to full
-/// size around the screen's middle as they fade in (`listIn`, over 0.22s,
-/// done well before a tile's swap at 86% of its 0.38s glide). No blur: a
+/// size around the screen's middle as the page lands (`forward`, on the
+/// landing glide's clock, done as the page lands, or as a tile's swap starts
+/// at 86% of its glide, so the flying tile and the real one match). No blur: a
 /// live blur over the list froze glides on David's iPhone before, and the
 /// haze behind is already one. `visualEffect`, not `scaleEffect`: it's
 /// drawing only, so nothing in the list moves or re-lays out. The spots the
@@ -1981,8 +1984,9 @@ struct ComesForward: ViewModifier, Animatable {
     var through: CGFloat
     let middle: CGPoint?
     let off: Bool
-    /// How much smaller it starts (Safari's is about 4%).
-    static let depth: CGFloat = 0.04
+    /// How much smaller it starts (Safari's is about 4%; 4% on the list's
+    /// quick fade couldn't be seen, David, 2026-11-13).
+    static let depth: CGFloat = 0.06
     nonisolated var animatableData: CGFloat {
         get { through }
         set { through = newValue }

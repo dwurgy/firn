@@ -20,6 +20,10 @@ struct BrowserScreen: View {
     /// How much of the overview's list shows: 0 while a page is held, in
     /// from the let-go (`listComes`), out as a tab opens.
     @State private var listIn: CGFloat = 0
+    /// How far the overview has come forward (0, a little smaller, to 1,
+    /// full size; `ComesForward`): on the landing glide's own clock, so
+    /// it's still growing as the page settles into its card.
+    @State private var forward: CGFloat = 0
     /// The glide (step 3b). The page's picture makes the move, standing in
     /// for the page: moving the page itself makes UIKit work out its safe
     /// area again every frame, so WebKit lays the whole page out again and
@@ -188,7 +192,7 @@ struct BrowserScreen: View {
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
             TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn,
+                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn, forward: forward,
                         screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
                         open: openTab,
                         done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
@@ -575,6 +579,7 @@ struct BrowserScreen: View {
                 showingTabs = true
                 arrival = 1
                 listIn = 1
+                forward = 1
                 pageHidden = true
             }
             return
@@ -679,6 +684,14 @@ struct BrowserScreen: View {
             standInCardWidth = spot.width
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
             withAnimation(Self.listComes) { listIn = 1 }
+            // The overview comes forward over the glide itself, finishing
+            // as the page lands (as a tile's swap starts), on a curve that
+            // keeps some of the growth for the end: tied to the list's
+            // quick fade, it was used up while the page still covered the
+            // screen, and couldn't be seen (David's recording, 2026-11-13).
+            withAnimation(.timingCurve(0.2, 0.1, 0.2, 1, duration: duration * (tile ? 0.86 : 1))) {
+                forward = 1
+            }
             if tile {
                 // Into a tile: the flying tile and the real one swap
                 // (`BasecampTiles.glideSwap`) on a short clock of their own,
@@ -764,6 +777,7 @@ struct BrowserScreen: View {
         withAnimation(Self.fade) {
             arrival = 1
             listIn = 1
+            forward = 1
             pageHidden = true
         } completion: {
             gliding = nil
@@ -814,7 +828,10 @@ struct BrowserScreen: View {
     /// the page takes over.
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool) {
         guard let standInSize else { return hideTabs() }
-        withAnimation(Self.listGoes) { listIn = 0 }
+        withAnimation(Self.listGoes) {
+            listIn = 0
+            forward = 0
+        }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
             boxRadius = 0
@@ -886,6 +903,7 @@ struct BrowserScreen: View {
             pageHidden = false
             arrival = 0
             listIn = 0
+            forward = 0
             showingTabs = false
         } completion: {
             gliding = nil
@@ -1376,7 +1394,7 @@ struct BrowserScreen: View {
     /// little smaller as a tab lands (`ComesForward`), and its spots are
     /// measured as drawn, so the page would land short of its card.
     private func fullSize(_ frame: CGRect) -> CGRect {
-        let scale = ComesForward.scale(listIn, off: reduceMotion)
+        let scale = ComesForward.scale(forward, off: reduceMotion)
         guard scale != 1, pageFrame.width > 0 else { return frame }
         let x = pageFrame.midX, y = pageFrame.midY
         return CGRect(x: x + (frame.minX - x) / scale, y: y + (frame.minY - y) / scale,

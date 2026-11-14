@@ -43,6 +43,14 @@ struct AddressBar: View {
     /// Add to Basecamp was picked with 12 tiles already there.
     @State private var basecampFull = false
     @Environment(\.newSpace) private var newSpace
+    @Environment(\.barQuiet) private var barQuiet
+    /// A finger is holding the field (from the touch, before it's a hold).
+    @GestureState private var holding = false
+    /// The held field sinks a little until the page menu opens, as a held
+    /// tab does before its menu (`pressedScale`).
+    @State private var fieldPressed = false
+    /// Bumped as a hold opens the menu: the lifted tab's tap.
+    @State private var holdOpenings = 0
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -62,6 +70,14 @@ struct AddressBar: View {
         return PageMenuPanel.Blocking(title: store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers",
                                       site: site)
     }
+    /// The page menu's Reader row, on pages that read as articles.
+    private var readingRow: PageMenuPanel.Reading? {
+        guard let page, page.isArticle || page.isReading else { return nil }
+        return PageMenuPanel.Reading(isOn: page.isReading) {
+            ReaderStyle.shared.toggle(page, space: space)
+        }
+    }
+
     /// The small pill shows only at rest: typing and the page menu always
     /// have the whole bar.
     private var compact: Bool { shrunk && !editing.wrappedValue && !menuOpen && store.activeTab?.page != nil }
@@ -261,6 +277,17 @@ struct AddressBar: View {
                 // narrows; measured afterwards, they trailed it (step 2c).
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
+                // Holding anywhere on the field opens the page menu, as in
+                // Safari, with a held tab's feel: it sinks from 0.15s, then
+                // at 0.5s a medium tap and the menu grows out of it, rising
+                // back from the sunk size as it grows (one motion). Reduce
+                // Motion: no sinking; the menu fades as it does on a tap.
+                .scaleEffect(fieldPressed && !reduceMotion ? pressedScale : 1)
+                .animation(fieldPressed ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
+                                        : .smooth(duration: 0.2), value: fieldPressed)
+                .simultaneousGesture(holdForMenu, including: canHoldForMenu ? .all : .subviews)
+                .onChange(of: holding) { pressHeld() }
+                .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
                 // The page coming in brings its own pill, an empty one of
                 // the same frost, growing out from the other button. Outside
                 // the mask, which only holds the field's own pill (inside
@@ -304,6 +331,36 @@ struct AddressBar: View {
         .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
     }
 
+    /// The field can be held for the page menu: at rest on a page, the full
+    /// bar (a tap on the small pill grows it), and not mid-swipe.
+    private var canHoldForMenu: Bool {
+        !editing.wrappedValue && !menuOpen && !compact && !settling && barSlide == nil && page?.url != nil
+    }
+
+    private var holdForMenu: some Gesture {
+        LongPressGesture(minimumDuration: HoldThenMove.menuHold)
+            .updating($holding) { pressing, state, _ in state = pressing }
+            .onEnded { _ in
+                guard canHoldForMenu, !barQuiet else { return }
+                fieldPressed = false
+                holdOpenings += 1
+                menuOpen = true
+            }
+    }
+
+    /// The sinking starts a beat into the touch, as a held tab's does, so a
+    /// tap never dips the field.
+    private func pressHeld() {
+        guard holding else {
+            fieldPressed = false
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(HoldThenMove.hold))
+            if holding, canHoldForMenu { fieldPressed = true }
+        }
+    }
+
     /// A sideways swipe, while the full bar shows (the small pill and the
     /// open menu keep their own look).
     private var activeSlide: BarSlide? {
@@ -338,7 +395,7 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        let height = PageMenuPanel.height(blocking: blockingRow != nil)
+        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (readingRow == nil ? 0 : 1))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
@@ -357,6 +414,8 @@ struct AddressBar: View {
             .opacity(open ? 0 : 1)
             .clipShape(shape)
             .background { BarFrost(shape: shape, space: space) }
+            // Open, the menu sits lifted, with a held tab's warm shadow.
+            .shadow(color: Theme.shadowPeek.opacity(open ? 1 : 0), radius: 18, y: 8)
             // The whole pill fades as it becomes a circle, its frost too,
             // as the coming one does.
             .opacity(pills?.heldOpacity ?? 1)
@@ -376,7 +435,7 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }) { menuOpen = false }
+            }, reading: readingRow) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
                 // The words come in once the glass has mostly grown, and go
@@ -485,6 +544,9 @@ private struct AddressField: View {
     /// The address editing started from, so it alone shows no results.
     @State private var startedWith = ""
     @State private var selection: TextSelection?
+    /// "Reader available" is showing (see `sawArticle`).
+    @State private var readerNote = false
+    @State private var noteTask: Task<Void, Never>?
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var frontURL: URL? { page?.url }
@@ -494,9 +556,8 @@ private struct AddressField: View {
         HStack(spacing: 0) {
             // The page menu also balances the button on the right, so the
             // site sits centered.
-            if !isEditing, frontURL != nil, !(reduceMotion && compact) {
-                BarButton(symbol: "ellipsis", label: "Page Menu") { menuOpen.toggle() }
-                    .accessibilityHint("Share or copy this page's link")
+            if !isEditing, let page, frontURL != nil, !(reduceMotion && compact) {
+                pageMenuButton(page)
                     // Safari's icon sits this much further in from the
                     // field's rounded end.
                     .padding(.leading, compact ? 0 : 3.5)
@@ -559,14 +620,15 @@ private struct AddressField: View {
                 .accessibilityHidden(!isEditing)
                 .overlay {
                     if !isEditing, !compact {
-                        Button { if !barQuiet { beginEditing() } } label: { Color.clear.contentShape(.rect) }
+                        // Not after a hold opened the menu: the finger lifting isn't a tap.
+                        Button { if !barQuiet, !menuOpen { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
                             .accessibilityValue(text)
                             .accessibilityHint("Edit the address or search")
                     }
                 }
-                // Over the edit button: only the book takes taps.
+                // Over the edit button, taking no taps.
                 .overlay {
                     if !isEditing {
                         // Reduce Motion: the full-size name and the small
@@ -621,7 +683,48 @@ private struct AddressField: View {
         .accessibilityHidden(menuOpen)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
+        .onChange(of: articleSighting, sawArticle)
         .onAppear(perform: showRestingAddress)
+    }
+
+    /// The page menu's button: •••, or Reader's book on a page that reads
+    /// as an article, as Safari's (David, 2026-11-13); the book in the
+    /// space's color, on a wash of it, while Reader is on. Either way it
+    /// opens the page menu, where Show Reader is the first row.
+    private func pageMenuButton(_ page: any PageController) -> some View {
+        let reader = page.isArticle || page.isReading
+        let color = Theme.spaceColor(store.activeSpace.color)
+        // Only opens: a hold already opened it, and the finger lifting
+        // over the button mustn't close it again.
+        return Button { if !barQuiet { menuOpen = true } } label: {
+            ZStack {
+                if reader {
+                    ReaderBookShape()
+                        .stroke(style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+                        .frame(width: 19, height: 19)
+                        .foregroundStyle(page.isReading ? color : Theme.ink)
+                        .frame(width: 32, height: 28)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(color.opacity(page.isReading ? 0.16 : 0))
+                        }
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "ellipsis")
+                        .font(BarButton.symbolFont)
+                        .foregroundStyle(Theme.ink)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: BarButton.size, height: BarButton.size)
+            .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.2), value: reader)
+        .animation(.easeOut(duration: 0.2), value: page.isReading)
+        .accessibilityLabel("Page Menu")
+        .accessibilityValue(page.isReading ? "Reader on" : reader ? "Reader available" : "")
+        .accessibilityHint(reader ? "Reader, share, or copy this page's link" : "Share or copy this page's link")
     }
 
     /// The site at rest, as Safari shows it: 16pt rather than the field's
@@ -630,16 +733,10 @@ private struct AddressField: View {
     /// so this is a plain label over it.
     private var restingLabel: some View {
         HStack(spacing: 2) {
-            // Reader's book, just before the site, as in the approved
-            // design (Safari's reader icon sits at the pill's start too).
-            if showsBook, let page {
-                ReaderBookButton(isOn: page.isReading, space: store.activeSpace.color) {
-                    if !barQuiet { ReaderStyle.shared.toggle(page, space: store.activeSpace.color) }
-                }
-                .transition(.opacity)
-            }
             Group {
-                if text.isEmpty {
+                if showsReaderNote {
+                    Text("Reader available").foregroundStyle(Theme.ink)
+                } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
                 } else {
                     Text(verbatim: text).foregroundStyle(Theme.ink)
@@ -655,10 +752,12 @@ private struct AddressField: View {
             // Laid out at its resting size and then scaled down, so the words
             // glide smaller rather than jumping to a new font size.
             .frame(width: compact ? compactTextWidth : nil)
+            // The name and "Reader available" cross-fade, never slide.
+            .id(showsReaderNote)
+            .transition(.opacity.animation(.easeOut(duration: 0.3)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .animation(.easeOut(duration: 0.2), value: showsBook)
         .frame(maxWidth: .infinity)
         .scaleEffect(compact ? AddressBar.compactTextScale : 1)
         .offset(y: compact ? compactDrop : 0)
@@ -672,14 +771,40 @@ private struct AddressField: View {
         }
         .opacity(menuOpen || settling ? 0 : 1)
         .animation(.easeOut(duration: 0.1), value: menuOpen)
-        .allowsHitTesting(showsBook && !menuOpen)
+        .allowsHitTesting(false)
     }
 
-    /// The book shows on pages that read as articles, and while Reader is
-    /// on; never in the small pill (only the site fits there).
-    private var showsBook: Bool {
-        guard !compact, !typingNewTab, let page else { return false }
-        return page.isArticle || page.isReading
+    /// "Reader available" in the site's place, for a moment after a page
+    /// turns out to be an article, as Safari says it; never in the small
+    /// pill, and gone once Reader is on.
+    private var showsReaderNote: Bool {
+        readerNote && !compact && !typingNewTab && page?.isReading == false
+    }
+
+    /// The tab on screen, and whether its page reads as an article: the
+    /// note shows when the same tab's page becomes one, not on a switch to
+    /// a tab that already was.
+    private struct ArticleSighting: Equatable {
+        let tab: UUID?
+        let isArticle: Bool
+    }
+
+    private var articleSighting: ArticleSighting {
+        ArticleSighting(tab: store.activeTab?.id, isArticle: page?.isArticle == true)
+    }
+
+    private func sawArticle(_ old: ArticleSighting, _ new: ArticleSighting) {
+        noteTask?.cancel()
+        guard new.tab == old.tab, !old.isArticle, new.isArticle else {
+            readerNote = false
+            return
+        }
+        readerNote = true
+        noteTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            readerNote = false
+        }
     }
 
     /// How far the small pill's middle sits below the field's.
@@ -706,11 +831,12 @@ private struct AddressField: View {
                 .disabled(text.isEmpty)
                 .accessibilityHidden(text.isEmpty)
         } else if let page, page.isLoading {
-            BarButton(symbol: "xmark", label: "Stop", action: page.stopLoading)
+            // Neither runs as the finger lifts from a hold that opened the menu.
+            BarButton(symbol: "xmark", label: "Stop") { if !menuOpen { page.stopLoading() } }
         } else if let page, page.url != nil || page.loadError != nil {
             // After a failed load too (a new tab's first page, say), so it
             // can be tried again: Reload loads the address that failed.
-            BarButton(symbol: "arrow.clockwise", label: "Reload", action: page.reload)
+            BarButton(symbol: "arrow.clockwise", label: "Reload") { if !menuOpen { page.reload() } }
         }
     }
 
@@ -764,24 +890,39 @@ private struct PageMenuPanel: View {
     }
     let blocking: Blocking?
     let toggleBlocking: () -> Void
+    /// Show Reader (or Hide Reader) first, on a page that reads as an
+    /// article (David, 2026-11-13, as Safari); nil on other pages.
+    struct Reading {
+        let isOn: Bool
+        let toggle: () -> Void
+    }
+    let reading: Reading?
     let close: () -> Void
-    @AccessibilityFocusState private var firstFocused: Bool
+    /// VoiceOver starts on the first row: Reader's, or else Share.
+    @AccessibilityFocusState private var focusedRow: Int?
 
     static let width: CGFloat = 250
     static let cornerRadius: CGFloat = 22
     private static let rowHeight: CGFloat = 48
     private static let inset: CGFloat = 6
-    static func height(blocking: Bool) -> CGFloat {
-        rowHeight * CGFloat(blocking ? 3 : 2) + inset * 2
+    static func height(rows: Int) -> CGFloat {
+        rowHeight * CGFloat(rows) + inset * 2
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            if let reading {
+                row(reading.isOn ? "Hide Reader" : "Show Reader", symbol: nil) {
+                    close()
+                    reading.toggle()
+                }
+                .accessibilityFocused($focusedRow, equals: 0)
+            }
             row("Share…", symbol: "square.and.arrow.up") {
                 close()
                 ShareSheet.present(url)
             }
-            .accessibilityFocused($firstFocused)
+            .accessibilityFocused($focusedRow, equals: 1)
             row("Copy Link", symbol: "link") {
                 UIPasteboard.general.url = url
                 close()
@@ -798,17 +939,25 @@ private struct PageMenuPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, close)
-        .onAppear { firstFocused = true }
+        .onAppear { focusedRow = reading == nil ? 1 : 0 }
     }
 
-    private func row(_ title: String, detail: String? = nil, symbol: String,
+    /// A row with an SF Symbol, or Reader's book when `symbol` is nil.
+    private func row(_ title: String, detail: String? = nil, symbol: String?,
                      action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Image(systemName: symbol)
-                    .font(BarButton.symbolFont)
-                    .frame(width: 24)
-                    .accessibilityHidden(true)
+                Group {
+                    if let symbol {
+                        Image(systemName: symbol).font(BarButton.symbolFont)
+                    } else {
+                        ReaderBookShape()
+                            .stroke(style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+                            .frame(width: 19, height: 19)
+                    }
+                }
+                .frame(width: 24)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.body)

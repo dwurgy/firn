@@ -17,6 +17,10 @@ struct BrowserScreen: View {
     /// one object (`Landing`, 2i step 3). The values keep their own names
     /// here (`arrival`, `gliding`, …), each passing through to it.
     @State private var landing = Landing()
+    /// What a pull and the page's picture move, read only by the small
+    /// pieces that draw them (`Hold`, 2i step 4). The values keep their own
+    /// names here (`box`, `pull`, …), each passing through to it.
+    @State private var hold = Hold()
     /// How far the overview has arrived, 0 to 1 (animated, or following a
     /// pull): its bar shows, the dim over its cards lifts, and the page's
     /// bar goes.
@@ -48,42 +52,42 @@ struct BrowserScreen: View {
     /// area again every frame, so WebKit lays the whole page out again and
     /// the glide froze. The live page stays put, hidden, and swaps with the
     /// picture at either end.
-    @State private var standIn: UIImage?
+    private var standIn: UIImage? {
+        get { hold.standIn }
+        nonmutating set { if hold.standIn !== newValue { hold.standIn = newValue } }
+    }
     /// The stand-in's size.
     private var standInSize: CGSize? { standIn?.size }
 
-    /// The tile a landing page forms into (`CardGlide.face`): only while
-    /// landing in one (`tileCrop` is set only then).
-    private var tileFace: ((CGFloat) -> AnyView)? {
-        guard tileCrop != nil, let tab = standInTab, tab.place == .basecamp else { return nil }
-        let space = store.activeSpace.color
-        let onScreen = tab.id == store.activeTab?.id
-        return { radius in AnyView(BasecampTiles.face(tab, space: space, onScreen: onScreen, cornerRadius: radius)) }
-    }
     /// A pull has the live page itself following the finger, until its
     /// picture comes (WebKit takes 50–100ms) and takes its place in the
     /// same spot, in one frame. Moved by its layer only (`PageHold`), so
     /// it never lays out again (`docs/IOS-PLAN.md`, the swipe up's delay,
     /// step 2b).
-    @State private var livePull = false
-    /// What a pull moves: the picture once it's here, the live page below
-    /// the status bar until then (the same size: the picture leaves the
-    /// strip out too).
-    private var pulledSize: CGSize? {
-        if let standInSize { return standInSize }
-        guard livePull, pageFrame.width > 0 else { return nil }
-        return CGSize(width: pageFrame.width, height: max(pageFrame.height - pictures.topInset, 1))
+    private var livePull: Bool {
+        get { hold.livePull }
+        nonmutating set { if hold.livePull != newValue { hold.livePull = newValue } }
     }
+    private var pulledSize: CGSize? { hold.pulledSize(topInset: pictures.topInset) }
     /// The page's color behind the status bar, which the picture leaves
     /// out. Never faded: it goes the moment the page starts to move and is
     /// back the moment it's the page again. Fading, it read as a separate
     /// band of color hanging behind the clock (David's recording,
     /// 2026-11-09).
-    @State private var standInTop: CGColor?
-    @State private var stripOpacity: Double = 1
+    private var standInTop: CGColor? {
+        get { hold.standInTop }
+        nonmutating set { if hold.standInTop != newValue { hold.standInTop = newValue } }
+    }
+    private var stripOpacity: Double {
+        get { hold.stripOpacity }
+        nonmutating set { if hold.stripOpacity != newValue { hold.stripOpacity = newValue } }
+    }
     /// The picture and its strip fading off a woken page. Its own value:
     /// removing them inside an animation swapped in one frame.
-    @State private var standInFade: Double = 1
+    private var standInFade: Double {
+        get { hold.standInFade }
+        nonmutating set { if hold.standInFade != newValue { hold.standInFade = newValue } }
+    }
     /// A Basecamp tile and the page's picture cross-fade where they meet:
     /// 1 shows the tile, 0 the picture. A tile has no title pill, so the
     /// picture can't land as a card does.
@@ -92,26 +96,44 @@ struct BrowserScreen: View {
         nonmutating set { if landing.tileReveal != newValue { landing.tileReveal = newValue } }
     }
     /// The tab the picture is of, for the card's line riding on it.
-    @State private var standInTab: FirnCore.Tab?
+    private var standInTab: FirnCore.Tab? {
+        get { hold.standInTab }
+        nonmutating set { if hold.standInTab !== newValue { hold.standInTab = newValue } }
+    }
     /// The page is gliding into its own card as the overview opens: the
     /// picture wears the card's ring, fading in over the glide's second
     /// half, so it's there when the card swaps in (David, 2026-11-08: it
     /// came in only after landing).
-    @State private var ringOnGlide = false
+    private var ringOnGlide: Bool {
+        get { hold.ringOnGlide }
+        nonmutating set { if hold.ringOnGlide != newValue { hold.ringOnGlide = newValue } }
+    }
     /// The width of the card the picture glides into or out of. A tab in a
     /// group is narrower than a loose one (the group card's padding); the
     /// line riding on the picture is laid out at this width, so it matches
     /// the card's own and nothing jumps as they swap (David, 2026-11-08: the
     /// title pill jittered and resized, only in groups).
-    @State private var standInCardWidth: CGFloat?
+    private var standInCardWidth: CGFloat? {
+        get { hold.standInCardWidth }
+        nonmutating set { if hold.standInCardWidth != newValue { hold.standInCardWidth = newValue } }
+    }
     /// Where the shown part of the picture sits on screen: the page's own
     /// place, a card, a row, or wherever the finger has pulled it. Its
     /// corners, and how much the card's line on it has faded in.
-    @State private var box: CGRect = .zero
-    @State private var boxRadius: CGFloat = 0
+    private var box: CGRect {
+        get { hold.box }
+        nonmutating set { if hold.box != newValue { hold.box = newValue } }
+    }
+    private var boxRadius: CGFloat {
+        get { hold.boxRadius }
+        nonmutating set { if hold.boxRadius != newValue { hold.boxRadius = newValue } }
+    }
     /// Gliding into a tile: where it started and the tile's size, so the
     /// picture takes the tile's shape early (`CardGlide`).
-    @State private var tileCrop: (from: CGRect, to: CGSize)?
+    private var tileCrop: (from: CGRect, to: CGSize)? {
+        get { hold.tileCrop }
+        nonmutating set { hold.tileCrop = newValue }
+    }
     /// The set-down (David, 2026-11-13, in place of Safari's little
     /// bounce): landing in its card, the page comes in a hair large and
     /// lifted (`settleLift`, with a soft shadow under it), then settles the
@@ -121,10 +143,16 @@ struct BrowserScreen: View {
         get { landing.settle }
         nonmutating set { if landing.settle != newValue { landing.settle = newValue } }
     }
-    @State private var lineOnPicture: Double = 0
+    private var lineOnPicture: Double {
+        get { hold.lineOnPicture }
+        nonmutating set { if hold.lineOnPicture != newValue { hold.lineOnPicture = newValue } }
+    }
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
-    @State private var pull: Pull?
+    private var pull: Pull? {
+        get { hold.pull }
+        nonmutating set { hold.pull = newValue }
+    }
     /// True while a finger is on the bar's drag; iOS resets it when the
     /// drag is cancelled too, which `onEnded` never hears about.
     @GestureState private var dragging = false
@@ -140,29 +168,43 @@ struct BrowserScreen: View {
     /// The tabs beside the one being pulled or swiped (step 3c, step 2),
     /// riding with it a gap apart, and how much they show (they fade as the
     /// page lands in its card).
-    @State private var neighbors: [Neighbor] = []
-    @State private var neighborsOpacity: Double = 1
+    private var neighbors: [Neighbor] {
+        get { hold.neighbors }
+        nonmutating set { hold.neighbors = newValue }
+    }
+    private var neighborsOpacity: Double {
+        get { hold.neighborsOpacity }
+        nonmutating set { if hold.neighborsOpacity != newValue { hold.neighborsOpacity = newValue } }
+    }
     /// How far the tabs beside it have come in (0 to 1). A pull up shows
     /// them only after a short hold, sliding in from the edges, so a quick
     /// flick never does (as in Safari; David, 2026-11-10); a sideways swipe
     /// shows them at once. Only shown can one be picked.
-    @State private var neighborsIn: CGFloat = 1
+    private var neighborsIn: CGFloat {
+        get { hold.neighborsIn }
+        nonmutating set { if hold.neighborsIn != newValue { hold.neighborsIn = newValue } }
+    }
     /// Held after a pull up, the tabs beside it peek in from the screen's
     /// edges rather than sitting beside it, a little bigger than the held
     /// page, and move with it sideways (as in Safari; David, 2026-11-10).
-    @State private var neighborsPeek = false
+    private var neighborsPeek: Bool {
+        get { hold.neighborsPeek }
+        nonmutating set { if hold.neighborsPeek != newValue { hold.neighborsPeek = newValue } }
+    }
     /// How far the held page has been moved sideways, kept past the
     /// finger's lift for the landing.
-    @State private var heldShift: CGFloat = 0
-    /// How much of a peeking tab shows at the screen's edge.
-    private static let peek: CGFloat = 20
-    /// The least room between a peeking tab and the held page.
-    private static let peekBuffer: CGFloat = 24
+    private var heldShift: CGFloat {
+        get { hold.heldShift }
+        nonmutating set { if hold.heldShift != newValue { hold.heldShift = newValue } }
+    }
     /// How long a pull up is held before the tabs beside it come in.
     private static let neighborsWait = Duration.milliseconds(450)
     /// A sideways swipe on the bar: the pages slide at full size, over the
     /// frame's sand, with the overview left out.
-    @State private var swiping = false
+    private var swiping: Bool {
+        get { hold.swiping }
+        nonmutating set { if hold.swiping != newValue { hold.swiping = newValue } }
+    }
     /// While the overview is up (and while the picture moves).
     @State private var pageHidden = false
     /// The tab whose card is hidden while the picture stands in for it.
@@ -182,7 +224,10 @@ struct BrowserScreen: View {
     }
     @State private var spots = OverviewSpots()
     /// The page's own frame on screen, to aim the glide from.
-    @State private var pageFrame: CGRect = .zero
+    private var pageFrame: CGRect {
+        get { hold.pageFrame }
+        nonmutating set { if hold.pageFrame != newValue { hold.pageFrame = newValue } }
+    }
     /// Whether the address being typed opens a new tab (from the overview's
     /// +) rather than replacing the page on screen.
     @State private var typingNewTab = false
@@ -190,16 +235,25 @@ struct BrowserScreen: View {
     /// how close it is to starting a new tab (0 to 1). Let go at 1 and the
     /// page settles back while typing for a new tab opens over it, as the
     /// overview's + does: Firn types over the page, never on a blank one.
-    @State private var newTabReach: CGFloat = 0
+    private var newTabReach: CGFloat {
+        get { hold.newTabReach }
+        nonmutating set { if hold.newTabReach != newValue { hold.newTabReach = newValue } }
+    }
     /// How far the finger has gone left past the last tab (0 or less);
     /// the + slides in from the edge with it. The page itself stays still:
     /// moving it needed a picture of the page first, and waiting for
     /// WebKit made the swipe start late and then jump (David's recording,
     /// 2026-11-06).
-    @State private var newTabShift: CGFloat = 0
+    private var newTabShift: CGFloat {
+        get { hold.newTabShift }
+        nonmutating set { if hold.newTabShift != newValue { hold.newTabShift = newValue } }
+    }
     /// How far the bar's field pulls in toward the thumb meanwhile (pt),
     /// as the pills give in an ordinary sideways swipe (David, 2026-11-11).
-    @State private var newTabGive: CGFloat = 0
+    private var newTabGive: CGFloat {
+        get { hold.newTabGive }
+        nonmutating set { if hold.newTabGive != newValue { hold.newTabGive = newValue } }
+    }
     /// A swipe past the last tab is under way (instead of a pull).
     @State private var newTabSwipe = false
     /// The page menu, grown out of the bar.
@@ -254,130 +308,11 @@ struct BrowserScreen: View {
                 .opacity(pageHidden ? 0 : 1)
                 .allowsHitTesting(!showingTabs)
                 .accessibilityHidden(showingTabs)
-            readerText
+            ReaderPill(store: store, hold: hold, away: showingTabs || pageHidden || editing)
 
-            if let standInSize = pulledSize, standInSize.width > 0 {
-                if let standInTop {
-                    // A fill, so a new tab's color fades in rather than snaps.
-                    Rectangle()
-                        .fill(Color(cgColor: standInTop))
-                        .frame(height: pictures.topInset)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .opacity(stripOpacity * standInFade)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-                // Placed from the screen's top-left corner, in the screen's
-                // own points, as the cards report theirs (measured: the
-                // layer's own corner isn't the screen's).
-                let width = pageFrame.width
-                let height = width * standInSize.height / standInSize.width
-                let cardWidth = max(standInCardWidth ?? width - 32, 1)
-                GeometryReader { layer in
-                    let corner = layer.frame(in: .global).origin
-                    ZStack(alignment: .topLeading) {
-                        // Sideways, each page carries its own strip under
-                        // the clock, which stays still over them (as in
-                        // Safari); behind the pictures, filling their
-                        // rounded top corners. The live page brings its own.
-                        if swiping {
-                            ForEach(neighbors) { neighbor in
-                                topBand(neighbor.top, over: neighbor.pinned ?? neighborBox(neighbor.place))
-                                    .opacity(neighborsOpacity * neighborsIn)
-                            }
-                            if standIn != nil { topBand(standInTop, over: box) }
-                        }
-                        // The tabs beside it, the same size, a gap apart.
-                        ForEach(neighbors) { neighbor in
-                            Group {
-                                if let image = neighbor.image {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .frame(width: width, height: width * image.size.height / max(image.size.width, 1))
-                                } else {
-                                    // Never pictured: a plain page.
-                                    Color.clear.frame(width: width, height: height)
-                                }
-                            }
-                            .frame(width: width, height: height, alignment: .top)
-                            .background(Theme.page)
-                            .modifier(CardGlide(width: width, box: neighbor.pinned ?? neighborBox(neighbor.place),
-                                                radius: boxRadius))
-                            // In from beyond the screen's edge.
-                            .offset(x: CGFloat(neighbor.place) * (1 - neighborsIn) * (Self.peek + 40))
-                            .opacity(neighborsOpacity * neighborsIn)
-                        }
-                        // The set-down's shadow: there only while the page is
-                        // lifted above its card, sinking in as it settles.
-                        // A tile's comes only with the real tile (`BasecampTiles`):
-                        // here it was sized to the whole picture, not the
-                        // part shown, and trailed below the landing tile as a
-                        // faint tall ghost (David's recording, 2026-11-13).
-                        if let standInTab, standInTab.place != .basecamp {
-                            RoundedRectangle(cornerRadius: boxRadius, style: .continuous)
-                                .fill(Theme.page)
-                                .frame(width: box.width, height: box.height)
-                                .shadow(color: Theme.shadowPageFar, radius: 12, y: 6)
-                                .offset(x: box.minX, y: box.minY)
-                                .opacity(Double((settle - 1) / (Self.settleLift - 1)))
-                        }
-                        Group {
-                            if let standIn { Image(uiImage: standIn).resizable() }
-                        }
-                        .frame(width: width, height: height)
-                        .modifier(CardGlide(width: width, box: box, radius: boxRadius,
-                                            cropFrom: tileCrop?.from, cropTo: tileCrop?.to,
-                                            face: tileFace))
-                        .modifier(ArrivalBand(arrival: standInTab?.place == .basecamp ? tileReveal : 0,
-                                              range: BasecampTiles.glideSwap, fadesIn: false))
-                        if ringOnGlide, let standInTab, standInTab.place != .basecamp {
-                            // The card's ring (`CardRing`), on the picture's inside edge.
-                            CardRing(color: Theme.spaceColor(store.activeSpace.color), radius: boxRadius)
-                                .frame(width: box.width, height: box.height)
-                                .offset(x: box.minX, y: box.minY)
-                                .modifier(RingFade(arrival: arrival))
-                        }
-                        // The card's line, drawn at the card's size and
-                        // scaled with the picture (no layout while it moves).
-                        // A tile has no line: only cards get it.
-                        if let standInTab, standInTab.place != .basecamp {
-                            CardTop(tab: standInTab, space: store.activeSpace.color, picture: standIn)
-                                .frame(width: cardWidth)
-                                .clipShape(CardTop.shape(OverviewRow.cornerRadius))
-                                .scaleEffect(box.width / cardWidth, anchor: .topLeading)
-                                .offset(x: box.minX, y: box.minY)
-                                // Never quite 0 while it rides the
-                                // picture: at 0 iOS drops the line's blur,
-                                // and building it again (or dropping it)
-                                // froze a frame about 100ms into every
-                                // glide (David's recording, 2026-11-04).
-                                .opacity(max(lineOnPicture, 0.002))
-                        }
-                    }
-                    // Around the card's middle, so it settles in place.
-                    .scaleEffect(settle, anchor: UnitPoint(x: box.midX / max(layer.size.width, 1),
-                                                           y: box.midY / max(layer.size.height, 1)))
-                    .offset(x: -corner.x, y: -corner.y)
-                }
-                .opacity(standInFade)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+            StandInLayer(hold: hold, landing: landing, store: store, pictures: pictures)
 
-            // Swiped past the last tab: a frosted + at the edge says a new
-            // tab is a let-go away.
-            NewTabHint(space: store.activeSpace.color, reach: newTabReach)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                // Just off the screen's edge at rest, sliding in with the
-                // finger (trailing-aligned, it starts half its width in).
-                .offset(x: newTabShift + BarButton.glassSize)
-                // It stays put as the keyboard comes up (it rode up with
-                // the bar; David, 2026-11-06).
-                .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            NewTabHintLayer(hold: hold, space: store.activeSpace.color)
 
             // While typing, the page (or the overview) dims a little; a tap
             // on it cancels.
@@ -400,21 +335,7 @@ struct BrowserScreen: View {
                     .accessibilityHidden(true)
             }
 
-            bar
-                // Over the overview, the bar shows only while typing from +.
-                // It fades out over the first half of the glide, before the
-                // overview's bar fades in, so the two never overlap. During
-                // a glide it stays a hair above 0: at 0 iOS lets its glass
-                // go, and setting the glass up again froze a frame partway
-                // back to the page (David's recording, 2026-11-04).
-                // Worked out on every frame (`ArrivalBand`): a plain
-                // opacity fades straight from start to end, so both bars
-                // faded at once and their words smudged together (David's
-                // recording, 2026-11-09).
-                .modifier(ArrivalBand(arrival: editing ? 0 : arrival, range: 0...0.2, fadesIn: false,
-                                      floor: !editing && gliding != nil ? 0.002 : 0))
-                .allowsHitTesting(barShown)
-                .accessibilityHidden(!barShown)
+            BarHost(hold: hold, landing: landing, editing: editing) { bar }
         }
         .background(Theme.page.ignoresSafeArea())
         // New Space…, from the space menu or the command bar (phase 4, step 2),
@@ -439,8 +360,6 @@ struct BrowserScreen: View {
         }
     }
 
-    private var barShown: Bool { arrival < 1 || editing }
-
     /// Opening a tab (a card or tile growing into the page) and closing
     /// one (the page landing in its card or tile) at Safari's own pace, so
     /// they feel as people expect (David, 2026-11-13). Both measured from
@@ -459,7 +378,7 @@ struct BrowserScreen: View {
     private static let closeDuration = 0.32
     /// How far above its card the page arrives (1.5% larger, about 5pt on
     /// a card), and how long the settle runs on after the glide ends.
-    private static let settleLift: CGFloat = 1.015
+    static let settleLift: CGFloat = 1.015
     private static let settleTime = 0.09
     private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
     private static let closeStart = 0.25
@@ -512,8 +431,6 @@ struct BrowserScreen: View {
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)
-            .environment(\.barSlide, barSlide)
-            .environment(\.barGive, newTabGive)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
@@ -560,29 +477,12 @@ struct BrowserScreen: View {
             .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
     }
 
-    /// Reader's Aa pill, just under the clock at the top right, as in the
-    /// approved design: only while reading, and gone while the page is
-    /// pulled, the overview shows, or an address is being typed.
-    @ViewBuilder private var readerText: some View {
-        let shown = store.activeTab?.page?.isReading == true && !showingTabs && !pageHidden
-            && pull == nil && !swiping && !editing
-        ZStack {
-            if shown {
-                // Just under the clock, 16pt in, as in the approved design.
-                ReaderTextButton(space: store.activeSpace.color, inset: 10)
-                    .padding(.trailing, 6)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: reduceMotion ? 0.15 : 0.2), value: shown)
-    }
-
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
-            PageView(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
-                     held: livePull ? PageHold(box: box, radius: boxRadius, includesTop: swiping) : nil) { scroll in
+            HeldPage(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
+                     hold: hold) { scroll in
                 let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }
             }
@@ -989,34 +889,8 @@ struct BrowserScreen: View {
 
     // MARK: The pull (step 3c)
 
-    /// A pull under way: where the finger came down, and the page's picture
-    /// being taken for it.
-    private struct Pull {
-        let id = UUID()
-        let tab: FirnCore.Tab
-        let start: CGPoint
-        let picture: Task<UIImage?, Never>?
-        var translation: CGSize = .zero
-        /// Started sideways: the page slides at full size between tabs,
-        /// and never shrinks.
-        var sideways = false
-    }
-
-    /// A tab beside the one held: -1 just before it in the list (on the
-    /// left), 1 just after it.
-    private struct Neighbor: Identifiable {
-        let id: UUID
-        let tab: FirnCore.Tab
-        let image: UIImage?
-        var place: Int
-        /// The strip under the clock while it's beside: its picture's top
-        /// edge, else the page's own color (none while asleep or loading,
-        /// when it's still black).
-        let top: CGColor?
-        /// Where it's drawn while set, rather than by its place: where it
-        /// was as another tab was picked, so it glides on from there.
-        var pinned: CGRect? = nil
-    }
+    private typealias Pull = Hold.Pull
+    private typealias Neighbor = Hold.Neighbor
 
     /// The finger moves on the bar. Going up more than across, it grabs the
     /// page: the overview lays out behind, the page's picture is taken, and
@@ -1177,13 +1051,7 @@ struct BrowserScreen: View {
                       width: page.width * scale, height: page.height * scale)
     }
 
-    /// How far the held page goes sideways with the finger. Swiped toward
-    /// a side with no tab, it gives a little and comes back.
-    private func sidewaysShift(_ pull: Pull) -> CGFloat {
-        var dx = pull.translation.width
-        if pull.sideways, !neighbors.contains(where: { $0.place == (dx > 0 ? -1 : 1) }) { dx *= 0.3 }
-        return dx
-    }
+    private func sidewaysShift(_ pull: Pull) -> CGFloat { hold.sidewaysShift(pull) }
 
     /// Let go: pulled far enough or flicked up, it lands in its card;
     /// otherwise (or flicked down) it goes back to being the page. Either
@@ -1311,50 +1179,8 @@ struct BrowserScreen: View {
         }
     }
 
-    /// The gap between the held page and the ones beside it: a little
-    /// narrower as they shrink.
-    private func gap(_ box: CGRect) -> CGFloat {
-        // Nearly touching at full size, as Safari's pages slide.
-        10 + 6 * box.width / max(pageFrame.width, 1)
-    }
-
-    /// Sideways, the page on screen and the one coming in share the bar's
-    /// gap, each with its own pill (`BarSlide`). Measured as on letting go
-    /// (`neighborChosen`), so the split carries straight on as the tab
-    /// beside becomes the one held. Toward a side with no tab, the pill
-    /// stays whole.
-    private var barSlide: BarSlide? {
-        guard swiping, !neighborsPeek, standIn != nil || livePull else { return nil }
-        let spacing = box.width + gap(box)
-        guard spacing > 1 else { return nil }
-        let t = (box.midX - pageFrame.midX) / spacing
-        let coming = t > 0 ? -1 : 1
-        guard t != 0, neighbors.contains(where: { $0.place == coming }) else { return BarSlide(progress: 0) }
-        return BarSlide(progress: t)
-    }
-
-    /// A page's strip under the clock, riding above its box.
-    private func topBand(_ color: CGColor?, over box: CGRect) -> some View {
-        UnevenRoundedRectangle(topLeadingRadius: boxRadius, topTrailingRadius: boxRadius, style: .continuous)
-            .fill(color.map { Color(cgColor: $0) } ?? Theme.page)
-            .frame(width: box.width, height: pictures.topInset + boxRadius)
-            .offset(x: box.minX, y: box.minY - pictures.topInset)
-    }
-
-    /// Where a tab beside the held one sits: the held box, moved over.
-    private func neighborBox(_ place: Int) -> CGRect {
-        guard neighborsPeek else { return box.offsetBy(dx: CGFloat(place) * (box.width + gap(box)), dy: 0) }
-        // At the screen's edge, a little bigger than the held page, and
-        // moved as far sideways as it has been.
-        let screen = pageFrame.width
-        let grown = box.insetBy(dx: -box.width * 0.02, dy: -box.height * 0.02)
-        let shift = pull.map(sidewaysShift) ?? heldShift
-        var x = place > 0 ? screen - Self.peek + shift : Self.peek + shift - grown.width
-        // Never touching the held page, nor under it: a page held off to
-        // one side pushes that side's tab out (David, 2026-11-11).
-        x = place > 0 ? max(x, box.maxX + Self.peekBuffer) : min(x, box.minX - Self.peekBuffer - grown.width)
-        return CGRect(x: x, y: grown.minY, width: grown.width, height: grown.height)
-    }
+    private func gap(_ box: CGRect) -> CGFloat { hold.gap(box) }
+    private func neighborBox(_ place: Int) -> CGRect { hold.neighborBox(place) }
 
     /// The tab beside it to open on letting go: moved (or flicked) more
     /// than about two fifths of the way toward the middle.
@@ -1488,130 +1314,5 @@ struct BrowserScreen: View {
     private func startNewTab() {
         typingNewTab = true
         editing = true
-    }
-}
-
-/// The page's picture in its box: scaled to the box's width, placed on it,
-/// and cut to the box's height with its corners. Transforms and a mask
-/// only, so nothing lays out again while it moves.
-private struct CardGlide: ViewModifier, Animatable {
-    let width: CGFloat
-    var box: CGRect
-    var radius: CGFloat
-    /// Into a tile: where the glide started, and the tile's size. The
-    /// shown part takes the tile's shape over the first 60% of the way, so
-    /// the page becomes a tile as it shrinks, rather than flying as a tall
-    /// mini page and being cut down at the end (David's recording,
-    /// 2026-11-09).
-    var cropFrom: CGRect? = nil
-    var cropTo: CGSize? = nil
-    /// Into a tile: the tile itself, given its corner radius, drawn at the
-    /// tile's size. It forms inside the shrinking picture as the picture
-    /// fades under it, as an app's icon forms inside a closing app, so the
-    /// page has already become the tile when it lands (David, 2026-11-13:
-    /// a page slice swapped for an icon in one frame read as a cut).
-    var face: ((CGFloat) -> AnyView)? = nil
-    /// The part of the way (`travel`) over which the tile forms: from about
-    /// 3 times the tile's width to about 1.6 times, then it travels the
-    /// rest as the tile. iOS's app close, frame by frame (David's
-    /// recording, 2026-11-13): the icon shows from about 3 times its size,
-    /// has taken over by about 1.5 times, and flies the last stretch as
-    /// the icon. Formed from 2.5 times to just above (0.55 to 0.9), it was
-    /// seen as a tile for only a frame or two before landing.
-    static let faceForms: ClosedRange<CGFloat> = 0.4...0.82
-
-    // Worked out on every frame, so the shown part, the ring, and the line
-    // all agree on the box mid-glide.
-    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
-        get { AnimatablePair(box.animatableData, radius) }
-        set { box.animatableData = newValue.first; radius = newValue.second }
-    }
-
-    /// The shown part's height on screen.
-    /// How far the picture has shrunk toward the tile, 0 to 1, by width.
-    private var travel: CGFloat {
-        guard let cropFrom, let cropTo, cropFrom.width > cropTo.width else { return 0 }
-        return min(max((cropFrom.width - box.width) / (cropFrom.width - cropTo.width), 0), 1)
-    }
-
-    /// How far the tile has formed, eased at both ends.
-    private var formed: CGFloat {
-        let range = Self.faceForms
-        let t = min(max((travel - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1)
-        return t * t * (3 - 2 * t)
-    }
-
-    private var shownHeight: CGFloat {
-        guard let cropFrom, let cropTo, cropTo.width > 0, cropFrom.width > cropTo.width else { return box.height }
-        let eased = 1 - pow(1 - min(travel / 0.6, 1), 2)
-        let tileShaped = min(box.width * cropTo.height / cropTo.width, box.height)
-        return box.height + (tileShaped - box.height) * eased
-    }
-
-    func body(content: Content) -> some View {
-        let scale = width > 0 && box.width > 0 ? box.width / width : 1
-        let formed = face == nil ? 0 : formed
-        content
-            .opacity(1 - Double(formed))
-            .overlay(alignment: .topLeading) {
-                if let face, let cropTo, cropTo.width > 0, box.width > 0, formed > 0 {
-                    // Drawn at the tile's own size (its mark stays 24pt
-                    // there) and the shown part's shape, then scaled up to
-                    // the picture's, so the two shrink as one.
-                    let up = width / cropTo.width
-                    face(radius * cropTo.width / box.width)
-                        .frame(width: cropTo.width, height: shownHeight * cropTo.width / box.width)
-                        .scaleEffect(up, anchor: .topLeading)
-                        .frame(width: width, height: shownHeight / scale, alignment: .topLeading)
-                        .opacity(Double(formed))
-                }
-            }
-            // One shape throughout, so its size and corners glide.
-            .mask(alignment: .top) {
-                RoundedRectangle(cornerRadius: radius / scale, style: .continuous)
-                    .frame(height: shownHeight / scale)
-            }
-            .scaleEffect(scale, anchor: .topLeading)
-            .offset(x: box.minX, y: box.minY)
-    }
-}
-
-/// The frosted + that shows at the right edge as the last tab is swiped
-/// past: it fades in and grows a little with the swipe, and fills with the
-/// space's color once letting go would start a new tab.
-private struct NewTabHint: View {
-    let space: String
-    let reach: CGFloat
-
-    var body: some View {
-        Image(systemName: "plus")
-            .font(BarButton.symbolFont)
-            .foregroundStyle(reach >= 1 ? Color.white : Theme.ink)
-            .frame(width: BarButton.size, height: BarButton.size)
-            .padding(2)
-            // Filled once it's a let-go away. A solid fill under the glass,
-            // not the glass's tint: a tinted glass that moves every frame
-            // drew washed out until it stopped (Simulator recording,
-            // 2026-11-06).
-            .background(Circle().fill(Theme.spaceVivid(space)).opacity(reach >= 1 ? 1 : 0))
-            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .circle)
-            .scaleEffect(0.7 + 0.3 * reach)
-            .opacity(Double(reach))
-            .animation(.smooth(duration: 0.2), value: reach >= 1)
-    }
-}
-
-/// The gliding card's ring: nothing over the glide's first half, then in
-/// with the page's arrival, full as it lands (as `ArrivalFade` does for the
-/// rest of the overview).
-private struct RingFade: ViewModifier, Animatable {
-    var arrival: CGFloat
-    nonisolated var animatableData: CGFloat {
-        get { arrival }
-        set { arrival = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content.opacity(min(max((arrival - 0.5) / 0.5, 0), 1))
     }
 }

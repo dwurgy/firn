@@ -203,10 +203,13 @@ struct ReaderDocumentTests {
             for: try article(), look: ReaderLook(), accent: 0x7F9CB0, icon: nil, summarize: true)
         // Under the byline, inside the heading, above the article.
         let meta = try #require(offered.range(of: "<div class=\"meta\">"))
-        let slot = try #require(offered.range(of: "<div class=\"sum-slot\" id=\"firn-summary\">"))
+        let slot = try #require(offered.range(of: "<div class=\"sum-slot\" id=\"firn-summary\" lang=\"en\">"))
         let head = try #require(offered.range(of: "</header>"))
         #expect(meta.lowerBound < slot.lowerBound && slot.lowerBound < head.lowerBound)
         #expect(offered.contains("data-act=\"make\""))
+        // VoiceOver hears when a summary arrives, from a line inside the heading.
+        let news = try #require(offered.range(of: "id=\"firn-summary-news\" lang=\"en\" aria-live=\"polite\""))
+        #expect(news.lowerBound < head.lowerBound)
         // The summary is set as text by Firn's world, never written as HTML.
         #expect(ReaderDocument.summaryScript.contains("node.textContent = words"))
         #expect(!ReaderDocument.summaryScript.contains("innerHTML"))

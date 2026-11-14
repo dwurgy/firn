@@ -87,7 +87,14 @@ enum ReaderDocument {
         let minutes = article.minutesToRead == 1 ? "1 min read" : "\(article.minutesToRead) min read"
         let meta = [article.byline, minutes].compactMap { $0 }.map(escape).joined(separator: " · ")
         let color = String(format: "#%06X", accent & 0xFFFFFF)
-        let slot = summarize ? "\n<div class=\"sum-slot\" id=\"firn-summary\">\(pill)</div>" : ""
+        // Firn's own words are English, whatever the article's language, so
+        // VoiceOver reads them in an English voice; the summary itself takes
+        // the article's language back (`summaryScript`). The quiet line after
+        // the slot tells VoiceOver when a summary arrives.
+        let slot = summarize
+            ? "\n<div class=\"sum-slot\" id=\"firn-summary\" lang=\"en\">\(pill)</div>"
+                + "<div class=\"sr\" id=\"firn-summary-news\" lang=\"en\" aria-live=\"polite\"></div>"
+            : ""
         return """
             <!doctype html>
             <html\(language) dir="\(direction)" class="\(look.rootClasses)">
@@ -188,6 +195,8 @@ enum ReaderDocument {
         if (!slot) return;
         var glyph = \(jsString(glyph));
         var hadFocus = slot.contains(document.activeElement);
+        var wasMaking = !!slot.querySelector('.making');
+        var news = document.getElementById('firn-summary-news');
         slot.textContent = '';
         function el(tag, cls, words) {
             var node = document.createElement(tag);
@@ -227,16 +236,32 @@ enum ReaderDocument {
                 lines.appendChild(el('i')); lines.appendChild(el('i')); lines.appendChild(el('i'));
                 card.appendChild(lines);
             } else if (state === 'failed') {
-                card.setAttribute('role', 'status');
                 card.appendChild(top('Summary'));
                 card.appendChild(el('p', 'fail', 'Couldn’t summarize this article.'));
             } else {
+                card.setAttribute('role', 'region');
+                card.setAttribute('aria-label', 'Summary');
                 card.appendChild(top('Summary'));
-                card.appendChild(el('p', settle ? 'prose settle' : 'prose', text));
+                // One paragraph, in the article's own language and voice,
+                // so VoiceOver reads it as one passage.
+                var prose = el('p', settle ? 'prose settle' : 'prose', text);
+                var language = document.documentElement.getAttribute('lang');
+                prose.setAttribute('lang', language || '');
+                prose.tabIndex = -1;
+                card.appendChild(prose);
                 card.appendChild(el('div', 'foot', 'Made on this ' + device + ' by Apple Intelligence. It can make mistakes.'));
             }
             slot.appendChild(card);
             focus = card.querySelector('.x');
+            // A summary just arrived: someone on the card hears it read
+            // out whole; anyone else hears that it's there.
+            if (wasMaking && state !== 'making') {
+                if (hadFocus) {
+                    focus = card.querySelector('.prose') || focus;
+                } else if (news) {
+                    news.textContent = state === 'made' ? 'Summary ready.' : 'Couldn’t summarize this article.';
+                }
+            }
         }
         if (hadFocus && focus) focus.focus();
         """
@@ -284,6 +309,15 @@ enum ReaderDocument {
           background: transparent; color: var(--faint); display: grid; place-items: center; cursor: pointer; padding: 0;
         }
         .card-top .x:hover { background: var(--wash); color: var(--ink); }
+        /* 44pt to tap on the iPhone, without changing how either looks. */
+        .suggest, .card-top .x { position: relative; }
+        .suggest::before { content: ""; position: absolute; inset: -7px 0; }
+        .card-top .x::before { content: ""; position: absolute; inset: -10px; }
+        .prose:focus { outline: none; }
+        .sr {
+          position: absolute; width: 1px; height: 1px; overflow: hidden;
+          clip-path: inset(50%); white-space: nowrap;
+        }
         .card-top .x svg { width: 10px; height: 10px; }
         .prose { margin: 10px 0 0; font-size: .92em; line-height: 1.5; text-wrap: pretty; hyphens: manual; }
         .prose.settle {

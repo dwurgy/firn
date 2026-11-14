@@ -609,7 +609,10 @@ private struct AddressField: View {
     @State private var noteTask: Task<Void, Never>?
 
     private var page: (any PageController)? { store.activeTab?.page }
-    private var frontURL: URL? { page?.url }
+    /// The address the page shows: one that failed to load comes first, as
+    /// on the Mac, so the bar never names the old site over Firn's error
+    /// (and editing starts from the address to fix).
+    private var frontURL: URL? { page?.loadError?.url ?? page?.url }
     private var isEditing: Bool { editing.wrappedValue }
 
     var body: some View {

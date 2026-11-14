@@ -304,6 +304,7 @@ struct BrowserScreen: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
                     pageFrame = $0
                     pictures.pageWidth = $0.width
+                    pictures.pageHeight = $0.height
                 }
                 .opacity(pageHidden ? 0 : 1)
                 .allowsHitTesting(!showingTabs)
@@ -438,7 +439,10 @@ struct BrowserScreen: View {
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
                 // Only the bar at rest counts: while it rides the keyboard,
                 // the page underneath shouldn't lay out again.
-                if !editing { barTop = top }
+                if !editing {
+                    barTop = top
+                    if pageFrame.height > 0 { pictures.bottomRoom = pageFrame.maxY - top }
+                }
             }
             // A swipe up on the bar pulls the page into the overview, as
             // in Safari. Alongside the bar's own buttons, so a tap still taps.
@@ -486,6 +490,11 @@ struct BrowserScreen: View {
                 let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }
             }
+                // A failed load covers the page with Firn's own words.
+                .overlay {
+                    LoadErrorCover(page: page, hold: hold, topRoom: pictures.topInset,
+                                   bottomRoom: barTop > 0 && pageFrame.height > 0 ? pageFrame.maxY - barTop : 0)
+                }
                 // A new tab gets a new web view, not the last one's.
                 .id(ObjectIdentifier(page))
                 // Every reader follows the one look, on screen or coming back to it.

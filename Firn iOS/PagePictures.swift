@@ -29,6 +29,10 @@ final class PagePictures {
     /// The status bar's height, in points (set by the screen): where the
     /// page, and so its picture, starts on screen.
     @ObservationIgnored var topInset: CGFloat = 0
+    /// The page's height on screen and the bar's room at its bottom, in
+    /// points (set by the screen), for drawing a failed page's words.
+    @ObservationIgnored var pageHeight: CGFloat = 0
+    @ObservationIgnored var bottomRoom: CGFloat = 0
     @ObservationIgnored private var warning: (any NSObjectProtocol)?
 
     init(store: PagePictureStore) {
@@ -123,8 +127,13 @@ final class PagePictures {
         let scale = UITraitCollection.current.displayScale
         let width = pageWidth * 2 / max(scale, 1)
         let store = store
+        // A failed page has nothing for WebKit to picture, and its old
+        // picture is of a page that's gone: Firn's own words are the picture,
+        // so the card and every glide show what the page shows.
+        let failed = errorPicture(for: page)
         return Task {
-            guard let picture = await page.snapshot(width: width) else { return nil }
+            let taken: CGImage? = if let failed { failed } else { await page.snapshot(width: width) }
+            guard let picture = taken else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
             // Its pills' blur first (a few milliseconds, off the main
             // thread), so the card gliding in never blurs live.
@@ -140,6 +149,22 @@ final class PagePictures {
             }
             return image
         }
+    }
+}
+
+extension PagePictures {
+    /// The error page as it shows below the status bar, drawn twice its
+    /// width in pixels, as WebKit's pictures are; nil if the page loaded.
+    fileprivate func errorPicture(for page: any PageController) -> CGImage? {
+        guard let error = page.loadError, pageWidth > 0, pageHeight > topInset else { return nil }
+        let traits = UITraitCollection.current
+        let view = LoadErrorView(error: error, isRetrying: false, retry: {}, bottomRoom: bottomRoom)
+            .frame(width: pageWidth, height: pageHeight - topInset)
+            .environment(\.colorScheme, traits.userInterfaceStyle == .dark ? .dark : .light)
+            .environment(\.dynamicTypeSize, DynamicTypeSize(traits.preferredContentSizeCategory) ?? .large)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        return renderer.cgImage
     }
 }
 

@@ -67,11 +67,19 @@ public struct LoadError: Equatable, Sendable {
         return site
     }
 
+    /// The offline line names the device; a phone may be on Wi‑Fi or
+    /// cellular data. The iPad gets its own words when Firn runs there.
+    #if os(iOS)
+    static let offlineLine = "This iPhone seems to be offline. Check Wi‑Fi or cellular data, then try again."
+    #else
+    static let offlineLine = "This Mac seems to be offline. Check your Wi‑Fi, then try again."
+    #endif
+
     public var headline: String { "Firn couldn’t reach \(site)" }
 
     public var explanation: String {
         switch reason {
-        case .offline: "This Mac seems to be offline. Check your Wi‑Fi, then try again."
+        case .offline: Self.offlineLine
         case .noSuchSite: "There’s no site at this address. Check the spelling."
         case .notAnswering: "The site isn’t answering. It may be busy or down for a moment."
         case .notSecure: "Firn couldn’t make a secure connection, so it didn’t open the page."

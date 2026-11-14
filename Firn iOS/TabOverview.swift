@@ -126,6 +126,11 @@ struct TabOverview: View {
     @State private var lastDrop = Date.distantPast
     @State private var lifts = 0
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
+    /// Where the tab last opened from here sat in the list's view, so the
+    /// page closes back into the same spot (David, 2026-11-13: "tabs should
+    /// always close back to where they were opened from"). A card cut off
+    /// at the top or behind the bar slides just into view instead.
+    @State private var returnSpot: ReturnSpot?
     /// Scrolls the list while a held tab rests near its top or bottom.
     @State private var edgeScroll: Task<Void, Never>?
     /// A pinch, a drag, or the moment after either: a finger lifting then
@@ -168,6 +173,8 @@ struct TabOverview: View {
     }
 
     private var space: String { store.activeSpace.color }
+    /// The room above the list's first item.
+    private static let topMargin: CGFloat = 8
     /// How long a tab stays a tall card after it was last looked at.
     private static let cardAge: TimeInterval = 24 * 60 * 60
 
@@ -202,7 +209,7 @@ struct TabOverview: View {
                                   incoming: drag?.basecamp == true ? drag?.id : nil,
                                   blank: blankSpot,
                                   away: drag?.tile == true && drag?.tabs == true ? drag?.id : nil,
-                                  open: { tab in if !busy { open(tab) } },
+                                  open: openRemembering,
                                   menu: { tileMenu(for: $0) },
                                   move: { tab, to in
                                       withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
@@ -241,6 +248,13 @@ struct TabOverview: View {
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
                                     leaveMenu: leaveMenu(to:from:)))
                 .opacity(listFade)
+                // The blur on the list's contents, not the scroll view: a
+                // blur draws its view into a picture of its own, and the
+                // scroll view's ends at the bar, so the cards under the bar
+                // were cut off for the whole landing and popped back after
+                // (David's recording, 2026-11-13).
+                .modifier(ComesForward(through: forward, middle: nil, off: reduceMotion,
+                                       blurs: listIn > 0, scales: false))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
@@ -274,7 +288,7 @@ struct TabOverview: View {
             .accessibilityAction(named: tidiedAt != nil ? "Show Cards" : "Show Rows") {
                 setCards(tidiedAt != nil ? 1 : 0, scroller)
             }
-            .contentMargins(.top, 8, for: .scrollContent)
+            .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             // While a page is held, only the haze is behind it, as in
             // Safari: shown clearly behind a slow hold, the cards were
@@ -285,7 +299,7 @@ struct TabOverview: View {
             // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
             // and rebuilt mid-glide.
             .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
-            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: listIn > 0))
+            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: false))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {
@@ -384,7 +398,39 @@ struct TabOverview: View {
         let viewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
         if viewed != lastViewed { lastViewed = viewed }
         loadTidied()
-        if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
+        guard let id = store.activeTab?.id else { return }
+        if let returnSpot, returnSpot.id == id {
+            scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: returnSpot.anchor))
+        } else {
+            scroller.scrollTo(id, anchor: .center)
+        }
+    }
+
+    /// Opens a tab, noting where its spot was for the way back.
+    private func openRemembering(_ tab: FirnCore.Tab) {
+        guard !busy else { return }
+        remember(tab.id)
+        open(tab)
+    }
+
+    /// Notes where the tab's spot sits in the list's view as it's opened:
+    /// as the anchor that puts it back there (0 at the top of the view, 1
+    /// with its bottom at the bar), kept between 0 and 1 so a spot that was
+    /// only partly in view comes back whole.
+    private func remember(_ id: UUID?) {
+        guard let id, let frame = spots.frames[id], spots.viewport.height > frame.height else {
+            returnSpot = nil
+            return
+        }
+        // Measured inside the list's top margin, as `scrollTo` places it
+        // (from the outer edge, a card came back 6pt low in the Simulator).
+        let top = spots.viewport.minY + Self.topMargin
+        let room = spots.viewport.height - Self.topMargin - frame.height
+        guard room > 0 else {
+            returnSpot = nil
+            return
+        }
+        returnSpot = ReturnSpot(id: id, anchor: min(max((frame.minY - top) / room, 0), 1))
     }
 
     /// Hidden: everything a visit leaves behind goes, as when the
@@ -592,7 +638,7 @@ struct TabOverview: View {
             ring: Theme.spaceColor(space),
             space: space,
             lineShown: !onScreen || lineShown,
-            open: { if !busy { open(tab) } },
+            open: { openRemembering(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,
             moveUp: moveUp,
@@ -716,6 +762,7 @@ struct TabOverview: View {
     /// card to come from.
     private func finish() {
         guard !finishing else { return }
+        remember(store.activeTab?.id)
         guard let id = store.activeTab?.groupID,
               let group = store.tabGroups.first(where: { $0.id == id }), group.folded
         else { return done() }
@@ -830,7 +877,7 @@ struct TabOverview: View {
         if tab.isAwayFromHome {
             first.append(HoldMenuItem(title: "Go Back to Home", systemImage: "house") {
                 store.goHome(tab)
-                if !busy { open(tab) }
+                openRemembering(tab)
             })
         }
         if let url = tab.url {
@@ -1990,6 +2037,9 @@ struct ComesForward: ViewModifier, Animatable {
     let off: Bool
     /// The page has been let go (or the overview is up): the blur may run.
     var blurs = true
+    /// Grows (the list's scroll view and the bar); the list's contents only
+    /// blur, as the scroll view around them grows.
+    var scales = true
     /// How soft it starts (pt).
     static let blur: CGFloat = 10
     /// How much smaller it starts (Safari's is about 4%; 4% on the list's
@@ -2006,7 +2056,7 @@ struct ComesForward: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        let scale = Self.scale(through, off: off)
+        let scale = scales ? Self.scale(through, off: off) : 1
         // Kept longer than the scale (the square root of what's left): on
         // the glide's quick start, a plain share was mostly gone within a
         // tenth of a second (Simulator recording, 2026-11-13), so the cards
@@ -2022,6 +2072,13 @@ struct ComesForward: ViewModifier, Animatable {
             return view.scaleEffect(scale, anchor: anchor).blur(radius: radius)
         }
     }
+}
+
+/// Where a tab opened from the overview sat in the list's view.
+struct ReturnSpot {
+    let id: UUID
+    /// The `scrollTo` anchor that puts it back (0 to 1).
+    let anchor: CGFloat
 }
 
 /// Firn's frost, the Mac's `FrostGlass` recipe, for every frosted thing in

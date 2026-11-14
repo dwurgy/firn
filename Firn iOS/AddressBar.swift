@@ -697,14 +697,14 @@ private struct AddressField: View {
         .onAppear(perform: showRestingAddress)
     }
 
-    /// The page menu's button: •••, or Reader's book on a page that reads
-    /// as an article, as Safari's (David, 2026-11-13); the book in the
-    /// space's color, on a wash of it, while Reader is on. It opens the
-    /// page menu, where Show Reader is the first row; but while "Reader
-    /// available" shows, a tap goes straight into Reader (David,
-    /// 2026-11-13).
+    /// The page menu's button: •••, or Reader's book while "Reader
+    /// available" shows, fading back to ••• with the words (David,
+    /// 2026-11-13), as Safari's; the book in the space's color, its pages
+    /// washed with it, while Reader is on. It opens the page menu, where
+    /// Show Reader is the first row; but while "Reader available" shows, a
+    /// tap goes straight into Reader (David, 2026-11-13).
     private func pageMenuButton(_ page: any PageController) -> some View {
-        let reader = page.isArticle || page.isReading
+        let reader = showsReaderNote || page.isReading
         let color = Theme.spaceColor(store.activeSpace.color)
         // Only opens: a hold already opened it, and the finger lifting
         // over the button mustn't close it again.

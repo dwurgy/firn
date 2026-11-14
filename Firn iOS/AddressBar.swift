@@ -689,14 +689,25 @@ private struct AddressField: View {
 
     /// The page menu's button: •••, or Reader's book on a page that reads
     /// as an article, as Safari's (David, 2026-11-13); the book in the
-    /// space's color, on a wash of it, while Reader is on. Either way it
-    /// opens the page menu, where Show Reader is the first row.
+    /// space's color, on a wash of it, while Reader is on. It opens the
+    /// page menu, where Show Reader is the first row; but while "Reader
+    /// available" shows, a tap goes straight into Reader (David,
+    /// 2026-11-13).
     private func pageMenuButton(_ page: any PageController) -> some View {
         let reader = page.isArticle || page.isReading
         let color = Theme.spaceColor(store.activeSpace.color)
         // Only opens: a hold already opened it, and the finger lifting
         // over the button mustn't close it again.
-        return Button { if !barQuiet { menuOpen = true } } label: {
+        return Button {
+            guard !barQuiet else { return }
+            if showsReaderNote, page.isArticle {
+                noteTask?.cancel()
+                readerNote = false
+                ReaderStyle.shared.toggle(page, space: store.activeSpace.color)
+            } else {
+                menuOpen = true
+            }
+        } label: {
             ZStack {
                 if reader {
                     ReaderBookShape()
@@ -724,7 +735,8 @@ private struct AddressField: View {
         .animation(.easeOut(duration: 0.2), value: page.isReading)
         .accessibilityLabel("Page Menu")
         .accessibilityValue(page.isReading ? "Reader on" : reader ? "Reader available" : "")
-        .accessibilityHint(reader ? "Reader, share, or copy this page's link" : "Share or copy this page's link")
+        .accessibilityHint(showsReaderNote ? "Opens Reader"
+                           : reader ? "Reader, share, or copy this page's link" : "Share or copy this page's link")
     }
 
     /// The site at rest, as Safari shows it: 16pt rather than the field's

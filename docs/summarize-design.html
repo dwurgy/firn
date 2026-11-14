@@ -1,0 +1,421 @@
+<!doctype html>
+<!-- Firn's Summarize: the look, as a mockup (docs/HISTORY.md, "Plan: Reader", step 5, step 1).
+     Draft for David (2026-11-13), not yet approved. It builds on the approved
+     docs/reader-design.html: the reader's look is unchanged, only Summarize is new.
+     Self-contained: no scripts or fonts from the network. ui-serif is New York and
+     -apple-system is SF on Apple devices; symbols are stand-ins drawn here (the app
+     uses SF Symbols: "text.append" for Summarize). The article is written for this mockup. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firn: Summarize</title>
+<style>
+:root {
+  --frame: #E9E3DA; --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --wash: rgba(70,55,40,.07); --press: rgba(70,55,40,.13); --hair: rgba(70,55,40,.12);
+  --shadow: 0 1px 2px rgba(60,40,20,.08), 0 10px 30px rgba(60,40,20,.10);
+  --space: #7F9CB0; --tint: .16;
+  --glass: rgba(251,250,248,.72);
+  --sheet-bg: #F3EFE9;
+  --card: color-mix(in srgb, var(--ink) 4%, var(--page));
+  color-scheme: light;
+}
+.dark {
+  --frame: #3A3734; --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13); --hair: rgba(255,248,240,.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.25), 0 10px 30px rgba(0,0,0,.30);
+  --tint: .14; --glass: rgba(58,55,52,.72); --sheet-bg: #24211F;
+  --card: color-mix(in srgb, var(--ink) 5%, var(--page));
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--sheet-bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, system-ui, sans-serif;
+  transition: background .2s ease-out, color .2s ease-out;
+}
+main { max-width: 1180px; margin: 0 auto; }
+h1.doc { font: 600 28px/1.2 -apple-system, system-ui, sans-serif; margin: 0 0 8px; }
+h2.doc { font: 600 19px/1.3 -apple-system, system-ui, sans-serif; margin: 56px 0 4px; }
+p.note { margin: 0 0 12px; color: var(--muted); max-width: 72ch; }
+ul.note { margin: 0 0 12px; padding-left: 20px; color: var(--muted); max-width: 72ch; }
+ul.note li { margin-bottom: 4px; }
+
+/* Mockup controls */
+.controls {
+  position: sticky; top: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+  margin: 24px 0 0; padding: 12px 16px; border-radius: 14px;
+  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+.controls fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.controls legend { float: left; margin-right: 8px; color: var(--muted); font-size: 13px; }
+.controls label { padding: 5px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; background: var(--wash); }
+.controls input { position: absolute; opacity: 0; }
+.controls label:has(input:checked) { background: var(--ink); color: var(--page); font-weight: 600; }
+.controls label:has(input:focus-visible) { outline: 3px solid rgba(130,168,190,.7); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+
+/* ---------- The reader (unchanged from reader-design.html) ---------- */
+.reader {
+  --size: 19px;
+  background: var(--page); color: var(--ink);
+  font-family: ui-serif, "New York", Georgia, serif;
+  font-size: var(--size); line-height: 1.6; position: relative;
+}
+.reader.sans { font-family: -apple-system, system-ui, sans-serif; font-size: calc(var(--size) - 1px); line-height: 1.55; }
+.reader .column { max-width: 34em; margin: 0 auto; }
+.reader .site { font: 500 12px/1.4 -apple-system, system-ui, sans-serif; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.reader .site .fav { width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, #9DB7C8, #7F9CB0); }
+.reader h1 { font-weight: 600; font-size: 1.75em; line-height: 1.18; letter-spacing: -0.01em; margin: 0 0 12px; text-wrap: balance; }
+.reader.sans h1 { letter-spacing: -0.02em; }
+.reader .dek { color: var(--muted); font-size: 1.05em; line-height: 1.45; margin: 0 0 16px; }
+.reader .meta { font: 12px/1.4 -apple-system, system-ui, sans-serif; color: var(--faint); }
+.reader .head { padding-bottom: 22px; margin-bottom: 26px; border-bottom: 1px solid var(--hair); }
+.reader p { margin: 0 0 1.05em; hyphens: auto; }
+.reader a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--space) 70%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.reader h2 { font-weight: 600; font-size: 1.2em; line-height: 1.3; margin: 1.6em 0 .5em; }
+.aa {
+  position: absolute; top: 14px; right: 14px; z-index: 2; height: 30px; padding: 0 12px; border-radius: 15px; border: 0;
+  font: 500 13px/30px -apple-system, system-ui, sans-serif; color: var(--ink);
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 .5px var(--hair), 0 2px 8px rgba(60,40,20,.08);
+}
+
+/* ---------- New: the Summarize suggestion ---------- */
+/* One quiet pill under the byline, inside the article's heading. Sans, muted, on the
+   warm wash: it reads as part of the page's furniture, like the byline, not a banner. */
+.sum-slot { margin-top: 14px; }
+.suggest {
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px 0 11px;
+  border: 0; border-radius: 15px; background: var(--wash); color: var(--muted);
+  font: 500 13px/1 -apple-system, system-ui, sans-serif; cursor: pointer;
+  transition: background .15s ease-out, color .15s ease-out;
+}
+.suggest:hover { background: var(--press); color: var(--ink); }
+.suggest:focus-visible { outline: 3px solid rgba(130,168,190,.7); outline-offset: 2px; }
+.glyph { width: 15px; height: 15px; flex: none; }
+
+/* ---------- New: the summary card ---------- */
+/* Grows out of the pill (same corner, same wash) into a soft card: 14pt corners,
+   the reader's own font for the points, a faint dot per point, and one honest line
+   at the foot. No color beyond the wash: the space's color stays in links and quotes. */
+.card {
+  border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--hair);
+  padding: 14px 18px 14px; overflow: hidden;
+  animation: grow .26s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes grow { from { clip-path: inset(0 calc(100% - 128px) calc(100% - 30px) 0 round 15px); opacity: .6; } to { clip-path: inset(0 0 0 0 round 14px); opacity: 1; } }
+.card-top { display: flex; align-items: center; gap: 7px; height: 22px; color: var(--muted); font: 600 12px/1 -apple-system, system-ui, sans-serif; letter-spacing: .01em; }
+.card-top .x {
+  margin-left: auto; width: 24px; height: 24px; border-radius: 12px; border: 0; background: transparent; color: var(--faint);
+  display: grid; place-items: center; cursor: pointer;
+}
+.card-top .x:hover { background: var(--wash); color: var(--ink); }
+.card-top .x svg { width: 10px; height: 10px; }
+.points { list-style: none; margin: 10px 0 0; padding: 0; font-size: .9em; line-height: 1.45; }
+.points li { position: relative; padding-left: 16px; margin-bottom: .5em; opacity: 0; transform: translateY(3px); animation: point .3s ease-out forwards; }
+.points li::before { content: ""; position: absolute; left: 1px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+.points li:nth-child(2) { animation-delay: .08s; } .points li:nth-child(3) { animation-delay: .16s; }
+.points li:nth-child(4) { animation-delay: .24s; } .points li:nth-child(5) { animation-delay: .32s; }
+@keyframes point { to { opacity: 1; transform: none; } }
+.foot { margin-top: 6px; font: 11px/1.4 -apple-system, system-ui, sans-serif; color: var(--faint); }
+
+/* Being made: three soft lines where the points will be, with one slow sheen across
+   them. It runs only while the model works, then stops. Reduce Motion: still lines. */
+.making { margin: 12px 0 4px; }
+.making i { display: block; height: 10px; border-radius: 5px; margin-bottom: 11px; background: var(--wash); position: relative; overflow: hidden; }
+.making i:nth-child(1) { width: 92%; } .making i:nth-child(2) { width: 78%; } .making i:nth-child(3) { width: 58%; margin-bottom: 4px; }
+.making i::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--page) 70%, transparent), transparent);
+  animation: sheen 1.6s ease-in-out infinite;
+}
+@keyframes sheen { to { transform: translateX(100%); } }
+.fail { margin: 8px 0 2px; font: 13px/1.45 -apple-system, system-ui, sans-serif; color: var(--muted); }
+
+/* ---------- Mac window ---------- */
+.mac {
+  margin-top: 20px; height: 760px; border-radius: 12px; overflow: hidden; display: flex;
+  background: color-mix(in srgb, var(--space) calc(var(--tint) * 100%), var(--frame));
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 24px 60px rgba(60,40,20,.22);
+}
+.macscroll { overflow-x: auto; padding: 0 2px 40px; margin-bottom: -20px; }
+.macscroll .mac { min-width: 1000px; }
+.side { width: 260px; flex: none; padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.lights { display: flex; gap: 8px; padding: 2px 6px 14px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #E0645A; }
+.lights i:nth-child(2) { background: #E8B73E; } .lights i:nth-child(3) { background: #5DB858; }
+.field { height: 36px; border-radius: 10px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; background: var(--wash); color: var(--ink); font-size: 13px; margin-bottom: 14px; }
+.field .host { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.book { width: 26px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+.book.on { color: var(--space); background: color-mix(in srgb, var(--space) 16%, transparent); }
+.book svg { width: 16px; height: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+.tiles i { height: 44px; border-radius: 9px; background: color-mix(in srgb, var(--page) 55%, transparent); box-shadow: inset 0 0 0 .5px var(--hair); }
+.row { height: 36px; border-radius: 10px; padding: 0 12px; display: flex; align-items: center; gap: 10px; color: var(--ink); }
+.row b { width: 16px; height: 16px; border-radius: 4px; background: var(--faint); opacity: .5; flex: none; }
+.row.on { background: color-mix(in srgb, var(--page) 70%, transparent); box-shadow: 0 1px 2px rgba(60,40,20,.06); }
+.row.on b { background: linear-gradient(135deg, #9DB7C8, #7F9CB0); opacity: 1; }
+.spacebar { margin-top: auto; text-align: center; font: 600 13px/1.2 -apple-system, system-ui, sans-serif; color: var(--space); }
+.spacebar .dots { display: flex; gap: 5px; justify-content: center; margin-top: 6px; }
+.spacebar .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); opacity: .5; }
+.spacebar .dots i:first-child { background: var(--space); opacity: 1; }
+.pagebox { flex: 1; margin: 8px 8px 8px 0; border-radius: 12px; overflow: hidden; position: relative; box-shadow: 0 1px 3px rgba(60,40,20,.10); }
+.pagebox .reader { height: 100%; overflow: auto; padding: 64px 48px 80px; }
+
+/* Mac: the View menu, as a stand-in for macOS's own menu */
+.menus { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 20px; align-items: flex-start; }
+.nsmenu { width: 260px; padding: 5px; border-radius: 10px; background: var(--glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 0 0 .5px var(--hair), var(--shadow); font-size: 13px; }
+.nsmenu div { display: flex; justify-content: space-between; padding: 3px 10px; border-radius: 5px; }
+.nsmenu .hi { background: #689ABB; color: #fff; }
+.nsmenu .dim { color: var(--faint); }
+.nsmenu hr { border: 0; border-top: 1px solid var(--hair); margin: 5px 10px; }
+.nsmenu kbd { font: inherit; color: inherit; opacity: .6; }
+.cmdbar { width: 520px; max-width: 100%; border-radius: 14px; background: var(--glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 0 0 .5px var(--hair), var(--shadow); padding: 8px; font-size: 14px; }
+.cmdbar .q { padding: 10px 12px 12px; font-size: 18px; border-bottom: 1px solid var(--hair); margin-bottom: 6px; }
+.cmdbar .r { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; }
+.cmdbar .r.hi { background: var(--wash); }
+.cmdbar .r .glyph, .cmdbar .r .book svg { width: 16px; height: 16px; color: var(--muted); }
+
+/* ---------- iPhone ---------- */
+.phones { display: flex; gap: 40px; margin-top: 20px; overflow-x: auto; padding: 12px 12px 40px; }
+.phone {
+  flex: none; width: 393px; height: 852px; border-radius: 56px; overflow: hidden; position: relative;
+  box-shadow: 0 0 0 10px #1d1b19, 0 0 0 11px #3a3633, 0 30px 70px rgba(60,40,20,.25); background: var(--page);
+}
+.phone .reader { height: 100%; overflow: auto; padding: 72px 22px 140px; }
+.phone .reader .column { max-width: none; }
+.phone .reader h1 { font-size: 1.6em; }
+.phone .status { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 6px 34px 0 46px; font: 600 16px -apple-system, system-ui; color: var(--ink);
+  background: linear-gradient(var(--page) 55%, color-mix(in srgb, var(--page) 0%, transparent)); }
+.phone .island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 124px; height: 36px; border-radius: 18px; background: #000; z-index: 3; }
+.phone .aa { top: 64px; right: 16px; }
+.bar { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; z-index: 4; display: flex; align-items: flex-start; gap: 8px; padding: 14px 16px 0;
+  background: linear-gradient(transparent, color-mix(in srgb, var(--page) 70%, transparent) 40%); }
+.circle, .pill {
+  height: 48px; border-radius: 24px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 .5px var(--hair), 0 4px 14px rgba(60,40,20,.10); display: grid; place-items: center; color: var(--ink);
+}
+.circle { width: 48px; flex: none; }
+.circle svg { width: 20px; height: 20px; }
+.pill { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px; font: 500 16px -apple-system, system-ui; }
+.pill .name { flex: 1; text-align: center; margin-right: 30px; }
+.home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 140px; height: 5px; border-radius: 3px; background: var(--ink); opacity: .85; z-index: 5; }
+/* the page menu, grown out of the field (250pt wide, 48pt rows, 22pt corners) */
+.page-site { position: absolute; inset: 0; background: var(--page); padding: 72px 22px 0; font: 17px/1.5 -apple-system, system-ui; color: var(--ink); }
+.page-site .ph { height: 180px; border-radius: 10px; background: var(--wash); margin: 14px 0; }
+.page-site .ln { height: 12px; border-radius: 6px; background: var(--wash); margin-bottom: 12px; }
+.dimmed { position: absolute; inset: 0; background: rgba(36,31,27,.18); z-index: 3; }
+.pmenu { position: absolute; left: 72px; bottom: 98px; width: 250px; padding: 6px; border-radius: 22px; z-index: 4;
+  background: var(--glass); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow: 0 0 0 .5px var(--hair), 0 18px 40px rgba(60,40,20,.22); }
+.pmenu div { display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 14px; border-radius: 16px; font: 17px -apple-system, system-ui; color: var(--ink); }
+.pmenu div.hi { background: var(--press); }
+.pmenu svg { width: 20px; height: 20px; flex: none; }
+.pmenu .icon { width: 24px; display: grid; place-items: center; }
+.caption { font: 13px/1.4 -apple-system, system-ui, sans-serif; color: var(--muted); text-align: center; margin-top: 14px; width: 393px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  .card { animation: fade .3s ease-out both; }
+  .points li { animation: fade .3s ease-out forwards; transform: none; animation-delay: 0s !important; }
+  .making i::after { display: none; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1 class="doc">Summarize: the look</h1>
+  <p class="note">A draft for step 5's design. Reader's look doesn't change; Summarize adds one quiet pill to the article's heading, and a soft card it grows into. Everything is made on the device by Apple Intelligence; on a Mac or iPhone without it, none of this appears. Pick a state below to see each moment, or click the pill and the card's ✕ in the mockups.</p>
+  <ul class="note">
+    <li><b>The suggestion:</b> every time Reader opens, a small "Summarize" pill sits under the byline, inside the article's heading. Sans, muted, on the warm wash, like the byline's quieter sibling. No color, no sparkle, no motion.</li>
+    <li><b>Being made:</b> the pill grows into the card (0.26s, bounce-free). Three soft lines with one slow sheen stand in for the points; it stops the moment the points arrive. No spinner, no percent.</li>
+    <li><b>The summary:</b> three to five points in the reader's own font (Serif or Sans follow the Aa choice), a faint dot each, fading in one after another. A last line says where it came from: "Made on this iPhone by Apple Intelligence. It can make mistakes."</li>
+    <li><b>Going away:</b> the ✕ folds the card back into the pill. Opening it again shows the same summary at once (kept only while Reader is open; never saved).</li>
+    <li><b>Couldn't:</b> when the model declines (an unsupported language, or a topic it won't touch), the card says so in one plain line, then folds back to the pill after a few seconds. Nothing in red.</li>
+  </ul>
+
+  <div class="controls" role="group" aria-label="Mockup settings">
+    <fieldset><legend>Look</legend>
+      <label><input type="radio" name="mode" value="light" checked><span>Light</span></label>
+      <label><input type="radio" name="mode" value="dark"><span>Dark</span></label>
+    </fieldset>
+    <fieldset><legend>State</legend>
+      <label><input type="radio" name="state" value="suggest" checked><span>Suggestion</span></label>
+      <label><input type="radio" name="state" value="making"><span>Being made</span></label>
+      <label><input type="radio" name="state" value="done"><span>Summary</span></label>
+      <label><input type="radio" name="state" value="fail"><span>Couldn't</span></label>
+    </fieldset>
+    <fieldset><legend>Font</legend>
+      <label><input type="radio" name="font" value="serif" checked><span>Serif</span></label>
+      <label><input type="radio" name="font" value="sans"><span>Sans</span></label>
+    </fieldset>
+    <fieldset><legend>Space</legend>
+      <label><input type="radio" name="space" value="#7F9CB0" checked><span><i class="swatch" style="background:#7F9CB0"></i>Glacier</span></label>
+      <label><input type="radio" name="space" value="#8FAE8B"><span><i class="swatch" style="background:#8FAE8B"></i>Sage</span></label>
+      <label><input type="radio" name="space" value="#B07F6A"><span><i class="swatch" style="background:#B07F6A"></i>Clay</span></label>
+    </fieldset>
+  </div>
+
+  <h2 class="doc">On the iPhone: the way in</h2>
+  <p class="note">As Safari: on a page that reads as an article, the page menu (the book, or holding the field) gets <b>Summarize</b> right under Show Reader. Picking it opens Reader with the card already being made at the top. Tapping the book while "Reader available" shows goes straight into Reader (no menu), and there the pill waits under the byline.</p>
+  <div class="phones">
+    <div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span></span></div>
+        <div class="page-site">
+          <div style="font-weight:600;font-size:24px;line-height:1.2">Why fresh snow makes the world go quiet</div>
+          <div class="ph"></div>
+          <div class="ln" style="width:94%"></div><div class="ln" style="width:88%"></div><div class="ln" style="width:91%"></div><div class="ln" style="width:70%"></div>
+        </div>
+        <div class="dimmed"></div>
+        <div class="pmenu" role="menu" aria-label="Page menu">
+          <div><span class="icon" data-book></span>Show Reader</div>
+          <div class="hi"><span class="icon" data-glyph></span>Summarize</div>
+          <div><span class="icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5V3M6.5 6.5 10 3l3.5 3.5M5 9.5v6.5h10V9.5"/></svg></span>Share…</div>
+          <div><span class="icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-1 1M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l1-1"/></svg></span>Copy Link</div>
+        </div>
+        <div class="bar">
+          <div class="circle" aria-label="Back"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4 6.5 10l6 6"/></svg></div>
+          <div class="pill"><span class="book" data-book></span><span class="name">quietpeaks.example</span></div>
+          <div class="circle" aria-label="Tabs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="12" height="12" rx="3"/></svg></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="caption">The page menu on an article: Summarize under Show Reader.</p>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span></span></div>
+        <div class="reader" data-reader data-device="iPhone"></div>
+        <div class="bar">
+          <div class="circle" aria-label="Back"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4 6.5 10l6 6"/></svg></div>
+          <div class="pill"><span class="book on" data-book></span><span class="name">quietpeaks.example</span></div>
+          <div class="circle" aria-label="Tabs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="12" height="12" rx="3"/></svg></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="caption">Reader, in the state picked above.</p>
+    </div>
+  </div>
+
+  <h2 class="doc">On the Mac</h2>
+  <p class="note">The same pill and card in the reader. Other ways in: <b>View › Summarize Article</b> (just under Show Reader, no shortcut of its own) and <b>Summarize</b> in the command bar, both only on articles, and both open Reader first, as on the iPhone.</p>
+  <div class="macscroll"><div class="mac">
+    <aside class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="field"><span class="host">quietpeaks.example</span><span class="book on" data-book></span></div>
+      <div class="tiles"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="row"><b></b><span>Weekend forecast</span></div>
+      <div class="row on"><b></b><span>Why snow goes quiet</span></div>
+      <div class="row"><b></b><span>Trail conditions</span></div>
+      <div class="spacebar">Personal<div class="dots"><i></i><i></i><i></i></div></div>
+    </aside>
+    <div class="pagebox"><div class="reader" data-reader data-device="Mac"></div></div>
+  </div></div>
+
+  <div class="menus">
+    <div class="nsmenu" aria-label="View menu">
+      <div><span>Show Sidebar</span><kbd>⌘S</kbd></div>
+      <hr>
+      <div><span>Show Reader</span><kbd>⇧⌘R</kbd></div>
+      <div class="hi"><span>Summarize Article</span><kbd></kbd></div>
+      <hr>
+      <div class="dim"><span>Zoom In</span><kbd>⌘+</kbd></div>
+    </div>
+    <div class="cmdbar" aria-label="Command bar">
+      <div class="q">summ</div>
+      <div class="r hi"><span data-glyph></span>Summarize</div>
+      <div class="r"><span class="book" data-book></span>Show Reader</div>
+    </div>
+  </div>
+</main>
+
+<template id="article">
+  <button class="aa" type="button">Aa</button>
+  <div class="column">
+    <div class="head">
+      <div class="site"><span class="fav"></span>Quiet Peaks</div>
+      <h1>Why fresh snow makes the world go quiet</h1>
+      <p class="dek">The hush after a snowfall isn't in your head. New snow is mostly air, and air is good at swallowing sound.</p>
+      <div class="meta">By Ren Halvorsen · November 12 · 5 min read</div>
+      <div class="sum-slot" data-slot></div>
+    </div>
+    <p>Step outside the morning after a big storm and something is missing. The road a block over sounds farther away. Your own footsteps are softer. Even the birds seem to be keeping it down.</p>
+    <p>It's not your imagination. A fresh layer of snow is a loose lattice of crystals, and as much as nine tenths of it is <a href="#">trapped air</a>. Sound waves that wander into those tiny pockets bounce around, lose their energy, and never come back out.</p>
+    <h2>The hush doesn't last</h2>
+    <p>As the days pass, the snow settles. Crystals round off and pack together, the air between them shrinks, and the surface grows a hard crust. Sound starts bouncing off it again, and the world gets noisier.</p>
+    <p>That's also why a squeak under your boots means it's cold. Below about fourteen degrees Fahrenheit, crystals stay too stiff to slide past each other quietly. They snap instead, and you hear every step.</p>
+  </div>
+</template>
+
+<script>
+const book = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 4.2C6.6 3.2 4.6 2.8 2.2 3v9.4c2.4-.2 4.4.2 5.8 1.2 1.4-1 3.4-1.4 5.8-1.2V3c-2.4-.2-4.4.2-5.8 1.2Z"/><path d="M8 4.2v9.4"/></svg>';
+// Stand-in for SF Symbols' "text.append": three lines, the last one short, with a small plus.
+const glyph = '<svg class="glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h5.5M11.5 10.5v3M10 12h3"/></svg>';
+const xmark = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>';
+const points = [
+  'Fresh snow is mostly trapped air, which soaks up sound instead of reflecting it.',
+  'The quiet fades within days as the snow settles, packs down, and grows a hard crust.',
+  'A squeak underfoot means it’s below about 14°F, when crystals snap rather than slide.',
+  'For the deepest hush, go out early, while the snow is new and the air is still.'
+];
+document.querySelectorAll('[data-book]').forEach(b => { b.innerHTML = book; });
+document.querySelectorAll('[data-glyph]').forEach(b => { b.innerHTML = glyph; });
+const tpl = document.getElementById('article');
+document.querySelectorAll('[data-reader]').forEach(r => r.appendChild(tpl.content.cloneNode(true)));
+
+const state = { mode: (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light', state: 'suggest', font: 'serif', space: '#7F9CB0' };
+
+function slotHTML(s, device) {
+  const top = (label) => '<div class="card-top">' + glyph + '<span>' + label + '</span>' +
+    '<button class="x" type="button" aria-label="Hide Summary" data-act="hide">' + xmark + '</button></div>';
+  if (s === 'suggest') return '<button class="suggest" type="button" data-act="make">' + glyph + 'Summarize</button>';
+  if (s === 'making') return '<div class="card" role="status" aria-label="Summarizing">' + top('Summarizing…') +
+    '<div class="making" aria-hidden="true"><i></i><i></i><i></i></div></div>';
+  if (s === 'fail') return '<div class="card" role="status">' + top('Summary') +
+    '<p class="fail">Couldn’t summarize this article.</p></div>';
+  return '<div class="card">' + top('Summary') + '<ul class="points">' +
+    points.map(p => '<li>' + p + '</li>').join('') + '</ul>' +
+    '<div class="foot">Made on this ' + device + ' by Apple Intelligence. It can make mistakes.</div></div>';
+}
+function render() {
+  document.querySelectorAll('[data-reader]').forEach(r => {
+    r.querySelector('[data-slot]').innerHTML = slotHTML(r.dataset.local || state.state, r.dataset.device);
+  });
+}
+function apply() {
+  document.documentElement.classList.toggle('dark', state.mode === 'dark');
+  document.body.classList.toggle('dark', state.mode === 'dark');
+  document.documentElement.style.setProperty('--space', state.space);
+  document.querySelectorAll('.reader').forEach(r => r.classList.toggle('sans', state.font === 'sans'));
+  document.querySelectorAll('.controls input').forEach(i => { i.checked = String(state[i.name]) === i.value; });
+}
+document.querySelectorAll('.controls input').forEach(i => i.addEventListener('change', () => {
+  state[i.name] = i.value;
+  if (i.name === 'state') { document.querySelectorAll('[data-reader]').forEach(r => delete r.dataset.local); render(); }
+  apply();
+}));
+// Clicking in a mockup plays the moment: the pill makes a summary, the ✕ folds it back.
+let timers = new Map();
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const r = btn.closest('[data-reader]');
+  clearTimeout(timers.get(r));
+  if (btn.dataset.act === 'make') {
+    r.dataset.local = 'making'; render();
+    timers.set(r, setTimeout(() => { r.dataset.local = 'done'; render(); }, 2200));
+  } else {
+    r.dataset.local = 'suggest'; render();
+  }
+});
+render(); apply();
+</script>
+</body>
+</html>

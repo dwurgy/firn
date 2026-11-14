@@ -179,7 +179,7 @@ struct BrowserScreen: View {
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
             TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                        lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn,
+                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn,
                         open: openTab,
                         done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
                         newTab: startNewTab, typing: editing, shown: showingTabs)
@@ -650,9 +650,11 @@ struct BrowserScreen: View {
                 // 200ms (David's recording, 2026-11-13).
                 withAnimation(.easeInOut(duration: duration * 0.24).delay(duration * 0.64)) { tileReveal = 1 }
             }
-            // A card is set down (`settle`); a tile turns to glass before
-            // it lands, so it has nothing to set down.
-            let setsDown = !tile && !reduceMotion
+            // Cards and tiles are set down (`settle`, David, 2026-11-13). A
+            // tile turns to glass before it lands, so the glass tile takes
+            // the same scale (`BasecampTiles.settle`) and keeps it until the
+            // settle ends (`gliding` clears in `swapIntoCard`).
+            let setsDown = !reduceMotion
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius

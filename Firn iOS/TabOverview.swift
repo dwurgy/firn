@@ -22,6 +22,8 @@ struct TabOverview: View {
     var gliding: UUID?
     /// How far a gliding Basecamp tile shows (`BasecampTiles.reveal`).
     var tileReveal: Double = 1
+    /// The set-down's scale, for a gliding tile (`BasecampTiles.settle`).
+    var settle: CGFloat = 1
     /// The tab on screen's title line, faded in once the page has landed.
     var lineShown = true
     /// Which tab has the tall card while a picked tab grows to the full
@@ -189,7 +191,7 @@ struct TabOverview: View {
                     // while empty); 12pt below it, as between any items.
                     BasecampTiles(store: store, spots: spots, gliding: gliding,
                                   onScreen: heldCard ?? store.activeTab?.id,
-                                  reveal: tileReveal, order: tileOrder,
+                                  reveal: tileReveal, settle: settle, order: tileOrder,
                                   held: drag?.tile == true ? drag?.id : nil,
                                   pressed: finger.pressed,
                                   incoming: drag?.basecamp == true ? drag?.id : nil,

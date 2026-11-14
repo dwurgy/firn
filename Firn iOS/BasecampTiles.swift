@@ -18,6 +18,10 @@ struct BasecampTiles: View {
     /// How far the gliding tile shows: it fades in as the page's picture
     /// lands in it, and out as the picture grows from it.
     var reveal: Double = 1
+    /// The set-down (`BrowserScreen.settle`): the gliding tile takes the
+    /// same scale as the page's picture over it, so the two settle
+    /// together through the swap. 1 at rest.
+    var settle: CGFloat = 1
     /// The stretch of a glide's way (`reveal`, run on the glide's own
     /// curve) where the page's picture and the tile swap: the last 8%,
     /// once the picture is nearly the tile's size and in its spot. Timed
@@ -207,6 +211,8 @@ struct BasecampTiles: View {
         .animation(pressed == tab.id ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
                                      : .smooth(duration: 0.2), value: pressed == tab.id)
         .modifier(ArrivalBand(arrival: gliding == tab.id ? reveal : 1, range: Self.glideSwap, fadesIn: true))
+        // Set down around its own middle, as the picture is around the box's.
+        .scaleEffect(gliding == tab.id ? settle : 1)
         // Lifted, its spot stays empty, at once (never faded).
         .opacity(held == tab.id ? 0 : 1)
         .animation(nil, value: held)

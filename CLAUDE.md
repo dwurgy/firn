@@ -150,7 +150,7 @@ Each space is its own browser. This is the heart of the new Firn; get it right b
   - **Saved passwords, then imports from Arc** (David, 2026-10-24: passwords are a must): plan saved passwords first, then CSV import, then Arc's sidebar (spaces, favorites as Basecamp, pinned as groups). Research in `docs/HISTORY.md`. Opus.
   - **Move a tab to another space** (David, 2026-10-19: wanted, but not in Phase 4). Between separate spaces the tab reloads with the other space's sign-ins, so the menu should say that plainly.
   - **Extensions:** look into how Orion (Kagi's browser, Mac native on WebKit) runs Chrome and Firefox extensions: what it built on top of `WKWebExtension` or before it, what works, and what doesn't (David, 2026-10-23). Research so far is in `docs/HISTORY.md` ("Research: extensions"). Opus.
-  - **Zen and Dia import:** research first (David, 2026-10-24). Zen keeps compressed session files in a profile folder named differently on each Mac; Dia's format is unknown. Not Chrome or Safari (no spaces to map). Opus.
+  - **Zen and Dia import:** research first (David, 2026-10-24). Zen keeps compressed session files in a profile folder named differently on each Mac; Dia: researched (2026-11-14, `docs/HISTORY.md`): its tab list is encrypted, so only profiles and open tabs could come over, not pinned tabs; skipped for now (David). Not Chrome or Safari (no spaces to map). Opus.
   - **Where a tab came from:** a new tab opened from a link quietly shows which tab it came from (leaning toward a hover echo in the space's color), without a tree, indenting, or extra menus.
 
 Keyboard shortcuts match the Mac version of the Electron app unless David decides otherwise.

@@ -43,13 +43,17 @@ Besides the websites you visit, Firn makes only these requests on its own.
 
 **Scam checks.** Firn uses macOS's own Safe Browsing service, the same one Safari uses. It keeps a list of known scam sites on your Mac. When a page might be on that list, it asks Apple using a short code calculated from the address, never the address itself. If the site is a known scam, you'll see a warning instead of the page.
 
-**Search suggestions, only if you turn them on.** They're off by default. If you turn them on, your search engine sees what you type in the address bar as you type it, without your cookies or sign-ins. Your searches themselves go to the search engine you choose: Google by default, or Bing, DuckDuckGo, or Ecosia in Settings.
+**Search suggestions, only if you turn them on.** They're off by default. If you turn them on, your search engine sees what you type in the address bar as you type it, without your cookies or sign-ins. Your searches themselves go to the search engine you choose: Google by default, or Bing, DuckDuckGo, Ecosia, or Yahoo in Settings.
 
-**Nothing else.** No analytics, no update checks yet, and no Firn server.
+**Update checks.** Firn checks firnbrowser.com for a new version, with a plain request that says which version of Firn you have and nothing about you. On the second launch it asks whether to check automatically, and you can turn that off in Settings. A new version downloads from GitHub and installs only if it's signed with Firn's own key.
+
+**Nothing else.** No analytics, and no Firn server for your data.
 
 ## What stays on your Mac
 
 Your tabs, spaces, Basecamp, groups, and settings are saved on your Mac so they come back when you reopen Firn. Each space's cookies, sign-ins, and site data are kept on your Mac, separately for each space.
+
+**Saved passwords** live in your Mac's Keychain, encrypted, separately for each space. They're never synced, and Firn fills one only into the very same site, over a secure (https) connection.
 
 All of it lives in Firn's own sandbox folder (`~/Library/Containers/`), where other apps can't reach it. None of it is uploaded anywhere.
 
@@ -78,7 +82,19 @@ Nothing else on your Mac is open to it. Every web page is treated as untrusted, 
 
 The sites you visit can still see you visit them, like they would in any browser. Firn blocks the trackers it knows about, but no list catches everything. And when you sign in to a site, that site knows it's you. Firn keeps those sign-ins in their own space; it can't make a site forget you.
 
-If Firn ever needs to send something new, like checking for updates, this page will say so first, in plain words.
+If Firn ever needs to send something new, this page will say so first, in plain words.
+
+## Coming to Firn
+
+These aren't in Firn yet. When they arrive, this page will describe them as they are.
+
+**Firn for iPhone and iPad,** with the same privacy as the Mac: no account, no tracking, and every space its own browser.
+
+**iCloud sync, only if you choose it.** Firn will ask once, and it stays off until you say yes. Your spaces, groups, the last 30 days of history, and, with their own switch, your saved passwords go to your own private iCloud, never to us. Firn encrypts them on your device first, so only your devices can read them, even without Advanced Data Protection. Sign-ins, cookies, Basecamp, and settings never sync. With sync off, nothing leaves your device.
+
+**Reader and Summarize.** Reader shows an article as calm, plain text, only when you ask, read from the page you already have open; its pictures load from the article's own site. Summarize writes a few sentences at the top, only when you ask, using Apple's on-device model on macOS 26 and iOS 26 with Apple Intelligence. Firn never sends the article anywhere, and the summary is never saved.
+
+**Groups that name themselves,** using the same on-device model, from the tabs' titles and sites. Nothing leaves your device, and once you rename a group, its name is yours.
 
 ## Questions
 

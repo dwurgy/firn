@@ -144,6 +144,19 @@ struct AddressBar: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardShown = true
         }
+        // The resting parts come back once the field is most of the way
+        // down, 30% into the keyboard's slide, timed from iOS's own start, so
+        // their fade ends about as it lands. Waiting for the keyboard to be
+        // gone, they came a beat after the field had settled (David,
+        // 2026-11-13); earlier still, they sat at the bottom before the field
+        // got there (2026-11-05).
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
+            let slide = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.3
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(min(max(slide, 0.1), 0.6) * 0.3))
+                land()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
             keyboardShown = false
             land()
@@ -158,8 +171,9 @@ struct AddressBar: View {
         editing.wrappedValue = false
     }
 
-    /// Typing ended: wait for the keyboard to finish leaving (with a
-    /// limit, in case iOS never says so).
+    /// Typing ended: the resting parts wait for the field to come down
+    /// (see the keyboard's will-hide above), with a limit, in case iOS
+    /// never says so.
     private func settle() {
         guard keyboardShown, !reduceMotion else { return }
         settling = true

@@ -248,13 +248,29 @@ struct TabOverview: View {
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
                                     leaveMenu: leaveMenu(to:from:)))
                 .opacity(listFade)
-                // The blur on the list's contents, not the scroll view: a
-                // blur draws its view into a picture of its own, and the
-                // scroll view's ends at the bar, so the cards under the bar
-                // were cut off for the whole landing and popped back after
-                // (David's recording, 2026-11-13).
-                .modifier(ComesForward(through: forward, middle: nil, off: reduceMotion,
-                                       blurs: listIn > 0, scales: false))
+                // The list's fade, growth, and blur all on its contents, never
+                // on the scroll view: the scroll view's frame ends at the bar's
+                // top, and anything wrapped around it was cut there on David's
+                // iPhone, so the cards under the bar showed only down to the
+                // bar for the whole landing and popped in as it ended (his
+                // recordings, 2026-11-13; first the blur, then the fade and
+                // the growth; the Simulator draws them whole either way). The
+                // contents run under the bar, so nothing is cut.
+                // While a page is held, only the haze is behind it, as in
+                // Safari: shown clearly behind a slow hold, the cards were
+                // distracting (David, 2026-11-10). They come in as it's let go,
+                // around the page while it flies (`listIn`), and leave first as
+                // a tab opens. Tied to the glide's last stretch, they faded up
+                // only after the page had landed (David's recording,
+                // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
+                // and rebuilt mid-glide.
+                .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
+                // Smaller only once a page is let go (the list is unseen
+                // before): shrunk while hidden, the scroll view's turn to
+                // the tab on screen (`getReady`) also slid it sideways, about
+                // 12pt (Simulator, 2026-11-13).
+                .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion,
+                                       blurs: listIn > 0, scales: listIn > 0))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
@@ -290,22 +306,6 @@ struct TabOverview: View {
             }
             .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
-            // Off while a page glides in or out: on the phone, the soft edge
-            // under the bar drew nothing of the list's blurred contents, so
-            // a card under the bar showed only down to the bar's top for the
-            // whole landing and popped in as the blur ended (David's
-            // recording, 2026-11-13; the Simulator draws it either way).
-            .scrollEdgeEffectHidden(gliding != nil && !reduceMotion, for: .bottom)
-            // While a page is held, only the haze is behind it, as in
-            // Safari: shown clearly behind a slow hold, the cards were
-            // distracting (David, 2026-11-10). They come in as it's let go,
-            // around the page while it flies (`listIn`), and leave first as
-            // a tab opens. Tied to the glide's last stretch, they faded up
-            // only after the page had landed (David's recording,
-            // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
-            // and rebuilt mid-glide.
-            .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
-            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: false))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {
@@ -2043,8 +2043,7 @@ struct ComesForward: ViewModifier, Animatable {
     let off: Bool
     /// The page has been let go (or the overview is up): the blur may run.
     var blurs = true
-    /// Grows (the list's scroll view and the bar); the list's contents only
-    /// blur, as the scroll view around them grows.
+    /// It may grow: for the list's contents, only once a page is let go.
     var scales = true
     /// How soft it starts (pt).
     static let blur: CGFloat = 10

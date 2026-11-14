@@ -878,6 +878,12 @@ private struct AddressField: View {
     @ViewBuilder private var trailingButton: some View {
         if isEditing {
             BarButton(symbol: "xmark.circle.fill", label: "Clear", tint: Theme.faint) { text = "" }
+                // New as typing starts, so it's put straight at its spot
+                // while the field still rides the keyboard up, and came in a
+                // few frames ahead of the field, from above (David's
+                // recording, 2026-11-13): it fades in once the field is there.
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.1)),
+                                        removal: .opacity))
                 .opacity(text.isEmpty ? 0 : 1)
                 .disabled(text.isEmpty)
                 .accessibilityHidden(text.isEmpty)

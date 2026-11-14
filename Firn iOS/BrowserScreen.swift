@@ -1394,7 +1394,8 @@ struct BrowserScreen: View {
     /// little smaller as a tab lands (`ComesForward`), and its spots are
     /// measured as drawn, so the page would land short of its card.
     private func fullSize(_ frame: CGRect) -> CGRect {
-        let scale = ComesForward.scale(forward, off: reduceMotion)
+        // The list is smaller only once a page is let go (`listIn`).
+        let scale = listIn > 0 ? ComesForward.scale(forward, off: reduceMotion) : 1
         guard scale != 1, pageFrame.width > 0 else { return frame }
         let x = pageFrame.midX, y = pageFrame.midY
         return CGRect(x: x + (frame.minX - x) / scale, y: y + (frame.minY - y) / scale,

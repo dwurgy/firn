@@ -721,7 +721,7 @@ private struct AddressField: View {
             ZStack {
                 if reader {
                     ReaderBookIcon(isOn: page.isReading, color: color, off: Theme.ink,
-                                   size: 19, lineWidth: 1.6)
+                                   size: 19, lineWidth: 1.9)
                         .transition(.opacity)
                 } else {
                     Image(systemName: "ellipsis")
@@ -975,7 +975,7 @@ private struct PageMenuPanel: View {
                         Image(systemName: symbol).font(BarButton.symbolFont)
                     } else {
                         ReaderBookShape()
-                            .stroke(style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+                            .stroke(style: StrokeStyle(lineWidth: 1.9, lineJoin: .round))
                             .frame(width: 19, height: 19)
                     }
                 }

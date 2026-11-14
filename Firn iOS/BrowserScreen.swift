@@ -671,7 +671,17 @@ struct BrowserScreen: View {
                 // the page had stopped read as a second little move
                 // (David's recording, 2026-11-13). The two add up, as
                 // SwiftUI's timed animations do.
-                withAnimation(.easeOut(duration: duration * 0.5)) { settle = Self.settleLift }
+                // A tile lifts further (1.5% of 56pt is under a point,
+                // `BasecampTiles.settleLift`), and only once the picture is
+                // nearly its size (from 30% of the time, about 80% of the
+                // way): 4% of the whole page would read as a swell.
+                if tile {
+                    withAnimation(.easeOut(duration: duration * 0.3).delay(duration * 0.3)) {
+                        settle = BasecampTiles.settleLift
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: duration * 0.5)) { settle = Self.settleLift }
+                }
                 withAnimation(.easeInOut(duration: duration * 0.4 + Self.settleTime).delay(duration * 0.6)) {
                     settle = 1
                 } completion: {

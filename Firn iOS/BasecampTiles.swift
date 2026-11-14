@@ -22,6 +22,9 @@ struct BasecampTiles: View {
     /// same scale as the page's picture over it, so the two settle
     /// together through the swap. 1 at rest.
     var settle: CGFloat = 1
+    /// How far above its spot a tile arrives: 4%, about 2pt (a card's
+    /// 1.5% is under a point on a tile), for David to judge.
+    static let settleLift: CGFloat = 1.04
     /// The stretch of a glide's way (`reveal`, run on the glide's own
     /// curve) where the page's picture and the tile swap: the last 8%,
     /// once the picture is nearly the tile's size and in its spot. Timed
@@ -210,6 +213,16 @@ struct BasecampTiles: View {
         .scaleEffect(pressed == tab.id ? pressedScale : 1)
         .animation(pressed == tab.id ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
                                      : .smooth(duration: 0.2), value: pressed == tab.id)
+        // The set-down's shadow, its own (the page's stand-in is over the
+        // overview, and would cover the glass after the swap): as strong as
+        // the lift, and inside the swap's fade, so it comes with the glass
+        // and sinks in as the tile settles.
+        .background {
+            if gliding == tab.id {
+                SetDownShadow(radius: Self.cornerRadius,
+                              lift: Double((settle - 1) / (Self.settleLift - 1)))
+            }
+        }
         .modifier(ArrivalBand(arrival: gliding == tab.id ? reveal : 1, range: Self.glideSwap, fadesIn: true))
         // Set down around its own middle, as the picture is around the box's.
         .scaleEffect(gliding == tab.id ? settle : 1)
@@ -364,5 +377,30 @@ extension View {
         } message: {
             Text("Basecamp holds \(BrowserStore.basecampLimit) sites. To add this one, remove another first.")
         }
+    }
+}
+
+/// A tile's set-down shadow: the card's warm shadow (`Theme.shadowPageFar`),
+/// scaled to a tile, with the tile's own shape cut out of it, so nothing
+/// shows through the glass. `lift` 0 to 1, how far it's lifted.
+private struct SetDownShadow: View {
+    let radius: CGFloat
+    let lift: Double
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        shape
+            .fill(Color.black)
+            .shadow(color: Theme.shadowPageFar, radius: 6, y: 3)
+            .mask {
+                // Everything but the tile itself.
+                Rectangle()
+                    .padding(-20)
+                    .overlay { shape.blendMode(.destinationOut) }
+                    .compositingGroup()
+            }
+            .opacity(min(max(lift, 0), 1))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }

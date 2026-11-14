@@ -142,6 +142,12 @@ struct TabOverview: View {
     }
     /// Done was tapped and the tab on screen's group is opening first.
     @State private var finishing = false
+    /// The overview softened once, for the landing (`FrozenOverview`), and
+    /// the wait before the next picture is taken.
+    @State private var frozen: FrozenOverview?
+    @State private var freezing: Task<Void, Never>?
+    @State private var scrolling = false
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Groups and loose tabs in the order shown: the store's, or the drag's
     /// while one moves.
@@ -277,6 +283,11 @@ struct TabOverview: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
+            // A new picture for the landing once a scroll comes to rest.
+            .onScrollPhaseChange { _, phase in
+                scrolling = phase != .idle
+                if !scrolling { freezeSoon() }
+            }
             .sensoryFeedback(.impact(weight: .medium), trigger: lifts)
             .sensoryFeedback(.impact(weight: .light), trigger: forms)
             .sensoryFeedback(.impact(weight: .light), trigger: picks)
@@ -347,6 +358,21 @@ struct TabOverview: View {
             .onChange(of: store.activeTab?.id) { if !shown { getReady(scroller) } }
             .onChange(of: store.activeSpace.id) { if !shown { getReady(scroller) } }
         }
+        // As a tab lands, the overview softened once fades out over the
+        // sharp list, growing and brightening with it (`FrozenOverview`);
+        // without an up-to-date picture, no blur at all.
+        .overlay {
+            if let frozen, !reduceMotion, gliding != nil, frozen.look == look() {
+                FrozenOverviewView(image: frozen.image)
+                    .opacity(1 - Double(min(max(focus, 0), 1)))
+                    .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true))
+                    .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
+                                           blurs: listIn > 0))
+            }
+        }
+        .onChange(of: atRest) { _, now in if now { freezeSoon() } }
+        .onChange(of: look(scroll: 0)) { freezeSoon() }
+        .onChange(of: shown) { _, now in if !now { freezing?.cancel() } }
         // Over everything, bar included: an open menu's dim (a tap on it
         // closes the menu), the held tab lifted over the list and following
         // the finger, and the menu beside it.
@@ -391,6 +417,44 @@ struct TabOverview: View {
             Button("Done") {
                 if let naming { store.rename(naming, to: name) }
             }
+        }
+    }
+
+    /// Settled on screen: nothing moving, held, or open over it.
+    private var atRest: Bool {
+        shown && gliding == nil && arrival >= 1 && focus >= 1 && heldCard == nil && drag == nil
+            && heldMenu == nil && !typing && !scrolling
+    }
+
+    /// What the overview shows now, for `FrozenOverview` (its scroll from
+    /// `spots`, which isn't observed; `scroll` stands in where only the
+    /// rest matters).
+    private func look(scroll: Int? = nil) -> FrozenOverview.Look {
+        let tabs = store.openTabs
+        return FrozenOverview.Look(
+            space: store.activeSpace.id,
+            onScreen: store.activeTab?.id,
+            tabs: tabs.map(\.id),
+            groups: Dictionary(store.tabGroups.map { ($0.id, $0.folded) }) { a, _ in a },
+            grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
+            tiles: store.basecampTabs.map(\.id),
+            rows: tidiedAt != nil,
+            scroll: scroll ?? Int(((spots.scroll?.contentOffset.y ?? 0) / 16).rounded()),
+            dark: colorScheme == .dark)
+    }
+
+    /// Takes the landing's picture once the overview has been still a
+    /// moment (a picture of the whole screen, so only when it's all the
+    /// overview), unless the last one still matches.
+    private func freezeSoon() {
+        freezing?.cancel()
+        guard shown, !reduceMotion else { return }
+        freezing = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, atRest else { return }
+            let now = look()
+            if frozen?.look == now { return }
+            if let made = await FrozenOverview.take(look: now), !Task.isCancelled { frozen = made }
         }
     }
 
@@ -2029,12 +2093,11 @@ struct ArrivalBand: ViewModifier, Animatable {
 /// size around the screen's middle as the page lands (`forward`, on the
 /// landing glide's clock, done as the page lands, or as a tile's swap starts
 /// at 86% of its glide, so the flying tile and the real one match), and come
-/// into focus from a soft blur, as the held page's own haze is blurred
-/// (David, 2026-11-13: "it would help this settling feel better"). The blur
-/// runs only while landing: none while a page is held (the list is all but
-/// hidden then, and a blur held under a moving page costs every frame) and
-/// none at rest. A live blur over the list froze glides on David's iPhone
-/// once before, so his recording decides. `visualEffect`, not `scaleEffect`: it's
+/// into focus, dimmed to bright, while a picture of it softened once fades
+/// out over it (`FrozenOverview`; David, 2026-11-13: "it would help this
+/// settling feel better"). The blur was live here until 2026-11-14: about
+/// 200 offscreen passes a frame, half of each swipe up's frames dropped on
+/// David's iPhone. The dim runs only while landing. `visualEffect`, not `scaleEffect`: it's
 /// drawing only, so nothing in the list moves or re-lays out. The spots the
 /// cards and tiles report (`OverviewSpots`) do come in scaled (measured in
 /// the Simulator: 96% at the let-go), so `BrowserScreen.fullSize` takes the
@@ -2054,9 +2117,6 @@ struct ComesForward: ViewModifier, Animatable {
     var blurs = true
     /// It may grow: for the list's contents, only once a page is let go.
     var scales = true
-    /// How soft it starts (pt). Safari's starts so soft the cards can
-    /// hardly be read (David's recording beside Safari's, 2026-11-13).
-    static let blur: CGFloat = 26
     /// How much darker it starts, lifting with the blur: Safari's overview
     /// is there at once, dimmed, and brightens as it comes forward, where
     /// Firn's read as a pale haze fading in (same recording).
@@ -2084,7 +2144,6 @@ struct ComesForward: ViewModifier, Animatable {
         // Its own curve holds it soft early (`BrowserScreen`), so a plain
         // share here.
         let left = 1 - min(max(focus, 0), 1)
-        let radius = off || !blurs ? 0 : Self.blur * left
         let dim = off || !blurs ? 0 : -Self.dim * Double(left)
         let middle = middle
         content.visualEffect { view, proxy in
@@ -2093,7 +2152,7 @@ struct ComesForward: ViewModifier, Animatable {
                 UnitPoint(x: frame.width > 0 ? ($0.x - frame.minX) / frame.width : 0.5,
                           y: frame.height > 0 ? ($0.y - frame.minY) / frame.height : 0.5)
             } ?? .center
-            return view.scaleEffect(scale, anchor: anchor).blur(radius: radius).brightness(dim)
+            return view.scaleEffect(scale, anchor: anchor).brightness(dim)
         }
     }
 }

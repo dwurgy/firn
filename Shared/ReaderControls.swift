@@ -73,8 +73,30 @@ struct ReaderBookShape: Shape {
     }
 }
 
-/// The book in the address field: muted while off; the space's color, on a
-/// soft wash of it, while Reader is on.
+/// The book itself, outlined, its pages washed with `color` while `isOn`.
+/// The wash lives inside the book, never in a box around it (David,
+/// 2026-11-13: no other button keeps a colored square).
+struct ReaderBookIcon: View {
+    let isOn: Bool
+    let color: Color
+    var off: Color = Theme.muted
+    var size: CGFloat = 16
+    var lineWidth: CGFloat = 1.4
+
+    var body: some View {
+        ZStack {
+            ReaderBookShape()
+                .fill(color.opacity(isOn ? 0.28 : 0))
+            ReaderBookShape()
+                .stroke(isOn ? color : off, style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// The book in the address field: muted while off; the space's color, its
+/// pages washed with it, while Reader is on. Hover is the same warm wash as
+/// the reload and zoom buttons beside it.
 struct ReaderBookButton: View {
     let isOn: Bool
     let space: String
@@ -82,16 +104,12 @@ struct ReaderBookButton: View {
     @State private var hovering = false
 
     var body: some View {
-        let color = Theme.spaceColor(space)
         Button(action: action) {
-            ReaderBookShape()
-                .stroke(style: StrokeStyle(lineWidth: 1.4, lineJoin: .round))
-                .frame(width: 16, height: 16)
-                .foregroundStyle(isOn ? color : Theme.muted)
+            ReaderBookIcon(isOn: isOn, color: Theme.spaceColor(space))
                 .frame(width: 26, height: 22)
                 .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isOn ? color.opacity(0.16) : hovering ? Theme.hover : .clear)
+                    RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
+                        .fill(hovering ? Theme.hover : .clear)
                 }
                 .frame(height: tapHeight)
                 .contentShape(Rectangle())

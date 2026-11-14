@@ -720,15 +720,8 @@ private struct AddressField: View {
         } label: {
             ZStack {
                 if reader {
-                    ReaderBookShape()
-                        .stroke(style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
-                        .frame(width: 19, height: 19)
-                        .foregroundStyle(page.isReading ? color : Theme.ink)
-                        .frame(width: 32, height: 28)
-                        .background {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(color.opacity(page.isReading ? 0.16 : 0))
-                        }
+                    ReaderBookIcon(isOn: page.isReading, color: color, off: Theme.ink,
+                                   size: 19, lineWidth: 1.6)
                         .transition(.opacity)
                 } else {
                     Image(systemName: "ellipsis")

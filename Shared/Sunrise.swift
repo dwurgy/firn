@@ -48,6 +48,10 @@ struct SunriseScene: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
         }
         .background(part == .front ? .clear : Theme.page)
+        // Fades as one picture. Without this a fade reaches each layer on
+        // its own, and the half-clear snow showed the whole sun through it
+        // until the fade ended (David's recording, 2026-11-13).
+        .compositingGroup()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

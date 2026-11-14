@@ -465,6 +465,15 @@ final class WindowModel {
 
     var isReading: Bool { readerPage?.isReading ?? false }
 
+    /// Whether View › Summarize Article and the command bar's Summarize
+    /// show: an article, and Apple Intelligence on this Mac.
+    var canSummarize: Bool { canToggleReader && ArticleSummarizer.isOffered }
+
+    func summarizeArticle() {
+        guard let page = readerPage else { return }
+        ReaderStyle.shared.summarize(page, space: store.activeSpace.color)
+    }
+
     /// The book, ⇧⌘R, or the command bar: Reader on or off for the tab on
     /// screen. A page that turns out too short just loses its book.
     func toggleReader() {

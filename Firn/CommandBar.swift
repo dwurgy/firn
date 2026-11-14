@@ -295,6 +295,11 @@ private struct CommandBar: View {
             window.toggleReader()
             window.focusPage()
         }
+        add("summarize", "Summarize", ["summary", "article", "reader", "tl;dr", "apple intelligence"],
+            when: window.canSummarize) {
+            window.summarizeArticle()
+            window.focusPage()
+        }
         if let name = window.frontBlockingName(enabled: blocksContent) {
             add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
                 window.toggleFrontBlocking()

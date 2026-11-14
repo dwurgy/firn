@@ -132,6 +132,14 @@ struct BrowserCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .disabled(!window.canToggleReader)
+            // Simply absent without Apple Intelligence, never greyed out.
+            if ArticleSummarizer.isOffered {
+                Button("Summarize Article") {
+                    window.summarizeArticle()
+                    window.focusPage()
+                }
+                .disabled(!window.canSummarize)
+            }
             Divider()
             // The page in front, as with Print. ⌘= also zooms in (TabShortcuts).
             Button("Zoom In") { window.zoomFront(.larger) }

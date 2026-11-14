@@ -77,6 +77,10 @@ public struct ArticleSummarizer: Sendable {
     /// Whether Summarize can be offered right now.
     public var isAvailable: Bool { model.isAvailable }
 
+    /// Whether Summarize is offered on this device right now: macOS 26 or
+    /// iOS 26 with Apple Intelligence on. Otherwise it's simply absent.
+    public static var isOffered: Bool { onDevice?.isAvailable ?? false }
+
     /// A few sentences about the article, or nil when the model can't or
     /// won't (Apple Intelligence off, an unsupported language, its
     /// guardrails, or the task cancelled because Reader closed). A long

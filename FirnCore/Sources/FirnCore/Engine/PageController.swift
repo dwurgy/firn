@@ -69,6 +69,10 @@ public protocol PageController: AnyObject, Observable {
     func closeReader()
     /// A new look for the reader on screen, without reloading it.
     func setReaderLook(_ look: ReaderLook)
+    /// Opens Summarize's card in the reader on screen and makes the summary
+    /// (or shows the one already made). Nothing when Reader is off or
+    /// Summarize isn't offered (`ArticleSummarizer.isOffered`).
+    func summarizeArticle()
     /// Demo shots only (`DemoShot`): turns down a site's cookie banner, so
     /// the website's screenshots show the page, not the banner. Waits up to
     /// `seconds` for one to appear; does nothing if none does.
@@ -218,5 +222,6 @@ public extension PageController {
     func openReader(look: ReaderLook, accent: UInt32) async -> Bool { false }
     func closeReader() {}
     func setReaderLook(_ look: ReaderLook) {}
+    func summarizeArticle() {}
     var topColor: CGColor? { nil }
 }

@@ -26,6 +26,19 @@ final class ReaderStyle {
         let accent = Theme.spaceHex(space)
         Task { _ = await page.openReader(look: look, accent: accent) }
     }
+
+    /// Summarize (View › Summarize Article, the command bar, or the
+    /// iPhone's page menu): opens Reader first if it's off, then the
+    /// summary at the top of the article.
+    func summarize(_ page: any PageController, space: String) {
+        if page.isReading { return page.summarizeArticle() }
+        guard page.isArticle else { return }
+        let look = look
+        let accent = Theme.spaceHex(space)
+        Task {
+            if await page.openReader(look: look, accent: accent) { page.summarizeArticle() }
+        }
+    }
 }
 
 /// Tap room on the iPhone: Apple's 44pt, around the same small drawing.

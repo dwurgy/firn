@@ -270,15 +270,10 @@ struct BrowserScreen: View {
                         }
                         // The set-down's shadow: there only while the page is
                         // lifted above its card, sinking in as it settles.
-                        // A tile's is cut out of it (the glass shows through)
-                        // and hands over to the real tile's with the swap.
-                        if let standInTab, standInTab.place == .basecamp {
-                            SetDownShadow(radius: boxRadius,
-                                          lift: Double((settle - 1) / (BasecampTiles.settleLift - 1)))
-                                .frame(width: box.width, height: box.height)
-                                .offset(x: box.minX, y: box.minY)
-                                .modifier(ArrivalBand(arrival: tileReveal, range: BasecampTiles.glideSwap, fadesIn: false))
-                        }
+                        // A tile's comes only with the real tile (`BasecampTiles`):
+                        // here it was sized to the whole picture, not the
+                        // part shown, and trailed below the landing tile as a
+                        // faint tall ghost (David's recording, 2026-11-13).
                         if let standInTab, standInTab.place != .basecamp {
                             RoundedRectangle(cornerRadius: boxRadius, style: .continuous)
                                 .fill(Theme.page)
@@ -438,7 +433,8 @@ struct BrowserScreen: View {
     /// and on the card's curve the whole landing showed for about 6 frames,
     /// the tile forming in 2 or 3 (David's recording, 2026-11-13). A flick
     /// may quicken its start only a little.
-    private static let tileCloseDuration = 0.46
+    /// 0.46s was too slow (David's recording, 2026-11-13): between the two.
+    private static let tileCloseDuration = 0.38
     private static let tileCloseStart = 0.2
     private static let tileCloseStartLimit = 0.3
     private static let tileCloseTail = 0.55

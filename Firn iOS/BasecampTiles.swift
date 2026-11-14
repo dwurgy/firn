@@ -398,7 +398,7 @@ extension View {
 /// A tile's set-down shadow: the card's warm shadow (`Theme.shadowPageFar`),
 /// scaled to a tile, with the tile's own shape cut out of it, so nothing
 /// shows through the glass. `lift` 0 to 1, how far it's lifted.
-struct SetDownShadow: View {
+private struct SetDownShadow: View {
     let radius: CGFloat
     let lift: Double
 

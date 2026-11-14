@@ -126,6 +126,14 @@ struct ReaderPageTests {
         #expect(html.contains("src=\"https://reader.test/snow.jpg\""))
         #expect(html.contains("alt=\"Snow\""))
         #expect(!html.contains("Bad"))
+        // Summarize's plain text: the article's blocks, one per line, no
+        // markup and nothing the cleaner dropped.
+        let text = article.text
+        #expect(text.split(separator: "\n").count > 3)
+        #expect(text.contains("more notes"))
+        for banned in ["<", "steal", "Footer text", "evil.test"] {
+            #expect(!text.contains(banned), "\(banned) got into the text")
+        }
         // Readability read a copy: the page itself is untouched (its nav,
         // footer, iframe, and three scripts are all still there).
         let left = try await page.webView.callAsyncJavaScript(

@@ -26,6 +26,10 @@ public enum Reader {
     /// a page past it is treated as no article rather than slowing Firn.
     static let maxHTMLBytes = 3_000_000
 
+    /// The plain text kept for Summarize, in characters: far more than it
+    /// reads (`ArticleSummarizer.partLimit` parts), so it's never the limit.
+    static let maxTextCharacters = 200_000
+
     /// Only web pages: never Firn's own pages, files, or error pages.
     public static func canRead(_ url: URL?) -> Bool {
         guard let url else { return false }
@@ -45,7 +49,7 @@ public enum Reader {
     /// an allowlist (see `cleanerSource`). Returns the fields
     /// `ReaderArticle(scriptResult:pageURL:)` expects, or null.
     static let articleScript: String? = bundled("Readability").map {
-        $0 + "\n" + cleanerSource + """
+        $0 + "\n" + cleanerSource + "\n" + textSource + """
 
             let article;
             try {
@@ -67,10 +71,25 @@ public enum Reader {
             return {
                 title: article.title, byline: article.byline, siteName: article.siteName,
                 excerpt: article.excerpt, lang: article.lang, dir: article.dir,
-                html: article.content, words: words
+                html: article.content, text: firnText(article.content), words: words
             };
             """
     }
+
+    /// The cleaned article as plain text, one block (paragraph, heading,
+    /// list item, cell) per line, for Summarize. Parsed in an inert document
+    /// like `firnClean`'s, so nothing in it loads or runs.
+    private static let textSource = """
+        function firnText(html) {
+            const out = document.implementation.createHTMLDocument('');
+            const root = out.createElement('div');
+            root.innerHTML = html;
+            for (const block of root.querySelectorAll('p, br, hr, h1, h2, h3, h4, h5, h6, li, dt, dd, blockquote, pre, figcaption, caption, tr, th, td, div, section, article')) {
+                block.after(out.createTextNode('\\n'));
+            }
+            return String(root.textContent || '').slice(0, 400000);
+        }
+        """
 
     /// Rebuilds the article in a fresh, inert document, keeping only what a
     /// reader shows: text, headings, paragraphs, lists, quotes, code, tables,
@@ -198,6 +217,10 @@ public struct ReaderArticle: Equatable, Sendable {
     public let wordCount: Int
     /// The page it came from, for its site and for links.
     public let pageURL: URL
+    /// The article as plain text, one block per line, whitespace tidied and
+    /// capped (`Reader.maxTextCharacters`), for Summarize. Empty if the
+    /// script didn't give it.
+    let text: String
 
     /// Rounded, and never less than one.
     public var minutesToRead: Int {
@@ -224,7 +247,26 @@ public struct ReaderArticle: Equatable, Sendable {
             $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") } ? $0 : nil
         }
         isRightToLeft = (fields["dir"] as? String)?.lowercased() == "rtl"
+        text = Self.plainText(fields["text"])
     }
+
+    /// The script's text, tidied: each line on one line with its whitespace
+    /// collapsed and control characters dropped, empty lines gone, capped.
+    static func plainText(_ value: Any?) -> String {
+        guard let value = value as? String else { return "" }
+        var lines: [String] = []
+        var total = 0
+        for raw in value.split(whereSeparator: \.isNewline) {
+            guard let line = line(String(raw), limit: maxTextLine) else { continue }
+            if total + line.count > Reader.maxTextCharacters { break }
+            lines.append(line)
+            total += line.count + 1
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// One line of plain text is cut here (a page with no breaks at all).
+    private static let maxTextLine = 20_000
 
     /// One plain line: whitespace and line breaks collapsed, control
     /// characters dropped, cut at `limit` characters; nil if nothing's left.

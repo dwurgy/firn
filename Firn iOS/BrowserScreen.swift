@@ -404,9 +404,9 @@ struct BrowserScreen: View {
     private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: 0.46)
     private static let closeDuration = 0.32
     /// How far above its card the page arrives (1.5% larger, about 5pt on
-    /// a card), and how long it takes to settle in.
+    /// a card), and how long the settle runs on after the glide ends.
     private static let settleLift: CGFloat = 1.015
-    private static let settleTime = 0.18
+    private static let settleTime = 0.09
     private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
     private static let closeStart = 0.25
     /// The most a let-go's speed may quicken a close's start: a flick
@@ -658,10 +658,21 @@ struct BrowserScreen: View {
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 arrival = 1
                 neighborsOpacity = 0
-                if setsDown { settle = Self.settleLift }
             } completion: {
-                guard setsDown else { return swapIntoCard() }
-                withAnimation(.easeOut(duration: Self.settleTime)) { settle = 1 } completion: {
+                if !setsDown { swapIntoCard() }
+            }
+            if setsDown {
+                // Part of the glide, not after it: the lift builds while the
+                // page flies, and the settle starts at 60% of the glide's
+                // time, so the glide's last stretch and the settle are one
+                // motion ending about 90ms after the glide. Settling once
+                // the page had stopped read as a second little move
+                // (David's recording, 2026-11-13). The two add up, as
+                // SwiftUI's timed animations do.
+                withAnimation(.easeOut(duration: duration * 0.5)) { settle = Self.settleLift }
+                withAnimation(.easeInOut(duration: duration * 0.4 + Self.settleTime).delay(duration * 0.6)) {
+                    settle = 1
+                } completion: {
                     swapIntoCard()
                 }
             }

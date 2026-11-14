@@ -36,6 +36,7 @@ final class PagePictures {
             MainActor.assumeIsolated {
                 self?.images.removeAll()
                 self?.recent.removeAll()
+                PillBackdrop.forgetAll()
             }
         }
     }
@@ -65,6 +66,14 @@ final class PagePictures {
         while recent.count > Self.memoryLimit {
             images[recent.removeFirst()] = nil
         }
+        // Read from disk on the spot: its pills' blur comes a moment later,
+        // and the cards are drawn again to use it.
+        if PillBackdrop.band(for: image, dark: false) == nil {
+            Task {
+                await PillBackdrop.prepare(image)
+                if images[tabID] === image { images[tabID] = image }
+            }
+        }
     }
 
     private func markShown(_ tabID: UUID) {
@@ -83,7 +92,9 @@ final class PagePictures {
             guard let picture = store.load(for: tabID) else { return nil }
             return UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
         }.value
-        if let image, images[tabID] == nil { keep(image, for: tabID) }
+        guard let image else { return }
+        await PillBackdrop.prepare(image)
+        if images[tabID] == nil { keep(image, for: tabID) }
     }
 
     /// Takes a picture of the tab's page as it is now and saves it. A
@@ -103,6 +114,9 @@ final class PagePictures {
         return Task {
             guard let picture = await page.snapshot(width: width) else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
+            // Its pills' blur first (a few milliseconds, off the main
+            // thread), so the card gliding in never blurs live.
+            await PillBackdrop.prepare(image)
             keep(image, for: id)
             // Encoding and writing happen off the main thread.
             Task.detached(priority: .utility) {

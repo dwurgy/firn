@@ -17,6 +17,9 @@ struct BrowserScreen: View {
     /// pull): its bar shows, the dim over its cards lifts, and the page's
     /// bar goes.
     @State private var arrival: CGFloat = 0
+    /// How much of the overview's list shows: 0 while a page is held, in
+    /// from the let-go (`listComes`), out as a tab opens.
+    @State private var listIn: CGFloat = 0
     /// The glide (step 3b). The page's picture makes the move, standing in
     /// for the page: moving the page itself makes UIKit work out its safe
     /// area again every frame, so WebKit lays the whole page out again and
@@ -170,7 +173,8 @@ struct BrowserScreen: View {
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
             TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                        lineShown: lineShown, heldCard: heldCard, arrival: arrival, open: openTab,
+                        lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn,
+                        open: openTab,
                         done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
                         newTab: startNewTab, typing: editing, shown: showingTabs)
                 // Typing from + leaves the overview where it is, under
@@ -372,8 +376,17 @@ struct BrowserScreen: View {
     /// Into a Basecamp tile, a far bigger change (the whole screen down to
     /// 56pt): a little longer and a gentler start, so it reads as a glide
     /// rather than a snap (David's recording, 2026-11-09).
-    private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.25, 1, duration: 0.42)
+    /// Its tail is shorter than the glide's (0.45, not 0.25): the last few
+    /// points took about 200ms, a tiny page creeping into the tile's spot
+    /// (David's recording, 2026-11-13).
+    private static let tileGlide = Animation.timingCurve(0.25, 0.7, 0.45, 1, duration: tileDuration)
+    private static let tileDuration = 0.38
     private static let fade = Animation.easeOut(duration: 0.2)
+    /// The cards coming in around a landing page: started with the glide,
+    /// mostly there by its middle, so the page lands among them.
+    private static let listComes = Animation.easeOut(duration: 0.22)
+    /// The cards leaving as a tab grows out of its card.
+    private static let listGoes = Animation.easeOut(duration: 0.1)
     /// Pages sliding sideways round to about the screen's own corners.
     private static let slideRadius: CGFloat = 50
 
@@ -493,6 +506,7 @@ struct BrowserScreen: View {
             withAnimation(Self.fade) {
                 showingTabs = true
                 arrival = 1
+                listIn = 1
                 pageHidden = true
             }
             return
@@ -519,7 +533,8 @@ struct BrowserScreen: View {
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             SwipeTiming.mark("picture set")
-            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.glide)
+            land(inCardOf: tab, curve: tab.place == .basecamp ? Self.tileGlide : Self.glide,
+                 duration: tab.place == .basecamp ? Self.tileDuration : 0.32)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -537,7 +552,9 @@ struct BrowserScreen: View {
         // A tile's spot stays empty until its page lands in it; shown, the
         // tile sat there during the pull, vanished as the finger lifted,
         // and came back (Simulator recording, 2026-11-09).
-        if tab.place == .basecamp { tileReveal = 0 }
+        // Hidden at the start of its swap's stretch, not 0, so the swap
+        // can later run on its own clock from here (`land(inCardOf:)`).
+        if tab.place == .basecamp { tileReveal = BasecampTiles.glideSwap.lowerBound }
         ringOnGlide = true
         standInCardWidth = spots.frames[tab.id]?.width
         lineShown = false
@@ -580,22 +597,28 @@ struct BrowserScreen: View {
 
     /// The picture glides from wherever it is into the tab's card; then the
     /// card takes its place in one frame. A card off screen: a cross-fade.
-    private func land(inCardOf tab: FirnCore.Tab, curve: Animation) {
+    private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double) {
         Task {
             guard let spot = await spot(of: tab.id) else { return fadeToTabs() }
             let tile = tab.place == .basecamp
             if tile {
-                tileReveal = 0
                 tileCrop = (from: box, to: spot.size)
             }
             standInCardWidth = spot.width
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
+            withAnimation(Self.listComes) { listIn = 1 }
+            if tile {
+                // Into a tile: the picture and the tile swap over the same
+                // last stretch as before (`BasecampTiles.glideSwap`), but on
+                // a short clock of their own in the glide's second half, so
+                // the glass tile is there as the picture closes the last
+                // points. On the glide's own curve, the swap waited for its
+                // slow tail and a tiny page sat in the tile's spot for about
+                // 200ms (David's recording, 2026-11-13).
+                withAnimation(.easeInOut(duration: duration * 0.32).delay(duration * 0.6)) { tileReveal = 1 }
+            }
             withAnimation(curve) {
                 box = spot
-                // Into a tile: on the glide's own curve, so the picture and
-                // the tile swap as it settles into the tile's spot
-                // (`BasecampTiles.glideSwap`).
-                if tile { tileReveal = 1 }
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 arrival = 1
                 neighborsOpacity = 0
@@ -630,6 +653,7 @@ struct BrowserScreen: View {
         swiping = false
         withAnimation(Self.fade) {
             arrival = 1
+            listIn = 1
             pageHidden = true
         } completion: {
             gliding = nil
@@ -680,6 +704,7 @@ struct BrowserScreen: View {
     /// the page takes over.
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool) {
         guard let standInSize else { return hideTabs() }
+        withAnimation(Self.listGoes) { listIn = 0 }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
             boxRadius = 0
@@ -750,6 +775,7 @@ struct BrowserScreen: View {
         withAnimation(Self.fade) {
             pageHidden = false
             arrival = 0
+            listIn = 0
             showingTabs = false
         } completion: {
             gliding = nil
@@ -987,8 +1013,11 @@ struct BrowserScreen: View {
             }
             if toTabs {
                 guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
-                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot,
-                                                         duration: pull.tab.place == .basecamp ? 0.42 : 0.34))
+                let tile = pull.tab.place == .basecamp
+                let duration = tile ? Self.tileDuration : 0.34
+                land(inCardOf: pull.tab, curve: carrying(velocity, to: spot, duration: duration,
+                                                         tail: tile ? 0.45 : 0.25),
+                     duration: duration)
             } else {
                 let page = pageBox(size: standInSize!)
                 land(onPage: pull.tab, curve: carrying(velocity, to: page), switching: false)
@@ -1193,7 +1222,8 @@ struct BrowserScreen: View {
     /// An ease-out glide whose start matches the finger's speed toward
     /// where it's going: a fast flick carries straight on, a slow let-go
     /// starts gently. A curve, not a spring, so it lands exactly on time.
-    private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34) -> Animation {
+    private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34,
+                          tail: Double = 0.25) -> Animation {
         let dx = target.midX - box.midX
         let dy = target.midY - box.midY
         let distance = max(hypot(dx, dy), 1)
@@ -1202,14 +1232,17 @@ struct BrowserScreen: View {
         let slope = max(0, toward) * duration / distance
         let x1 = 0.2
         let y1 = min(max(slope * x1, 0.16), 1)
-        return .timingCurve(x1, y1, 0.25, 1, duration: duration)
+        return .timingCurve(x1, y1, tail, 1, duration: duration)
     }
 
     /// Where the tab's card is once the overview has laid out and scrolled
     /// to it: a few frames at most.
+    /// Asked at once first: it always waited a frame, and the let-go asks
+    /// twice, so the page sat still under the lifted finger for two or
+    /// three frames before it moved (David's recording, 2026-11-13).
     private func spot(of id: UUID) async -> CGRect? {
-        for _ in 0..<6 {
-            try? await Task.sleep(for: .milliseconds(16))
+        for attempt in 0..<7 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(16)) }
             if let frame = spots.frames[id], let spot = visible(frame) { return spot }
         }
         return nil

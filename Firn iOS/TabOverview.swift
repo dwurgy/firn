@@ -31,6 +31,9 @@ struct TabOverview: View {
     /// How far the overview has arrived (0 to 1, following the page as
     /// it's pulled): its bar fades in and the dim over the cards lifts.
     var arrival: CGFloat = 1
+    /// How much of the list shows (0 to 1): none while a page is held,
+    /// coming in from the moment it's let go, gliding with it.
+    var listIn: CGFloat = 1
     /// Shows a tab (the page grows out of its card or row).
     let open: (FirnCore.Tab) -> Void
     /// Back to the page, showing the tab on screen.
@@ -267,11 +270,14 @@ struct TabOverview: View {
             .contentMargins(.top, 8, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             // While a page is held, only the haze is behind it, as in
-            // Safari: the cards come in over the landing's last stretch
-            // (and leave first as a tab opens). Shown clearly behind a slow
-            // hold, they were distracting (David, 2026-11-10). A hair above
-            // 0, so the cards' blur isn't dropped and rebuilt mid-glide.
-            .modifier(ArrivalBand(arrival: arrival, range: 0.85...1, fadesIn: true, floor: 0.002))
+            // Safari: shown clearly behind a slow hold, the cards were
+            // distracting (David, 2026-11-10). They come in as it's let go,
+            // around the page while it flies (`listIn`), and leave first as
+            // a tab opens. Tied to the glide's last stretch, they faded up
+            // only after the page had landed (David's recording,
+            // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
+            // and rebuilt mid-glide.
+            .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {
@@ -359,9 +365,15 @@ struct TabOverview: View {
     /// What an opening takes as it starts: each tab's last-viewed time
     /// (so nothing changes size while it's open), this space's tidy, and
     /// the list scrolled to the tab on screen.
+    /// Only what has changed is set: every card reads these, so setting
+    /// them as a swipe up began rebuilt the whole list in the frame the
+    /// finger grabbed (a 35–55ms frame on David's iPhone, 2026-11-13). The
+    /// opening time only matters against a day (`cardAge`), so a minute's
+    /// difference is nothing.
     private func getReady(_ scroller: ScrollViewProxy) {
-        openedAt = .now
-        lastViewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
+        if Date.now.timeIntervalSince(openedAt) > 60 { openedAt = .now }
+        let viewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
+        if viewed != lastViewed { lastViewed = viewed }
         loadTidied()
         if let id = store.activeTab?.id { scroller.scrollTo(id, anchor: .center) }
     }
@@ -492,8 +504,10 @@ struct TabOverview: View {
         UserDefaults.standard.removeObject(forKey: "overviewSlimRows")  // the old mode
         let saved = UserDefaults.standard.dictionary(forKey: Self.tidiedKey) as? [String: Double] ?? [:]
         let at = saved[store.activeSpace.id.uuidString].map(Date.init(timeIntervalSince1970:))
-        tidiedAt = at.flatMap { openedAt.timeIntervalSince($0) < Self.cardAge ? $0 : nil }
-        cards = tidiedAt == nil ? 1 : 0
+        let tidied = at.flatMap { openedAt.timeIntervalSince($0) < Self.cardAge ? $0 : nil }
+        if tidied != tidiedAt { tidiedAt = tidied }
+        let shape: CGFloat = tidied == nil ? 1 : 0
+        if shape != cards { cards = shape }
         if at != nil, tidiedAt == nil { saveTidied() }
     }
 

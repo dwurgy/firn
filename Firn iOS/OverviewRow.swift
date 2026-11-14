@@ -1,6 +1,133 @@
+import Accelerate
 import FirnCore
 import SwiftUI
 import UIKit
+
+/// What a card's pills show through: the top of the page's picture, blurred
+/// (and lifted, for light mode) once, off the main thread, as a picture is
+/// taken or read. Blurred live, every card's title pill and X blurred again
+/// on every frame anything moved: about ten blurs at once behind a swipe
+/// up, which held the glide to about 40 frames a second on David's iPhone
+/// while Basecamp's tiles (no pills) glided at full speed (his recording,
+/// 2026-11-13). The picture never changes, so neither does its blur.
+@MainActor enum PillBackdrop {
+    /// How much of the picture's top is kept, in its own points: enough
+    /// for the pills at any stage of a pinch (44pt at most) on the
+    /// narrowest card, with room for the blur to reach in.
+    nonisolated static let bandHeight: CGFloat = 72
+    /// How soft the page is through a pill: enough that no shape can be
+    /// made out, while its light and color still come through.
+    nonisolated static let blurRadius: CGFloat = 10
+    /// Frost scatters light, so it's brighter than what's behind it: in
+    /// light mode the blurred page is lifted a fixed amount, so a dark
+    /// page's pill turns a lighter grey and its dark title reads (David,
+    /// 2026-11-08). Bright pages barely change. Dark mode reads as is.
+    nonisolated static let frostLift: Double = 0.15
+
+    private struct Made {
+        let picture: UIImage
+        let light: UIImage
+        let dark: UIImage
+    }
+    private static var made: [ObjectIdentifier: Made] = [:]
+    private static var order: [ObjectIdentifier] = []
+    /// A few more than the pictures kept in memory; each is small (1x, the
+    /// top band only).
+    private static let limit = PagePictures.memoryLimit + 8
+
+    /// The picture's blurred band, if it's been made. Checked against the
+    /// picture itself, so a reused identifier can't show another page.
+    static func band(for picture: UIImage, dark: Bool) -> UIImage? {
+        guard let made = made[ObjectIdentifier(picture)], made.picture === picture else { return nil }
+        return dark ? made.dark : made.light
+    }
+
+    /// Makes the picture's band, unless it's there already.
+    static func prepare(_ picture: UIImage) async {
+        let id = ObjectIdentifier(picture)
+        if let made = made[id], made.picture === picture { return }
+        guard let source = picture.cgImage else { return }
+        let scale = picture.scale
+        let bands = await Task.detached(priority: .userInitiated) { blurredBands(source, scale: scale) }.value
+        guard let bands else { return }
+        made[id] = Made(picture: picture, light: UIImage(cgImage: bands.light, scale: 1, orientation: .up),
+                        dark: UIImage(cgImage: bands.dark, scale: 1, orientation: .up))
+        order.removeAll { $0 == id }
+        order.append(id)
+        while order.count > limit { made[order.removeFirst()] = nil }
+    }
+
+    static func forgetAll() {
+        made.removeAll()
+        order.removeAll()
+    }
+
+    /// The top band, shrunk to one pixel a point (it's blurred, so nothing
+    /// is lost), blurred with its edges held, and a lifted copy for light
+    /// mode. The radius is the card's 10pt, in the picture's points: a card
+    /// is a little narrower than the page it shows. Three box blurs, which
+    /// together are a Gaussian, on the CPU: well under a millisecond for so
+    /// small an image (Core Image took about 20ms, mostly its setup, and
+    /// held up the picture the glide waits for).
+    private nonisolated static func blurredBands(_ source: CGImage, scale: CGFloat)
+        -> (light: CGImage, dark: CGImage)? {
+        let bandPixels = min(Int((bandHeight * scale).rounded()), source.height)
+        guard bandPixels > 0, scale > 0,
+              let band = source.cropping(to: CGRect(x: 0, y: 0, width: source.width, height: bandPixels))
+        else { return nil }
+        let width = max(Int((CGFloat(source.width) / scale).rounded()), 1)
+        let height = max(Int((CGFloat(bandPixels) / scale).rounded()), 1)
+        let rowBytes = width * 4
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue
+        var pixels = [UInt8](repeating: 0, count: rowBytes * height)
+        var spare = [UInt8](repeating: 0, count: rowBytes * height)
+        // A Gaussian of this size is three box blurs about 2σ+1 wide.
+        let radius = blurRadius * CGFloat(width) / max(CGFloat(width) - 32, 1)
+        let box = UInt32(Int(radius * 2) | 1)
+        let blurred: Bool = pixels.withUnsafeMutableBytes { raw in
+            spare.withUnsafeMutableBytes { other in
+                guard let context = CGContext(data: raw.baseAddress, width: width, height: height,
+                                              bitsPerComponent: 8, bytesPerRow: rowBytes, space: space,
+                                              bitmapInfo: info) else { return false }
+                context.interpolationQuality = .high
+                context.draw(band, in: CGRect(x: 0, y: 0, width: width, height: height))
+                var a = vImage_Buffer(data: raw.baseAddress, height: vImagePixelCount(height),
+                                      width: vImagePixelCount(width), rowBytes: rowBytes)
+                var b = vImage_Buffer(data: other.baseAddress, height: vImagePixelCount(height),
+                                      width: vImagePixelCount(width), rowBytes: rowBytes)
+                let flags = vImage_Flags(kvImageEdgeExtend)
+                guard vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError,
+                      vImageBoxConvolve_ARGB8888(&b, &a, nil, 0, 0, box, box, nil, flags) == kvImageNoError,
+                      vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError
+                else { return false }
+                return true
+            }
+        }
+        // The blur ended in `spare`.
+        guard blurred, let dark = image(from: spare, width: width, height: height, space: space, info: info)
+        else { return nil }
+        // Lifted: the same amount added to every color, as SwiftUI's
+        // `brightness` adds it (the picture is opaque, so no alpha to mind).
+        let lift = Int((frostLift * 255).rounded())
+        for i in stride(from: 0, to: spare.count, by: 4) {
+            spare[i] = UInt8(min(Int(spare[i]) + lift, 255))
+            spare[i + 1] = UInt8(min(Int(spare[i + 1]) + lift, 255))
+            spare[i + 2] = UInt8(min(Int(spare[i + 2]) + lift, 255))
+        }
+        guard let light = image(from: spare, width: width, height: height, space: space, info: info)
+        else { return nil }
+        return (light, dark)
+    }
+
+    private nonisolated static func image(from pixels: [UInt8], width: Int, height: Int,
+                                          space: CGColorSpace, info: UInt32) -> CGImage? {
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: width * 4, space: space, bitmapInfo: CGBitmapInfo(rawValue: info),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+}
 
 /// A slim row on glass: the site's icon and the page's title, one line, as
 /// in Safari and Firn's Mac sidebar. The tab on screen stands out on solid page white with a frost
@@ -330,14 +457,6 @@ struct CardLine: View, Animatable {
         .frame(height: mix(Self.rowHeight, Self.cardLineHeight, t), alignment: .top)
     }
 
-    /// How soft the page is through a pill: enough that no shape can be
-    /// made out, while its light and color still come through.
-    private static let blurRadius: CGFloat = 10
-    /// Frost scatters light, so it's brighter than what's behind it: in
-    /// light mode the blurred page is lifted a fixed amount, so a dark
-    /// page's pill turns a lighter grey and its dark title reads (David,
-    /// 2026-11-08). Bright pages barely change. Dark mode reads as is.
-    private static let frostLift: Double = 0.15
     private static let noPicture = UIImage()
 
     /// A pill's frost: the group cards' recipe, light, over the page's own
@@ -350,17 +469,21 @@ struct CardLine: View, Animatable {
     private func pillFrost<S: InsettableShape>(_ shape: S, at origin: CGPoint, size: CGSize,
                                                cardWidth: CGFloat) -> some View {
         let image = solid ? Self.noPicture : (picture ?? Self.noPicture)
-        let scale = image.size.width > 0 ? cardWidth / image.size.width : 0
+        // Already blurred (`PillBackdrop`): a plain picture, nothing worked
+        // out per frame. Until it's made (a moment after a picture is read
+        // from disk), blurred live as before.
+        let band = solid ? nil : picture.flatMap { PillBackdrop.band(for: $0, dark: colorScheme == .dark) }
+        let shown = band ?? image
+        let scale = shown.size.width > 0 ? cardWidth / shown.size.width : 0
         return Frost(shape: shape, space: space, fill: Theme.cardPillVeil, solid: solid)
             .background {
-                Image(uiImage: image)
+                Image(uiImage: shown)
                     .resizable()
-                    .frame(width: cardWidth, height: image.size.height * scale)
+                    .frame(width: cardWidth, height: shown.size.height * scale)
                     .offset(x: -origin.x, y: -origin.y)
                     .frame(width: size.width, height: size.height, alignment: .topLeading)
                     .clipped()
-                    .blur(radius: Self.blurRadius, opaque: true)
-                    .brightness(colorScheme == .light ? Self.frostLift : 0)
+                    .modifier(LiveBlur(on: band == nil, lift: colorScheme == .light))
                     .clipShape(shape)
                     .accessibilityHidden(true)
             }
@@ -392,6 +515,22 @@ struct CardLine: View, Animatable {
                 .accessibilityLabel("Close \(tab.title)")
         } else {
             mark.allowsHitTesting(false).accessibilityHidden(true)
+        }
+    }
+}
+
+/// A pill's live blur, only until its picture's `PillBackdrop` is made.
+private struct LiveBlur: ViewModifier {
+    let on: Bool
+    let lift: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .blur(radius: PillBackdrop.blurRadius, opaque: true)
+                .brightness(lift ? PillBackdrop.frostLift : 0)
+        } else {
+            content
         }
     }
 }

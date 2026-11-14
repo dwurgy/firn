@@ -21,5 +21,12 @@
 	     until sync is turned on. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Lets people pick Firn as the iPhone's default browser (Settings › Apps › Default Browser App). A managed
+	     entitlement Apple granted on 2026-11-14; the app ID has to have it turned on (Additional Capabilities) or
+	     builds for a device won't sign. Apple's rules for browsers are met: http and https in Info.plist, no
+	     UIWebView, an address bar on launch, links opened as they are, and none of the Info.plist keys Apple
+	     rejects browsers for (photo library read access, Always location, HomeKit, Bluetooth Always, Health). -->
+	<key>com.apple.developer.web-browser</key>
+	<true/>
 </dict>
 </plist>

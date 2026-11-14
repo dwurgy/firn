@@ -32,6 +32,11 @@ struct TabOverview: View {
     /// The screen's middle (global points), which the list and bar grow
     /// around as they come forward (`ComesForward`).
     var screenMiddle: CGPoint?
+    /// The screen's middle in the list's scroll view's own points, which
+    /// don't move as it scrolls (`ComesForward.inScroll`).
+    private var listMiddle: CGPoint? {
+        screenMiddle.map { CGPoint(x: $0.x - spots.viewport.minX, y: $0.y - spots.viewport.minY) }
+    }
     /// Show a tab (the page grows out of its card or row), back to the
     /// page, and a new tab (back to the page, ready to type).
     let actions: OverviewActions
@@ -266,8 +271,8 @@ struct TabOverview: View {
                 // before): shrunk while hidden, the scroll view's turn to
                 // the tab on screen (`getReady`) also slid it sideways, about
                 // 12pt (Simulator, 2026-11-13).
-                .modifier(LandingForward(landing: landing, middle: screenMiddle, off: reduceMotion,
-                                         scalesWithList: true))
+                .modifier(LandingForward(landing: landing, middle: listMiddle, off: reduceMotion,
+                                         scalesWithList: true, inScroll: true))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
@@ -2096,6 +2101,14 @@ struct ComesForward: ViewModifier, Animatable {
     var focus: CGFloat
     let middle: CGPoint?
     let off: Bool
+    /// `middle` is in the scroll view's own points, and the content is
+    /// placed by its frame there (`.scrollView`), not on screen: for a
+    /// scrolling list. The list's frame on screen could be a frame behind
+    /// its scroll as it turned to the tab on screen, so the point it grew
+    /// around jumped, and the whole list slid several points sideways and
+    /// up or down as a tab landed, then snapped back (David's recording,
+    /// 2026-11-14). The scroll view's own space moves with the scroll.
+    var inScroll = false
     /// The page has been let go (or the overview is up): the blur may run.
     var blurs = true
     /// It may grow: for the list's contents, only once a page is let go.
@@ -2129,8 +2142,9 @@ struct ComesForward: ViewModifier, Animatable {
         let left = 1 - min(max(focus, 0), 1)
         let dim = off || !blurs ? 0 : -Self.dim * Double(left)
         let middle = middle
+        let inScroll = inScroll
         content.visualEffect { view, proxy in
-            let frame = proxy.frame(in: .global)
+            let frame = inScroll ? proxy.frame(in: .scrollView) : proxy.frame(in: .global)
             let anchor = middle.map {
                 UnitPoint(x: frame.width > 0 ? ($0.x - frame.minX) / frame.width : 0.5,
                           y: frame.height > 0 ? ($0.y - frame.minY) / frame.height : 0.5)

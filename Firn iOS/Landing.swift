@@ -78,11 +78,13 @@ struct LandingForward: ViewModifier {
     let middle: CGPoint?
     let off: Bool
     var scalesWithList = false
+    /// `middle` is in the scroll view's own points (`ComesForward.inScroll`).
+    var inScroll = false
 
     func body(content: Content) -> some View {
         let listing = landing.listIn > 0
         content.modifier(ComesForward(through: landing.forward, focus: landing.focus, middle: middle, off: off,
-                                      blurs: listing, scales: scalesWithList ? listing : true))
+                                      inScroll: inScroll, blurs: listing, scales: scalesWithList ? listing : true))
     }
 }
 

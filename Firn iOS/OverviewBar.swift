@@ -43,6 +43,11 @@ struct OverviewBar: View {
     @State private var labelWidths: [UUID: CGFloat] = [:]
     /// The room between + and the check: the widest a pill can be.
     @State private var room: CGFloat = 0
+    /// A finished slide's width, held until the new space arrives: the
+    /// slide resets a moment before the space changes, and in between the
+    /// pill took the old space's width again, then glided back (David's
+    /// recording, 2026-11-13).
+    @State private var landedWidth: CGFloat?
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -67,6 +72,7 @@ struct OverviewBar: View {
     /// the coming one's as the seam crosses, so the two pills share a
     /// frame that's changing size under them.
     private var pillWidth: CGFloat {
+        if let landedWidth { return landedWidth }
         let held = restWidth(space)
         guard progress != 0, let next = neighbor(progress) else { return held }
         let t = min(abs(progress), 1)
@@ -113,7 +119,12 @@ struct OverviewBar: View {
         .padding(.top, 8)
         .padding(.bottom, 0)
         // A space changed elsewhere (the menu, the command bar) mid-slide.
-        .onChange(of: space.id) { if !finishing { progress = 0 } }
+        .onChange(of: space.id) {
+            if !finishing { progress = 0 }
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) { landedWidth = nil }
+        }
         .onChange(of: touching) { _, now in
             guard !now, !finishing, progress != 0 else { return }
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { progress = 0 }
@@ -252,6 +263,7 @@ struct OverviewBar: View {
                     var quiet = Transaction()
                     quiet.disablesAnimations = true
                     withTransaction(quiet) {
+                        landedWidth = restWidth(next)
                         progress = 0
                         wordsIn = 0
                     }

@@ -6,7 +6,8 @@ import SwiftUI
 /// behind it: the page you came from, blurred by shrinking its picture to
 /// a few pixels and stretching it back up (one still image, no live blur),
 /// under a wash of the frame's color, the space's tint, and the paper
-/// grain. With no picture (no tab), or Reduce Transparency: the plain
+/// grain. With no tab, Sunrise shines through the same way, as the empty
+/// page you came from (David, 2026-11-13). Reduce Transparency: the plain
 /// tinted frame. Nothing redraws while idle or scrolling; the haze is
 /// remade only when the tab on screen or its picture changes, and a space
 /// change cross-fades the tint.
@@ -22,6 +23,8 @@ struct OverviewHaze: View {
     /// should be still (David's recording, 2026-11-09); a fresh one still
     /// cross-fades in over it when the page has changed.
     @MainActor private static var kept: [UUID: UIImage] = [:]
+    /// Sunrise's haze, per space color and look (a handful at most).
+    @MainActor private static var sunriseKept: [String: UIImage] = [:]
 
     init(tab: UUID?, picture: UIImage?, space: String) {
         self.tab = tab
@@ -76,6 +79,22 @@ struct OverviewHaze: View {
             var now = Transaction()
             now.disablesAnimations = true
             withTransaction(now) { haze = tab.flatMap { Self.kept[$0] } }
+        }
+        // No tab: the empty page's Sunrise, in this space's snow and the
+        // current look, through the same blur as a page's picture.
+        .task(id: tab == nil ? "\(space)|\(colorScheme == .dark)" : nil) {
+            guard tab == nil else { return }
+            let key = "\(space)|\(colorScheme == .dark)"
+            if let kept = Self.sunriseKept[key] { return haze = kept }
+            let renderer = ImageRenderer(content: SunriseScene(spaceColor: space)
+                .frame(width: 200, height: 434)
+                .environment(\.colorScheme, colorScheme))
+            renderer.scale = 1
+            guard let source = renderer.cgImage else { return }
+            let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
+            guard !Task.isCancelled, tab == nil else { return }
+            haze = made.map { UIImage(cgImage: $0) }
+            Self.sunriseKept[key] = haze
         }
         .task(id: picture.map(ObjectIdentifier.init)) {
             // No picture in memory (hidden): the kept haze stays.

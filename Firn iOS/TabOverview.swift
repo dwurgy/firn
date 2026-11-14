@@ -38,6 +38,8 @@ struct TabOverview: View {
     var listIn: CGFloat = 1
     /// How far the list and bar have come forward (`ComesForward`).
     var forward: CGFloat = 1
+    /// How far the list and bar have come into focus (`ComesForward`).
+    var focus: CGFloat = 1
     /// The screen's middle (global points), which the list and bar grow
     /// around as they come forward (`ComesForward`).
     var screenMiddle: CGPoint?
@@ -269,7 +271,7 @@ struct TabOverview: View {
                 // before): shrunk while hidden, the scroll view's turn to
                 // the tab on screen (`getReady`) also slid it sideways, about
                 // 12pt (Simulator, 2026-11-13).
-                .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion,
+                .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
                                        blurs: listIn > 0, scales: listIn > 0))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
@@ -329,7 +331,8 @@ struct TabOverview: View {
                     // a hair above 0 while gliding keeps its glass ready.
                     .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
                                           floor: !typing && gliding != nil ? 0.002 : 0))
-                    .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: listIn > 0))
+                    .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
+                                           blurs: listIn > 0))
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
             // to the tab on screen, so the page's card is in place the
@@ -2038,21 +2041,33 @@ struct ArrivalBand: ViewModifier, Animatable {
 /// scale back out and the page lands in the spot's full-size place.
 /// Reduce Motion: none.
 struct ComesForward: ViewModifier, Animatable {
+    /// How far it has grown (0 to 1): on a slower clock than the focus,
+    /// still growing after the page lands, so it can be seen coming
+    /// forward (David, beside Safari's, 2026-11-13).
     var through: CGFloat
+    /// How far it has come into focus (0 to 1): the blur and dim, done as
+    /// the page lands, so the card it lands in is sharp when they swap.
+    var focus: CGFloat
     let middle: CGPoint?
     let off: Bool
     /// The page has been let go (or the overview is up): the blur may run.
     var blurs = true
     /// It may grow: for the list's contents, only once a page is let go.
     var scales = true
-    /// How soft it starts (pt).
-    static let blur: CGFloat = 10
+    /// How soft it starts (pt). Safari's starts so soft the cards can
+    /// hardly be read (David's recording beside Safari's, 2026-11-13).
+    static let blur: CGFloat = 26
+    /// How much darker it starts, lifting with the blur: Safari's overview
+    /// is there at once, dimmed, and brightens as it comes forward, where
+    /// Firn's read as a pale haze fading in (same recording).
+    static let dim: Double = 0.2
     /// How much smaller it starts (Safari's is about 4%; 4% on the list's
-    /// quick fade couldn't be seen, David, 2026-11-13).
-    static let depth: CGFloat = 0.06
-    nonisolated var animatableData: CGFloat {
-        get { through }
-        set { through = newValue }
+    /// quick fade couldn't be seen; 94% and 90% tried; 92%, measured from
+    /// Safari's, David's recording, 2026-11-13).
+    static let depth: CGFloat = 0.08
+    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(through, focus) }
+        set { through = newValue.first; focus = newValue.second }
     }
 
     /// The scale at `through` (0 to 1).
@@ -2066,7 +2081,11 @@ struct ComesForward: ViewModifier, Animatable {
         // the glide's quick start, a plain share was mostly gone within a
         // tenth of a second (Simulator recording, 2026-11-13), so the cards
         // come into focus over the landing's end instead.
-        let radius = off || !blurs ? 0 : Self.blur * sqrt(1 - min(max(through, 0), 1))
+        // Its own curve holds it soft early (`BrowserScreen`), so a plain
+        // share here.
+        let left = 1 - min(max(focus, 0), 1)
+        let radius = off || !blurs ? 0 : Self.blur * left
+        let dim = off || !blurs ? 0 : -Self.dim * Double(left)
         let middle = middle
         content.visualEffect { view, proxy in
             let frame = proxy.frame(in: .global)
@@ -2074,7 +2093,7 @@ struct ComesForward: ViewModifier, Animatable {
                 UnitPoint(x: frame.width > 0 ? ($0.x - frame.minX) / frame.width : 0.5,
                           y: frame.height > 0 ? ($0.y - frame.minY) / frame.height : 0.5)
             } ?? .center
-            return view.scaleEffect(scale, anchor: anchor).blur(radius: radius)
+            return view.scaleEffect(scale, anchor: anchor).blur(radius: radius).brightness(dim)
         }
     }
 }

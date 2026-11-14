@@ -24,6 +24,9 @@ struct BrowserScreen: View {
     /// full size; `ComesForward`): on the landing glide's own clock, so
     /// it's still growing as the page settles into its card.
     @State private var forward: CGFloat = 0
+    /// How far the overview has come into focus (0, blurred and dimmed, to
+    /// 1; `ComesForward`): on the glide's clock, done as the page lands.
+    @State private var focus: CGFloat = 0
     /// The glide (step 3b). The page's picture makes the move, standing in
     /// for the page: moving the page itself makes UIKit work out its safe
     /// area again every frame, so WebKit lays the whole page out again and
@@ -192,7 +195,7 @@ struct BrowserScreen: View {
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
             TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn, forward: forward,
+                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn, forward: forward, focus: focus,
                         screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
                         open: openTab,
                         done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
@@ -456,7 +459,16 @@ struct BrowserScreen: View {
     private static let fade = Animation.easeOut(duration: 0.2)
     /// The cards coming in around a landing page: started with the glide,
     /// mostly there by its middle, so the page lands among them.
-    private static let listComes = Animation.easeOut(duration: 0.22)
+    /// Quick: Safari's overview is behind the page from the let-go's first
+    /// frame, blurred and dimmed (David's recording, 2026-11-13).
+    private static let listComes = Animation.easeOut(duration: 0.1)
+    /// The overview growing to full size as a tab lands (`ComesForward`),
+    /// as Safari's (David's recording, frame by frame, 2026-11-13): an
+    /// even ease through the glide, running on about 0.12s past the
+    /// landing while the closing tab holds still.
+    private static let forwardTime = closeDuration + 0.12
+    private static let forwardCurve = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.25, y: 0.1),
+                                                       endControlPoint: UnitPoint(x: 0.25, y: 1))
     /// The cards leaving as a tab grows out of its card.
     private static let listGoes = Animation.easeOut(duration: 0.1)
     /// Pages sliding sideways round to about the screen's own corners.
@@ -580,6 +592,7 @@ struct BrowserScreen: View {
                 arrival = 1
                 listIn = 1
                 forward = 1
+                focus = 1
                 pageHidden = true
             }
             return
@@ -676,8 +689,14 @@ struct BrowserScreen: View {
     /// card takes its place in one frame. A card off screen: a cross-fade.
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double) {
         Task {
-            guard let spot = await spot(of: tab.id) else { return fadeToTabs() }
+            guard let measured = await spot(of: tab.id) else { return fadeToTabs() }
             let tile = tab.place == .basecamp
+            // Aimed at its card's full-size place, and it stays there: the
+            // closing tab is its own thing, never part of the overview
+            // coming forward behind it (David, 2026-11-13). The picture
+            // stands in until the overview is full size (`forwardTime`),
+            // then the card, now in the same place, takes over.
+            let spot = measured
             if tile {
                 tileCrop = (from: box, to: spot.size)
             }
@@ -689,8 +708,23 @@ struct BrowserScreen: View {
             // keeps some of the growth for the end: tied to the list's
             // quick fade, it was used up while the page still covered the
             // screen, and couldn't be seen (David's recording, 2026-11-13).
-            withAnimation(.timingCurve(0.2, 0.1, 0.2, 1, duration: duration * (tile ? 0.86 : 1))) {
+            // Into focus over the glide itself, done as the page lands (as
+            // a tile's swap starts), on a curve that keeps some of it for
+            // the end, so the card it lands in is sharp when they swap.
+            // As Safari's: fully soft for about the first third, then
+            // clearing, sharp as the page lands.
+            withAnimation(.timingCurve(0.45, 0, 0.55, 1, duration: duration * (tile ? 0.86 : 1))) {
+                focus = 1
+            }
+            // Growing on a slower clock of its own, still coming forward
+            // after the page lands: done with the focus, it was forward
+            // before you had a chance to notice; Safari's can be seen coming
+            // (David's recording beside Safari's, 2026-11-13).
+            withAnimation(.timingCurve(Self.forwardCurve, duration: Self.forwardTime)) {
                 forward = 1
+            } completion: {
+                // Still this landing (nothing opened meanwhile).
+                if gliding == tab.id, showingTabs { swapIntoCard() }
             }
             if tile {
                 // Into a tile: the flying tile and the real one swap
@@ -703,20 +737,28 @@ struct BrowserScreen: View {
                 // swap is quick (two or three frames), as the picture
                 // reaches the spot: a long cross-fade of two glass tiles dips
                 // in strength midway.
-                withAnimation(.easeInOut(duration: duration * 0.08).delay(duration * 0.86)) { tileReveal = 1 }
+                // Once the overview is full size, so the real tile is where
+                // the flying one waits.
+                let reveal = duration * 0.08
+                withAnimation(.easeInOut(duration: reveal).delay(max(duration * 0.86, Self.forwardTime - reveal))) {
+                    tileReveal = 1
+                }
             }
             // Cards and tiles are set down (`settle`, David, 2026-11-13). A
             // tile turns to glass before it lands, so the glass tile takes
             // the same scale (`BasecampTiles.settle`) and keeps it until the
             // settle ends (`gliding` clears in `swapIntoCard`).
-            let setsDown = !reduceMotion
+            // The swap waits for the overview to be full size (`forward`'s
+            // completion), so the set-down is the closing tab's alone.
+            // Safari's closing tab simply eases in, with no set-down
+            // (David, 2026-11-13: "just copy it exactly"). The set-down's
+            // code stays, switched off.
+            let setsDown = false
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 arrival = 1
                 neighborsOpacity = 0
-            } completion: {
-                if !setsDown { swapIntoCard() }
             }
             if setsDown {
                 // Part of the glide, not after it: the lift builds while the
@@ -739,8 +781,6 @@ struct BrowserScreen: View {
                 }
                 withAnimation(.easeInOut(duration: duration * 0.4 + Self.settleTime).delay(duration * 0.6)) {
                     settle = 1
-                } completion: {
-                    swapIntoCard()
                 }
             }
             // The line's fade starts on the glide's first frame (where the
@@ -778,6 +818,7 @@ struct BrowserScreen: View {
             arrival = 1
             listIn = 1
             forward = 1
+            focus = 1
             pageHidden = true
         } completion: {
             gliding = nil
@@ -831,6 +872,7 @@ struct BrowserScreen: View {
         withAnimation(Self.listGoes) {
             listIn = 0
             forward = 0
+            focus = 0
         }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
@@ -904,6 +946,7 @@ struct BrowserScreen: View {
             arrival = 0
             listIn = 0
             forward = 0
+            focus = 0
             showingTabs = false
         } completion: {
             gliding = nil
@@ -1396,10 +1439,15 @@ struct BrowserScreen: View {
     private func fullSize(_ frame: CGRect) -> CGRect {
         // The list is smaller only once a page is let go (`listIn`).
         let scale = listIn > 0 ? ComesForward.scale(forward, off: reduceMotion) : 1
+        return scaled(frame, by: 1 / scale)
+    }
+
+    /// A spot scaled around the screen's middle, as `ComesForward` draws it.
+    private func scaled(_ frame: CGRect, by scale: CGFloat) -> CGRect {
         guard scale != 1, pageFrame.width > 0 else { return frame }
         let x = pageFrame.midX, y = pageFrame.midY
-        return CGRect(x: x + (frame.minX - x) / scale, y: y + (frame.minY - y) / scale,
-                      width: frame.width / scale, height: frame.height / scale)
+        return CGRect(x: x + (frame.minX - x) * scale, y: y + (frame.minY - y) * scale,
+                      width: frame.width * scale, height: frame.height * scale)
     }
 
     /// + types right on the overview: an empty address field over it, and

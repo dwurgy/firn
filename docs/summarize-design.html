@@ -1,6 +1,7 @@
 <!doctype html>
 <!-- Firn's Summarize: the look, as a mockup (docs/HISTORY.md, "Plan: Reader", step 5, step 1).
-     Draft for David (2026-11-13), not yet approved. It builds on the approved
+     Draft for David (2026-11-13), not yet approved. Revised the same day: a few calm
+     sentences instead of points (David, after Safari's). It builds on the approved
      docs/reader-design.html: the reader's look is unchanged, only Summarize is new.
      Self-contained: no scripts or fonts from the network. ui-serif is New York and
      -apple-system is SF on Apple devices; symbols are stand-ins drawn here (the app
@@ -100,8 +101,8 @@ ul.note li { margin-bottom: 4px; }
 
 /* ---------- New: the summary card ---------- */
 /* Grows out of the pill (same corner, same wash) into a soft card: 14pt corners,
-   the reader's own font for the points, a faint dot per point, and one honest line
-   at the foot. No color beyond the wash: the space's color stays in links and quotes. */
+   a few calm sentences in the reader's own font, and one honest line at the foot.
+   No color beyond the wash: the space's color stays in links and quotes. */
 .card {
   border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--hair);
   padding: 14px 18px 14px; overflow: hidden;
@@ -115,15 +116,23 @@ ul.note li { margin-bottom: 4px; }
 }
 .card-top .x:hover { background: var(--wash); color: var(--ink); }
 .card-top .x svg { width: 10px; height: 10px; }
-.points { list-style: none; margin: 10px 0 0; padding: 0; font-size: .9em; line-height: 1.45; }
-.points li { position: relative; padding-left: 16px; margin-bottom: .5em; opacity: 0; transform: translateY(3px); animation: point .3s ease-out forwards; }
-.points li::before { content: ""; position: absolute; left: 1px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
-.points li:nth-child(2) { animation-delay: .08s; } .points li:nth-child(3) { animation-delay: .16s; }
-.points li:nth-child(4) { animation-delay: .24s; } .points li:nth-child(5) { animation-delay: .32s; }
-@keyframes point { to { opacity: 1; transform: none; } }
+/* The sentences settle in from the top down, like frost spreading over glass: a soft
+   edge slides down the paragraph once (about 0.9s), then the text is simply there. */
+.prose {
+  margin: 10px 0 0; font-size: .92em; line-height: 1.5; text-wrap: pretty;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 55%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 55%);
+  -webkit-mask-size: 100% 220%; mask-size: 100% 220%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: settle .9s ease-out both;
+}
+@keyframes settle {
+  from { -webkit-mask-position: 0 100%; mask-position: 0 100%; }
+  to { -webkit-mask-position: 0 0; mask-position: 0 0; }
+}
 .foot { margin-top: 6px; font: 11px/1.4 -apple-system, system-ui, sans-serif; color: var(--faint); }
 
-/* Being made: three soft lines where the points will be, with one slow sheen across
+/* Being made: three soft lines where the sentences will be, with one slow sheen across
    them. It runs only while the model works, then stops. Reduce Motion: still lines. */
 .making { margin: 12px 0 4px; }
 .making i { display: block; height: 10px; border-radius: 5px; margin-bottom: 11px; background: var(--wash); position: relative; overflow: hidden; }
@@ -221,7 +230,7 @@ ul.note li { margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .card { animation: fade .3s ease-out both; }
-  .points li { animation: fade .3s ease-out forwards; transform: none; animation-delay: 0s !important; }
+  .prose { -webkit-mask-image: none; mask-image: none; animation: fade .3s ease-out both; }
   .making i::after { display: none; }
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 }
@@ -233,8 +242,8 @@ ul.note li { margin-bottom: 4px; }
   <p class="note">A draft for step 5's design. Reader's look doesn't change; Summarize adds one quiet pill to the article's heading, and a soft card it grows into. Everything is made on the device by Apple Intelligence; on a Mac or iPhone without it, none of this appears. Pick a state below to see each moment, or click the pill and the card's ✕ in the mockups.</p>
   <ul class="note">
     <li><b>The suggestion:</b> every time Reader opens, a small "Summarize" pill sits under the byline, inside the article's heading. Sans, muted, on the warm wash, like the byline's quieter sibling. No color, no sparkle, no motion.</li>
-    <li><b>Being made:</b> the pill grows into the card (0.26s, bounce-free). Three soft lines with one slow sheen stand in for the points; it stops the moment the points arrive. No spinner, no percent.</li>
-    <li><b>The summary:</b> three to five points in the reader's own font (Serif or Sans follow the Aa choice), a faint dot each, fading in one after another. A last line says where it came from: "Made on this iPhone by Apple Intelligence. It can make mistakes."</li>
+    <li><b>Being made:</b> the pill grows into the card (0.26s, bounce-free). Three soft lines with one slow sheen stand in for the sentences; it stops the moment they arrive. No spinner, no percent.</li>
+    <li><b>The summary:</b> a few calm sentences (two to four), in the reader's own font (Serif or Sans follow the Aa choice), a touch smaller than the article. They settle in from the top down once, a soft edge sliding down the paragraph, then hold still. A last line says where it came from: "Made on this iPhone by Apple Intelligence. It can make mistakes."</li>
     <li><b>Going away:</b> the ✕ folds the card back into the pill. Opening it again shows the same summary at once (kept only while Reader is open; never saved).</li>
     <li><b>Couldn't:</b> when the model declines (an unsupported language, or a topic it won't touch), the card says so in one plain line, then folds back to the pill after a few seconds. Nothing in red.</li>
   </ul>
@@ -360,12 +369,9 @@ const book = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-
 // Stand-in for SF Symbols' "text.append": three lines, the last one short, with a small plus.
 const glyph = '<svg class="glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h5.5M11.5 10.5v3M10 12h3"/></svg>';
 const xmark = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>';
-const points = [
-  'Fresh snow is mostly trapped air, which soaks up sound instead of reflecting it.',
-  'The quiet fades within days as the snow settles, packs down, and grows a hard crust.',
-  'A squeak underfoot means it’s below about 14°F, when crystals snap rather than slide.',
-  'For the deepest hush, go out early, while the snow is new and the air is still.'
-];
+const summary = 'Fresh snow is mostly trapped air, so it soaks up sound instead of throwing it back. ' +
+  'The hush fades within days as the snow settles and crusts over. ' +
+  'A squeak underfoot means it\u2019s below about 14\u00b0F, when crystals snap instead of sliding.';
 document.querySelectorAll('[data-book]').forEach(b => { b.innerHTML = book; });
 document.querySelectorAll('[data-glyph]').forEach(b => { b.innerHTML = glyph; });
 const tpl = document.getElementById('article');
@@ -381,8 +387,7 @@ function slotHTML(s, device) {
     '<div class="making" aria-hidden="true"><i></i><i></i><i></i></div></div>';
   if (s === 'fail') return '<div class="card" role="status">' + top('Summary') +
     '<p class="fail">Couldn’t summarize this article.</p></div>';
-  return '<div class="card">' + top('Summary') + '<ul class="points">' +
-    points.map(p => '<li>' + p + '</li>').join('') + '</ul>' +
+  return '<div class="card">' + top('Summary') + '<p class="prose">' + summary + '</p>' +
     '<div class="foot">Made on this ' + device + ' by Apple Intelligence. It can make mistakes.</div></div>';
 }
 function render() {

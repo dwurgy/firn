@@ -51,6 +51,17 @@ struct AddressBar: View {
     @State private var fieldPressed = false
     /// Bumped as a hold opens the menu: the lifted tab's tap.
     @State private var holdOpenings = 0
+    /// The hold that opened the menu is still down: the same finger can
+    /// slide onto a row and let go to pick it, as on a held tab's menu.
+    @State private var holdTracking = false
+    /// Where that finger is (global), once it has slid: the menu opens
+    /// under it, so a hold let go without sliding picks nothing.
+    @State private var menuPoint: CGPoint?
+    /// Bumped as the sliding finger lifts, at `menuLiftPoint`.
+    @State private var menuLift = 0
+    @State private var menuLiftPoint: CGPoint?
+    /// How far the finger slides before it points at rows.
+    private static let pointSlop: CGFloat = 10
 
     private var page: (any PageController)? { store.activeTab?.page }
     private var space: String { store.activeSpace.color }
@@ -295,7 +306,9 @@ struct AddressBar: View {
                 .scaleEffect(fieldPressed && !reduceMotion ? pressedScale : 1)
                 .animation(fieldPressed ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
                                         : .smooth(duration: 0.2), value: fieldPressed)
-                .simultaneousGesture(holdForMenu, including: canHoldForMenu ? .all : .subviews)
+                // Kept on while the hold that opened the menu is down, so
+                // the finger can go on to a row.
+                .simultaneousGesture(holdForMenu, including: canHoldForMenu || holdTracking ? .all : .subviews)
                 .onChange(of: holding) { pressHeld() }
                 .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
                 // The page coming in brings its own pill, an empty one of
@@ -347,14 +360,36 @@ struct AddressBar: View {
         !editing.wrappedValue && !menuOpen && !compact && !settling && barSlide == nil && page?.url != nil
     }
 
+    /// Hold, and the menu opens; the same finger then slides onto a row
+    /// (a highlight follows it, with a tick per row) and lets go to pick
+    /// it, as on a held tab's menu (David, 2026-11-13). Let go without
+    /// sliding, the menu stays open for a tap.
     private var holdForMenu: some Gesture {
         LongPressGesture(minimumDuration: HoldThenMove.menuHold)
-            .updating($holding) { pressing, state, _ in state = pressing }
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+            .updating($holding) { value, state, _ in
+                if case .first(true) = value { state = true }
+            }
+            .onChanged { value in
+                guard case let .second(true, drag) = value else { return }
+                if !holdTracking {
+                    guard canHoldForMenu, !barQuiet else { return }
+                    holdTracking = true
+                    fieldPressed = false
+                    holdOpenings += 1
+                    menuOpen = true
+                }
+                guard menuOpen, let drag else { return }
+                let moved = hypot(drag.translation.width, drag.translation.height)
+                if menuPoint != nil || moved > Self.pointSlop { menuPoint = drag.location }
+            }
             .onEnded { _ in
-                guard canHoldForMenu, !barQuiet else { return }
-                fieldPressed = false
-                holdOpenings += 1
-                menuOpen = true
+                if holdTracking, menuOpen, let point = menuPoint {
+                    menuLiftPoint = point
+                    menuLift += 1
+                }
+                holdTracking = false
+                menuPoint = nil
             }
     }
 
@@ -445,7 +480,8 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }, reading: readingRow) { menuOpen = false }
+            }, reading: readingRow, pointer: menuPoint, lift: menuLift,
+               liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
                 // The words come in once the glass has mostly grown, and go
@@ -914,9 +950,64 @@ private struct PageMenuPanel: View {
         let summarize: (() -> Void)?
     }
     let reading: Reading?
+    /// The finger that held the bar open, once it has slid (global).
+    let pointer: CGPoint?
+    /// Bumped as that finger lifts, at `liftPoint`: the row there runs.
+    let lift: Int
+    let liftPoint: CGPoint?
     let close: () -> Void
     /// VoiceOver starts on the first row: Reader's, or else Share.
     @AccessibilityFocusState private var focusedRow: Int?
+    /// Each row's frame (global), for the sliding finger.
+    @State private var frames: [String: CGRect] = [:]
+    @Namespace private var highlight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The row under a point (global), if any.
+    private func key(at point: CGPoint?) -> String? {
+        guard let point else { return nil }
+        return frames.first { $0.value.contains(point) }?.key
+    }
+
+    private struct Entry {
+        let key: String
+        let title: String
+        var detail: String?
+        /// An SF Symbol, or nil for Reader's book.
+        let symbol: String?
+        let action: () -> Void
+    }
+
+    private var entries: [Entry] {
+        var list: [Entry] = []
+        if let reading {
+            list.append(Entry(key: "reader", title: reading.isOn ? "Hide Reader" : "Show Reader", symbol: nil) {
+                close()
+                reading.toggle()
+            })
+            if let summarize = reading.summarize {
+                list.append(Entry(key: "summarize", title: "Summarize", symbol: "text.line.3.summary") {
+                    close()
+                    summarize()
+                })
+            }
+        }
+        list.append(Entry(key: "share", title: "Share…", symbol: "square.and.arrow.up") { [url] in
+            close()
+            ShareSheet.present(url)
+        })
+        list.append(Entry(key: "copy", title: "Copy Link", symbol: "link") { [url] in
+            UIPasteboard.general.url = url
+            close()
+        })
+        if let blocking {
+            list.append(Entry(key: "blocking", title: blocking.title, detail: blocking.site, symbol: "hand.raised") {
+                close()
+                toggleBlocking()
+            })
+        }
+        return list
+    }
 
     static let width: CGFloat = 250
     static let cornerRadius: CGFloat = 22
@@ -927,36 +1018,24 @@ private struct PageMenuPanel: View {
     }
 
     var body: some View {
+        let entries = entries
+        let lit = key(at: pointer)
         VStack(spacing: 0) {
-            if let reading {
-                row(reading.isOn ? "Hide Reader" : "Show Reader", symbol: nil) {
-                    close()
-                    reading.toggle()
-                }
-                .accessibilityFocused($focusedRow, equals: 0)
-                if let summarize = reading.summarize {
-                    row("Summarize", symbol: "text.line.3.summary") {
-                        close()
-                        summarize()
-                    }
-                }
+            ForEach(entries, id: \.key) { entry in
+                row(entry, lit: lit)
+                    .accessibilityFocused($focusedRow, equals: entry.key == "reader" ? 0 : entry.key == "share" ? 1 : -1)
+                    .accessibilityLabel(entry.detail.map { "\(entry.title) on \($0)" } ?? entry.title)
             }
-            row("Share…", symbol: "square.and.arrow.up") {
-                close()
-                ShareSheet.present(url)
-            }
-            .accessibilityFocused($focusedRow, equals: 1)
-            row("Copy Link", symbol: "link") {
-                UIPasteboard.general.url = url
-                close()
-            }
-            if let blocking {
-                row(blocking.title, detail: blocking.site, symbol: "hand.raised") {
-                    close()
-                    toggleBlocking()
-                }
-                .accessibilityLabel("\(blocking.title) on \(blocking.site)")
-            }
+        }
+        // The highlight glides from row to row: quick, no bounce; none
+        // with Reduce Motion.
+        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: lit)
+        // A tick each time the sliding finger reaches another row.
+        .sensoryFeedback(trigger: lit) { _, now in now == nil ? nil : .selection }
+        // Let go on a row: it runs, as a tap. Elsewhere, the menu stays.
+        .onChange(of: lift) {
+            guard let key = key(at: liftPoint), let entry = entries.first(where: { $0.key == key }) else { return }
+            entry.action()
         }
         .padding(Self.inset)
         .accessibilityElement(children: .contain)
@@ -965,10 +1044,11 @@ private struct PageMenuPanel: View {
         .onAppear { focusedRow = reading == nil ? 1 : 0 }
     }
 
-    /// A row with an SF Symbol, or Reader's book when `symbol` is nil.
-    private func row(_ title: String, detail: String? = nil, symbol: String?,
-                     action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    /// A row with an SF Symbol, or Reader's book when `symbol` is nil; lit
+    /// while the sliding finger is on it.
+    private func row(_ entry: Entry, lit: String?) -> some View {
+        let title = entry.title, detail = entry.detail, symbol = entry.symbol
+        return Button(action: entry.action) {
             HStack(spacing: 14) {
                 Group {
                     if let symbol {
@@ -1003,6 +1083,14 @@ private struct PageMenuPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(MenuRowStyle())
+        .background {
+            if lit == entry.key {
+                RoundedRectangle(cornerRadius: Self.cornerRadius - 6, style: .continuous)
+                    .fill(Theme.press)
+                    .matchedGeometryEffect(id: "lit", in: highlight)
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[entry.key] = $0 }
     }
 }
 

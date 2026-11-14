@@ -290,6 +290,12 @@ struct TabOverview: View {
             }
             .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // Off while a page glides in or out: on the phone, the soft edge
+            // under the bar drew nothing of the list's blurred contents, so
+            // a card under the bar showed only down to the bar's top for the
+            // whole landing and popped in as the blur ended (David's
+            // recording, 2026-11-13; the Simulator draws it either way).
+            .scrollEdgeEffectHidden(gliding != nil && !reduceMotion, for: .bottom)
             // While a page is held, only the haze is behind it, as in
             // Safari: shown clearly behind a slow hold, the cards were
             // distracting (David, 2026-11-10). They come in as it's let go,

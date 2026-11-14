@@ -27,9 +27,15 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
         ContentBlocker.shared.attach(configuration.userContentController)
         ContentBlocker.shared.setBlocks(
             page.blocksContent?(article.pageURL) ?? true, for: configuration.userContentController)
-        webView = WKWebView(frame: page.webView.frame, configuration: configuration)
+        // Firn's own view, as the page's: its right-click menu and its keys
+        // (⌃Tab) work the same while reading.
+        let view = FirnWebView(frame: page.webView.frame, configuration: configuration)
+        view.page = page
+        view.isReader = true
+        webView = view
         super.init()
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.isInspectable = true
         #if os(macOS)
         webView.allowsMagnification = true
@@ -73,6 +79,25 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
     }
 }
 
+extension ReaderPage: WKUIDelegate {
+    /// A new window from the reader: a Firn menu item (Open in New Tab, Save
+    /// Link As…) does what it does on the page; anything else that asks
+    /// (the iPhone's Open in New Tab, say) becomes a fresh tab of its own.
+    /// Never a page made from the reader's setup, which has scripts off.
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard let page, !page.runMenuChoice(for: navigationAction),
+              let url = navigationAction.request.url, WebAddress.isWebURL(url),
+              let onRequest = page.onRequest else { return nil }
+        onRequest(.openURL(url, inBackground: false))
+        return nil
+    }
+}
+
 // MARK: - Reader, as the rest of Firn sees it
 
 extension WebKitPageController {
@@ -95,6 +120,7 @@ extension WebKitPageController {
         guard let reader else { return }
         reader.webView.stopLoading()
         reader.webView.navigationDelegate = nil
+        reader.webView.uiDelegate = nil
         self.reader = nil
     }
 

@@ -205,6 +205,11 @@ final class WebKitPageController: NSObject, PageController {
         if isPausedByFirn { isPausedByFirn = false }
     }
 
+    /// The view being read: Reader's while it's on, so find, print, the
+    /// selection, and the tab's picture are the article's, not the page's
+    /// hidden under it.
+    var frontView: WKWebView { reader?.webView ?? webView }
+
     #if os(macOS)
     func focus() {
         // Reader's view while Reader is on, so the keys scroll the article.
@@ -216,11 +221,12 @@ final class WebKitPageController: NSObject, PageController {
         guard url != nil, loadError == nil else { return nil }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(width))
-        let image = try? await webView.takeSnapshot(configuration: configuration)
+        let image = try? await frontView.takeSnapshot(configuration: configuration)
         return image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
     func printPage() {
+        let webView = frontView
         guard let window = webView.window, url != nil, loadError == nil, !isShowingPanel else { return }
         let operation = webView.printOperation(with: NSPrintInfo.shared)
         // WebKit prints blank pages unless its print view has a size.
@@ -241,6 +247,7 @@ final class WebKitPageController: NSObject, PageController {
     func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int {
         let query = FindOnPage.query(text)
         guard url != nil, loadError == nil, !query.isEmpty else { return 0 }
+        let webView = frontView
         // Firn's world, and the words passed as a value, never as code.
         if direction == .fromHere {
             _ = try? await webView.callAsyncJavaScript(
@@ -262,7 +269,7 @@ final class WebKitPageController: NSObject, PageController {
 
     func selectedText() async -> String {
         guard url != nil, loadError == nil else { return "" }
-        let selected = try? await webView.callAsyncJavaScript(
+        let selected = try? await frontView.callAsyncJavaScript(
             FindOnPage.selectionScript, arguments: ["limit": FindOnPage.maxLength],
             in: nil, contentWorld: Self.firnWorld)
         return FindOnPage.query((selected as? String) ?? "")
@@ -751,9 +758,13 @@ private final class PageMenuItem: NSObject {
 /// ⌃Tab, AppKit takes it as "next field" and focuses the address bar, so the
 /// menu's Show Next Tab only worked every other press. Tab switching goes
 /// to the menu first instead, as in other browsers; everything else still
-/// goes to the page.
-private final class FirnWebView: WKWebView {
+/// goes to the page. Reader's view is one too, so its keys and menu are
+/// the page's (`ReaderPage`).
+final class FirnWebView: WKWebView {
     weak var page: WebKitPageController?
+    /// Reader's view: its menu has no Back, Forward, or Reload, which would
+    /// act on the reader's own (empty) history.
+    var isReader = false
 
     #if os(macOS)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -786,6 +797,9 @@ private final class FirnWebView: WKWebView {
         }
         // No Inspect Element: the Web Inspector is reached from Safari's Develop menu.
         for name in ["SearchWeb", "InspectElement"] { item(name)?.isHidden = true }
+        if isReader {
+            for name in ["GoBack", "GoForward", "Reload"] { item(name)?.isHidden = true }
+        }
         if item("Paste") != nil {
             if let search, let original = item("SearchWeb") {
                 menu.insertItem(search, at: menu.index(of: original))
@@ -822,8 +836,8 @@ private final class FirnWebView: WKWebView {
         var pageAddress: URL?
         if sections.isEmpty, let address = page.url, WebAddress.isWebURL(address) || address.isFileURL {
             pageAddress = address
-            sections.append([item("GoBack"), item("GoForward"), item("Reload")].compactMap { $0 }
-                + [action("Copy Page Link", "link", #selector(copyPageLink))])
+            let history = isReader ? [] : [item("GoBack"), item("GoForward"), item("Reload")].compactMap { $0 }
+            sections.append(history + [action("Copy Page Link", "link", #selector(copyPageLink))])
         }
         guard !sections.isEmpty else { return }
         for name in ["OpenLink", "OpenLinkInNewWindow", "DownloadLinkedFile", "OpenImageInNewWindow", "DownloadImage"] {
@@ -936,40 +950,7 @@ extension WebKitPageController: WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        // Taken on every new window, so a stale choice can't be used later.
-        if let chosen = menuChoice {
-            menuChoice = nil
-            if ProcessInfo.processInfo.systemUptime - chosen.at < 1, let url = navigationAction.request.url {
-                switch chosen.choice {
-                case .newTab:
-                    // In the background, as a ⌘-click does; a fresh page, not tied to this one.
-                    if let onRequest, WebAddress.isWebURL(url) { onRequest(.openURL(url, inBackground: true)) }
-                    return nil
-                case .split:
-                    if let onRequest, WebAddress.isWebURL(url) { onRequest(.openInSplit(url)) }
-                    return nil
-                case .copyAddress:
-                    #if os(macOS)
-                    if WebAddress.isWebURL(url) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                    }
-                    #endif
-                    return nil
-                case .lookout:
-                    if let onRequest, WebAddress.isWebURL(url) {
-                        // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.
-                        onRequest(.openInLookout(url))
-                        return nil
-                    }
-                case .saveAs:
-                    #if os(macOS)
-                    saveAs(url)
-                    #endif
-                    return nil
-                }
-            }
-        }
+        if runMenuChoice(for: navigationAction) { return nil }
         guard let onRequest, Self.mayOpenInNewTab(navigationAction.request.url) else { return nil }
         // The popup must use its opener's store, so it stays in the same space.
         // WebKit's copy does; anything else is refused rather than risk a leak.
@@ -985,6 +966,44 @@ extension WebKitPageController: WKUIDelegate {
         // opener was closing, say) is refused, so it never loads unseen.
         guard page.onRequest != nil else { return nil }
         return page.webView
+    }
+
+    /// Does what a Firn item in the page's (or Reader's) menu chose a moment
+    /// ago, for the new window WebKit then asks for; false if nothing was
+    /// chosen, so the ask goes on as an ordinary new window.
+    func runMenuChoice(for navigationAction: WKNavigationAction) -> Bool {
+        // Taken on every new window, so a stale choice can't be used later.
+        guard let chosen = menuChoice else { return false }
+        menuChoice = nil
+        guard ProcessInfo.processInfo.systemUptime - chosen.at < 1, let url = navigationAction.request.url
+        else { return false }
+        switch chosen.choice {
+        case .newTab:
+            // In the background, as a ⌘-click does; a fresh page, not tied to this one.
+            if let onRequest, WebAddress.isWebURL(url) { onRequest(.openURL(url, inBackground: true)) }
+            return true
+        case .split:
+            if let onRequest, WebAddress.isWebURL(url) { onRequest(.openInSplit(url)) }
+            return true
+        case .copyAddress:
+            #if os(macOS)
+            if WebAddress.isWebURL(url) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            }
+            #endif
+            return true
+        case .lookout:
+            guard let onRequest, WebAddress.isWebURL(url) else { return false }
+            // A fresh page in the Lookout, not WebKit's: it needn't stay tied to this one.
+            onRequest(.openInLookout(url))
+            return true
+        case .saveAs:
+            #if os(macOS)
+            saveAs(url)
+            #endif
+            return true
+        }
     }
 
     /// A Firn item in the page's menu was chosen; WebKit asks for the new window next.

@@ -288,5 +288,7 @@ private struct ReaderTextChoices: View {
         .buttonStyle(FrostPress(shape: RoundedRectangle(cornerRadius: ReaderTextCard.wellRadius - 3, style: .continuous)))
         .disabled(!enabled)
         .accessibilityLabel(smaller ? "Smaller text" : "Larger text")
+        // The size it's at, so a press is heard to do something.
+        .accessibilityValue("Size \(style.look.size + 1) of \(ReaderLook.sizes.count)")
     }
 }

@@ -182,9 +182,11 @@ struct AddressBar: View {
         return frontPage
     }
     /// The page's zoom, shown only while it isn't actual size, so a page
-    /// zoomed and forgotten doesn't just look wrong.
+    /// zoomed and forgotten doesn't just look wrong. Not while Reader is on:
+    /// zoom is then Reader's text size, and the Aa pill shows that.
     private var zoomLabel: String? {
-        guard !focused, window.canZoomFront(.actualSize), let zoom = frontPage?.zoom else { return nil }
+        guard !focused, frontPage?.isReading != true, window.canZoomFront(.actualSize),
+              let zoom = frontPage?.zoom else { return nil }
         return PageZoom.percent(zoom)
     }
 

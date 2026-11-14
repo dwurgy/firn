@@ -9,10 +9,6 @@ extension WebKitPageController {
         webView.becomeFirstResponder()
     }
 
-    /// The view on screen: Reader's while it's on, so the overview's card
-    /// shows what was being read.
-    private var frontView: WKWebView { reader?.webView ?? webView }
-
     func snapshot(width: CGFloat) async -> CGImage? {
         guard url != nil, loadError == nil else { return nil }
         let webView = frontView

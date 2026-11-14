@@ -1,0 +1,93 @@
+<!doctype html>
+<!--
+  Firn's Reader test page: a long article with tricks hidden in it. Reader
+  only reads web pages, so open it through a local server:
+    python3 -m http.server 8000 --directory docs
+  then go to http://localhost:8000/reader-test.html (or, from the iPhone
+  Simulator or an iPhone on the same Wi-Fi, http://<this Mac's name>.local:8000/,
+  its name in System Settings › General › Sharing).
+
+  The book should show in the address bar. In Reader, every trick below
+  should be gone or harmless, and the article itself should read normally:
+  the picture, the quote's line in the space's color, the list, the code,
+  and the table. reader-test-short.html is a page that passes Firn's quick
+  check but is too short: its book should quietly fade away when clicked.
+
+  Each trick says in the article's own words what Reader should show, so
+  a look at the reader is the whole test. On the page itself (not in
+  Reader), the tricks run as any page's would: that's expected.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The title hides a right-to-left override (U+202E) before "txt.exe": Reader's title must read "Settled snow, and why it squeaks txt.exe" left to right. -->
+<title>Settled snow, and why it squeaks &#x202E;txt.exe</title>
+<meta name="author" content="Reader Test &lt;b&gt;not bold&lt;/b&gt;">
+<meta property="og:site_name" content="Firn Test Desk">
+<meta name="description" content="A short walk through how fresh snow becomes firn, with a few traps for Firn's Reader along the way.">
+<style>
+  :root { --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; }
+  @media (prefers-color-scheme: dark) { :root { --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; } }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.6 -apple-system, system-ui, sans-serif; }
+  header, footer, nav { color: var(--muted); padding: 16px 24px; font-size: 13px; }
+  article { max-width: 640px; margin: 32px auto 64px; padding: 0 24px; }
+  .trap { color: #B0503A; }
+</style>
+<script>
+  // Any script that came along into Reader would turn its page red; Reader runs none.
+  if (location.hash === '#never') document.body.style.background = 'red';
+</script>
+</head>
+<body>
+<nav>Home · Weather · Snow · About (navigation: Reader should leave this out)</nav>
+<header>Firn Test Desk (a header: Reader should leave this out)</header>
+<article>
+<h1>Settled snow, and why it squeaks</h1>
+<p>Fresh snow is mostly air. A flake falls as a lacy six-armed crystal, and a new layer of them on a still night can be nine parts empty space to one part ice. That is why a morning after a storm feels so quiet: all that air between the crystals swallows sound the way a heavy curtain does. Walk out onto it and your boots sink in to the shin with almost no noise at all.</p>
+<p>Within hours, the crystals begin to change. Their fine arms are thin and have a lot of surface for the little ice they hold, and ice, like a soap bubble, is always trying to have less surface. Water molecules slowly leave the sharp tips and settle in the hollows, so each flake rounds off into a small grain. Snow scientists call this destructive metamorphism, which sounds dramatic for something so gentle.</p>
+<p>Next is a picture with a caption. It should show, rounded at the corners, at the column's width.</p>
+<figure>
+<img src="screenshots/01-hero-light.png" alt="Firn's window on a calm morning" width="1600" height="1000" onerror="document.body.style.background='red'">
+<figcaption>A caption under the picture, in small grey text.</figcaption>
+</figure>
+<p>As the grains round, they also start to touch. Where two grains meet, water molecules gather in the narrow neck between them, and the neck slowly thickens into a bond. Over days, the loose pile of rounded grains becomes a connected lattice, a little like a sponge made of ice. The layer gets denser and stronger, and the air between the grains is squeezed out bit by bit.</p>
+<p>This sentence has a link to <a href="https://example.com/" target="_blank" rel="opener" style="color:red">example.com</a>; it should be underlined in the space's color, open in this tab when clicked, and open in a new tab from its right-click menu. This one is written as <a href="javascript:document.body.style.background='red'">a script link</a>, and this one as <a href="data:text/html,&lt;h1&gt;hi&lt;/h1&gt;">a data link</a>: both should read as plain text, with no underline.</p>
+<p class="trap" style="color:red;font-size:40px" onclick="alert(1)">This paragraph asked to be huge and red. In Reader it should be ordinary text, the same size and color as the rest.</p>
+<iframe src="https://example.com/" width="400" height="200" title="A frame Reader should drop"></iframe>
+<form action="https://example.com/"><label>A form Reader should drop <input name="q" value="if you can read this, the form came along"></label><button>Send</button></form>
+<svg width="200" height="40" onload="document.body.style.background='red'"><text x="0" y="20">AN SVG READER SHOULD DROP</text></svg>
+<object data="https://example.com/"></object>
+<meta http-equiv="refresh" content="0; url=https://example.com/">
+<p>After the frame, the form, the drawing, and the embedded object above, this paragraph should follow straight on, with no gap or leftover pieces. If you read words in capitals about a form or an SVG, something came along that shouldn't have.</p>
+<blockquote>Snow that has survived a whole summer without melting is no longer just snow. Mountaineers call it firn, and it is the halfway point between a snowfall and a glacier.</blockquote>
+<p>Firn is old, dense, granular snow, usually at least a year old, packed to more than half the density of solid ice. On a high alpine slope it can be walked on in the early morning without sinking, and it has a coarse, sugary feel underfoot. Push deeper, and each year's firn is pressed harder by the layers above it, until the connected air channels between the grains pinch off into separate bubbles. At that point the firn has become glacier ice.</p>
+<h2>Why cold snow squeaks</h2>
+<p>On a very cold morning, packed snow squeaks under your boots. The sound comes from the grains themselves: below about minus ten degrees Celsius, the ice is too cold for your weight to melt a thin slippery film at the contact points, so the bonds between grains snap instead of sliding. Thousands of tiny snaps together make the squeak. On a mild day, the same snow just crunches softly, or packs down without a sound.</p>
+<p>A few things change how loud it is:</p>
+<ul>
+<li>How cold the air is, since colder snow has stronger, more brittle bonds.</li>
+<li>How long the snow has settled, since older snow has more bonds to break.</li>
+<li>What is on your feet, since a hard sole snaps more bonds at once than a soft one.</li>
+</ul>
+<p>Snow researchers often write small programs to model all this. A bond's strength might be estimated like so, which should appear in a soft box in a fixed-width font:</p>
+<pre><code>strength = neck_area * ice_strength(temperature)
+if load &gt; strength:
+    squeak()</code></pre>
+<p>And here are a few rough densities, which should appear as a quiet table:</p>
+<table>
+<caption>Density of snow and ice, in kilograms per cubic metre</caption>
+<thead><tr><th>Kind</th><th>Density</th></tr></thead>
+<tbody>
+<tr><td>Fresh snow</td><td>50 to 100</td></tr>
+<tr><td>Settled snow</td><td>200 to 300</td></tr>
+<tr><td>Firn</td><td>400 to 830</td></tr>
+<tr><td>Glacier ice</td><td>830 to 917</td></tr>
+</tbody>
+</table>
+<p>So the next time you hear snow squeak on the way to the car, you are hearing ice bonds break, thousands at a time, in snow that has spent the night quietly turning itself into something a little more like a glacier. It is a small reminder that even a still, white morning is busy underneath.</p>
+<p>That is the end of the article. Below it, the page has a footer and a comment box, which Reader should leave out.</p>
+</article>
+<footer>© Firn Test Desk · Comments (3) · Share (a footer: Reader should leave this out)</footer>
+</body>
+</html>

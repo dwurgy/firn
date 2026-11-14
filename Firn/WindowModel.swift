@@ -421,9 +421,30 @@ final class WindowModel {
         }
     }
 
-    func canZoomFront(_ change: ZoomChange) -> Bool { zoom(after: change) != nil }
+    /// While Reader is on, zoom is Reader's text size, as in Safari: one
+    /// size to think about, the same one the Aa card changes (every reader
+    /// follows it). Actual Size goes back to the standard size.
+    private func readerSize(after change: ZoomChange) -> Int? {
+        let look = ReaderStyle.shared.look
+        let standard = ReaderLook().size
+        switch change {
+        case .larger: return look.canGrow ? look.size + 1 : nil
+        case .smaller: return look.canShrink ? look.size - 1 : nil
+        case .actualSize: return look.size == standard ? nil : standard
+        }
+    }
+
+    private var isReadingFront: Bool { frontPage?.isReading == true }
+
+    func canZoomFront(_ change: ZoomChange) -> Bool {
+        isReadingFront ? readerSize(after: change) != nil : zoom(after: change) != nil
+    }
 
     func zoomFront(_ change: ZoomChange) {
+        if isReadingFront {
+            if let size = readerSize(after: change) { ReaderStyle.shared.look.size = size }
+            return
+        }
         guard let zoom = zoom(after: change) else { return }
         frontPage?.setZoom(zoom)
     }

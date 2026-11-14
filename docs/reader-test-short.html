@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  Firn's Reader test: a page that passes the quick article check (two long
+  paragraphs) but is under Reader's 150 words. The book should show; when
+  clicked, it should quietly fade away, with no message, and stay away for
+  this page. Served with reader-test.html (see its notes).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A short note on snow</title>
+<style>
+  :root { --page: #FBFAF8; --ink: #241F1B; }
+  @media (prefers-color-scheme: dark) { :root { --page: #2B2826; --ink: #F5F1EC; } }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.6 -apple-system, system-ui, sans-serif; }
+  article { max-width: 640px; margin: 64px auto; padding: 0 24px; }
+</style>
+</head>
+<body>
+<article>
+<h1>A short note on snow</h1>
+<p>Fresh snow is mostly air, which is why the morning after a storm feels so quiet. All of that empty space between the lacy crystals swallows sound the way a heavy curtain does, and boots sink in to the shin with hardly a noise, leaving deep, soft prints behind.</p>
+<p>Within hours the crystals start to round off and touch, and the bonds between them slowly thicken. Over days the loose layer settles into something denser and stronger, and by the end of a long winter it has quietly become a different kind of snow altogether.</p>
+</article>
+</body>
+</html>

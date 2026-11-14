@@ -98,6 +98,7 @@ struct SpaceSheet: View {
     private var nameField: some View {
         TextField(Space.defaultName, text: $name)
             .textFieldStyle(.plain)
+            .onChange(of: name) { if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) } }
             .font(Theme.tabFont)
             .foregroundStyle(Theme.ink)
             .focused($nameFocused)

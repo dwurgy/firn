@@ -165,7 +165,7 @@ struct ArcImportPlanTests {
         file.space("s1", String(repeating: "x", count: 300), pinned: "pin")
 
         let plan = try ArcImportPlan(file.data)
-        #expect(plan.spaces[0].name.count == TabGroup.nameLimit)
+        #expect(plan.spaces[0].name.count == Space.nameLimit)
         #expect(plan.spaces[0].groups.map(\.name) == [TabGroup.defaultName])
         #expect(plan.spaces[0].groups[0].sites[0].title == "Line one")
     }

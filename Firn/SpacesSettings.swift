@@ -54,7 +54,10 @@ struct SpacesSettings: View {
                         FirnTextField(placeholder: Space.defaultName, text: $name, focused: $nameFocused)
                             .frame(maxWidth: 260)
                             .accessibilityLabel("Name")
-                            .onChange(of: name) { store.updateSpace(selected, name: name, color: selected.color) }
+                            .onChange(of: name) {
+                                if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) }
+                                store.updateSpace(selected, name: name, color: selected.color)
+                            }
                             // A blank name isn't kept: the field shows the saved one again.
                             .onSubmit { name = selected.name }
                             .onChange(of: nameFocused) { if !nameFocused { name = selected.name } }

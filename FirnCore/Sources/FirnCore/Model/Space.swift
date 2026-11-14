@@ -5,6 +5,10 @@ import Foundation
 /// `BrowserStore.spaces`; `order` mirrors it for saving.
 public struct Space: Identifiable, Codable, Hashable, Sendable {
     public static let defaultName = "New Space"
+    /// The longest a space's name can be: it has to sit on one line under
+    /// the Mac's sidebar and in the iPhone's overview pill (David,
+    /// 2026-11-13). Text fields stop at it as you type.
+    public static let nameLimit = 24
 
     public let id: UUID
     public var name: String
@@ -75,9 +79,9 @@ public struct Space: Identifiable, Codable, Hashable, Sendable {
     }
 
     /// A name fit to show, by the same rules as a group's: one line,
-    /// trimmed, not too long; nil if nothing's left.
+    /// trimmed, and no longer than `nameLimit`; nil if nothing's left.
     static func cleanName(_ name: String) -> String? {
-        TabGroup.cleanName(name)
+        TabGroup.cleanName(name).map { String($0.prefix(nameLimit)).trimmingCharacters(in: .whitespaces) }
     }
 }
 

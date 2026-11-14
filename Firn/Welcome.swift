@@ -499,7 +499,7 @@ private struct SpaceStep: View {
                         .font(Theme.tabFont)
                         .focused($nameFocused)
                         .accessibilityLabel("Space name")
-                        .onChange(of: name) { if name.count > 40 { name = String(name.prefix(40)) } }
+                        .onChange(of: name) { if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) } }
                         .onSubmit { store.updateSpace(space, name: name, color: space.color) }
                 }
                 .padding(.horizontal, 10)

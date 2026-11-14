@@ -49,7 +49,7 @@ extension BrowserStore {
             // gets the first color, as a first space would.
             let spaceColor = color(spaces.filter { $0.id != replacing?.id })
             let space = Space(
-                name: imported.name, color: spaceColor,
+                name: Space.cleanName(imported.name) ?? Space.defaultName, color: spaceColor,
                 order: spaces.count, dataStoreID: dataStoreID, lastChangedAt: now()
             )
             spaces.append(space)

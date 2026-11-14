@@ -38,6 +38,11 @@ struct OverviewBar: View {
     /// True while a finger is on the pill. A swipe iOS cancels never
     /// reports its end, so the pills settle back when this goes false.
     @GestureState private var touching = false
+    /// Each space's label at its own width (name, dots, and padding), so
+    /// the pill hugs the name and can glide to the next one's width.
+    @State private var labelWidths: [UUID: CGFloat] = [:]
+    /// The room between + and the check: the widest a pill can be.
+    @State private var room: CGFloat = 0
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -50,10 +55,31 @@ struct OverviewBar: View {
 
     private var slide: BarSlide? { progress == 0 ? nil : BarSlide(progress: progress) }
 
+    /// A space's pill at rest: as wide as its name (David, 2026-11-13), never
+    /// narrower than two buttons, so it stays a pill to swipe, nor wider
+    /// than the room (a long name ends in "…").
+    private func restWidth(_ space: Space) -> CGFloat {
+        let fit = max(labelWidths[space.id] ?? room, Self.height * 2)
+        return room > 0 ? min(fit, room) : fit
+    }
+
+    /// The pill's width now: mid-slide it goes from this space's width to
+    /// the coming one's as the seam crosses, so the two pills share a
+    /// frame that's changing size under them.
+    private var pillWidth: CGFloat {
+        let held = restWidth(space)
+        guard progress != 0, let next = neighbor(progress) else { return held }
+        let t = min(abs(progress), 1)
+        return held + (restWidth(next) - held) * t
+    }
+
     var body: some View {
         ZStack {
             pill
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { room = $0 }
                 .padding(.horizontal, Self.height + 16)
+                .background { measuring }
             HStack {
                 Button(action: newTab) {
                     Image(systemName: "plus")
@@ -94,8 +120,21 @@ struct OverviewBar: View {
         }
     }
 
+    /// Every space's label, unseen, at the width it wants.
+    private var measuring: some View {
+        ZStack {
+            ForEach(spaces) { each in
+                label(each)
+                    .fixedSize()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labelWidths[each.id] = $0 }
+            }
+        }
+        .hidden()
+        .accessibilityHidden(true)
+    }
+
     /// The name, and the dots under it once there's more than one space.
-    private var label: some View {
+    private func label(_ space: Space) -> some View {
         VStack(spacing: 4) {
             Text(space.name)
                 .font(.headline)
@@ -103,6 +142,10 @@ struct OverviewBar: View {
                 // words carry no color of their own (David, 2026-11-04).
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
+                // A long name tightens a little before it ends in "…", as
+                // the address bar's site name does.
+                .allowsTightening(true)
+                .minimumScaleFactor(0.85)
             if spaces.count > 1 {
                 SpaceDots(spaces: spaces, current: space.id)
             }
@@ -111,7 +154,7 @@ struct OverviewBar: View {
     }
 
     private var pill: some View {
-        label
+        label(space)
             // The name and dots change at once, never cross-fading (the old
             // name came back for a frame as a slide landed).
             .transaction { $0.animation = nil }
@@ -120,6 +163,13 @@ struct OverviewBar: View {
             // their pill, as the address bar's do.
             .opacity(slide?.wordsOpacity ?? 1)
             .frame(maxWidth: .infinity)
+            // A space picked from the menu or the command bar glides to its
+            // own width; a swipe already moves it with the seam.
+            .transaction { t in
+                if progress == 0, t.animation == nil, !t.disablesAnimations {
+                    t.animation = reduceMotion ? nil : .smooth(duration: 0.25)
+                }
+            } body: { $0.frame(width: pillWidth) }
             .frame(height: Self.height)
             .mask {
                 if let slide {
@@ -178,14 +228,14 @@ struct OverviewBar: View {
                 guard !reduceMotion, !finishing,
                       abs(drag.translation.width) > abs(drag.translation.height) || progress != 0
                 else { return }
-                let width = max(pillFrame.width, 1)
+                let width = max(restWidth(space), 1)
                 let t = min(max(drag.translation.width / width, -1), 1)
                 progress = neighbor(t) == nil ? 0 : t
             }
             .onEnded { drag in
                 if reduceMotion { return swipeWithoutSliding(drag) }
                 guard !finishing, progress != 0 else { return }
-                let width = max(pillFrame.width, 1)
+                let width = max(restWidth(space), 1)
                 let flung = drag.predictedEndTranslation.width / width
                 let direction: CGFloat = progress > 0 ? 1 : -1
                 guard let next = neighbor(direction),

@@ -278,6 +278,7 @@ struct SettingsSheet: View {
                 .accessibilityHidden(true)
             TextField(Space.defaultName, text: $name)
                 .font(.body)
+                .onChange(of: name) { if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) } }
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(.trailing)
                 .focused($nameFocused)

@@ -17,38 +17,27 @@ struct TabOverview: View {
     let pictures: PagePictures
     /// Where each card's picture (or slim row) is on screen, for the glide.
     let spots: OverviewSpots
+    /// What a swipe up or a tab opening moves (`Landing`): read only by
+    /// the small views that use each value, so its changes don't run this
+    /// body and its whole list again (2i step 3). Only `gliding` and
+    /// `heldCard` are read here: they change which card shows what.
+    let landing: Landing
     /// The tab whose card the page is gliding into or out of: hidden, so
     /// the page is the only one of it on screen.
-    var gliding: UUID?
-    /// How far a gliding Basecamp tile shows (`BasecampTiles.reveal`).
-    var tileReveal: Double = 1
-    /// The set-down's scale, for a gliding tile (`BasecampTiles.settle`).
-    var settle: CGFloat = 1
-    /// The tab on screen's title line, faded in once the page has landed.
-    var lineShown = true
+    private var gliding: UUID? { landing.gliding }
     /// Which tab has the tall card while a picked tab grows to the full
     /// screen: still the one that was on screen, so nothing behind the
     /// glide changes size.
-    var heldCard: UUID?
-    /// How far the overview has arrived (0 to 1, following the page as
-    /// it's pulled): its bar fades in and the dim over the cards lifts.
-    var arrival: CGFloat = 1
-    /// How much of the list shows (0 to 1): none while a page is held,
-    /// coming in from the moment it's let go, gliding with it.
-    var listIn: CGFloat = 1
-    /// How far the list and bar have come forward (`ComesForward`).
-    var forward: CGFloat = 1
-    /// How far the list and bar have come into focus (`ComesForward`).
-    var focus: CGFloat = 1
+    private var heldCard: UUID? { landing.heldCard }
     /// The screen's middle (global points), which the list and bar grow
     /// around as they come forward (`ComesForward`).
     var screenMiddle: CGPoint?
-    /// Shows a tab (the page grows out of its card or row).
-    let open: (FirnCore.Tab) -> Void
-    /// Back to the page, showing the tab on screen.
-    let done: () -> Void
-    /// A new tab: back to the page, with the address field ready to type.
-    let newTab: () -> Void
+    /// Show a tab (the page grows out of its card or row), back to the
+    /// page, and a new tab (back to the page, ready to type).
+    let actions: OverviewActions
+    private var open: (FirnCore.Tab) -> Void { actions.open }
+    private var done: () -> Void { actions.done }
+    private var newTab: () -> Void { actions.newTab }
     /// Typing from +: the address field takes the bar's place, so the bar
     /// steps out of its way (it would show through the field's glass).
     var typing = false
@@ -209,9 +198,9 @@ struct TabOverview: View {
                 LazyVStack(spacing: 12) {
                     // Basecamp first, scrolling away with the list (hidden
                     // while empty); 12pt below it, as between any items.
-                    BasecampTiles(store: store, spots: spots, gliding: gliding,
+                    BasecampTiles(store: store, spots: spots, landing: landing,
                                   onScreen: heldCard ?? store.activeTab?.id,
-                                  reveal: tileReveal, settle: settle, order: tileOrder,
+                                  order: tileOrder,
                                   held: drag?.tile == true ? drag?.id : nil,
                                   pressed: finger.pressed,
                                   incoming: drag?.basecamp == true ? drag?.id : nil,
@@ -272,13 +261,13 @@ struct TabOverview: View {
                 // only after the page had landed (David's recording,
                 // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
                 // and rebuilt mid-glide.
-                .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
+                .modifier(LandingBand(landing: landing, value: \.listIn, range: 0...1, floor: 0.002))
                 // Smaller only once a page is let go (the list is unseen
                 // before): shrunk while hidden, the scroll view's turn to
                 // the tab on screen (`getReady`) also slid it sideways, about
                 // 12pt (Simulator, 2026-11-13).
-                .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
-                                       blurs: listIn > 0, scales: listIn > 0))
+                .modifier(LandingForward(landing: landing, middle: screenMiddle, off: reduceMotion,
+                                         scalesWithList: true))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .scrollPosition($scrollPosition)
@@ -321,12 +310,7 @@ struct TabOverview: View {
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
-            .overlay {
-                Theme.lookoutDim
-                    .ignoresSafeArea()
-                    .opacity(1 - arrival)
-                    .allowsHitTesting(false)
-            }
+            .overlay { LandingDim(landing: landing) }
             .overlay {
                 if store.openTabs.isEmpty {
                     Text("No open tabs")
@@ -340,10 +324,9 @@ struct TabOverview: View {
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
-                    .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
-                                          floor: !typing && gliding != nil ? 0.002 : 0))
-                    .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
-                                           blurs: listIn > 0))
+                    .modifier(LandingBand(landing: landing, value: \.arrival, range: 0.55...1,
+                                          glidingFloor: 0.002, off: typing))
+                    .modifier(LandingForward(landing: landing, middle: screenMiddle, off: reduceMotion))
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
             // to the tab on screen, so the page's card is in place the
@@ -362,15 +345,14 @@ struct TabOverview: View {
         // sharp list, growing and brightening with it (`FrozenOverview`);
         // without an up-to-date picture, no blur at all.
         .overlay {
-            if let frozen, !reduceMotion, gliding != nil, frozen.look == look() {
-                FrozenOverviewView(image: frozen.image)
-                    .opacity(1 - Double(min(max(focus, 0), 1)))
-                    .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true))
-                    .modifier(ComesForward(through: forward, focus: focus, middle: screenMiddle, off: reduceMotion,
-                                           blurs: listIn > 0))
+            if let frozen, !reduceMotion, frozen.look == look() {
+                LandingFrozen(landing: landing, image: frozen.image, middle: screenMiddle)
             }
         }
-        .onChange(of: atRest) { _, now in if now { freezeSoon() } }
+        .background {
+            LandingRest(landing: landing, still: shown && drag == nil && heldMenu == nil && !typing && !scrolling,
+                        rested: freezeSoon)
+        }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
         .onChange(of: shown) { _, now in if !now { freezing?.cancel() } }
         // Over everything, bar included: an open menu's dim (a tap on it
@@ -422,7 +404,7 @@ struct TabOverview: View {
 
     /// Settled on screen: nothing moving, held, or open over it.
     private var atRest: Bool {
-        shown && gliding == nil && arrival >= 1 && focus >= 1 && heldCard == nil && drag == nil
+        shown && gliding == nil && landing.arrival >= 1 && landing.focus >= 1 && heldCard == nil && drag == nil
             && heldMenu == nil && !typing && !scrolling
     }
 
@@ -710,7 +692,7 @@ struct TabOverview: View {
             loadPicture: { await pictures.loadImage(for: tab.id) },
             ring: Theme.spaceColor(space),
             space: space,
-            lineShown: !onScreen || lineShown,
+            lineShown: !onScreen || landing.lineShown,
             open: { openRemembering(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,
@@ -796,8 +778,8 @@ struct TabOverview: View {
                 // shrinks into its card, fully there as it lands. Fading in
                 // only after it landed lagged (David, 2026-11-08: "could be
                 // a little snappier").
-                .modifier(ArrivalFade(arrival: !lifted && !lineShown && tabs.contains(where: isOnScreen)
-                                      ? arrival : 1))
+                .modifier(LandingGroupFade(landing: landing,
+                                           holdsOnScreen: !lifted && tabs.contains(where: isOnScreen)))
                 // A new space's color cross-fades in, as the Mac's tint.
                 .animation(.easeInOut(duration: 0.4), value: space)
         }

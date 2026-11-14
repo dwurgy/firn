@@ -10,18 +10,21 @@ import SwiftUI
 struct BasecampTiles: View {
     let store: BrowserStore
     let spots: OverviewSpots
+    /// What a swipe up or a tab opening moves (`Landing`), read here so
+    /// its changes run only the tiles.
+    let landing: Landing
     /// The tile the page is gliding into or out of: hidden, so the page is
     /// the only one of it on screen.
-    var gliding: UUID?
+    private var gliding: UUID? { landing.gliding }
     /// The tab on screen (or still held as it while a picked tab grows).
     let onScreen: UUID?
     /// How far the gliding tile shows: it fades in as the page's picture
     /// lands in it, and out as the picture grows from it.
-    var reveal: Double = 1
+    private var reveal: Double { landing.tileReveal }
     /// The set-down (`BrowserScreen.settle`): the gliding tile takes the
     /// same scale as the page's picture over it, so the two settle
     /// together through the swap. 1 at rest.
-    var settle: CGFloat = 1
+    private var settle: CGFloat { landing.settle }
     /// How far above its spot a tile arrives: 4%, about 2pt (a card's
     /// 1.5% is under a point on a tile), for David to judge.
     static let settleLift: CGFloat = 1.04

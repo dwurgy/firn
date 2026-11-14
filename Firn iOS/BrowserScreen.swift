@@ -13,20 +13,36 @@ struct BrowserScreen: View {
     @FocusState private var editing: Bool
     /// Whether the overview is there behind (or instead of) the page.
     @State private var showingTabs = false
+    /// What a swipe up or a tab opening moves, handed to the overview as
+    /// one object (`Landing`, 2i step 3). The values keep their own names
+    /// here (`arrival`, `gliding`, …), each passing through to it.
+    @State private var landing = Landing()
     /// How far the overview has arrived, 0 to 1 (animated, or following a
     /// pull): its bar shows, the dim over its cards lifts, and the page's
     /// bar goes.
-    @State private var arrival: CGFloat = 0
+    private var arrival: CGFloat {
+        get { landing.arrival }
+        nonmutating set { if landing.arrival != newValue { landing.arrival = newValue } }
+    }
     /// How much of the overview's list shows: 0 while a page is held, in
     /// from the let-go (`listComes`), out as a tab opens.
-    @State private var listIn: CGFloat = 0
+    private var listIn: CGFloat {
+        get { landing.listIn }
+        nonmutating set { if landing.listIn != newValue { landing.listIn = newValue } }
+    }
     /// How far the overview has come forward (0, a little smaller, to 1,
     /// full size; `ComesForward`): on the landing glide's own clock, so
     /// it's still growing as the page settles into its card.
-    @State private var forward: CGFloat = 0
+    private var forward: CGFloat {
+        get { landing.forward }
+        nonmutating set { if landing.forward != newValue { landing.forward = newValue } }
+    }
     /// How far the overview has come into focus (0, blurred and dimmed, to
     /// 1; `ComesForward`): on the glide's clock, done as the page lands.
-    @State private var focus: CGFloat = 0
+    private var focus: CGFloat {
+        get { landing.focus }
+        nonmutating set { if landing.focus != newValue { landing.focus = newValue } }
+    }
     /// The glide (step 3b). The page's picture makes the move, standing in
     /// for the page: moving the page itself makes UIKit work out its safe
     /// area again every frame, so WebKit lays the whole page out again and
@@ -71,7 +87,10 @@ struct BrowserScreen: View {
     /// A Basecamp tile and the page's picture cross-fade where they meet:
     /// 1 shows the tile, 0 the picture. A tile has no title pill, so the
     /// picture can't land as a card does.
-    @State private var tileReveal: Double = 1
+    private var tileReveal: Double {
+        get { landing.tileReveal }
+        nonmutating set { if landing.tileReveal != newValue { landing.tileReveal = newValue } }
+    }
     /// The tab the picture is of, for the card's line riding on it.
     @State private var standInTab: FirnCore.Tab?
     /// The page is gliding into its own card as the overview opens: the
@@ -98,7 +117,10 @@ struct BrowserScreen: View {
     /// lifted (`settleLift`, with a soft shadow under it), then settles the
     /// last hair down into place as its shadow sinks in. It never turns
     /// back, so it never bounces. 1 at rest.
-    @State private var settle: CGFloat = 1
+    private var settle: CGFloat {
+        get { landing.settle }
+        nonmutating set { if landing.settle != newValue { landing.settle = newValue } }
+    }
     @State private var lineOnPicture: Double = 0
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
@@ -144,11 +166,20 @@ struct BrowserScreen: View {
     /// While the overview is up (and while the picture moves).
     @State private var pageHidden = false
     /// The tab whose card is hidden while the picture stands in for it.
-    @State private var gliding: UUID?
+    private var gliding: UUID? {
+        get { landing.gliding }
+        nonmutating set { if landing.gliding != newValue { landing.gliding = newValue } }
+    }
     /// The tab on screen's title line, faded in after the landing.
-    @State private var lineShown = true
+    private var lineShown: Bool {
+        get { landing.lineShown }
+        nonmutating set { if landing.lineShown != newValue { landing.lineShown = newValue } }
+    }
     /// The card that keeps its size while another tab grows out of its row.
-    @State private var heldCard: UUID?
+    private var heldCard: UUID? {
+        get { landing.heldCard }
+        nonmutating set { if landing.heldCard != newValue { landing.heldCard = newValue } }
+    }
     @State private var spots = OverviewSpots()
     /// The page's own frame on screen, to aim the glide from.
     @State private var pageFrame: CGRect = .zero
@@ -194,12 +225,13 @@ struct BrowserScreen: View {
             // up only reveals it: building it on each swipe held the screen
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
-            TabOverview(store: store, pictures: pictures, spots: spots, gliding: gliding, tileReveal: tileReveal,
-                        settle: settle, lineShown: lineShown, heldCard: heldCard, arrival: arrival, listIn: listIn, forward: forward, focus: focus,
+            TabOverview(store: store, pictures: pictures, spots: spots, landing: landing,
                         screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
-                        open: openTab,
-                        done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
-                        newTab: startNewTab, typing: editing, shown: showingTabs)
+                        actions: OverviewActions(
+                            open: openTab,
+                            done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
+                            newTab: startNewTab, key: [reduceMotion, voiceOver]),
+                        typing: editing, shown: showingTabs)
                 // Typing from + leaves the overview where it is, under
                 // the dim; its own bar stays behind the keyboard.
                 .ignoresSafeArea(.keyboard)

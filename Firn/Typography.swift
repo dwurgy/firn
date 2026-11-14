@@ -3,14 +3,14 @@ import SwiftUI
 
 /// Gooper Deck, the brand's headline face (BRAND.md, "Type"), for the Mac's
 /// welcome: Hello, the steps' titles, and "Welcome in." (David, 2026-11-13).
-/// Settings, History, and the other panel titles keep Fraunces for now
-/// (`Theme.fraunces`).
+/// Settings, History, and the other panel titles are SF
+/// (`Theme.panelTitleFont`).
 ///
 /// Gooper Deck is licensed and must never be committed: the repo is public.
 /// The files live in `PrivateFonts/` (ignored by git) on David's Mac, and the
 /// target's "Copy Private Fonts" build step copies them into the app's
 /// `Fonts/` folder only if they're there. Without them (a fork, a fresh
-/// clone) the welcome uses the bundled Fraunces instead.
+/// clone) the welcome uses the system serif instead, as on the iPhone.
 enum BrandFont {
     /// Gooper Deck at `size`: Regular (400), or SemiBold (600) for emphasis,
     /// never heavier and never a color (BRAND.md).
@@ -18,7 +18,7 @@ enum BrandFont {
         if let descriptor = emphasis ? semiBold : regular {
             return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
         }
-        return Theme.fraunces(size, weight: emphasis ? 600 : 360)
+        return .system(size: size, weight: emphasis ? .semibold : .regular, design: .serif)
     }
 
     /// Read once from the app's own files, for Firn only (not registered

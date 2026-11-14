@@ -92,7 +92,7 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 - Blue is branding, never text. Sand never carries text. Buttons are ink. Shadows are warm brown, never grey.
 - Glacier stays #7F9CB0 / #6E98B2; no darker "contrast-fixed" versions. The one exception is the system accent (switches, radio buttons, selection, focus rings): a slightly more saturated Glacier, #689ABB light and #5F98BB dark, so controls don't look washed out (David, 2026-10-24).
 
-**Brand font: Gooper Deck** (David, 2026-11-13: Fraunces is no more). Brand moments only, the same rule as before. Licensed: it lives in the git-ignored `PrivateFonts/`, is copied in by a build step when present, and is never committed (the repo is public). Emphasis is weight (Regular, then SemiBold), never color. Everything else, reader mode included, is Apple's system fonts. *Left over:* the Mac's Settings and History titles (`FrauncesWindowTitle`, `Theme.panelTitleFont`) and the welcome's fallback in a clone without Gooper still use the bundled Fraunces; moving them off is its own step.
+**Brand font: Gooper Deck** (David, 2026-11-13: Fraunces is no more). Brand moments only, the same rule as before. Licensed: it lives in the git-ignored `PrivateFonts/`, is copied in by a build step when present, and is never committed (the repo is public). Emphasis is weight (Regular, then SemiBold), never color. Everything else, reader mode included, is Apple's system fonts. Panel titles (Settings, History, and sheets) are SF semibold, Mac and iPhone; without Gooper Deck (a fresh clone) the welcome falls back to the system serif. Fraunces is out of the app (2026-11-14).
 
 **Logo and icons:** use only the final files from the brand kit (`brand/`). Never redraw or re-type the logo or wordmark. The app icon is the glacier tile; on macOS 26 it's the `Firn.icon` from Icon Composer.
 
@@ -296,4 +296,4 @@ Each is its own step, planned with David, on Opus.
 
 ## License
 
-Firn's code is open source under the Mozilla Public License 2.0. **The Firn name, logo, and app icons are not covered by the license** (`brand/` and the app icon). Fraunces has its own license, the SIL Open Font License.
+Firn's code is open source under the Mozilla Public License 2.0. **The Firn name, logo, and app icons are not covered by the license** (`brand/` and the app icon).

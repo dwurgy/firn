@@ -6,8 +6,7 @@ import UIKit
 /// Firn's type on iPhone and iPad (David, 2026-11-11): Gooper Deck for the
 /// brand moments only (the welcome and the empty page), SF for tools
 /// (Settings, History, other panel titles, and the scam warning). Fraunces
-/// and New York are retired on iOS. The Mac still uses Fraunces through
-/// `Theme.fraunces` (Shared/Theme.swift), which this app never calls.
+/// and New York are retired, on the Mac too.
 ///
 /// Gooper Deck is licensed and must never be committed: the repo is public.
 /// The files live in `PrivateFonts/` (ignored by git) on David's Mac, and the

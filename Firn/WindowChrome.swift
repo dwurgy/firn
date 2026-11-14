@@ -510,12 +510,12 @@ struct PointerTracker: NSViewRepresentable {
     }
 }
 
-/// A window's title in Fraunces, as the Electron app's Settings and History
-/// had it. macOS draws window titles in the system font and can't be told
-/// otherwise, so the system title is hidden from the toolbar and Firn draws
-/// its own in the same spot. The window keeps its real title (from
+/// A window's title in Firn's panel title (`Theme.panelTitleFont`), larger
+/// than macOS's own. macOS draws window titles at its own size and can't be
+/// told otherwise, so the system title is hidden from the toolbar and Firn
+/// draws its own in the same spot. The window keeps its real title (from
 /// `.navigationTitle`) for the Window menu, Mission Control, and VoiceOver.
-struct FrauncesWindowTitle: ViewModifier {
+struct PanelWindowTitle: ViewModifier {
     let title: String
     var subtitle: String?
 

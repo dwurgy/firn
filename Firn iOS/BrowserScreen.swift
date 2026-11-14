@@ -1400,8 +1400,13 @@ private struct CardGlide: ViewModifier, Animatable {
     /// a page slice swapped for an icon in one frame read as a cut).
     var face: ((CGFloat) -> AnyView)? = nil
     /// The part of the way (`travel`) over which the tile forms: from about
-    /// 2.5 times the tile's width to just above it.
-    static let faceForms: ClosedRange<CGFloat> = 0.55...0.9
+    /// 3 times the tile's width to about 1.6 times, then it travels the
+    /// rest as the tile. iOS's app close, frame by frame (David's
+    /// recording, 2026-11-13): the icon shows from about 3 times its size,
+    /// has taken over by about 1.5 times, and flies the last stretch as
+    /// the icon. Formed from 2.5 times to just above (0.55 to 0.9), it was
+    /// seen as a tile for only a frame or two before landing.
+    static let faceForms: ClosedRange<CGFloat> = 0.4...0.82
 
     // Worked out on every frame, so the shown part, the ring, and the line
     // all agree on the box mid-glide.

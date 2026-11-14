@@ -112,6 +112,11 @@ private struct CommandResultRow: View {
             }
         case .history:
             Image(systemName: "clock")
+        case let .action(action) where action.id == "reader":
+            // Reader's own book, as in the page menu.
+            ReaderBookShape()
+                .stroke(style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+                .frame(width: 19, height: 19)
         case let .action(action):
             Image(systemName: Self.symbol(for: action.id))
         }
@@ -129,6 +134,8 @@ private struct CommandResultRow: View {
         case "new-group": "folder.badge.plus"
         case "add-basecamp": "mountain.2"
         case "close": "xmark"
+        case "blocking": "hand.raised"
+        case "summarize": "text.line.3.summary"
         case "reopen": "arrow.uturn.backward"
         default: "circle"
         }

@@ -73,9 +73,14 @@ struct AddressBar: View {
     /// The page menu's Reader row, on pages that read as articles.
     private var readingRow: PageMenuPanel.Reading? {
         guard let page, page.isArticle || page.isReading else { return nil }
-        return PageMenuPanel.Reading(isOn: page.isReading) {
+        let space = space
+        // Summarize sits just under it, as Safari's, only with Apple
+        // Intelligence on; otherwise simply absent.
+        let summarize: (() -> Void)? = ArticleSummarizer.isOffered
+            ? { ReaderStyle.shared.summarize(page, space: space) } : nil
+        return PageMenuPanel.Reading(isOn: page.isReading, toggle: {
             ReaderStyle.shared.toggle(page, space: space)
-        }
+        }, summarize: summarize)
     }
 
     /// The small pill shows only at rest: typing and the page menu always
@@ -211,6 +216,11 @@ struct AddressBar: View {
             add("reader", page.isReading ? "Hide Reader" : "Show Reader",
                 ["reader", "reading", "article", "text only", "book"], when: page.isArticle || page.isReading) {
                 ReaderStyle.shared.toggle(page, space: space)
+            }
+            // Opens Reader first if it's off, then the summary at the top.
+            add("summarize", "Summarize", ["summary", "article", "reader", "tl;dr", "apple intelligence"],
+                when: (page.isArticle || page.isReading) && ArticleSummarizer.isOffered) {
+                ReaderStyle.shared.summarize(page, space: space)
             }
             add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)
@@ -395,7 +405,7 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (readingRow == nil ? 0 : 1))
+        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
@@ -907,6 +917,8 @@ private struct PageMenuPanel: View {
     struct Reading {
         let isOn: Bool
         let toggle: () -> Void
+        /// Summarize, just under it; nil without Apple Intelligence.
+        let summarize: (() -> Void)?
     }
     let reading: Reading?
     let close: () -> Void
@@ -929,6 +941,12 @@ private struct PageMenuPanel: View {
                     reading.toggle()
                 }
                 .accessibilityFocused($focusedRow, equals: 0)
+                if let summarize = reading.summarize {
+                    row("Summarize", symbol: "text.line.3.summary") {
+                        close()
+                        summarize()
+                    }
+                }
             }
             row("Share…", symbol: "square.and.arrow.up") {
                 close()

@@ -875,26 +875,45 @@ private struct AddressField: View {
         max(compactWidth - AddressBar.compactPadding * 2, 0) / AddressBar.compactTextScale
     }
 
-    @ViewBuilder private var trailingButton: some View {
-        if isEditing {
+    /// Stop or Reload shows in the trailing spot (not while typing).
+    private var hasPageButton: Bool {
+        guard !isEditing, let page else { return false }
+        return page.isLoading || page.url != nil || page.loadError != nil
+    }
+
+    private var clearShown: Bool { isEditing && !text.isEmpty }
+
+    private var trailingButton: some View {
+        ZStack {
+            // Clear is always part of the field, unseen until typing, so it
+            // rides up with the field as the keyboard comes, fading in on the
+            // way, as every other button does. Made only as typing started,
+            // it was put straight at its spot ahead of the field and came in
+            // from above (David's recordings, 2026-11-13).
             BarButton(symbol: "xmark.circle.fill", label: "Clear", tint: Theme.faint) { text = "" }
-                // New as typing starts, so it's put straight at its spot
-                // while the field still rides the keyboard up, and came in a
-                // few frames ahead of the field, from above (David's
-                // recording, 2026-11-13): it fades in once the field is there.
-                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.1)),
-                                        removal: .opacity))
-                .opacity(text.isEmpty ? 0 : 1)
-                .disabled(text.isEmpty)
-                .accessibilityHidden(text.isEmpty)
-        } else if let page, page.isLoading {
-            // Neither runs as the finger lifts from a hold that opened the menu.
-            BarButton(symbol: "xmark", label: "Stop") { if !menuOpen { page.stopLoading() } }
-        } else if let page, page.url != nil || page.loadError != nil {
-            // After a failed load too (a new tab's first page, say), so it
-            // can be tried again: Reload loads the address that failed.
-            BarButton(symbol: "arrow.clockwise", label: "Reload") { if !menuOpen { page.reload() } }
+                // Only the fade on its own clock: an animation on the button
+                // moved it on that quicker clock too, ahead of the field. A
+                // hair above 0 when hidden: the rise is the keyboard's own
+                // animation, which moves only what's already drawn, and at 0
+                // it wasn't, so it showed straight at its spot (Simulator).
+                .animation(.easeOut(duration: 0.2)) { $0.opacity(clearShown ? 1 : 0.002) }
+                .allowsHitTesting(clearShown)
+                .accessibilityHidden(!clearShown)
+            if !isEditing, let page {
+                if page.isLoading {
+                    // Neither runs as the finger lifts from a hold that opened the menu.
+                    BarButton(symbol: "xmark", label: "Stop") { if !menuOpen { page.stopLoading() } }
+                } else if page.url != nil || page.loadError != nil {
+                    // After a failed load too (a new tab's first page, say), so it
+                    // can be tried again: Reload loads the address that failed.
+                    BarButton(symbol: "arrow.clockwise", label: "Reload") { if !menuOpen { page.reload() } }
+                }
+            }
         }
+        // No room taken when the spot is empty at rest (a blank new tab), as
+        // before.
+        .frame(width: isEditing || hasPageButton ? nil : 0)
+        .clipped()
     }
 
     /// Typing starts from the whole address, all picked out, so it can be

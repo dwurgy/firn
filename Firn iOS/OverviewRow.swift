@@ -588,7 +588,7 @@ struct CardRing: View {
             .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
             .overlay {
                 // Light catching the ring's outer edge along the top, gone by the middle.
-                shape.strokeBorder(
+                shape.gradientBorder(
                     LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
                                    startPoint: .top, endPoint: .center),
                     lineWidth: 1)

@@ -335,13 +335,13 @@ private struct TileButtonStyle: ButtonStyle {
     private var chosen: some View {
         TileGlass(cornerRadius: cornerRadius)
             .overlay {
-                shape.fill(LinearGradient(
+                shape.gradientFill(LinearGradient(
                     colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
             }
             .overlay {
                 // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
-                shape.strokeBorder(
+                shape.gradientBorder(
                     AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
                     lineWidth: BasecampTiles.ringWidth)
                     .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
@@ -349,7 +349,7 @@ private struct TileButtonStyle: ButtonStyle {
             .overlay {
                 // Light catching the ring's outer edge along the top, gone by
                 // the middle: a thin line, so the color underneath stays full.
-                shape.strokeBorder(
+                shape.gradientBorder(
                     LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
                                    startPoint: .top, endPoint: .center),
                     lineWidth: 1)
@@ -374,7 +374,7 @@ private struct TileGlass: View {
         } else {
             shape.fill(Theme.tileFill)
                 .overlay {
-                    shape.strokeBorder(
+                    shape.gradientBorder(
                         LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom], startPoint: .top, endPoint: .bottom),
                         lineWidth: 1)
                 }

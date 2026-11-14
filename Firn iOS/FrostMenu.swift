@@ -265,7 +265,7 @@ struct FrostMenu: View {
         .overlay {
             shape.strokeBorder(Theme.holdMenuEdge, lineWidth: 1)
             // The top's light, as on Basecamp's tiles.
-            shape.strokeBorder(LinearGradient(colors: [Theme.tileRimTop, .clear],
+            shape.gradientBorder(LinearGradient(colors: [Theme.tileRimTop, .clear],
                                               startPoint: .top, endPoint: .init(x: 0.5, y: 0.08)),
                                lineWidth: 1)
         }

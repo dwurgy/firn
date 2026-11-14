@@ -39,7 +39,7 @@ struct FirnFrost<S: InsettableShape, Under: View>: View {
                     .background { under }
                     .overlay { shape.fill(tint) }
                     .overlay {
-                        shape.strokeBorder(
+                        shape.gradientBorder(
                             LinearGradient(colors: [Theme.tileRimTop, Theme.tileRimBottom],
                                            startPoint: .top, endPoint: .bottom),
                             lineWidth: 1)
@@ -60,6 +60,23 @@ extension FirnFrost where Under == EmptyView {
         self.init(shape: shape, fill: fill, tint: tint, solid: solid, shadow: shadow,
                   shadowRadius: shadowRadius, shadowY: shadowY, hairlineOutset: hairlineOutset,
                   under: { EmptyView() })
+    }
+}
+
+extension InsettableShape {
+    /// An outline colored by a gradient, drawn by the GPU. Firn's lit rims
+    /// were `strokeBorder(LinearGradient(...))`, which iOS paints on the
+    /// CPU, the shape's whole box, again whenever its size changes: on
+    /// David's iPhone the main thread's largest single cost, every frame of
+    /// a gesture (Instruments, 2026-11-13, `docs/IOS-PLAN.md`). The same
+    /// gradient as its own layer, masked to the ring, looks the same.
+    func gradientBorder<G: ShapeStyle & View>(_ gradient: G, lineWidth: CGFloat) -> some View {
+        gradient.mask { strokeBorder(.black, lineWidth: lineWidth) }
+    }
+
+    /// A shape filled with a gradient, drawn by the GPU (see `gradientBorder`).
+    func gradientFill<G: ShapeStyle & View>(_ gradient: G) -> some View {
+        gradient.clipShape(self)
     }
 }
 

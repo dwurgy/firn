@@ -285,7 +285,7 @@ struct TabOverview: View {
             // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
             // and rebuilt mid-glide.
             .modifier(ArrivalBand(arrival: listIn, range: 0...1, fadesIn: true, floor: 0.002))
-            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion))
+            .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: listIn > 0))
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay {
@@ -309,7 +309,7 @@ struct TabOverview: View {
                     // a hair above 0 while gliding keeps its glass ready.
                     .modifier(ArrivalBand(arrival: typing ? 0 : arrival, range: 0.55...1, fadesIn: true,
                                           floor: !typing && gliding != nil ? 0.002 : 0))
-                    .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion))
+                    .modifier(ComesForward(through: forward, middle: screenMiddle, off: reduceMotion, blurs: listIn > 0))
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
             // to the tab on screen, so the page's card is in place the
@@ -1972,9 +1972,13 @@ struct ArrivalBand: ViewModifier, Animatable {
 /// 2026-11-13): the list and the bar start a little smaller and grow to full
 /// size around the screen's middle as the page lands (`forward`, on the
 /// landing glide's clock, done as the page lands, or as a tile's swap starts
-/// at 86% of its glide, so the flying tile and the real one match). No blur: a
-/// live blur over the list froze glides on David's iPhone before, and the
-/// haze behind is already one. `visualEffect`, not `scaleEffect`: it's
+/// at 86% of its glide, so the flying tile and the real one match), and come
+/// into focus from a soft blur, as the held page's own haze is blurred
+/// (David, 2026-11-13: "it would help this settling feel better"). The blur
+/// runs only while landing: none while a page is held (the list is all but
+/// hidden then, and a blur held under a moving page costs every frame) and
+/// none at rest. A live blur over the list froze glides on David's iPhone
+/// once before, so his recording decides. `visualEffect`, not `scaleEffect`: it's
 /// drawing only, so nothing in the list moves or re-lays out. The spots the
 /// cards and tiles report (`OverviewSpots`) do come in scaled (measured in
 /// the Simulator: 96% at the let-go), so `BrowserScreen.fullSize` takes the
@@ -1984,6 +1988,10 @@ struct ComesForward: ViewModifier, Animatable {
     var through: CGFloat
     let middle: CGPoint?
     let off: Bool
+    /// The page has been let go (or the overview is up): the blur may run.
+    var blurs = true
+    /// How soft it starts (pt).
+    static let blur: CGFloat = 10
     /// How much smaller it starts (Safari's is about 4%; 4% on the list's
     /// quick fade couldn't be seen, David, 2026-11-13).
     static let depth: CGFloat = 0.06
@@ -1999,6 +2007,11 @@ struct ComesForward: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         let scale = Self.scale(through, off: off)
+        // Kept longer than the scale (the square root of what's left): on
+        // the glide's quick start, a plain share was mostly gone within a
+        // tenth of a second (Simulator recording, 2026-11-13), so the cards
+        // come into focus over the landing's end instead.
+        let radius = off || !blurs ? 0 : Self.blur * sqrt(1 - min(max(through, 0), 1))
         let middle = middle
         content.visualEffect { view, proxy in
             let frame = proxy.frame(in: .global)
@@ -2006,7 +2019,7 @@ struct ComesForward: ViewModifier, Animatable {
                 UnitPoint(x: frame.width > 0 ? ($0.x - frame.minX) / frame.width : 0.5,
                           y: frame.height > 0 ? ($0.y - frame.minY) / frame.height : 0.5)
             } ?? .center
-            return view.scaleEffect(scale, anchor: anchor)
+            return view.scaleEffect(scale, anchor: anchor).blur(radius: radius)
         }
     }
 }

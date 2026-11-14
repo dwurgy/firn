@@ -435,9 +435,17 @@ struct BrowserScreen: View {
     /// may quicken its start only a little.
     /// 0.46s was too slow (David's recording, 2026-11-13): between the two.
     private static let tileCloseDuration = 0.38
-    private static let tileCloseStart = 0.2
-    private static let tileCloseStartLimit = 0.3
-    private static let tileCloseTail = 0.55
+    /// Shaped so the tile shrinks at an even pace to the eye: a size is
+    /// seen in ratios, so going from the page's width to 90pt evenly in
+    /// points packs the most visible change into the end. The slow-start
+    /// curve before (0.3, 0.2, 0.55, 1) barely moved for 9 frames, then
+    /// crossed most of the way in 2 or 3, the tile forming in that rush
+    /// (David's recording at 120fps, 2026-11-13). This one is about 40% of
+    /// the way at a quarter of the time and 75% at half, close to an even
+    /// ratio's 40% and 68%, with a gentle end.
+    private static let tileCloseStart = 0.35
+    private static let tileCloseStartLimit = 0.45
+    private static let tileCloseTail = 0.45
     private static let tileCloseGlide = Animation.timingCurve(0.3, tileCloseStart, tileCloseTail, 1,
                                                               duration: tileCloseDuration)
     private static let fade = Animation.easeOut(duration: 0.2)
@@ -681,7 +689,7 @@ struct BrowserScreen: View {
                 // swap is quick (two or three frames), as the picture
                 // reaches the spot: a long cross-fade of two glass tiles dips
                 // in strength midway.
-                withAnimation(.easeInOut(duration: duration * 0.1).delay(duration * 0.82)) { tileReveal = 1 }
+                withAnimation(.easeInOut(duration: duration * 0.08).delay(duration * 0.86)) { tileReveal = 1 }
             }
             // Cards and tiles are set down (`settle`, David, 2026-11-13). A
             // tile turns to glass before it lands, so the glass tile takes

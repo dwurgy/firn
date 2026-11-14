@@ -77,6 +77,12 @@ struct BrowserScreen: View {
     /// Gliding into a tile: where it started and the tile's size, so the
     /// picture takes the tile's shape early (`CardGlide`).
     @State private var tileCrop: (from: CGRect, to: CGSize)?
+    /// The set-down (David, 2026-11-13, in place of Safari's little
+    /// bounce): landing in its card, the page comes in a hair large and
+    /// lifted (`settleLift`, with a soft shadow under it), then settles the
+    /// last hair down into place as its shadow sinks in. It never turns
+    /// back, so it never bounces. 1 at rest.
+    @State private var settle: CGFloat = 1
     @State private var lineOnPicture: Double = 0
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
@@ -253,6 +259,16 @@ struct BrowserScreen: View {
                             .offset(x: CGFloat(neighbor.place) * (1 - neighborsIn) * (Self.peek + 40))
                             .opacity(neighborsOpacity * neighborsIn)
                         }
+                        // The set-down's shadow: there only while the page is
+                        // lifted above its card, sinking in as it settles.
+                        if let standInTab, standInTab.place != .basecamp {
+                            RoundedRectangle(cornerRadius: boxRadius, style: .continuous)
+                                .fill(Theme.page)
+                                .frame(width: box.width, height: box.height)
+                                .shadow(color: Theme.shadowPageFar, radius: 12, y: 6)
+                                .offset(x: box.minX, y: box.minY)
+                                .opacity(Double((settle - 1) / (Self.settleLift - 1)))
+                        }
                         Group {
                             if let standIn { Image(uiImage: standIn).resizable() }
                         }
@@ -285,6 +301,9 @@ struct BrowserScreen: View {
                                 .opacity(max(lineOnPicture, 0.002))
                         }
                     }
+                    // Around the card's middle, so it settles in place.
+                    .scaleEffect(settle, anchor: UnitPoint(x: box.midX / max(layer.size.width, 1),
+                                                           y: box.midY / max(layer.size.height, 1)))
                     .offset(x: -corner.x, y: -corner.y)
                 }
                 .opacity(standInFade)
@@ -378,8 +397,16 @@ struct BrowserScreen: View {
     /// few milliseconds. Curves, not springs: a spring's last frames creep
     /// and it reports done before it has landed, so the swap with the page
     /// jumped the last few points.
-    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: 0.4)
-    private static let closeDuration = 0.28
+    /// About 15% slower than Safari's (0.4s and 0.28s): Safari's page
+    /// shrinks evenly, while Firn's wide card mostly loses height, so its
+    /// bottom edge travels about twice as far and the same clock felt
+    /// faster (David, 2026-11-13).
+    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: 0.46)
+    private static let closeDuration = 0.32
+    /// How far above its card the page arrives (1.5% larger, about 5pt on
+    /// a card), and how long it takes to settle in.
+    private static let settleLift: CGFloat = 1.015
+    private static let settleTime = 0.18
     private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
     private static let closeStart = 0.25
     /// The most a let-go's speed may quicken a close's start: a flick
@@ -585,6 +612,7 @@ struct BrowserScreen: View {
         standInTab = tab
         standIn = image
         standInFade = 1
+        settle = 1
         pageHidden = true
     }
 
@@ -616,26 +644,26 @@ struct BrowserScreen: View {
                 // Into a tile: the picture and the tile swap over the same
                 // last stretch as before (`BasecampTiles.glideSwap`), but on
                 // a short clock of their own, from 90% of the way to 99%
-                // (about 180 to 245ms), so the glass tile is there as the
+                // (0.64 to 0.88 of the glide's time), so the glass tile is there as the
                 // picture closes the last points. On the glide's own curve, the swap waited for its
                 // slow tail and a tiny page sat in the tile's spot for about
                 // 200ms (David's recording, 2026-11-13).
                 withAnimation(.easeInOut(duration: duration * 0.24).delay(duration * 0.64)) { tileReveal = 1 }
             }
+            // A card is set down (`settle`); a tile turns to glass before
+            // it lands, so it has nothing to set down.
+            let setsDown = !tile && !reduceMotion
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
                 arrival = 1
                 neighborsOpacity = 0
+                if setsDown { settle = Self.settleLift }
             } completion: {
-                // The card shows the same picture and line: they swap.
-                neighbors = []
-                lineShown = true
-                gliding = nil
-                ringOnGlide = false
-                standIn = nil
-                standInTab = nil
-                tileCrop = nil
+                guard setsDown else { return swapIntoCard() }
+                withAnimation(.easeOut(duration: Self.settleTime)) { settle = 1 } completion: {
+                    swapIntoCard()
+                }
             }
             // The line's fade starts on the glide's first frame (where the
             // page has just become its picture, so a hiccup can't show) and
@@ -646,6 +674,18 @@ struct BrowserScreen: View {
                 withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
             }
         }
+    }
+
+    /// The card shows the same picture and line: they swap.
+    private func swapIntoCard() {
+        neighbors = []
+        lineShown = true
+        gliding = nil
+        ringOnGlide = false
+        standIn = nil
+        standInTab = nil
+        tileCrop = nil
+        settle = 1
     }
 
     /// No picture or no card to aim at: the overview fades in.

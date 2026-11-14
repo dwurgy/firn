@@ -80,6 +80,20 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
         webView.isInspectable = true
         #if os(macOS)
         webView.allowsMagnification = true
+        #else
+        // Reader fades in as it opens, before its page has drawn; until
+        // then a web view is plain white, a flash in dark mode (David's
+        // recording, 2026-11-13). Its own paper from the start instead
+        // (`ReaderDocument`'s --page, light and dark).
+        let paper = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0x2B / 255, green: 0x28 / 255, blue: 0x26 / 255, alpha: 1)
+                : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
+        }
+        webView.isOpaque = false
+        webView.backgroundColor = paper
+        webView.scrollView.backgroundColor = paper
+        webView.underPageBackgroundColor = paper
         #endif
         let html = ReaderDocument.html(
             for: article, look: look, accent: accent, icon: page.icon, summarize: summarizer != nil)

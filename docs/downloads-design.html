@@ -1,0 +1,351 @@
+<!doctype html>
+<!-- Firn for iPhone: downloads to Files, the look, as a mockup
+     (docs/IOS-PLAN.md, phase 6, "Downloads to Files", step 1). Draft (2026-11-14), not yet approved by David.
+     Self-contained: no scripts or fonts from the network. Symbols are stand-ins
+     drawn here; the app uses SF Symbols (named in the notes). iOS's alert is drawn
+     as a stand-in too: the app shows iOS's own. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firn for iPhone: downloads</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 40px 24px 80px; background: #F3EFE9; color: #241F1B;
+  font: 15px/1.5 -apple-system, system-ui, sans-serif;
+}
+main { max-width: 900px; margin: 0 auto; }
+h1 { font: 600 28px/1.2 -apple-system, system-ui, sans-serif; margin: 0 0 8px; }
+h2 { font: 600 19px/1.3 -apple-system, system-ui, sans-serif; margin: 56px 0 4px; }
+p, li { color: #5E564E; max-width: 66ch; }
+p { margin: 0 0 12px; }
+ul { margin: 0 0 12px; padding-left: 20px; }
+b { color: #241F1B; font-weight: 600; }
+.controls {
+  position: sticky; top: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center;
+  margin: 24px 0 0; padding: 12px 16px; border-radius: 14px;
+  background: rgba(251,250,248,.86); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(60,40,20,.08), 0 8px 24px rgba(60,40,20,.08);
+}
+.controls fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 6px; align-items: center; }
+.controls legend { float: left; margin-right: 8px; color: #5E564E; font-size: 13px; }
+.controls label { padding: 5px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; background: rgba(70,55,40,.07); }
+.controls input { position: absolute; opacity: 0; }
+.controls label:has(input:checked) { background: #241F1B; color: #FBFAF8; font-weight: 600; }
+.controls label:has(input:focus-visible) { outline: 3px solid rgba(130,168,190,.7); }
+.controls button { margin-left: auto; font: inherit; font-size: 13px; padding: 5px 14px; border-radius: 8px; border: 0; background: rgba(70,55,40,.07); color: inherit; cursor: pointer; }
+.pair { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 16px; }
+.caption { font-size: 13px; color: #5E564E; text-align: center; margin: 12px 0 0; width: 393px; max-width: 100%; }
+
+/* ---- The phone ---- */
+.phone {
+  --frame: #E9E3DA; --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --wash: rgba(70,55,40,.07); --press: rgba(70,55,40,.13); --hair: rgba(70,55,40,.12);
+  --glass: rgba(251,250,248,.72); --rim: rgba(255,255,255,.85);
+  --frost: rgba(251,250,248,.44); --frost-edge: rgba(255,255,255,.6);
+  --shadow: rgba(60,40,20,.22); --dim: rgba(36,31,27,.18);
+  --sheet: #F3EFE9; --card: #FBFAF8; --space: #7F9CB0; --danger: #B0503A;
+  --site-sky: linear-gradient(180deg, #C9DCE8, #EEF2F5);
+  flex: none; width: 393px; height: 852px; border-radius: 56px; overflow: hidden; position: relative;
+  background: var(--page); color: var(--ink);
+  font: 17px/1.25 -apple-system, system-ui, sans-serif;
+  box-shadow: 0 0 0 10px #1d1b19, 0 0 0 11px #3a3633, 0 30px 70px rgba(60,40,20,.22);
+  user-select: none; -webkit-user-select: none;
+}
+.phone[data-theme="dark"] {
+  --frame: #3A3734; --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13); --hair: rgba(255,248,240,.10);
+  --glass: rgba(58,55,52,.72); --rim: rgba(255,255,255,.16);
+  --frost: rgba(103,99,95,.42); --frost-edge: rgba(200,220,230,.16);
+  --shadow: rgba(0,0,0,.5); --dim: rgba(0,0,0,.40);
+  --sheet: #24211F; --card: #2B2826; --danger: #E3907A;
+  --site-sky: linear-gradient(180deg, #44515A, #33383B);
+}
+.island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 124px; height: 36px; border-radius: 18px; background: #000; z-index: 9; }
+.status { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 8; display: flex; align-items: center; padding: 6px 0 0 46px; font: 600 16px -apple-system, system-ui; }
+.home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 140px; height: 5px; border-radius: 3px; background: var(--ink); opacity: .85; z-index: 9; }
+
+/* A made-up site: a trail guide with a map to save. */
+.site { position: absolute; inset: 0; padding: 70px 22px 0; }
+.site .hero { height: 200px; border-radius: 12px; background: var(--site-sky); position: relative; overflow: hidden; margin-bottom: 18px; }
+.site .hero::after { content: ""; position: absolute; left: -10%; right: -10%; bottom: -40px; height: 120px; border-radius: 50%; background: #8FAE8B; opacity: .55; }
+.site h3 { margin: 0 0 10px; font: 700 24px/1.2 -apple-system, system-ui; }
+.site .ln { height: 11px; border-radius: 6px; background: var(--wash); margin-bottom: 11px; }
+.site .dl { display: inline-flex; margin: 10px 0 18px; padding: 10px 16px; border-radius: 10px; background: #4E6B57; color: #fff; font: 600 15px -apple-system, system-ui; }
+
+/* The bar: Back, the field, Tabs (the iPhone's look, as built). */
+.bar { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; z-index: 6; display: flex; align-items: flex-start; gap: 8px; padding: 14px 16px 0;
+  background: linear-gradient(transparent, color-mix(in srgb, var(--page) 70%, transparent) 40%); }
+.circle, .field {
+  height: 48px; border-radius: 24px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 .5px var(--hair), 0 4px 14px rgba(60,40,20,.10); display: flex; align-items: center; justify-content: center; color: var(--ink);
+}
+.circle { width: 48px; flex: none; }
+.field { flex: 1; padding: 0 12px; gap: 8px; font: 500 16px -apple-system, system-ui; }
+.field .name { flex: 1; text-align: center; }
+.field svg { color: var(--ink); }
+
+/* ---- 1. The question ---- */
+.dim { position: absolute; inset: 0; background: var(--dim); z-index: 7; }
+/* iOS's own alert (stand-in for iOS 26's look). */
+.alert {
+  position: absolute; z-index: 8; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 300px;
+  padding: 22px 16px 16px; border-radius: 34px; text-align: center;
+  background: var(--glass); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--rim), 0 0 0 .5px var(--hair), 0 20px 50px var(--shadow);
+}
+.alert .t { font-weight: 600; font-size: 17px; margin: 0 6px 6px; overflow-wrap: anywhere; }
+.alert .m { font-size: 14px; line-height: 1.35; color: var(--muted); margin: 0 6px 18px; }
+.alert .b { height: 48px; border-radius: 24px; background: var(--wash); display: flex; align-items: center; justify-content: center; font-size: 17px; margin-top: 8px; }
+.alert .b.main { background: var(--ink); color: var(--page); font-weight: 600; }
+.alert .tag { position: absolute; top: -26px; left: 0; right: 0; font-size: 11px; color: #FBFAF8; opacity: .8; }
+/* Firn's own card, just above the bar (the other way). */
+.ask {
+  position: absolute; z-index: 8; left: 12px; right: 12px; bottom: 112px; padding: 16px; border-radius: 22px;
+  background: var(--frost); backdrop-filter: blur(18px) saturate(1.5) brightness(1.06); -webkit-backdrop-filter: blur(18px) saturate(1.5) brightness(1.06);
+  box-shadow: inset 0 1px 0 var(--rim), 0 0 0 1px var(--frost-edge), 0 2px 6px rgba(60,40,20,.08), 0 14px 34px var(--shadow);
+  animation: rise .22s cubic-bezier(.2,.8,.2,1) both;
+}
+.ask .top { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.ask .n { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ask .s { font-size: 13px; color: var(--muted); }
+.ask .btns { display: flex; gap: 8px; }
+.ask .btns span { flex: 1; height: 44px; border-radius: 22px; background: var(--wash); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.ask .btns .main { background: var(--ink); color: var(--page); font-weight: 600; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.97); filter: blur(4px); } }
+.doc { flex: none; width: 40px; height: 40px; border-radius: 10px; background: var(--wash); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+body[data-ask="ios"] .ask, body[data-ask="firn"] .alert { display: none; }
+
+/* ---- 2. The pill above the bar ---- */
+.pill {
+  position: absolute; z-index: 6; left: 50%; bottom: 120px; transform: translateX(-50%);
+  height: 36px; max-width: 280px; padding: 0 14px 0 10px; border-radius: 18px;
+  display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 14px;
+  background: var(--frost); backdrop-filter: blur(16px) saturate(1.5) brightness(1.06); -webkit-backdrop-filter: blur(16px) saturate(1.5) brightness(1.06);
+  box-shadow: inset 0 1px 0 var(--rim), 0 0 0 1px var(--frost-edge), 0 6px 18px rgba(60,40,20,.14);
+}
+.pill .w { overflow: hidden; text-overflow: ellipsis; }
+.pill .pct { color: var(--faint); font-variant-numeric: tabular-nums; }
+.ring { flex: none; }
+.ring .track { stroke: var(--hair); }
+.ring .fill { stroke: var(--space); transition: stroke-dashoffset .3s ease-out; }
+.done-dot { flex: none; width: 20px; height: 20px; border-radius: 10px; background: var(--space); color: #FBFAF8; display: flex; align-items: center; justify-content: center; }
+.pill.fade { animation: settle 4s ease-out both; }
+@keyframes settle { 0% { opacity: 0; } 6% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- 3. The page menu (as built: 250pt, 48pt rows, 22pt corners) ---- */
+.pmenu { position: absolute; left: 72px; bottom: 98px; width: 250px; padding: 6px; border-radius: 22px; z-index: 8;
+  background: var(--frost); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--rim), 0 0 0 1px var(--frost-edge), 0 18px 40px var(--shadow); }
+.pmenu .r { display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 0 14px; border-radius: 16px; font-size: 17px; }
+.pmenu .r.hi { background: var(--press); }
+.pmenu .r svg { flex: none; color: var(--ink); }
+.pmenu .r small { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+
+/* ---- 4. The Downloads sheet ---- */
+.under { position: absolute; inset: 0; transform: scale(.92) translateY(-14px); border-radius: 40px; overflow: hidden; filter: brightness(.82); }
+.phone[data-theme="dark"] .under { filter: brightness(.6); }
+.sheet { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; z-index: 7; border-radius: 34px 34px 0 0; background: var(--sheet);
+  box-shadow: 0 -6px 30px rgba(60,40,20,.12); padding: 0 16px; }
+.grab { width: 36px; height: 5px; border-radius: 3px; background: var(--faint); opacity: .5; margin: 6px auto 0; }
+.head { display: flex; align-items: center; height: 56px; }
+.head .side { flex: 1; font-size: 17px; }
+.head .side.right { text-align: right; font-weight: 600; }
+.head .side.left { color: var(--muted); }
+.head h4 { margin: 0; font: 600 17px -apple-system, system-ui; }
+.list { background: var(--card); border-radius: 22px; overflow: hidden; box-shadow: 0 0 0 .5px var(--hair); }
+.item { display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 10px 12px 10px 14px; position: relative; }
+.item + .item::before { content: ""; position: absolute; top: 0; left: 66px; right: 0; height: .5px; background: var(--hair); }
+.item .txt { flex: 1; min-width: 0; }
+.item .nm { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .st { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.item .st.bad { color: var(--danger); }
+.item .bar2 { height: 3px; border-radius: 2px; background: var(--hair); margin-top: 7px; overflow: hidden; }
+.item .bar2 i { display: block; height: 100%; width: 42%; background: var(--space); border-radius: 2px; }
+.item .act { flex: none; width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; color: var(--muted); background: var(--wash); }
+.foot { margin-top: 12px; background: var(--card); border-radius: 22px; box-shadow: 0 0 0 .5px var(--hair); height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 16px; font-size: 17px; }
+.foot svg { color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); margin: 10px 14px 0; line-height: 1.4; }
+.where-files, .where-icloud { display: none; }
+body[data-where="files"] .where-files, body[data-where="icloud"] .where-icloud { display: inline; }
+
+/* ---- 5. The hold menu on a download (Firn's own, as built) ---- */
+.held { position: absolute; left: 16px; right: 16px; z-index: 9; border-radius: 18px; background: var(--card); transform: scale(1.03);
+  box-shadow: 0 8px 18px var(--shadow); }
+.hmenu { position: absolute; left: 16px; width: 250px; z-index: 9; padding: 4px; border-radius: 14px;
+  background: var(--frost); backdrop-filter: blur(18px) saturate(1.5) brightness(1.08); -webkit-backdrop-filter: blur(18px) saturate(1.5) brightness(1.08);
+  box-shadow: inset 0 1px 0 var(--rim), 0 0 0 1px var(--frost-edge), 0 2px 6px rgba(60,40,20,.08), 0 14px 34px var(--shadow);
+  font-size: 16px; animation: form .22s cubic-bezier(.2,.8,.2,1) both; transform-origin: 20% 0; }
+@keyframes form { from { opacity: 0; transform: scale(.86); filter: blur(6px); } }
+.hmenu .r { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 10px; }
+.hmenu .r svg { color: var(--muted); }
+.hmenu .r.close, .hmenu .r.close svg { color: var(--danger); }
+.hmenu .sep { height: 1px; margin: 4px 12px; background: var(--hair); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ask, .hmenu { animation: fadein .3s ease-out both; }
+  @keyframes fadein { from { opacity: 0; } }
+  .ring .fill { transition: none; }
+}
+@media (max-width: 460px) { .phone { transform: scale(.82); transform-origin: top left; margin-bottom: -150px; margin-right: -70px; } }
+</style>
+</head>
+<body data-ask="ios" data-where="files">
+<main>
+<h1>Downloads on the iPhone</h1>
+<p>A draft for step 1 of "Downloads to Files" (<code>docs/IOS-PLAN.md</code>, phase 6). Today the iPhone refuses downloads, so a page can't quietly fill the phone. This is how they come back: <b>nothing is saved until you tap</b>, you can always see what's coming in, and every file lands in one place you can find in the Files app.</p>
+<p>Two choices are yours, in the bar below. Each scene shows light and dark.</p>
+
+<div class="controls">
+  <fieldset>
+    <legend>The question</legend>
+    <label><input type="radio" name="ask" value="ios" checked><span>iOS's alert</span></label>
+    <label><input type="radio" name="ask" value="firn"><span>Firn's card</span></label>
+  </fieldset>
+  <fieldset>
+    <legend>Files go to</legend>
+    <label><input type="radio" name="where" value="files" checked><span>On My iPhone</span></label>
+    <label><input type="radio" name="where" value="icloud"><span>iCloud Drive</span></label>
+  </fieldset>
+  <button type="button" id="replay">Play again</button>
+</div>
+
+<h2>1. The question</h2>
+<p>Tap a download link and Firn asks first, naming the file, the site it really comes from (never what the page claims), and its size when the site says. <b>Download</b> saves it; <b>View</b> shows it as the page instead (only for what the phone can show, like a PDF); <b>Cancel</b> saves nothing. WebKit writes not a byte before the tap.</p>
+<ul>
+  <li><b>iOS's alert</b> (my pick): the same alert Firn already uses when a page says something (headed by the real site), and Safari's way. A page can't draw over it or imitate it convincingly, which matters for a question about saving files.</li>
+  <li><b>Firn's card</b>: the hold menu's frost, rising just above the bar. Calmer and more Firn, but a page can draw something that looks like it.</li>
+</ul>
+<div class="pair" data-scene="ask"></div>
+
+<h2>2. While it saves</h2>
+<p>A quiet frosted pill floats just above the bar: a ring filling in the space's color, the file's name, and how far along it is. The page stays fully usable; the pill never covers the bar. Tap it to open Downloads.</p>
+<div class="pair" data-scene="progress"></div>
+
+<h2>3. Saved</h2>
+<p>The ring becomes a check and the pill says <b>Saved to Files</b>. It holds a few seconds, then fades. Tap it before it goes to open Downloads. A failed download says <b>Download failed</b> the same way, in the same calm words, no alarm.</p>
+<div class="pair" data-scene="saved"></div>
+
+<h2>4. The way back in</h2>
+<p>While this space has downloads, the page menu (the ••• in the field) gets a <b>Downloads</b> row at the end, with a quiet second line: how many are saving, or how many there are. The command bar gets a <b>Downloads</b> action too. When the space has none, neither shows (as on the Mac, where the button is there only while the space has downloads).</p>
+<div class="pair" data-scene="menu"></div>
+
+<h2>5. Downloads</h2>
+<p>A sheet on warm paper, like Settings and New Space. Only this space's downloads (each space is its own browser). Tap a finished file to open it right there (Quick Look); the ↑ shares it. A saving file shows its progress and an ✕ to stop it. <b>Clear</b> takes finished ones off the list; the files stay. <b>Open in Files</b> goes straight to the folder. The list is forgotten when Firn quits, as on the Mac; the files never are.</p>
+<div class="pair" data-scene="sheet"></div>
+
+<h2>6. Holding a download</h2>
+<p>Firn's own hold menu, kept short: <b>Share…</b>, <b>Show in Files</b>, and <b>Delete</b> (in terracotta: it removes the file itself, after a plain "Delete this file? It can't be brought back"). Taking it off the list without deleting is what Clear does.</p>
+<div class="pair" data-scene="hold"></div>
+
+<h2>Where the files go</h2>
+<p class="where-files"><b>On My iPhone › Firn › Downloads</b> (my pick). Files stay on the phone, as Firn's promise says. They show in the Files app under Firn's own folder, can be moved anywhere from there, and go away if Firn is deleted (Files warns before that). Every space's files share this one folder, as on the Mac, where they all go to Downloads.</p>
+<p class="where-icloud"><b>iCloud Drive › Downloads</b>, as Safari's default. Handy across devices, but every download would go up to iCloud, which changes "your data stays on your device": Firn would have to say so. It also needs an iCloud container document setting and works only when signed in to iCloud, so Firn would still need On My iPhone as a fallback.</p>
+<p>Either way: no setting to pick a different folder (calm over clever), and nothing about downloads ever leaves the phone through Firn.</p>
+</main>
+
+<script>
+const S = (d, w = 20) => `<svg aria-hidden="true" width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const sym = {
+  back: S('<path d="M15 5l-7 7 7 7"/>'),
+  tabs: S('<rect x="4.5" y="7.5" width="12" height="12" rx="3"/><path d="M8 4.5h8.5a3 3 0 0 1 3 3V16"/>'),
+  more: S('<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>'),
+  reload: S('<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M19 4.5V8h-3.5"/>', 18),
+  doc: S('<path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M14 3.5V8h4"/>', 22),
+  zip: S('<path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M11 6v1.5M11 9.5V11M11 13v1.5"/>', 22),
+  image: S('<rect x="4" y="5" width="16" height="14" rx="3"/><path d="M4.5 16l4.5-4 4 3.5 2.5-2 4 3.5"/><circle cx="15.5" cy="9.5" r="1.3"/>', 22),
+  share: S('<path d="M12 14.5V4M8 7.5L12 3.5l4 4M6 11v8.5h12V11"/>', 18),
+  link: S('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
+  hand: S('<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5M14 10.5V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a5 5 0 0 1-4-2L4 14.5a1.5 1.5 0 0 1 2.300-1.900L8 14"/>'),
+  dl: S('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v8M8.5 12.5L12 16l3.5-3.5"/>'),
+  folder: S('<path d="M3.5 7a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>'),
+  x: S('<path d="M8 8l8 8M16 8l-8 8"/>', 16),
+  trash: S('<path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7"/>'),
+  check: S('<path d="M7 12.5l3.2 3L17 9"/>', 16),
+};
+const ring = (p, r = 8) => {
+  const c = 2 * Math.PI * r, s = r * 2 + 4;
+  return `<svg class="ring" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true">
+    <circle class="track" cx="${s/2}" cy="${s/2}" r="${r}" fill="none" stroke-width="2.5"/>
+    <circle class="fill" cx="${s/2}" cy="${s/2}" r="${r}" fill="none" stroke-width="2.5" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}" transform="rotate(-90 ${s/2} ${s/2})"/></svg>`;
+};
+const site = `<div class="site"><div class="hero"></div><h3>Green Lakes trail</h3>
+  <div class="ln" style="width:96%"></div><div class="ln" style="width:90%"></div><div class="ln" style="width:72%"></div>
+  <span class="dl">Download the map (PDF)</span>
+  <div class="ln" style="width:94%"></div><div class="ln" style="width:88%"></div><div class="ln" style="width:91%"></div><div class="ln" style="width:60%"></div></div>`;
+const bar = `<div class="bar"><div class="circle" aria-label="Back">${sym.back}</div>
+  <div class="field"><span style="width:20px;display:flex">${sym.more}</span><span class="name">trails.example</span><span style="width:20px;display:flex">${sym.reload}</span></div>
+  <div class="circle" aria-label="Tabs">${sym.tabs}</div></div>`;
+const chrome = inner => `<div class="island"></div><div class="status">9:41</div>${inner}<div class="home"></div>`;
+
+const scenes = {
+  ask: () => chrome(site + bar + `<div class="dim"></div>
+    <div class="alert" role="alertdialog"><div class="t">Download “green-lakes-map.pdf”?</div>
+      <div class="m">From trails.example · 4.8 MB</div>
+      <div class="b main">Download</div><div class="b">View</div><div class="b">Cancel</div></div>
+    <div class="ask" role="alertdialog"><div class="top"><span class="doc">${sym.doc}</span>
+      <div style="min-width:0"><div class="n">green-lakes-map.pdf</div><div class="s">From trails.example · 4.8 MB</div></div></div>
+      <div class="btns"><span>Cancel</span><span>View</span><span class="main">Download</span></div></div>`),
+  progress: () => chrome(site + `<div class="pill" data-live>${ring(.42)}<span class="w">green-lakes-map.pdf</span><span class="pct">42%</span></div>` + bar),
+  saved: () => chrome(site + `<div class="pill fade"><span class="done-dot">${sym.check}</span><span class="w">Saved to Files</span></div>` + bar),
+  menu: () => chrome(site + `<div class="dim"></div><div class="pmenu" role="menu">
+    <div class="r">${sym.share}Share…</div><div class="r">${sym.link}Copy Link</div>
+    <div class="r">${sym.hand}<div>Stop Blocking<small>trails.example</small></div></div>
+    <div class="r hi">${sym.dl}<div>Downloads<small>1 saving</small></div></div></div>` + bar),
+  sheet: () => chrome(`<div class="under">${site}${bar}</div>${sheet()}`),
+  hold: () => chrome(`<div class="under">${site}${bar}</div>${sheet()}<div class="dim" style="z-index:8"></div>
+    <div class="held" style="top:${64 + 11 + 56 + 68}px">${item(sym.doc, 'green-lakes-map.pdf', 'Done · 4.8 MB', 'share')}</div>
+    <div class="hmenu" style="top:${64 + 11 + 56 + 136 + 12}px" role="menu">
+      <div class="r">${sym.share}Share…</div><div class="r">${sym.folder}Show in Files</div><div class="sep"></div>
+      <div class="r close">${sym.trash}Delete</div></div>`),
+};
+function item(icon, name, status, act, o = {}) {
+  return `<div class="item"><span class="doc">${icon}</span><div class="txt"><div class="nm">${name}</div>
+    <div class="st${o.bad ? ' bad' : ''}">${status}</div>${o.progress ? '<div class="bar2"><i></i></div>' : ''}</div>
+    ${act ? `<span class="act" aria-label="${act === 'x' ? 'Stop download' : 'Share'}">${act === 'x' ? sym.x : sym.share}</span>` : ''}</div>`;
+}
+function sheet() {
+  return `<div class="sheet"><div class="grab"></div><div class="head"><span class="side left">Clear</span><h4>Downloads</h4><span class="side right">Done</span></div>
+    <div class="list">
+      ${item(sym.zip, 'trail-gpx-tracks.zip', 'Saving… 42% · 12 of 28 MB', 'x', { progress: true })}
+      ${item(sym.doc, 'green-lakes-map.pdf', 'Done · 4.8 MB', 'share')}
+      ${item(sym.image, 'broken-top-sunrise.jpg', 'Done · 2.1 MB', 'share')}
+      ${item(sym.doc, 'permit-application.pdf', 'Failed', '', { bad: true })}
+    </div>
+    <div class="foot">${sym.folder}Open in Files</div>
+    <p class="note">Saved in <span class="where-files">On My iPhone › Firn › Downloads</span><span class="where-icloud">iCloud Drive › Downloads</span>. Clear only takes them off this list.</p></div>`;
+}
+
+for (const pair of document.querySelectorAll('.pair')) {
+  const name = pair.dataset.scene;
+  for (const theme of ['light', 'dark']) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<div class="phone" data-theme="${theme}" aria-label="${theme} mode">${scenes[name]()}</div><p class="caption">${theme === 'light' ? 'Light' : 'Dark'}</p>`;
+    pair.append(wrap);
+  }
+}
+
+// The progress ring creeps along, then starts over.
+let p = .42;
+setInterval(() => {
+  p = p >= 1 ? .05 : Math.min(1, p + .03);
+  for (const pill of document.querySelectorAll('[data-live]')) {
+    const fill = pill.querySelector('.fill'), c = 2 * Math.PI * 8;
+    fill.setAttribute('stroke-dashoffset', c * (1 - p));
+    pill.querySelector('.pct').textContent = Math.round(p * 100) + '%';
+  }
+}, 400);
+
+for (const r of document.querySelectorAll('.controls input'))
+  r.addEventListener('change', () => { document.body.dataset[r.name] = r.value; });
+document.getElementById('replay').addEventListener('click', () => {
+  for (const el of document.querySelectorAll('.ask, .hmenu, .pill.fade')) {
+    const a = el.style.animation; el.style.animation = 'none'; el.offsetHeight; el.style.animation = a;
+  }
+});
+</script>
+</body>
+</html>

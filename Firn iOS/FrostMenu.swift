@@ -361,7 +361,7 @@ private struct MenuFrost: View {
                             // bright page is held down a little in dark mode
                             // (David, 2026-11-09: readability).
                             .blur(radius: 30, opaque: true)
-                            .saturation(1.3)
+                            .saturation(1.1)
                             .brightness(scheme == .light ? 0.04 : -0.08)
                         Theme.holdDim
                     } else {

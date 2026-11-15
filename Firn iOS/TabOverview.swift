@@ -731,7 +731,7 @@ struct TabOverview: View {
             pictures: pictures,
             readsDisk: onScreen && shown,
             loadPicture: { await pictures.loadImage(for: tab.id) },
-            ring: Theme.spaceColor(space),
+            ring: Theme.spaceRing(space),
             space: space,
             lineShown: !onScreen || landing.lineShown,
             open: { openCard(tab) },

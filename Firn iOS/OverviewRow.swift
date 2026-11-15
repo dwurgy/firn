@@ -151,7 +151,7 @@ struct OverviewRow: View {
     }
     /// Reads the picture from disk when a card comes into view without one.
     let loadPicture: () async -> Void
-    /// The ring around the tab on screen: the space's color.
+    /// The ring around the tab on screen: the space's color, calmed (`Theme.spaceRing`).
     let ring: Color
     /// The space's color name, for the card's frost.
     let space: String
@@ -605,7 +605,7 @@ struct CardRing: View {
                                    startPoint: .top, endPoint: .center),
                     lineWidth: 1)
             }
-            .shadow(color: color.opacity(dark ? 0.18 : 0.28), radius: 5)
+            .shadow(color: color.opacity(dark ? 0.14 : 0.2), radius: 5)
     }
 }
 

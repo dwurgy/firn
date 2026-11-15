@@ -133,7 +133,7 @@ public enum IconColor {
     /// soft saturation, middling brightness.
     static func calmed(_ color: HSB) -> RGB {
         HSB(hue: color.hue,
-            saturation: min(max(color.saturation, 0.28), 0.5),
+            saturation: min(max(color.saturation, 0.28), 0.44),
             brightness: min(max(color.brightness, 0.6), 0.8)).rgb
     }
 

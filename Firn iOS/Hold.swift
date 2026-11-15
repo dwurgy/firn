@@ -229,7 +229,7 @@ struct StandInLayer: View {
                                           range: BasecampTiles.glideSwap, fadesIn: false))
                     if hold.ringOnGlide, let standInTab = hold.standInTab, standInTab.place != .basecamp {
                         // The card's ring (`CardRing`), on the picture's inside edge.
-                        CardRing(color: Theme.spaceColor(store.activeSpace.color), radius: boxRadius)
+                        CardRing(color: Theme.spaceRing(store.activeSpace.color), radius: boxRadius)
                             .frame(width: box.width, height: box.height)
                             .offset(x: box.minX, y: box.minY)
                             .modifier(RingFade(arrival: landing.arrival))

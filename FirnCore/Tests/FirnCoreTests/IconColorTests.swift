@@ -33,7 +33,7 @@ struct IconColorTests {
         let youtube = try #require(IconColor.pick(rgba: pixels([(60, 255, 0, 0, 255), (40, 255, 255, 255, 255)])))
         let hsb = IconColor.HSB(red: youtube.red, green: youtube.green, blue: youtube.blue)
         #expect(hue(youtube) < 0.02 || hue(youtube) > 0.98)
-        #expect(hsb.saturation <= 0.5 + 1e-9)
+        #expect(hsb.saturation <= 0.44 + 1e-9)
         #expect(hsb.brightness <= 0.8 + 1e-9)
     }
 

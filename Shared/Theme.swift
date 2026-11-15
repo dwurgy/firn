@@ -186,18 +186,28 @@ enum Theme {
     /// white symbol on it (the overview's check, in place of Safari's blue).
     /// More saturated than the space color, deepened just enough for the
     /// white to read (about 3.5:1 or better); the same in light and dark.
+    /// A hair calmer since (David, 2026-11-15: read too saturated): about a
+    /// fifth less saturation at the same lightness, so the white reads the same.
     static func spaceVivid(_ name: String) -> Color {
         let hex: UInt32 = switch name {
-        case "sand": 0xAA8253
-        case "sage": 0x64955F
-        case "heather": 0xB16C8A
-        case "ochre": 0xA1873D
-        case "dusk": 0x7978B7
-        case "clay": 0xB86846
-        case "lagoon": 0x3C9994
-        default: 0x5690B8
+        case "sand": 0xA38460
+        case "sage": 0x6C9368
+        case "heather": 0xA87189
+        case "ochre": 0x9D884B
+        case "dusk": 0x7A79AD
+        case "clay": 0xAC6E53
+        case "lagoon": 0x4A9793
+        default: 0x628FAE
         }
         return Color(light: hex, dark: hex)
+    }
+
+    /// The ring around the tab on screen's card (iOS): the space's color
+    /// eased a quarter toward warm grey, so it reads as frost, not paint
+    /// (David, 2026-11-15: Sage's ring read vivid green over a white page).
+    static func spaceRing(_ name: String) -> Color {
+        let hex = spaceHex(name)
+        return Color(light: mix(hex, 0x9D9389, 0.25), dark: mix(hex, 0x958D85, 0.25))
     }
 
     /// The tab overview's haze (iOS): the frame's color washed over the

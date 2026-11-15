@@ -93,7 +93,22 @@ struct DownloadPill: View {
             guard let latest = Downloads.shared.latest, latest !== shown else { return }
             show(latest)
         }
-        .onChange(of: shown?.state) { settle() }
+        .onChange(of: shown?.state) { _, state in
+            settle()
+            announce(state)
+        }
+    }
+
+    /// VoiceOver hears a download end, wherever focus is (the pill is out
+    /// of the way, so it's rarely focused). Not a stop: that was a tap.
+    private func announce(_ state: Download.State?) {
+        guard let shown, shown.dataStoreID == store.activeSpace.dataStoreID else { return }
+        let name = shown.fileName ?? "Download"
+        switch state {
+        case .finished: AccessibilityNotification.Announcement("\(name) saved to Files").post()
+        case .failed: AccessibilityNotification.Announcement("\(name) download failed").post()
+        default: break
+        }
     }
 
     private func show(_ download: Download) {
@@ -147,6 +162,8 @@ struct DownloadPill: View {
                 }
             }
             .font(.subheadline)
+            // Fits its 36pt (the bar's own cap); VoiceOver reads it whole.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.leading, 10)
             .padding(.trailing, 14)
             .frame(height: Self.height)
@@ -327,8 +344,8 @@ struct DownloadsSheet: View {
         return DownloadRow(download: download, space: space.color,
                            share: { share(download) }, stop: { download.cancel() })
             .contentShape(Rectangle())
-            .scaleEffect(pressing == id ? 0.97 : 1)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: pressing == id)
+            .scaleEffect(pressing == id && !reduceMotion ? 0.97 : 1)
+            .animation(.smooth(duration: 0.2), value: pressing == id)
             .opacity(isHeld ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[id] = $0 }
             .onTapGesture { open(download) }

@@ -21,6 +21,16 @@ struct AddressInputTests {
         #expect(!WebAddress.isNotSecure(nil))
     }
 
+    @Test func shortSiteKeepsWhoseSiteItIs() {
+        #expect(WebAddress.shortSite(of: URL(string: "http://brightsilvergoodpeace.neverssl.com/online")) == "neverssl.com")
+        #expect(WebAddress.shortSite(of: URL(string: "http://news.bbc.co.uk/")) == "bbc.co.uk")
+        #expect(WebAddress.shortSite(of: URL(string: "http://www.example.com/")) == "example.com")
+        #expect(WebAddress.shortSite(of: URL(string: "http://a.example.com:8080/")) == "example.com:8080")
+        #expect(WebAddress.shortSite(of: URL(string: "http://192.168.1.1/")) == "192.168.1.1")
+        #expect(WebAddress.shortSite(of: URL(string: "http://localhost:3000/")) == "localhost:3000")
+        #expect(WebAddress.shortSite(of: nil) == "")
+    }
+
     @Test func domainGetsHTTPS() {
         #expect(open("example.com") == "https://example.com")
         #expect(open("  news.example.co.uk/a?b=1#top  ") == "https://news.example.co.uk/a?b=1#top")

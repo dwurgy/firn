@@ -826,12 +826,13 @@ private struct AddressField: View {
                     // Plain http: said first, so a long name is cut short
                     // before the warning ever is (http-only sites, step 3).
                     // The hold menu's terracotta, which reads on the glass.
-                    // A long name is cut from its start, so the end that
-                    // says whose site it is ("…neverssl.com") always shows.
+                    // Only whose site it is ("neverssl.com"), as the words
+                    // leave little room (David, 2026-11-15); if even that is
+                    // too long, it's cut from its start, keeping its end.
                     HStack(spacing: 0) {
                         Text("Not Secure\u{2002}").foregroundStyle(Theme.menuDanger)
                             .fixedSize()
-                        Text(verbatim: text).foregroundStyle(Theme.ink)
+                        Text(verbatim: WebAddress.shortSite(of: frontURL)).foregroundStyle(Theme.ink)
                             .truncationMode(.head)
                     }
                 } else {
@@ -859,7 +860,7 @@ private struct AddressField: View {
         .offset(y: compact ? compactDrop : 0)
         .background {
             Text(verbatim: text.isEmpty ? "Search or enter address"
-                           : notSecure ? "Not Secure\u{2002}" + text : text)
+                           : notSecure ? "Not Secure\u{2002}" + WebAddress.shortSite(of: frontURL) : text)
                 .font(.callout.weight(.medium))
                 .lineLimit(1)
                 .fixedSize()

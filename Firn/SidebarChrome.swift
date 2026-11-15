@@ -317,6 +317,7 @@ struct AddressBar: View {
     /// pending one, so it can't claim to be a page that isn't there yet), as just the site.
     private func showRestingAddress() {
         guard !focused else { return }
-        text = WebAddress.site(of: frontURL)
+        // Beside "Not Secure" only whose site it is, as on the iPhone.
+        text = WebAddress.isNotSecure(frontURL) ? WebAddress.shortSite(of: frontURL) : WebAddress.site(of: frontURL)
     }
 }

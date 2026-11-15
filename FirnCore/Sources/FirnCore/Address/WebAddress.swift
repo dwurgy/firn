@@ -43,6 +43,15 @@ public enum WebAddress {
         return first == second
     }
 
+    /// The site cut to whose it is, for the bar beside "Not Secure", where
+    /// there's little room: "a.b.neverssl.com" is "neverssl.com",
+    /// "news.bbc.co.uk" is "bbc.co.uk"; a port stays. Empty without a host.
+    public static func shortSite(of url: URL?) -> String {
+        guard let url, !url.isFileURL, let site = siteKey(of: url) else { return site(of: url) }
+        if let port = url.port { return "\(site):\(port)" }
+        return site
+    }
+
     /// Second-level names that sit under a country, as in "co.uk" or "com.au".
     private static let countrySecondLevels: Set<String> = ["co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go"]
 

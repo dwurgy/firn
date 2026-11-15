@@ -10,6 +10,9 @@ struct LoadErrorView: View {
     let error: LoadError
     let isRetrying: Bool
     let retry: () -> Void
+    /// Opens an address; offered only when Firn guessed https for a site
+    /// that may answer only over http (`LoadError.insecureFallback`).
+    var load: (URL) -> Void = { _ in }
     /// The status bar's height and the bar's room at the bottom, so the
     /// words sit in the free space between them.
     var topRoom: CGFloat = 0
@@ -45,6 +48,22 @@ struct LoadErrorView: View {
                 .buttonStyle(InkButtonStyle())
                 .disabled(isRetrying)
                 .padding(.top, 28)
+            if let http = error.insecureFallback {
+                // Quieter than Try Again, and never automatic, so a network
+                // can't quietly push a site onto http.
+                Button(LoadError.continueInsecurelyTitle) { load(http) }
+                    .buttonStyle(QuietButtonStyle())
+                    .disabled(isRetrying)
+                    .accessibilityHint(LoadError.continueInsecurelyNote)
+                    .padding(.top, 8)
+                Text(LoadError.continueInsecurelyNote)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+            }
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .frame(maxWidth: 340)
@@ -86,6 +105,22 @@ private struct InkButtonStyle: ButtonStyle {
     }
 }
 
+/// The quieter way through: ink words, no fill, 44pt to tap.
+private struct QuietButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.callout.weight(.medium))
+            .foregroundStyle(Theme.ink)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.55 : 1)
+            .contentShape(Rectangle())
+    }
+}
+
 /// The error over the live page, following it while a finger holds it: the
 /// engine moves the page by its layer (`PageHold`), and this does the same
 /// sums, so the two move as one. Reads the hold here, so a pull runs only
@@ -109,7 +144,7 @@ struct LoadErrorCover: View {
                     ? CGRect(x: 0, y: topRoom, width: size.width, height: size.height - topRoom)
                     : CGRect(origin: .zero, size: size)
                 let origin = geometry.frame(in: .global).origin
-                LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload,
+                LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload, load: page.load,
                               topRoom: topRoom, bottomRoom: bottomRoom)
                     .frame(width: size.width, height: size.height)
                     .mask(alignment: .topLeading) {

@@ -8,6 +8,9 @@ struct LoadErrorView: View {
     let error: LoadError
     let isRetrying: Bool
     let retry: () -> Void
+    /// Opens an address; offered only when Firn guessed https for a site
+    /// that may answer only over http (`LoadError.insecureFallback`).
+    var load: (URL) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +36,23 @@ struct LoadErrorView: View {
                 .buttonStyle(InkButtonStyle())
                 .disabled(isRetrying)
                 .padding(.top, 26)
+            if let http = error.insecureFallback {
+                // Quieter than Try Again, and never automatic, so a network
+                // can't quietly push a site onto http.
+                Button(LoadError.continueInsecurelyTitle) { load(http) }
+                    .buttonStyle(TextActionStyle())
+                    .disabled(isRetrying)
+                    .accessibilityHint(LoadError.continueInsecurelyNote)
+                    .padding(.top, 14)
+                Text(LoadError.continueInsecurelyNote)
+                    .font(Theme.hintFont)
+                    .foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 300)
+                    .padding(.top, 6)
+                    .accessibilityHidden(true)
+            }
         }
         .frame(maxWidth: 360)
         .padding(32)

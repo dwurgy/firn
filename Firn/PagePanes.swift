@@ -135,7 +135,7 @@ struct PagePane: View {
                 PageView(page: page, cornerRadius: Theme.pageCornerRadius, onPointerDown: onPointerDown)
                     .overlay {
                         if let error = page.loadError {
-                            LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload)
+                            LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload, load: page.load)
                                 .clipShape(shape)
                                 .transition(.opacity)
                                 .simultaneousGesture(TapGesture().onEnded { onPointerDown?() })

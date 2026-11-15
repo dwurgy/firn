@@ -89,6 +89,12 @@ public struct LoadError: Equatable, Sendable {
 
     public var headline: String { "Firn couldn’t reach \(site)" }
 
+    /// The quieter way through when Firn guessed https and the site may
+    /// only answer over http. Only ever a button the person presses.
+    public static let continueInsecurelyTitle = "Continue Without a Secure Connection"
+    public static let continueInsecurelyNote =
+        "The site may not offer one. If you continue, the connection won’t be private: others on the network could see the page and anything you type into it."
+
     public var explanation: String {
         switch reason {
         case .offline: Self.offlineLine

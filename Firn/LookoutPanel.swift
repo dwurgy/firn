@@ -122,7 +122,7 @@ private struct LookoutCard: View, Animatable {
         PageView(page: page, cornerRadius: radius)
             .overlay {
                 if let error = page.loadError {
-                    LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload)
+                    LoadErrorView(error: error, isRetrying: page.isLoading, retry: page.reload, load: page.load)
                         .background(Theme.page)
                         .clipShape(shape)
                 } else if page.url == nil {

@@ -48,5 +48,13 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Web pages may load over plain http (App Transport Security would refuse them all). Only web content:
+	     Firn's own requests (site icons, updates) still need https. Firn says so (the address bar's "Not Secure" is planned),
+	     and an https guess falls back to http only when the person presses Continue. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

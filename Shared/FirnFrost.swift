@@ -71,7 +71,11 @@ extension InsettableShape {
     /// a gesture (Instruments, 2026-11-13, `docs/IOS-PLAN.md`). The same
     /// gradient as its own layer, masked to the ring, looks the same.
     func gradientBorder<G: ShapeStyle & View>(_ gradient: G, lineWidth: CGFloat) -> some View {
+        // Only light, never a touch: masking hides the gradient but not its
+        // hit area, so it covered whatever it rimmed and swallowed every tap
+        // on the hold menu's rows (2026-11-15).
         gradient.mask { strokeBorder(.black, lineWidth: lineWidth) }
+            .allowsHitTesting(false)
     }
 
     /// A shape filled with a gradient, drawn by the GPU (see `gradientBorder`).

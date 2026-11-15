@@ -14,6 +14,10 @@
 	<!-- The Downloads folder, so a download saves there without a Save panel. Nothing else on disk. -->
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
+	<!-- Lets a downloaded app (or one inside a downloaded disk image) be opened after macOS's usual Gatekeeper check.
+	     Without it, macOS marks every file a sandboxed app saves as never runnable ("can't be opened", no Open Anyway). -->
+	<key>com.apple.security.files.user-selected.executable</key>
+	<true/>
 	<!-- The camera and microphone, used only after a site asks and you click Allow (macOS asks once too). -->
 	<key>com.apple.security.device.camera</key>
 	<true/>

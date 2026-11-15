@@ -57,6 +57,26 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
     }
 
     func downloadDidFinish(_ download: WKDownload) {
+        #if os(macOS)
+        guard let url = self.download.fileURL else { return done() }
+        Task {
+            // WebKit's own download process saves the file under its own
+            // sandbox, and macOS marks it as never runnable ("hard"
+            // quarantine): a downloaded app then "can't be opened". Firn
+            // writes the file again itself, so it carries Firn's mark, under
+            // which a downloaded app opens after Gatekeeper's usual check.
+            if Quarantine.isHard(url) {
+                _ = await Task.detached { Quarantine.rewrite(url) }.value
+            }
+            guard self.download.state == .downloading else { return }
+            done()
+        }
+        #else
+        done()
+        #endif
+    }
+
+    private func done() {
         markQuarantined()
         self.download.progress = 1
         finish(.finished)
@@ -99,3 +119,58 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
         #endif
     }
 }
+
+#if os(macOS)
+/// A downloaded file's quarantine mark, and writing a file again from
+/// Firn's own process so it takes Firn's mark.
+enum Quarantine {
+    private static let name = "com.apple.quarantine"
+    /// "Hard" quarantine: macOS won't run anything in the file at all.
+    private static let hard: UInt32 = 0x0004
+
+    /// The mark's flags (hex), or nil if the file has none.
+    static func flags(_ url: URL) -> String? {
+        let path = url.path(percentEncoded: false)
+        let size = getxattr(path, name, nil, 0, 0, 0)
+        guard size > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: size)
+        guard getxattr(path, name, &bytes, size, 0, 0) == size else { return nil }
+        return String(decoding: bytes, as: UTF8.self).split(separator: ";").first.map(String.init)
+    }
+
+    static func isHard(_ url: URL) -> Bool {
+        guard let flags = flags(url), let value = UInt32(flags, radix: 16) else { return false }
+        return value & hard != 0
+    }
+
+    /// Copies the file's bytes (never its marks) into a new hidden file
+    /// beside it, then puts that in its place. On any failure the original
+    /// stays as it was. Returns whether it was replaced.
+    static func rewrite(_ url: URL) -> Bool {
+        let fresh = url.deletingLastPathComponent()
+            .appending(path: ".\(UUID().uuidString).firn-download", directoryHint: .notDirectory)
+        let freshPath = fresh.path(percentEncoded: false)
+        do {
+            let reader = try FileHandle(forReadingFrom: url)
+            defer { try? reader.close() }
+            guard FileManager.default.createFile(atPath: freshPath, contents: nil) else { return false }
+            let writer = try FileHandle(forWritingTo: fresh)
+            defer { try? writer.close() }
+            while let chunk = try reader.read(upToCount: 4 << 20), !chunk.isEmpty {
+                try writer.write(contentsOf: chunk)
+            }
+            try writer.synchronize()
+        } catch {
+            try? FileManager.default.removeItem(at: fresh)
+            return false
+        }
+        // rename(2), not FileManager's replace, which would carry the old
+        // file's marks over.
+        guard rename(freshPath, url.path(percentEncoded: false)) == 0 else {
+            try? FileManager.default.removeItem(at: fresh)
+            return false
+        }
+        return true
+    }
+}
+#endif

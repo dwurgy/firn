@@ -227,6 +227,14 @@ struct TabOverview: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                // Where the top of the list's view is on screen, below the
+                // status bar and the top margin (the scroll view's own
+                // space starts there), to turn a card's spot into the list's
+                // offset (`scroll(to:)`). Not `spots.viewport`: the scroll
+                // view runs up under the status bar, above its laid-out frame.
+                .onGeometryChange(for: CGFloat.self, of: {
+                    $0.frame(in: .global).minY - $0.frame(in: .scrollView).minY
+                }) { spots.scrollTop = $0 }
                 // The blank tile comes and goes with a glide, the list
                 // moving down to make room and back up once it's let go.
                 .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: blankSpot != nil)
@@ -456,11 +464,45 @@ struct TabOverview: View {
         if viewed != lastViewed { lastViewed = viewed }
         loadTidied()
         guard let id = store.activeTab?.id else { return }
-        if let returnSpot, returnSpot.id == id {
-            scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: returnSpot.anchor))
-        } else {
-            scroller.scrollTo(id, anchor: .center)
+        let anchor = returnSpot?.id == id ? returnSpot?.anchor ?? 0.5 : 0.5
+        scroll(to: id, anchor: anchor, scroller)
+    }
+
+    /// Scrolls the list so the tab's spot sits at `anchor` of its view (0 at
+    /// the top, 1 at the bar), but never past either end of the list, and as
+    /// a plain offset. Asked by id, a spot that can't sit
+    /// there (a tab near the end of the list, or a short list) stopped at
+    /// the end at first, but SwiftUI kept the request and carried it out
+    /// later, past the end, as the layout changed: around the let-go on
+    /// David's iPhone, so the page aimed at the card's old spot and
+    /// snapped down as it landed (his recording, 2026-11-14), and just
+    /// after the landing in the Simulator (the list slid 70pt down). An
+    /// offset leaves nothing to carry out later.
+    /// A spot out of view (not laid out, or its spot from an older scroll)
+    /// is first scrolled to by id, then set as an offset the next frame.
+    private func scroll(to id: UUID, anchor: CGFloat, _ scroller: ScrollViewProxy, again: Bool = true) {
+        guard let frame = spots.frames[id], let scroll = spots.scroll, let scrollTop = spots.scrollTop,
+              frame.maxY > scrollTop, frame.minY < scrollTop + scroll.containerSize.height else {
+            scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: anchor))
+            guard again else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(16))
+                scroll(to: id, anchor: anchor, scroller, again: false)
+            }
+            return
         }
+        // The list's view runs from below the status bar and top margin
+        // down to the bar (`containerSize` is already that tall): where the
+        // spot is in it now, and where `anchor` puts it (0 at the top, 1
+        // with its bottom at the bar, as `remember` measures it).
+        let view = scroll.containerSize.height
+        let now = frame.minY - scrollTop
+        let wanted = anchor * (view - frame.height)
+        let lowest = -scroll.contentInsets.top
+        let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
+        let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
+        guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
+        scrollPosition.scrollTo(y: y)
     }
 
     /// Opens a tab, noting where its spot was for the way back.
@@ -2198,6 +2240,9 @@ struct Frost<S: InsettableShape>: View {
     var cards: Set<UUID> = []
     /// The list's scroll, for scrolling while a tab is held at an edge.
     var scroll: ScrollGeometry?
+    /// The top of the list's view on screen, below the status bar and the
+    /// top margin.
+    var scrollTop: CGFloat?
     /// Basecamp's grid (nil while empty), and the empty spot in it for a
     /// tab carried up from the list.
     var basecamp: CGRect?

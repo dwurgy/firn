@@ -201,16 +201,37 @@ struct AddressBar: View {
         return Theme.rowPadding + book + reload + zoom
     }
 
+    /// The page in front is on plain http: the bar says "Not Secure" before
+    /// the site, so it never suggests a privacy that isn't there. Not while
+    /// typing, where the whole address (with its http://) shows.
+    private var showsNotSecure: Bool {
+        !focused && !text.isEmpty && WebAddress.isNotSecure(frontURL)
+    }
+
     var body: some View {
-        TextField("Search or enter address", text: $text)
-            .textFieldStyle(.plain)
-            .font(Theme.tabFont)
-            .foregroundStyle(Theme.ink)
-            .focused($focused)
-            // At rest, a long address fades out before the zoom and reload
-            // buttons, as tab titles do before the close button. Not while
-            // typing, where the end of the text is where the cursor is.
-            .mask { TrailingFade(width: focused ? 0 : 18) }
+        HStack(spacing: 6) {
+            if showsNotSecure {
+                Text("Not Secure")
+                    .font(Theme.labelFont.weight(.medium))
+                    .foregroundStyle(Theme.danger)
+                    .fixedSize()
+                    // Part of the field: a click here starts typing too.
+                    .onTapGesture { focused = true }
+                    .help("This page doesn't use a secure connection. Others on the network could see it and anything you type into it.")
+            }
+            TextField("Search or enter address", text: $text)
+                .textFieldStyle(.plain)
+                .font(Theme.tabFont)
+                .foregroundStyle(Theme.ink)
+                .focused($focused)
+                // At rest, a long address fades out before the zoom and reload
+                // buttons, as tab titles do before the close button. Not while
+                // typing, where the end of the text is where the cursor is.
+                .mask { TrailingFade(width: focused ? 0 : 18) }
+                .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")
+                .onSubmit(open)
+                .onExitCommand(perform: cancel)
+        }
             .padding(.leading, Theme.rowPadding)
             .padding(.trailing, trailingRoom)
             .frame(height: Theme.rowHeight)
@@ -255,9 +276,6 @@ struct AddressBar: View {
                 .animation(.easeOut(duration: 0.2), value: showsBook)
             }
             .onHover { hovering = $0 }
-            .accessibilityLabel(store.lookout != nil ? "Lookout address" : "Address")
-            .onSubmit(open)
-            .onExitCommand(perform: cancel)
             .onChange(of: window.addressRequest) {
                 text = frontURL?.absoluteString ?? ""
                 focused = true

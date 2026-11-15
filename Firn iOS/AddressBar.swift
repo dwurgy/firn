@@ -703,7 +703,7 @@ private struct AddressField: View {
                         Button { if !barQuiet, !menuOpen { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
-                            .accessibilityValue(text)
+                            .accessibilityValue(spokenAddress)
                             .accessibilityHint("Edit the address or search")
                     }
                 }
@@ -752,7 +752,7 @@ private struct AddressField: View {
                 }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Address")
-                    .accessibilityValue(text)
+                    .accessibilityValue(spokenAddress)
                     .accessibilityHint("Shows the address bar")
             }
         }
@@ -822,6 +822,12 @@ private struct AddressField: View {
                     Text("Reader available").foregroundStyle(Theme.ink)
                 } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
+                } else if notSecure {
+                    // Plain http: said first, so a long name is cut short
+                    // before the warning ever is (http-only sites, step 3).
+                    // The hold menu's terracotta, which reads on the glass.
+                    Text("\(Text("Not Secure").foregroundStyle(Theme.menuDanger))\u{2002}\(text)")
+                        .foregroundStyle(Theme.ink)
                 } else {
                     Text(verbatim: text).foregroundStyle(Theme.ink)
                 }
@@ -846,7 +852,8 @@ private struct AddressField: View {
         .scaleEffect(compact ? AddressBar.compactTextScale : 1)
         .offset(y: compact ? compactDrop : 0)
         .background {
-            Text(verbatim: text.isEmpty ? "Search or enter address" : text)
+            Text(verbatim: text.isEmpty ? "Search or enter address"
+                           : notSecure ? "Not Secure\u{2002}" + text : text)
                 .font(.callout.weight(.medium))
                 .lineLimit(1)
                 .fixedSize()
@@ -856,6 +863,17 @@ private struct AddressField: View {
         .opacity(menuOpen || settling ? 0 : 1)
         .animation(.easeOut(duration: 0.1), value: menuOpen)
         .allowsHitTesting(false)
+    }
+
+    /// The page is on plain http, so the bar says "Not Secure" before the
+    /// site, never suggesting a privacy that isn't there.
+    private var notSecure: Bool {
+        !text.isEmpty && WebAddress.isNotSecure(frontURL)
+    }
+
+    /// What VoiceOver hears for the address at rest.
+    private var spokenAddress: String {
+        notSecure ? "Not Secure, \(text)" : text
     }
 
     /// "Reader available" in the site's place, for a moment after a page

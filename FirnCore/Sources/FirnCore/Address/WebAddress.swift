@@ -26,6 +26,13 @@ public enum WebAddress {
         return site
     }
 
+    /// Whether the address bar says "Not Secure": a page on plain http,
+    /// where others on the network could see the page and what's typed into
+    /// it. https, files, and no page at all say nothing.
+    public static func isNotSecure(_ url: URL?) -> Bool {
+        url?.scheme?.lowercased() == "http"
+    }
+
     /// Whether two addresses belong to the same site: "mail.google.com" and
     /// "accounts.google.com" do; "google.com" and "youtube.com" don't. Firn
     /// has no list of public suffixes, so this takes the host's last two

@@ -13,6 +13,14 @@ struct AddressInputTests {
         #expect(WebAddress.site(of: nil) == "")
     }
 
+    @Test func onlyPlainHTTPIsNotSecure() {
+        #expect(WebAddress.isNotSecure(URL(string: "http://example.com/")))
+        #expect(WebAddress.isNotSecure(URL(string: "HTTP://example.com/")))
+        #expect(!WebAddress.isNotSecure(URL(string: "https://example.com/")))
+        #expect(!WebAddress.isNotSecure(URL(fileURLWithPath: "/tmp/a.html")))
+        #expect(!WebAddress.isNotSecure(nil))
+    }
+
     @Test func domainGetsHTTPS() {
         #expect(open("example.com") == "https://example.com")
         #expect(open("  news.example.co.uk/a?b=1#top  ") == "https://news.example.co.uk/a?b=1#top")

@@ -202,7 +202,7 @@ struct FrostMenu: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         let lit = row(at: pointer.point)
         VStack(spacing: 0) {
             if let open, let parent = item(at: open) {
@@ -289,7 +289,7 @@ struct FrostMenu: View {
             .buttonStyle(MenuRowStyle())
             .background {
                 if lit == key {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(Theme.press)
                         .matchedGeometryEffect(id: section, in: highlight)
                 }
@@ -427,7 +427,7 @@ private struct MenuRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(configuration.isPressed ? Theme.press : .clear)
             }
     }

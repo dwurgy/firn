@@ -175,8 +175,7 @@ extension PagePane {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 if let offer = store.fillOffer, offer.tabID == tab.id, page.loadError == nil {
-                    PasswordFillList(store: store, offer: offer,
-                                     color: Theme.spaceColor(store.activeSpace.color), pageSize: proxy.size)
+                    PasswordFillList(store: store, offer: offer, pageSize: proxy.size)
                         .id(offer.id)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4)))
                 }

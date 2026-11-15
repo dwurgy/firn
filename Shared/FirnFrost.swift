@@ -97,20 +97,17 @@ struct FrostPress<S: Shape>: ButtonStyle {
 }
 
 /// Firn's frost for a pill or button floating over a live page (the
-/// iPhone's bars, and the Mac reader's Aa pill), washed with the space's
-/// color, over the system's thinnest material blur, so the page's shapes
+/// iPhone's bars, and the Mac reader's Aa pill), neutral, never tinted by
+/// the space (David, 2026-11-15), over the system's thinnest material blur, so the page's shapes
 /// don't show through. A trial (David, 2026-11-09): iOS's soft edge blur, as under
 /// Safari's bar, never appeared under a web page (`docs/IOS-PLAN.md`).
 /// Reduce Transparency: solid.
 struct BarFrost<S: InsettableShape>: View {
     let shape: S
-    let space: String
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        FirnFrost(shape: shape, fill: Theme.barFrost,
-                  tint: Theme.spaceColor(space).opacity(Theme.groupTint),
-                  solid: reduceTransparency) {
+        FirnFrost(shape: shape, fill: Theme.barFrost, solid: reduceTransparency) {
             shape.fill(.ultraThinMaterial)
         }
     }

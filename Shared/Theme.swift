@@ -70,42 +70,43 @@ enum Theme {
     /// keeps the system's light or dark whatever page is behind it (glass
     /// alone turns mid-grey over a bright page in dark mode, and the ink
     /// washes out).
-    static let commandVeil = Color(light: 0xFBFAF8, lightOpacity: 0.62, dark: 0x1C1916, darkOpacity: 0.62)
+    static let commandVeil = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0x1C1C1E, darkOpacity: 0.62)
 
     /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
-    static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xF5F1EC, darkOpacity: 0.08)
-    static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xF5F1EC, darkOpacity: 0.13)
-    /// With Reduce Transparency: the same tile, solid.
-    static let tileSolid = Color(light: 0xF4F0EA, dark: 0x332E29)
+    static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xFFFFFF, darkOpacity: 0.08)
+    static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xFFFFFF, darkOpacity: 0.13)
+    /// With Reduce Transparency: the same tile, solid. Neutral, not warm
+    /// (David, 2026-11-15: cards read brown in dark).
+    static let tileSolid = Color(light: 0xF5F5F5, dark: 0x2E2E30)
     /// Under anything lifted on the iPhone (a tab, a group, a Basecamp
     /// tile), held or dragged: the solid tile, see-through, one level the
     /// whole way (David, 2026-11-09: 85% read too dark; 60%).
-    static let heldRowBase = Color(light: 0xF4F0EA, lightOpacity: 0.6, dark: 0x332E29, darkOpacity: 0.6)
+    static let heldRowBase = Color(light: 0xF5F5F5, lightOpacity: 0.6, dark: 0x2E2E30, darkOpacity: 0.6)
     /// A tile's edge: lit along the top, a warm hairline around.
     static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
     static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)
-    static let tileHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.30)
+    static let tileHairline = Color(light: 0x000000, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.30)
     /// The crisp, frosty edge on Liquid Glass (the command bar).
-    static let tileFrostEdge = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xC8DCE6, darkOpacity: 0.14)
+    static let tileFrostEdge = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xFFFFFF, darkOpacity: 0.14)
     /// Tiles are a touch crisper than tab rows (10pt), so the glass reads as ice.
     static let tileRadius: CGFloat = 9
 
     /// Group cards: frosted like the tiles, a touch more see-through, and
     /// washed with the space's color.
-    static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xF5F1EC, darkOpacity: 0.05)
+    static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xFFFFFF, darkOpacity: 0.05)
     static let groupTint = 0.10
     /// The iPhone's group cards: the same recipe, stronger. The Mac's card
     /// sits on an even sidebar; the iPhone's sits on a haze that can be any
     /// mid tone of the page, where the Mac's numbers vanished (David's
     /// screenshots, 2026-11-08). Fixed levels, never adapting.
-    static let groupCardFill = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xF5F1EC, darkOpacity: 0.11)
-    static let groupCardShadow = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.35)
+    static let groupCardFill = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xFFFFFF, darkOpacity: 0.11)
+    static let groupCardShadow = Color(light: 0x000000, lightOpacity: 0.12, dark: 0x000000, darkOpacity: 0.35)
     /// The iPhone's slim tab rows: flat, like paper rather than frost (no
     /// blur, rim, or tint), a step lighter than the haze and the group
     /// cards so each row reads as something to tap (David, 2026-11-08).
     /// One recipe for both modes; only the wash differs (page white in
     /// light, warm white in dark). With a hairline and `shadowSoft`.
-    static let slimRowFill = Color(light: 0xFBFAF8, lightOpacity: 0.72, dark: 0xF5F1EC, darkOpacity: 0.10)
+    static let slimRowFill = Color(light: 0xFFFFFF, lightOpacity: 0.72, dark: 0xFFFFFF, darkOpacity: 0.10)
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
     /// The frost that forms across the address field while a page loads, in
@@ -222,7 +223,7 @@ enum Theme {
     /// always bleeds through, like a frosted cabin window (David,
     /// 2026-11-08): the blur erases shapes, so the fill can stay light;
     /// one level in both modes (David, 2026-11-08).
-    static let cardPillVeil = Color(light: 0xE9E3DA, lightOpacity: 0.42, dark: 0x4E4843, darkOpacity: 0.42)
+    static let cardPillVeil = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0x48484A, darkOpacity: 0.42)
     /// The iPhone's bars (the address bar, and the overview's bar): Firn's
     /// frost over iOS's thinnest material, which already blurs and veils,
     /// so the fill is far lighter than the pills': 42%, then 24%, still
@@ -230,19 +231,27 @@ enum Theme {
     /// so the material does the work and the frost is mostly its rim,
     /// hairline, and tint. In dark, the frame at 40%, so the bar sits as dark
     /// as the darker frame (David, 2026-11-15: the material alone read pale).
-    static let barFrost = Color(light: 0xE9E3DA, lightOpacity: 0.10, dark: 0x28241F, darkOpacity: 0.40)
+    static let barFrost = Color(light: 0xFFFFFF, lightOpacity: 0.10, dark: 0x1C1C1E, darkOpacity: 0.40)
 
+    /// Menus, cards, and the bars are neutral, never warm or tinted by the
+    /// space, so they sit beside Apple's own (David, 2026-11-15). The space's
+    /// color stays on the overview's tint, the ring, the check, the loading
+    /// frost, and the Mac's sidebar.
+    ///
     /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
     /// overview while it's open, and the card's veil over a real blur of
     /// what's behind it (the pills' recipe: one fixed level, page white in
     /// light, the pills' warm gray in dark), its frosted edge, and its shadow.
-    static let holdDim = Color(light: 0x14100C, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
+    static let holdDim = Color(light: 0x000000, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
     /// Thicker than the mockup's 44% (David, 2026-11-09: words got hard to
     /// read over a bright page), still one level for every screen.
-    static let holdMenuVeil = Color(light: 0xFBFAF8, lightOpacity: 0.58, dark: 0x38332E, darkOpacity: 0.62)
-    static let holdMenuEdge = Color(light: 0xFFFFFF, lightOpacity: 0.60, dark: 0xC8DCE6, darkOpacity: 0.16)
-    static let holdMenuShadow = Color(light: 0x3C2814, lightOpacity: 0.24, dark: 0x000000, darkOpacity: 0.50)
-    static let holdMenuHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.10)
+    static let holdMenuVeil = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0x2C2C2E, darkOpacity: 0.66)
+    static let holdMenuEdge = Color(light: 0xFFFFFF, lightOpacity: 0.60, dark: 0xFFFFFF, darkOpacity: 0.14)
+    static let holdMenuShadow = Color(light: 0x000000, lightOpacity: 0.20, dark: 0x000000, darkOpacity: 0.50)
+    /// The hold menu with no picture behind it, or Reduce Transparency:
+    /// solid, close to Apple's own menus.
+    static let menuSolid = Color(light: 0xF6F6F6, dark: 0x2C2C2E)
+    static let holdMenuHairline = Color(light: 0x000000, lightOpacity: 0.07, dark: 0xFFFFFF, darkOpacity: 0.10)
     /// Muted terracotta for closing things, never alarm red (Danger).
     static let danger = Color(light: 0xB0503A, dark: 0xE3907A)
     /// The iPhone hold menu's Close rows: the same terracotta, a step deeper

@@ -72,7 +72,7 @@ private struct FindBar: View {
         .padding(.leading, Theme.rowPadding)
         .padding(.trailing, 6)
         .frame(width: 320, height: Theme.rowHeight)
-        .background { CommandBarGlass(shape: shape, color: Theme.spaceColor(store.activeSpace.color)) }
+        .background { CommandBarGlass(shape: shape) }
         .clipShape(shape)
         .shadow(color: Theme.shadowPeek, radius: 16, y: 6)
         .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)

@@ -98,7 +98,7 @@ private struct CommandBar: View {
                 .padding(6)
             }
         }
-        .background { CommandBarGlass(shape: shape, color: Theme.spaceColor(store.activeSpace.color)) }
+        .background { CommandBarGlass(shape: shape) }
         .clipShape(shape)
         .shadow(color: Theme.shadowPeek, radius: 24, y: 8)
         .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)
@@ -443,12 +443,14 @@ private struct CommandRowView: View {
 }
 
 /// The bar's glass: Liquid Glass on macOS 26, a regular material before,
-/// tinted by the space's color. It sits over web pages, so it's the
+/// neutral, as Apple's menus are. It sits over web pages, so it's the
 /// regular (denser) glass, not the sidebar groups' thinner frost. The space
 /// card (`SpaceSheet`) wears it too.
 struct CommandBarGlass: View {
     let shape: RoundedRectangle
-    let color: Color
+    /// Only sheets that show a picked color (a new space, the welcome)
+    /// pass one; menus and bars stay neutral (David, 2026-11-15).
+    var color: Color = .clear
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {

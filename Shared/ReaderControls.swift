@@ -196,7 +196,7 @@ struct ReaderTextButton: View {
     }
 
     @ViewBuilder private func glass(_ shape: RoundedRectangle) -> some View {
-        let frost = BarFrost(shape: shape, space: space)
+        let frost = BarFrost(shape: shape)
             .frame(width: size.width, height: size.height)
         if reduceMotion {
             // No growing: the pill's frost and the card's swap with a fade.

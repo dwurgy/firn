@@ -51,9 +51,9 @@ struct CommandResults: View {
         .scrollDisabled(!scrolls)
         .frame(maxHeight: CGFloat(rows.count) * Self.rowHeight + Self.padding * 2)
         .clipShape(shape)
-        // The same glass and tint as the field beneath it: one piece of the
+        // Neutral glass, as the field beneath it: one piece of the
         // bar, not a panel of its own.
-        .glassEffect(.regular.tint(Theme.frameTint(space)), in: shape)
+        .glassEffect(.regular, in: shape)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Results")
     }

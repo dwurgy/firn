@@ -95,7 +95,7 @@ struct OverviewBar: View {
                         .contentShape(.circle)
                 }
                 .buttonStyle(FrostPress(shape: Circle()))
-                .background { BarFrost(shape: Circle(), space: space.color) }
+                .background { BarFrost(shape: Circle()) }
                 .accessibilityLabel("New Tab")
                 Spacer()
                 Button(action: done) {
@@ -198,14 +198,14 @@ struct OverviewBar: View {
             .background {
                 GeometryReader { geo in
                     let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
-                    BarFrost(shape: Capsule(), space: space.color)
+                    BarFrost(shape: Capsule())
                         .frame(width: pills.held.width, height: pills.held.height)
                         .opacity(pills.heldOpacity)
                         .position(x: pills.held.midX, y: pills.held.midY)
-                    // The coming space's own pill, in its own tint, growing
-                    // out from the other button.
-                    if let coming = pills.coming, let next = neighbor(progress) {
-                        BarFrost(shape: Capsule(), space: next.color)
+                    // The coming space's own pill, growing out from the
+                    // other button.
+                    if let coming = pills.coming, neighbor(progress) != nil {
+                        BarFrost(shape: Capsule())
                             .frame(width: coming.width, height: coming.height)
                             .opacity(pills.comingOpacity)
                             .position(x: coming.midX, y: coming.midY)

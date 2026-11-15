@@ -128,7 +128,7 @@ private struct TabSwitcherPanel: View {
             }
         }
         .padding(Self.padding)
-        .background { CommandBarGlass(shape: shape, color: Theme.spaceColor(store.activeSpace.color)) }
+        .background { CommandBarGlass(shape: shape) }
         .clipShape(shape)
         .shadow(color: Theme.shadowPeek, radius: 24, y: 8)
         .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 3, y: 1)

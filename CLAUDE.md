@@ -87,7 +87,7 @@ Spaces  Glacier #7F9CB0 (default) · Sand #C9A27E · Sage #8FAE8B · Heather #B8
 Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 ```
 
-- Neutrals lean warm (sand and brown), never blue-gray. Hover and press are a warm brown wash (7% and 13% of rgb(70, 55, 40) in light; warm white in dark).
+- Neutrals lean warm (sand and brown), never blue-gray. Except menus, cards, and the iPhone's bars: neutral greys and whites, never warm or tinted by the space, so they sit beside Apple's own (David, 2026-11-15). The space's color stays on the overview's tint, the tab on screen's ring, the check, the loading frost, and the Mac's sidebar and frame. Hover and press are a warm brown wash (7% and 13% of rgb(70, 55, 40) in light; warm white in dark).
 - The active space tints the frame and glass at about 16% (14% in dark) and cross-fades on switch.
 - Blue is branding, never text. Sand never carries text. Buttons are ink. Shadows are warm brown, never grey.
 - Glacier stays #7F9CB0 / #6E98B2; no darker "contrast-fixed" versions. The one exception is the system accent (switches, radio buttons, selection, focus rings): a slightly more saturated Glacier, #689ABB light and #5F98BB dark, so controls don't look washed out (David, 2026-10-24). Buttons stay ink, alerts' main buttons on the iPhone included (dark mode: muted #5E564E, since iOS writes their label in white); switches and the other system controls stay Glacier (David, 2026-11-14).

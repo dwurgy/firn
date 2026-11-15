@@ -68,7 +68,7 @@ struct HistoryWindow: View {
             .onAppear(perform: answerClearRequest)
             .onChange(of: window.asksToClearHistory) { answerClearRequest() }
             .overlay { GlassSheetLayer() }
-            .glassSheetHost(color: Theme.spaceColor(space.color))
+            .glassSheetHost(color: .clear)
     }
 
     private func answerClearRequest() {

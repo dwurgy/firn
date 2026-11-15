@@ -169,7 +169,7 @@ struct DownloadPill: View {
             .frame(height: Self.height)
             .frame(maxWidth: 280)
             .fixedSize(horizontal: true, vertical: false)
-            .background { BarFrost(shape: Capsule(), space: space) }
+            .background { BarFrost(shape: Capsule()) }
             .shadow(color: Theme.shadowPeek.opacity(0.5), radius: 9, y: 6)
             .contentShape(Capsule())
         }

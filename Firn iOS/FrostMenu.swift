@@ -260,7 +260,7 @@ struct FrostMenu: View {
         // Never takes a touch: its picture of the screen is clipped to the
         // card but still covers the whole screen, and it took every tap
         // outside the card, so the menu wouldn't close (2026-11-09).
-        .background { MenuFrost(backdrop: backdrop, space: space).allowsHitTesting(false) }
+        .background { MenuFrost(backdrop: backdrop).allowsHitTesting(false) }
         .clipShape(shape)
         .overlay {
             shape.strokeBorder(Theme.holdMenuEdge, lineWidth: 1)
@@ -335,18 +335,13 @@ struct FrostMenu: View {
 /// Reduce Transparency, a solid fill.
 private struct MenuFrost: View {
     let backdrop: UIImage?
-    /// The space's color, washed over the veil as the bars' frost is
-    /// (`groupTint`), so a menu and the address bar read as one frost
-    /// (David, 2026-11-15: the untinted veil read warmer than the bar).
-    let space: String
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         if reduceTransparency {
-            Theme.tileSolid
-                .overlay { Theme.spaceColor(space).opacity(Theme.groupTint) }
+            Theme.menuSolid
         } else {
             GeometryReader { box in
                 let frame = box.frame(in: .global)
@@ -365,10 +360,9 @@ private struct MenuFrost: View {
                             .brightness(scheme == .light ? 0.04 : -0.08)
                         Theme.holdDim
                     } else {
-                        Theme.frame
+                        Theme.menuSolid
                     }
                     Theme.holdMenuVeil
-                    Theme.spaceColor(space).opacity(Theme.groupTint)
                 }
                 .frame(width: frame.width, height: frame.height, alignment: .topLeading)
                 .clipped()

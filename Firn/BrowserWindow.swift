@@ -103,7 +103,7 @@ struct BrowserWindow: View {
         }
         .onOpenURL { window.openFromOtherApp($0) }
         .modifier(ArcImportFlow(starting: Bindable(window).startingArcImport, window: window))
-        .glassSheetHost(color: Theme.spaceColor(store.activeSpace.color))
+        .glassSheetHost(color: .clear)
     }
 
     private var slide: Animation { Theme.slide(reduceMotion: reduceMotion) }

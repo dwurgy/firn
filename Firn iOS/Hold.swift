@@ -466,7 +466,7 @@ private struct NewTabHint: View {
             // drew washed out until it stopped (Simulator recording,
             // 2026-11-06).
             .background(Circle().fill(Theme.spaceVivid(space)).opacity(reach >= 1 ? 1 : 0))
-            .glassEffect(.regular.tint(Theme.frameTint(space)), in: .circle)
+            .glassEffect(.regular, in: .circle)
             .scaleEffect(0.7 + 0.3 * reach)
             .opacity(Double(reach))
             .animation(.smooth(duration: 0.2), value: reach >= 1)

@@ -349,7 +349,7 @@ struct AddressBar: View {
                         GeometryReader { geo in
                             let pills = activeSlide.pills(in: geo.size)
                             if let coming = pills.coming {
-                                BarFrost(shape: Capsule(), space: space)
+                                BarFrost(shape: Capsule())
                                     .frame(width: coming.width, height: coming.height)
                                     .opacity(pills.comingOpacity)
                                     .position(x: coming.midX, y: coming.midY)
@@ -488,7 +488,7 @@ struct AddressBar: View {
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
             .clipShape(shape)
-            .background { BarFrost(shape: shape, space: space) }
+            .background { BarFrost(shape: shape) }
             // Open, the menu sits lifted, with a held tab's warm shadow.
             .shadow(color: Theme.shadowPeek.opacity(open ? 1 : 0), radius: 18, y: 8)
             // The whole pill fades as it becomes a circle, its frost too,
@@ -593,7 +593,7 @@ private struct NavigationPill: View {
         .frame(width: wide ? Self.wideWidth : Self.roundWidth,
                height: AddressField.height, alignment: .leading)
         .clipShape(.capsule)
-        .background { BarFrost(shape: Capsule(), space: space) }
+        .background { BarFrost(shape: Capsule()) }
     }
 }
 
@@ -1231,7 +1231,7 @@ private struct TabsButton: View {
     var body: some View {
         BarButton(symbol: "square.on.square", label: "Tabs", action: action)
             .padding(2)
-            .background { BarFrost(shape: Circle(), space: space) }
+            .background { BarFrost(shape: Circle()) }
             .accessibilityHint("Shows all your tabs")
     }
 }

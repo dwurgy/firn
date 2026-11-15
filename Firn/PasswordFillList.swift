@@ -13,7 +13,6 @@ import SwiftUI
 struct PasswordFillList: View {
     let store: BrowserStore
     let offer: FillOffer
-    let color: Color
     /// The page's size, to keep the list inside it.
     let pageSize: CGSize
     @State private var marked: Int?
@@ -49,7 +48,7 @@ struct PasswordFillList: View {
         }
         .padding(6)
         .frame(width: width)
-        .background { CommandBarGlass(shape: shape, color: color) }
+        .background { CommandBarGlass(shape: shape) }
         .clipShape(shape)
         .shadow(color: Theme.shadowSoft, radius: 10, x: 0, y: 4)
         .background { FillListKeys(onKey: key, onOutside: store.dismissFillOffer) }

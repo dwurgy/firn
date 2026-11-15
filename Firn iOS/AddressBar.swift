@@ -826,8 +826,14 @@ private struct AddressField: View {
                     // Plain http: said first, so a long name is cut short
                     // before the warning ever is (http-only sites, step 3).
                     // The hold menu's terracotta, which reads on the glass.
-                    Text("\(Text("Not Secure").foregroundStyle(Theme.menuDanger))\u{2002}\(text)")
-                        .foregroundStyle(Theme.ink)
+                    // A long name is cut from its start, so the end that
+                    // says whose site it is ("…neverssl.com") always shows.
+                    HStack(spacing: 0) {
+                        Text("Not Secure\u{2002}").foregroundStyle(Theme.menuDanger)
+                            .fixedSize()
+                        Text(verbatim: text).foregroundStyle(Theme.ink)
+                            .truncationMode(.head)
+                    }
                 } else {
                     Text(verbatim: text).foregroundStyle(Theme.ink)
                 }

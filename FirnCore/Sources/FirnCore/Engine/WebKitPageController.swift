@@ -389,7 +389,7 @@ extension WebKitPageController: WKNavigationDelegate {
         // A link marked `download`: saved, never shown, so a file the page
         // made itself (blob: or data:) is fine here.
         if navigationAction.shouldPerformDownload {
-            return decisionHandler(Self.downloadsAllowed && DownloadPolicy.allows(url) ? .download : .cancel)
+            return decisionHandler(DownloadPolicy.allows(url) ? .download : .cancel)
         }
         if let onRequest, navigationAction.navigationType == .linkActivated, WebAddress.isWebURL(url) {
             if let click = specialClick(for: navigationAction) {
@@ -441,41 +441,62 @@ extension WebKitPageController: WKNavigationDelegate {
         let isAttachment = disposition?.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment") ?? false
         let cantShow = navigationResponse.isForMainFrame && !navigationResponse.canShowMIMEType
         guard isAttachment || cantShow else { return decisionHandler(.allow) }
-        if Self.downloadsAllowed { return decisionHandler(.download) }
-        // No downloads here (iOS, until "downloads to Files"): a page the
-        // phone can show is shown, as the whole page only; anything else
-        // is refused, and the page still showing keeps its own blocking.
-        if navigationResponse.isForMainFrame, navigationResponse.canShowMIMEType {
-            return decisionHandler(.allow)
+        #if os(iOS)
+        // Asked first, as Safari: nothing is saved without a tap, so a page
+        // can't fill the phone on its own. View shows it as the whole page
+        // instead, for what the phone can show (a PDF sent as an attachment).
+        let response = navigationResponse.response
+        let canView = navigationResponse.isForMainFrame && navigationResponse.canShowMIMEType
+        let isMainFrame = navigationResponse.isForMainFrame
+        askToDownload(response.suggestedFilename ?? "", response: response, canView: canView) {
+            [weak self] answer in
+            switch answer {
+            case .download: decisionHandler(.download)
+            case .view: decisionHandler(.allow)
+            case .cancel:
+                // The page still showing keeps its own blocking.
+                if isMainFrame { self?.followBlockingOfShownPage() }
+                decisionHandler(.cancel)
+            }
         }
-        if navigationResponse.isForMainFrame { followBlockingOfShownPage() }
-        decisionHandler(.cancel)
+        #else
+        decisionHandler(.download)
+        #endif
     }
 
-    /// Whether pages may save files. Not yet on iOS: with no Downloads
-    /// button there, a page could fill the phone's storage with files no
-    /// one sees or can remove (docs/IOS-PLAN.md, "downloads to Files").
-    #if os(iOS)
-    private static let downloadsAllowed = false
-    #else
-    private static let downloadsAllowed = true
-    #endif
-
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        // A link marked `download` reaches here unasked; the question comes
+        // as WebKit asks where to save it, once the file's name is known.
+        #if os(iOS)
+        let frame: WKFrameInfo? = navigationAction.sourceFrame
+        let source = frame?.securityOrigin.host
+        startedDownload(download) { [weak self] name, response in
+            guard let self else { return false }
+            return await withCheckedContinuation { done in
+                self.askToDownload(name, response: response, canView: false, source: source) {
+                    done.resume(returning: $0 == .download)
+                }
+            }
+        }
+        #else
         startedDownload(download)
+        #endif
     }
 
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
         if navigationResponse.isForMainFrame { followBlockingOfShownPage() }
+        // Already asked, in the response's decision.
         startedDownload(download)
     }
 
-    private func startedDownload(_ download: WKDownload) {
-        guard Self.downloadsAllowed, let store = webView.configuration.websiteDataStore.identifier else {
+    private func startedDownload(
+        _ download: WKDownload, ask: (@MainActor (String, URLResponse) async -> Bool)? = nil
+    ) {
+        guard let store = webView.configuration.websiteDataStore.identifier else {
             // Every page has its space's store; without one, nothing is saved.
             return download.cancel { _ in }
         }
-        WebKitDownload.follow(download, dataStoreID: store)
+        WebKitDownload.follow(download, dataStoreID: store, ask: ask)
         // A popup opened only to download a file would stay behind empty.
         if isPopup, url == nil { onRequest?(.close) }
     }
@@ -1306,6 +1327,81 @@ extension WebKitPageController {
         }
         isShowingPanel = true
         top.present(alert, animated: true)
+    }
+
+    enum DownloadAnswer { case download, view, cancel }
+
+    /// "Download “name”?", from the site the file really comes from (never
+    /// what the page claims) and its size when the site says. Answered
+    /// Cancel without asking when the page isn't on screen, is told to
+    /// stop, or another question is up, so nothing jumps out and nothing is
+    /// saved unseen. `source` is the asking frame's real host, for a file
+    /// the page made itself (blob: or data:), which has none of its own.
+    func askToDownload(
+        _ suggestedName: String,
+        response: URLResponse,
+        canView: Bool,
+        source: String? = nil,
+        done: @escaping @MainActor (DownloadAnswer) -> Void
+    ) {
+        guard !dialogsBlocked, !isShowingPanel,
+              let root = webView.window?.rootViewController else { return done(.cancel) }
+        var top = root
+        while let shown = top.presentedViewController { top = shown }
+        guard !top.isBeingDismissed else { return done(.cancel) }
+
+        let name = Self.clippedName(DownloadName.clean(suggestedName))
+        let host = Self.downloadSource(response.url, frameHost: source, pageURL: url)
+        var from = host.map { "From \($0)" } ?? ""
+        if response.expectedContentLength > 0 {
+            let size = ByteCountFormatter.string(fromByteCount: response.expectedContentLength, countStyle: .file)
+            from = from.isEmpty ? size : "\(from) · \(size)"
+        }
+        let alert = UIAlertController(
+            title: "Download “\(name)”?", message: from.isEmpty ? nil : from, preferredStyle: .alert)
+        var answered = false
+        let finish: @MainActor (DownloadAnswer) -> Void = { [weak self] answer in
+            guard !answered else { return }
+            answered = true
+            self?.isShowingPanel = false
+            done(answer)
+        }
+        let download = UIAlertAction(title: "Download", style: .default) { _ in finish(.download) }
+        alert.addAction(download)
+        if canView {
+            alert.addAction(UIAlertAction(title: "View", style: .default) { _ in finish(.view) })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish(.cancel) })
+        alert.preferredAction = download
+        dialogsShown += 1
+        // As with alerts: from the second one on, a way out of a page that
+        // keeps asking.
+        if dialogsShown > 1 {
+            alert.addAction(UIAlertAction(title: "Don’t let this page show more", style: .default) {
+                [weak self] _ in
+                self?.dialogsBlocked = true
+                finish(.cancel)
+            })
+        }
+        isShowingPanel = true
+        top.present(alert, animated: true)
+    }
+
+    /// A name the site chose, kept to a readable length in the question.
+    fileprivate static func clippedName(_ name: String) -> String {
+        guard name.count > 80 else { return name }
+        let (stem, ext) = DownloadName.split(name)
+        return String(stem.prefix(max(80 - ext.count, 20))) + "…" + ext
+    }
+
+    /// The site a file comes from: its own address's host, or for one the
+    /// page made itself (blob: or data:), the frame that made it, else the
+    /// page. Nil when none is known.
+    fileprivate static func downloadSource(_ fileURL: URL?, frameHost: String?, pageURL: URL?) -> String? {
+        if let fileURL, WebAddress.isWebURL(fileURL), let host = fileURL.host(), !host.isEmpty { return host }
+        if let frameHost, !frameHost.isEmpty { return frameHost }
+        if let host = pageURL?.host(), !host.isEmpty { return host }
+        return nil
     }
 }
 #endif

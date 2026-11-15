@@ -16,21 +16,36 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
     private let chosenURL: URL?
     /// Held while the download runs; WebKit holds its delegate weakly.
     private var keepAlive: WebKitDownload?
+    /// Asked before anything is saved, given the site's suggested name and
+    /// its response; true to save. Nil when it was already asked (or on
+    /// the Mac, which saves as Safari does, without a question).
+    private let ask: (@MainActor (String, URLResponse) async -> Bool)?
 
+    /// The download joins `Downloads` at once, or with `ask`, only once
+    /// it's answered yes, so a refused one never shows anywhere.
     @discardableResult
-    static func follow(_ webKitDownload: WKDownload, dataStoreID: UUID, to chosenURL: URL? = nil) -> Download {
-        let download = Downloads.shared.start(dataStoreID: dataStoreID)
-        let follower = WebKitDownload(download: download, webKitDownload: webKitDownload, chosenURL: chosenURL)
+    static func follow(
+        _ webKitDownload: WKDownload, dataStoreID: UUID, to chosenURL: URL? = nil,
+        ask: (@MainActor (String, URLResponse) async -> Bool)? = nil
+    ) -> Download {
+        let download = Download(dataStoreID: dataStoreID)
+        if ask == nil { Downloads.shared.add(download) }
+        let follower = WebKitDownload(
+            download: download, webKitDownload: webKitDownload, chosenURL: chosenURL, ask: ask)
         follower.keepAlive = follower
         webKitDownload.delegate = follower
         download.stop = { [weak follower] in follower?.stop() }
         return download
     }
 
-    private init(download: Download, webKitDownload: WKDownload, chosenURL: URL?) {
+    private init(
+        download: Download, webKitDownload: WKDownload, chosenURL: URL?,
+        ask: (@MainActor (String, URLResponse) async -> Bool)?
+    ) {
         self.download = download
         self.webKitDownload = webKitDownload
         self.chosenURL = chosenURL
+        self.ask = ask
         super.init()
         progressObservation = webKitDownload.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             let known = progress.totalUnitCount > 0
@@ -43,10 +58,18 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
     }
 
     /// The place picked in a save panel, or else the Downloads folder under
-    /// a name checked by `DownloadName`. Nil (no folder) cancels it.
+    /// a name checked by `DownloadName`. Nil (no folder) cancels it. WebKit
+    /// waits for this, so with a question nothing is written before a yes.
     func download(
         _ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String
     ) async -> URL? {
+        if let ask {
+            guard await ask(suggestedFilename, response), self.download.state == .downloading else {
+                finish(.cancelled)
+                return nil
+            }
+            Downloads.shared.add(self.download)
+        }
         guard self.download.state == .downloading, let url = chosenURL.map({
             Downloads.shared.destination(for: self.download, chosen: $0)
         }) ?? Downloads.shared.destination(for: self.download, suggestedName: suggestedFilename) else {

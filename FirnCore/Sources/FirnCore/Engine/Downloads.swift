@@ -73,18 +73,23 @@ public final class Downloads {
 
     func start(dataStoreID: UUID) -> Download {
         let download = Download(dataStoreID: dataStoreID)
+        add(download)
+        return download
+    }
+
+    /// Puts a download on the list once it's really going ahead (on iOS,
+    /// only after the question was answered Download).
+    func add(_ download: Download) {
+        guard !all.contains(where: { $0 === download }) else { return }
         all.append(download)
         latest = download
-        return download
     }
 
     /// Picks where `download` is saved: the Downloads folder, under a clean
     /// name no other file (or download in progress) has. Nil if there's no
     /// Downloads folder to save to.
     func destination(for download: Download, suggestedName: String) -> URL? {
-        guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-            return nil
-        }
+        guard let folder = Self.folder else { return nil }
         let name = DownloadName.unique(DownloadName.clean(suggestedName)) { name in
             let url = folder.appending(path: name, directoryHint: .notDirectory)
             return reserved.contains(url) || FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
@@ -94,6 +99,26 @@ public final class Downloads {
         download.fileName = name
         download.fileURL = url
         return url
+    }
+
+    /// Where downloads are saved: the Mac's Downloads folder, or on iOS
+    /// Firn's own Downloads folder in its Documents (which Files shows as
+    /// On My iPhone › Firn › Downloads), made the first time it's needed.
+    static var folder: URL? {
+        #if os(iOS)
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let folder = documents.appending(path: "Downloads", directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        return folder
+        #else
+        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        #endif
     }
 
     /// A place picked in a save panel, which already asked before replacing

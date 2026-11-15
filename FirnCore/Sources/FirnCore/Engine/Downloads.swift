@@ -20,6 +20,9 @@ public final class Download: Identifiable {
     public internal(set) var state = State.downloading
     /// From 0 to 1; nil while the size isn't known.
     public internal(set) var progress: Double?
+    /// Its size in bytes, once the site says; and how much has come in.
+    public internal(set) var totalBytes: Int64?
+    public internal(set) var receivedBytes: Int64 = 0
 
     /// Stops the download in the engine. Cleared once it ends.
     @ObservationIgnored var stop: (@MainActor () -> Void)?
@@ -66,6 +69,15 @@ public final class Downloads {
         all.filter { $0.dataStoreID == dataStoreID }.reversed()
     }
 
+    /// Deletes a finished download's file and takes it off the list. Only
+    /// ever a file Firn saved itself (its own name, checked as free).
+    public func delete(_ download: Download) {
+        guard download.state != .downloading else { return }
+        if let url = download.fileURL { try? FileManager.default.removeItem(at: url) }
+        all.removeAll { $0 === download }
+        if latest === download { latest = nil }
+    }
+
     /// Takes the space's ended downloads off its list.
     public func clear(_ dataStoreID: UUID) {
         all.removeAll { $0.dataStoreID == dataStoreID && $0.state != .downloading }
@@ -104,7 +116,7 @@ public final class Downloads {
     /// Where downloads are saved: the Mac's Downloads folder, or on iOS
     /// Firn's own Downloads folder in its Documents (which Files shows as
     /// On My iPhone › Firn › Downloads), made the first time it's needed.
-    static var folder: URL? {
+    public static var folder: URL? {
         #if os(iOS)
         guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil

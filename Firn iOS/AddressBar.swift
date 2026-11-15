@@ -43,6 +43,7 @@ struct AddressBar: View {
     /// Add to Basecamp was picked with 12 tiles already there.
     @State private var basecampFull = false
     @Environment(\.newSpace) private var newSpace
+    @Environment(\.showDownloads) private var showDownloads
     @Environment(\.barQuiet) private var barQuiet
     /// A finger is holding the field (from the touch, before it's a hold).
     @GestureState private var holding = false
@@ -81,6 +82,15 @@ struct AddressBar: View {
         return PageMenuPanel.Blocking(title: store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers",
                                       site: site)
     }
+    /// The page menu's last row while the space has downloads: Downloads,
+    /// and under it how many are saving, or how many there are.
+    private var downloadsRow: PageMenuPanel.DownloadsRow? {
+        guard let showDownloads, let detail = Downloads.shared.summary(for: store.activeSpace.dataStoreID) else {
+            return nil
+        }
+        return PageMenuPanel.DownloadsRow(detail: detail) { showDownloads() }
+    }
+
     /// The page menu's Reader row, on pages that read as articles.
     private var readingRow: PageMenuPanel.Reading? {
         guard let page, page.isArticle || page.isReading else { return nil }
@@ -264,6 +274,10 @@ struct AddressBar: View {
             }
         }
         if let newSpace { add("new-space", "New Space…", ["space", "create"]) { newSpace() } }
+        if let showDownloads {
+            add("downloads", "Downloads", ["files", "saved", "download"],
+                when: Downloads.shared.summary(for: store.activeSpace.dataStoreID) != nil) { showDownloads() }
+        }
         add("reopen", store.nextToReopen == .group ? "Reopen Closed Group" : "Reopen Closed Tab",
             ["undo", "restore", "bring back"], when: store.nextToReopen != nil) { store.reopenClosed() }
         return list
@@ -454,7 +468,8 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
+        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
+                                          + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
@@ -494,7 +509,7 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }, reading: readingRow, pointer: menuPoint, lift: menuLift,
+            }, reading: readingRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
                liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -992,6 +1007,12 @@ private struct PageMenuPanel: View {
         let summarize: (() -> Void)?
     }
     let reading: Reading?
+    /// Downloads, last, while the space has any.
+    struct DownloadsRow {
+        let detail: String
+        let open: () -> Void
+    }
+    let downloads: DownloadsRow?
     /// The finger that held the bar open, once it has slid (global).
     let pointer: CGPoint?
     /// Bumped as that finger lifts, at `liftPoint`: the row there runs.
@@ -1046,6 +1067,13 @@ private struct PageMenuPanel: View {
             list.append(Entry(key: "blocking", title: blocking.title, detail: blocking.site, symbol: "hand.raised") {
                 close()
                 toggleBlocking()
+            })
+        }
+        if let downloads {
+            list.append(Entry(key: "downloads", title: "Downloads", detail: downloads.detail,
+                              symbol: "arrow.down.circle") {
+                close()
+                downloads.open()
             })
         }
         return list
@@ -1152,7 +1180,7 @@ private struct BarAction {
 }
 
 /// iOS's own share sheet, over whatever's on screen.
-@MainActor private enum ShareSheet {
+@MainActor enum ShareSheet {
     static func present(_ url: URL) {
         let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

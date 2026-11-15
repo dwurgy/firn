@@ -50,9 +50,12 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
         progressObservation = webKitDownload.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             let known = progress.totalUnitCount > 0
             let fraction = progress.fractionCompleted
+            let total = progress.totalUnitCount, received = progress.completedUnitCount
             Task { @MainActor in
                 guard let self, self.download.state == .downloading else { return }
                 self.download.progress = known ? min(max(fraction, 0), 1) : nil
+                self.download.totalBytes = known ? total : nil
+                self.download.receivedBytes = max(received, 0)
             }
         }
     }
@@ -102,6 +105,11 @@ final class WebKitDownload: NSObject, WKDownloadDelegate {
     private func done() {
         markQuarantined()
         self.download.progress = 1
+        // The size as saved, for a site that never said.
+        if let url = self.download.fileURL,
+           let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+            self.download.totalBytes = Int64(size)
+        }
         finish(.finished)
     }
 

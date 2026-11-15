@@ -137,6 +137,7 @@ private struct CommandResultRow: View {
         case "blocking": "hand.raised"
         case "summarize": "text.line.3.summary"
         case "reopen": "arrow.uturn.backward"
+        case "downloads": "arrow.down.circle"
         default: "circle"
         }
     }

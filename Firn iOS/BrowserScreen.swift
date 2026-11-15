@@ -311,6 +311,13 @@ struct BrowserScreen: View {
                 .accessibilityHidden(showingTabs)
             ReaderPill(store: store, hold: hold, away: showingTabs || pageHidden || editing)
 
+            // Just above the bar while a download saves, then "Saved to
+            // Files" (phase 6); a tap opens Downloads.
+            DownloadPill(store: store, hold: hold, away: showingTabs || pageHidden || editing || menuOpen,
+                         barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) {
+                sheets.downloads = true
+            }
+
             StandInLayer(hold: hold, landing: landing, store: store, pictures: pictures)
 
             NewTabHintLayer(hold: hold, space: store.activeSpace.color)
@@ -343,9 +350,13 @@ struct BrowserScreen: View {
         // and Space Settings…, from the space menu (step 3).
         .environment(\.newSpace, SheetAction { [sheets] in sheets.newSpace = true })
         .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
-        .onChange(of: sheets.newSpace || sheets.settings) { if sheets.newSpace || sheets.settings { editing = false } }
+        .environment(\.showDownloads, SheetAction { [sheets] in sheets.downloads = true })
+        .onChange(of: sheets.newSpace || sheets.settings || sheets.downloads) {
+            if sheets.newSpace || sheets.settings || sheets.downloads { editing = false }
+        }
         .sheet(isPresented: $sheets.newSpace) { NewSpaceSheet(store: store) }
         .sheet(isPresented: $sheets.settings) { SettingsSheet(store: store, sync: sync) }
+        .sheet(isPresented: $sheets.downloads) { DownloadsSheet(store: store) }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }

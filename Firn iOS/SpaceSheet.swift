@@ -14,6 +14,9 @@ extension EnvironmentValues {
 @MainActor @Observable final class SpaceSheets {
     var newSpace = false
     var settings = false
+    /// Downloads (docs/IOS-PLAN.md, phase 6): the page menu, the command
+    /// bar, or the pill above the bar.
+    var downloads = false
 }
 
 /// Opens a sheet. Always equal to itself, so setting it never makes the

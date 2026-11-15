@@ -563,7 +563,7 @@ extension WebKitPageController: WKNavigationDelegate {
         // Nothing new committed, so `url` stays the old page's. The error
         // page covers it, and the tab shows the address that failed instead.
         isProvisional = false
-        if let failure = LoadError(error, fallbackURL: provisionalURL) { loadError = failure }
+        if let failure = LoadError(error, fallbackURL: provisionalURL) { loadError = failure.offeringInsecureFallback() }
         provisionalURL = nil
         followBlockingOfShownPage()
         syncState()
@@ -571,7 +571,7 @@ extension WebKitPageController: WKNavigationDelegate {
 
     /// The page had started arriving, then the connection gave out.
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
-        if let failure = LoadError(error, fallbackURL: url) { loadError = failure }
+        if let failure = LoadError(error, fallbackURL: url) { loadError = failure.offeringInsecureFallback() }
         syncState()
     }
 }

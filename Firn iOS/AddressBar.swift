@@ -208,6 +208,7 @@ struct AddressBar: View {
         defer { editing.wrappedValue = false }
         switch row {
         case let .go(url), let .search(_, url, _):
+            if case .go = row { InsecureFallback.remember(typed: typed) }
             if let page, !typingNewTab { page.load(url) } else { store.openTab(url) }
         case let .history(visit):
             if let page, !typingNewTab { page.load(visit.url) } else { store.openTab(visit.url) }
@@ -969,6 +970,7 @@ private struct AddressField: View {
     private func open() {
         defer { editing.wrappedValue = false }
         guard let url = AddressInput.url(for: text, searchEngine: SearchEngine.chosen) else { return }
+        InsecureFallback.remember(typed: text)
         if let page, !typingNewTab {
             page.load(url)
         } else {

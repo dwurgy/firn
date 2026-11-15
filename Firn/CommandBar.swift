@@ -199,6 +199,7 @@ private struct CommandBar: View {
         let change = { @MainActor in
             switch row {
             case let .go(url), let .search(_, url, _):
+                if case .go = row { InsecureFallback.remember(typed: text) }
                 store.openTab(url)
             case let .history(page):
                 store.openTab(page.url)
@@ -223,6 +224,7 @@ private struct CommandBar: View {
             let incoming: FirnCore.Tab?
             switch row {
             case let .go(url), let .search(_, url, _):
+                if case .go = row { InsecureFallback.remember(typed: text) }
                 incoming = store.openTab(url, inBackground: true)
             case let .history(page):
                 incoming = store.openTab(page.url, inBackground: true)

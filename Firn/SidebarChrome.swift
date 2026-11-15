@@ -275,6 +275,7 @@ struct AddressBar: View {
 
     private func open() {
         guard let url = AddressInput.url(for: text, searchEngine: searchEngine) else { return }
+        InsecureFallback.remember(typed: text)
         if store.activeTab == nil {
             store.openTab(url)
         } else {

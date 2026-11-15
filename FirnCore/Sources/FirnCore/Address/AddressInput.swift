@@ -31,6 +31,16 @@ public enum AddressInput {
         return explicitScheme(in: text) != nil || addressWithoutScheme(text) != nil
     }
 
+    /// The address `url(for:)` gives, when Firn put `https://` on it itself
+    /// (text typed without a scheme); nil for anything else, including text
+    /// typed with `https://`, a search, or an address that gets http.
+    public static func guessedHTTPS(_ text: String) -> URL? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains(where: \.isWhitespace), explicitScheme(in: text) == nil,
+              let url = addressWithoutScheme(text), url.scheme == "https" else { return nil }
+        return url
+    }
+
     /// The scheme the text starts with ("https" in "https://…", "javascript"
     /// in "javascript:…"), or nil. "localhost:3000" is a host and port, not a scheme.
     private static func explicitScheme(in text: String) -> String? {

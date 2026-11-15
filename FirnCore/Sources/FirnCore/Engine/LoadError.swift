@@ -10,10 +10,22 @@ public struct LoadError: Equatable, Sendable {
     /// The address that failed (always http or https).
     public let url: URL
     public let reason: Reason
+    /// For a not-secure failure of an address Firn put `https://` on itself:
+    /// the same address over http, to offer (never to open on its own).
+    /// See `InsecureFallback`.
+    public let insecureFallback: URL?
 
-    public init(url: URL, reason: Reason) {
+    public init(url: URL, reason: Reason, insecureFallback: URL? = nil) {
         self.url = url
         self.reason = reason
+        self.insecureFallback = reason == .notSecure ? insecureFallback : nil
+    }
+
+    /// This error, with the http address to offer if Firn guessed https.
+    @MainActor
+    func offeringInsecureFallback() -> LoadError {
+        guard reason == .notSecure, let http = InsecureFallback.fallback(for: url) else { return self }
+        return LoadError(url: url, reason: reason, insecureFallback: http)
     }
 
     /// The error a load failed with, or nil if it isn't worth showing:

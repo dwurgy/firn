@@ -9,10 +9,10 @@ import SwiftUI
 /// Firn's colors and sizes, in one place (CLAUDE.md, Design tokens).
 /// Views never hard-code a color.
 enum Theme {
-    static let frame = Color(light: 0xE9E3DA, dark: 0x3A3734)
+    static let frame = Color(light: 0xE9E3DA, dark: 0x28241F)
     /// The frame over the window's glass: mostly frame, a little desktop showing through.
-    static let frameWash = Color(light: 0xE9E3DA, lightOpacity: 0.45, dark: 0x3A3734, darkOpacity: 0.55)
-    static let page = Color(light: 0xFBFAF8, dark: 0x2B2826)
+    static let frameWash = Color(light: 0xE9E3DA, lightOpacity: 0.45, dark: 0x28241F, darkOpacity: 0.55)
+    static let page = Color(light: 0xFBFAF8, dark: 0x1C1916)
     static let ink = Color(light: 0x241F1B, dark: 0xF5F1EC)
     static let muted = Color(light: 0x5E564E, dark: 0xD4CDC5)
     /// A group card's name: ink in dark; in light, a step softer than ink,
@@ -40,7 +40,7 @@ enum Theme {
     /// Under anything lifted off the sidebar (a tab, a tile, a group's card):
     /// the frame itself, nearly opaque, so the glass on top looks as it does
     /// at rest but never turns see-through over the page (`LiftBacking`).
-    static let liftBacking = Color(light: 0xE9E3DA, lightOpacity: 0.88, dark: 0x3A3734, darkOpacity: 0.88)
+    static let liftBacking = Color(light: 0xE9E3DA, lightOpacity: 0.88, dark: 0x28241F, darkOpacity: 0.88)
     /// The other tabs' titles rest a step back, so the tab on screen leads.
     static let tabRest = Color(light: 0x5E564E, dark: 0xBDB5AC)
 
@@ -70,17 +70,17 @@ enum Theme {
     /// keeps the system's light or dark whatever page is behind it (glass
     /// alone turns mid-grey over a bright page in dark mode, and the ink
     /// washes out).
-    static let commandVeil = Color(light: 0xFBFAF8, lightOpacity: 0.62, dark: 0x2B2826, darkOpacity: 0.62)
+    static let commandVeil = Color(light: 0xFBFAF8, lightOpacity: 0.62, dark: 0x1C1916, darkOpacity: 0.62)
 
     /// Basecamp tiles: frosted pebbles that sit a little lighter than the frame.
     static let tileFill = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0xF5F1EC, darkOpacity: 0.08)
     static let tileFillHover = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0xF5F1EC, darkOpacity: 0.13)
     /// With Reduce Transparency: the same tile, solid.
-    static let tileSolid = Color(light: 0xF4F0EA, dark: 0x45413D)
+    static let tileSolid = Color(light: 0xF4F0EA, dark: 0x332E29)
     /// Under anything lifted on the iPhone (a tab, a group, a Basecamp
     /// tile), held or dragged: the solid tile, see-through, one level the
     /// whole way (David, 2026-11-09: 85% read too dark; 60%).
-    static let heldRowBase = Color(light: 0xF4F0EA, lightOpacity: 0.6, dark: 0x45413D, darkOpacity: 0.6)
+    static let heldRowBase = Color(light: 0xF4F0EA, lightOpacity: 0.6, dark: 0x332E29, darkOpacity: 0.6)
     /// A tile's edge: lit along the top, a warm hairline around.
     static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
     static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)
@@ -203,7 +203,7 @@ enum Theme {
     /// The tab overview's haze (iOS): the frame's color washed over the
     /// blurred picture of the page you came from, at one level for every
     /// page (like the Mac's window, it shows whatever is behind it).
-    static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x3A3734, darkOpacity: 0.7)
+    static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x28241F, darkOpacity: 0.7)
 
     /// The fill of a tall card's title pill and X (iOS), over a real blur of
     /// the page's picture: the group cards' frost, stronger, so the title

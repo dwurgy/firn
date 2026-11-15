@@ -360,7 +360,7 @@ enum ReaderDocument {
         }
         @media (prefers-color-scheme: dark) {
           :root {
-            --page: #2B2826; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+            --page: #1C1916; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
             --hair: rgba(255,248,240,.10); --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13);
             --frost: rgba(160,196,214,.45);
             --card: color-mix(in srgb, var(--ink) 5%, var(--page));

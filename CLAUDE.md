@@ -225,7 +225,7 @@ Don't add these without David asking again.
 
 - **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups (decided and planned, David, 2026-11-06: always on, see Groups). Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
 - **iCloud sync: decided** (David, 2026-11-13); see "Where we are" and `docs/SYNC-PLAN.md`.
-- **Dark mode a little darker: decided** (David, 2026-11-15): frame #28241F, page #1C1916, held tile #332E29 (option B in `docs/dark-mode-design.html`); the old frame let a space's tint grey it out. Built, not yet checked by David on the Mac or iPhone. The brand moments (Sunrise) and `brand/` keep the site's values.
+- **Dark mode a little darker: decided** (David, 2026-11-15): frame #28241F, page #1C1916, held tile #332E29 (option B in `docs/dark-mode-design.html`); the old frame let a space's tint grey it out. Then on the iPhone, in dark: the card pills #4E4843, the bars' frost the frame at 40%, the hold menu #38332E, and the hold menu's corners 22pt (rows 18pt); David checked it on his iPhone (2026-11-15). The Mac not yet checked. The brand moments (Sunrise) and `brand/` keep the site's values.
 
 ---
 

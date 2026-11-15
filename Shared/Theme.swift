@@ -218,8 +218,9 @@ enum Theme {
     /// so the fill is far lighter than the pills': 42%, then 24%, still
     /// read milky next to Safari's bar (David's screenshots, 2026-11-09),
     /// so the material does the work and the frost is mostly its rim,
-    /// hairline, and tint. The card pills' colors, one level for both modes.
-    static let barFrost = Color(light: 0xE9E3DA, lightOpacity: 0.10, dark: 0x4E4843, darkOpacity: 0.10)
+    /// hairline, and tint. In dark, the frame at 40%, so the bar sits as dark
+    /// as the darker frame (David, 2026-11-15: the material alone read pale).
+    static let barFrost = Color(light: 0xE9E3DA, lightOpacity: 0.10, dark: 0x28241F, darkOpacity: 0.40)
 
     /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
     /// overview while it's open, and the card's veil over a real blur of
@@ -228,7 +229,7 @@ enum Theme {
     static let holdDim = Color(light: 0x14100C, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
     /// Thicker than the mockup's 44% (David, 2026-11-09: words got hard to
     /// read over a bright page), still one level for every screen.
-    static let holdMenuVeil = Color(light: 0xFBFAF8, lightOpacity: 0.58, dark: 0x4A4642, darkOpacity: 0.62)
+    static let holdMenuVeil = Color(light: 0xFBFAF8, lightOpacity: 0.58, dark: 0x38332E, darkOpacity: 0.62)
     static let holdMenuEdge = Color(light: 0xFFFFFF, lightOpacity: 0.60, dark: 0xC8DCE6, darkOpacity: 0.16)
     static let holdMenuShadow = Color(light: 0x3C2814, lightOpacity: 0.24, dark: 0x000000, darkOpacity: 0.50)
     static let holdMenuHairline = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0xF5F1EC, darkOpacity: 0.10)

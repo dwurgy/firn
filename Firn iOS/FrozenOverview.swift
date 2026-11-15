@@ -29,8 +29,8 @@ struct FrozenOverview {
         let grouped: [UUID: UUID]
         let tiles: [UUID]
         let rows: Bool
-        /// The scroll, to the nearest 16pt: a tab opened from the overview
-        /// comes back to the same spot (`ReturnSpot`), a point or two off,
+        /// The scroll, to the nearest 16pt: a tab lands a third down the list
+        /// (`TabOverview.scroll(to:)`), a point or two off from last time,
         /// which a blur this soft can't show.
         let scroll: Int
         let dark: Bool

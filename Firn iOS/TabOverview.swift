@@ -126,7 +126,6 @@ struct TabOverview: View {
     /// page closes back into the same spot (David, 2026-11-13: "tabs should
     /// always close back to where they were opened from"). A card cut off
     /// at the top or behind the bar slides just into view instead.
-    @State private var returnSpot: ReturnSpot?
     /// Scrolls the list while a held tab rests near its top or bottom.
     @State private var edgeScroll: Task<Void, Never>?
     /// A pinch, a drag, or the moment after either: a finger lifting then
@@ -211,7 +210,7 @@ struct TabOverview: View {
                                   incoming: drag?.basecamp == true ? drag?.id : nil,
                                   blank: blankSpot,
                                   away: drag?.tile == true && drag?.tabs == true ? drag?.id : nil,
-                                  open: openRemembering,
+                                  open: openCard,
                                   menu: { tileMenu(for: $0) },
                                   move: { tab, to in
                                       withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
@@ -464,72 +463,69 @@ struct TabOverview: View {
         if viewed != lastViewed { lastViewed = viewed }
         loadTidied()
         guard let id = store.activeTab?.id else { return }
-        let anchor = returnSpot?.id == id ? returnSpot?.anchor ?? 0.5 : 0.5
-        scroll(to: id, anchor: anchor, scroller)
+        scroll(to: id, scroller)
     }
 
-    /// Scrolls the list so the tab's spot sits at `anchor` of its view (0 at
-    /// the top, 1 at the bar), but never past either end of the list, and as
-    /// a plain offset. Asked by id, a spot that can't sit
-    /// there (a tab near the end of the list, or a short list) stopped at
-    /// the end at first, but SwiftUI kept the request and carried it out
-    /// later, past the end, as the layout changed: around the let-go on
-    /// David's iPhone, so the page aimed at the card's old spot and
-    /// snapped down as it landed (his recording, 2026-11-14), and just
-    /// after the landing in the Simulator (the list slid 70pt down). An
-    /// offset leaves nothing to carry out later.
+    /// Scrolls the list so the tab's card has its middle a third of the way
+    /// down the list's view, as Safari lands a tab (David's recording,
+    /// 2026-11-14: wherever it was opened from), but never past either end
+    /// of the list, so a tab near the end lands whole above the bar.
+    /// The spot is worked out here, kept between the list's ends: asked by
+    /// id for a spot past the end, SwiftUI stopped at the end at first but
+    /// carried the request out later, past it (the card's old spot aimed
+    /// at, a snap as it landed; his recording, 2026-11-14).
     /// A spot out of view (not laid out, or its spot from an older scroll)
     /// is first scrolled to by id, then set as an offset the next frame.
-    private func scroll(to id: UUID, anchor: CGFloat, _ scroller: ScrollViewProxy, again: Bool = true) {
+    private func scroll(to id: UUID, _ scroller: ScrollViewProxy, again: Bool = true) {
         guard let frame = spots.frames[id], let scroll = spots.scroll, let scrollTop = spots.scrollTop,
               frame.maxY > scrollTop, frame.minY < scrollTop + scroll.containerSize.height else {
-            scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: anchor))
+            scroller.scrollTo(id, anchor: .center)
             guard again else { return }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(16))
-                scroll(to: id, anchor: anchor, scroller, again: false)
+                scroll(to: id, scroller, again: false)
             }
             return
         }
         // The list's view runs from below the status bar and top margin
         // down to the bar (`containerSize` is already that tall): where the
-        // spot is in it now, and where `anchor` puts it (0 at the top, 1
-        // with its bottom at the bar, as `remember` measures it).
+        // card's top is in it now, and where a third puts it.
         let view = scroll.containerSize.height
         let now = frame.minY - scrollTop
-        let wanted = anchor * (view - frame.height)
+        let wanted = max(view / 3 - frame.height / 2, 0)
         let lowest = -scroll.contentInsets.top
         let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
         let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
         guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
-        scrollPosition.scrollTo(y: y)
+        // Asked by id, with the anchor that puts the card exactly there.
+        // `scrollPosition.scrollTo(y:)` alone was taken but never carried
+        // out while the overview was hidden, and asked again with the same
+        // offset as it showed, it was dropped as nothing new: the last tab
+        // came back half under the bar (David's recording, 2026-11-14).
+        // `scrollTo(id:)` lines the card's anchor up with the same point of
+        // the scroll view's whole height, the status bar and top margin
+        // included.
+        let region = view + scroll.contentInsets.top
+        let top = now - (y - scroll.contentOffset.y) + scroll.contentInsets.top
+        let unit = min(max(top / max(region - frame.height, 1), 0), 1)
+        scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: unit))
+        // But SwiftUI keeps an id request and does it again whenever the
+        // layout changes: the first tab, landed at the list's top, was set
+        // 62pt past it a moment later, as the top inset came back
+        // (Simulator, logged). So once it's there, the reached offset is
+        // set as the list's position too, which takes the request's place;
+        // carried out, it put the list back at the top, still hidden.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard let reached = spots.scroll?.contentOffset.y, abs(reached - y) < 1 else { return }
+            scrollPosition.scrollTo(y: reached)
+        }
     }
 
-    /// Opens a tab, noting where its spot was for the way back.
-    private func openRemembering(_ tab: FirnCore.Tab) {
+    /// Opens a tab.
+    private func openCard(_ tab: FirnCore.Tab) {
         guard !busy else { return }
-        remember(tab.id)
         open(tab)
-    }
-
-    /// Notes where the tab's spot sits in the list's view as it's opened:
-    /// as the anchor that puts it back there (0 at the top of the view, 1
-    /// with its bottom at the bar), kept between 0 and 1 so a spot that was
-    /// only partly in view comes back whole.
-    private func remember(_ id: UUID?) {
-        guard let id, let frame = spots.frames[id], spots.viewport.height > frame.height else {
-            returnSpot = nil
-            return
-        }
-        // Measured inside the list's top margin, as `scrollTo` places it
-        // (from the outer edge, a card came back 6pt low in the Simulator).
-        let top = spots.viewport.minY + Self.topMargin
-        let room = spots.viewport.height - Self.topMargin - frame.height
-        guard room > 0 else {
-            returnSpot = nil
-            return
-        }
-        returnSpot = ReturnSpot(id: id, anchor: min(max((frame.minY - top) / room, 0), 1))
     }
 
     /// Hidden: everything a visit leaves behind goes, as when the
@@ -738,7 +734,7 @@ struct TabOverview: View {
             ring: Theme.spaceColor(space),
             space: space,
             lineShown: !onScreen || landing.lineShown,
-            open: { openRemembering(tab) },
+            open: { openCard(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,
             moveUp: moveUp,
@@ -865,7 +861,6 @@ struct TabOverview: View {
     /// card to come from.
     private func finish() {
         guard !finishing else { return }
-        remember(store.activeTab?.id)
         guard let id = store.activeTab?.groupID,
               let group = store.tabGroups.first(where: { $0.id == id }), group.folded
         else { return done() }
@@ -980,7 +975,7 @@ struct TabOverview: View {
         if tab.isAwayFromHome {
             first.append(HoldMenuItem(title: "Go Back to Home", systemImage: "house") {
                 store.goHome(tab)
-                openRemembering(tab)
+                openCard(tab)
             })
         }
         if let url = tab.url {
@@ -2194,13 +2189,6 @@ struct ComesForward: ViewModifier, Animatable {
             return view.scaleEffect(scale, anchor: anchor).brightness(dim)
         }
     }
-}
-
-/// Where a tab opened from the overview sat in the list's view.
-struct ReturnSpot {
-    let id: UUID
-    /// The `scrollTo` anchor that puts it back (0 to 1).
-    let anchor: CGFloat
 }
 
 /// Firn's frost, the Mac's `FrostGlass` recipe, for every frosted thing in

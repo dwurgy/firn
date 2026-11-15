@@ -1325,6 +1325,7 @@ extension WebKitPageController {
                 finish(nil)
             })
         }
+        alert.view.tintColor = Self.alertInk
         isShowingPanel = true
         top.present(alert, animated: true)
     }
@@ -1383,8 +1384,21 @@ extension WebKitPageController {
                 finish(.cancel)
             })
         }
+        alert.view.tintColor = Self.alertInk
         isShowingPanel = true
         top.present(alert, animated: true)
+    }
+
+    /// The alerts' buttons in Firn's ink, not the Glacier accent: buttons
+    /// are ink, and it stays neutral in every space (David, 2026-11-14).
+    /// iOS always writes the main button's label in white, so dark mode's
+    /// ink (near white) would hide it: there, a warm mid-brown (light
+    /// mode's muted) that holds white text. Theme's values; FirnCore can't
+    /// see Theme.
+    fileprivate static let alertInk = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0x5E / 255, green: 0x56 / 255, blue: 0x4E / 255, alpha: 1)
+            : UIColor(red: 0x24 / 255, green: 0x1F / 255, blue: 0x1B / 255, alpha: 1)
     }
 
     /// A name the site chose, kept to a readable length in the question.

@@ -21,7 +21,18 @@ struct OverviewHaze: View {
 
     /// The haze's own tint: the space's color over the whole blurred scene,
     /// light and dark. One place to tune it.
-    static let hazeTint: (light: CGFloat, dark: CGFloat) = (light: 0.08, dark: 0.06)
+    static let hazeTint: (light: CGFloat, dark: CGFloat) = (light: 0.06, dark: 0.05)
+    /// The band of the scene's height (0 top, 1 bottom) the haze is made
+    /// from: where the sky turns lavender, through the dawn glow, into the
+    /// top of the snow. The whole scene read as navy above the cards in
+    /// every space (David, 2026-11-16); its whole bottom 42% was mostly
+    /// snow, a grey fog once blurred, so the band stops partway in.
+    static let horizonBand: ClosedRange<CGFloat> = 0.50...0.84
+    /// Dark only: how far the haze's bottom (`darkBottomShare` of it) is
+    /// darkened toward warm charcoal, baked in, so blue hour never turns
+    /// into grey fog over the snow.
+    static let darkBottomStrength: CGFloat = 0.85
+    static let darkBottomShare: CGFloat = 0.4
 
     @State private var haze: UIImage?
     /// The screen's height over its width, rounded, so a turned iPad gets a
@@ -58,14 +69,11 @@ struct OverviewHaze: View {
             } else {
                 if let haze {
                     // Filling the screen, never sizing the backdrop itself.
-                    Color.clear
-                        .overlay {
-                            Image(uiImage: haze)
-                                .resizable()
-                                .interpolation(.high)
-                                .scaledToFill()
-                        }
-                        .clipped()
+                    // Stretched to the screen: the horizon's strip, blurred
+                    // to blobs, shows no stretch.
+                    Image(uiImage: haze)
+                        .resizable()
+                        .interpolation(.high)
                         // Each scene its own layer, so a new one cross-fades
                         // in by opacity alone, never blended on the CPU.
                         .id(ObjectIdentifier(haze))
@@ -86,7 +94,7 @@ struct OverviewHaze: View {
             let size = proxy.size
             return size.width > 0 ? (size.height / size.width * 20).rounded() / 20 : 0
         } action: { aspect = $0 }
-        .background(LightStatusBar(on: shown && !reduceTransparency))
+        .background(LightStatusBar(on: shown && colorScheme == .dark && !reduceTransparency))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .task(id: aspect > 0 && !reduceTransparency ? key : nil) {
@@ -98,8 +106,18 @@ struct OverviewHaze: View {
                 .frame(width: width, height: (width * aspect).rounded())
                 .environment(\.colorScheme, colorScheme))
             renderer.scale = 1
-            guard let source = renderer.cgImage else { return }
-            let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
+            guard let scene = renderer.cgImage else { return }
+            // Only the horizon: from the lavender sky down to the snow.
+            let height = CGFloat(scene.height)
+            let top = (height * Self.horizonBand.lowerBound).rounded()
+            let bottom = (height * Self.horizonBand.upperBound).rounded()
+            guard let source = scene.cropping(to: CGRect(x: 0, y: top, width: CGFloat(scene.width),
+                                                         height: bottom - top))
+            else { return }
+            let dark = colorScheme == .dark
+            let made = await Task.detached(priority: .userInitiated) {
+                Self.blurred(source).flatMap { dark ? Self.darkenedBottom($0) : $0 }
+            }.value
             guard !Task.isCancelled, let made else { return }
             let image = UIImage(cgImage: made)
             if Self.kept.count > 16 { Self.kept.removeAll() }
@@ -141,6 +159,29 @@ struct OverviewHaze: View {
             .applyingGaussianBlur(sigma: Double(wide / tiny) / 2)
             .cropped(to: extent)
         return softener.createCGImage(soft, from: extent)
+    }
+
+    /// Dark's haze with its bottom eased toward warm charcoal (the dark
+    /// frame), so the snow's glow stays blue hour in every space color.
+    private nonisolated static func darkenedBottom(_ image: CGImage) -> CGImage? {
+        let width = image.width, height = image.height
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        let full = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(image, in: full)
+        let charcoal = CGColor(srgbRed: 0x28 / 255, green: 0x24 / 255, blue: 0x1F / 255, alpha: 1)
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+            colors: [charcoal.copy(alpha: 0)!, charcoal.copy(alpha: darkBottomStrength)!] as CFArray,
+            locations: [0, 1]
+        ) else { return image }
+        // Core Graphics counts up from the bottom.
+        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: CGFloat(height) * darkBottomShare),
+                                   end: .zero, options: [.drawsAfterEndLocation])
+        return context.makeImage()
     }
 
     /// One Core Image context, made once: setting one up for every haze

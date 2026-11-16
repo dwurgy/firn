@@ -116,6 +116,13 @@ struct OverviewRow: View {
             // the title reads the same over anything.
             shape.fill(Theme.cardPaper)
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                // Dark: a faint light along the top edge, so cards stand
+                // off the blue-hour sky.
+                .overlay {
+                    shape.strokeBorder(LinearGradient(colors: [Theme.cardTopLight, .clear],
+                                                      startPoint: .top, endPoint: .center),
+                                       lineWidth: 1)
+                }
                 .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
@@ -135,8 +142,8 @@ struct OverviewRow: View {
         .overlay(alignment: .top) { TabLine(tab: tab, close: close) }
         .overlay {
             if isOnScreen {
-                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t) + BasecampTiles.ringWidth)
-                    .padding(-BasecampTiles.ringWidth)
+                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t) + CardRing.reach)
+                    .padding(-CardRing.reach)
                     .allowsHitTesting(false)
             }
         }
@@ -171,6 +178,12 @@ struct OverviewRow: View {
             .frame(height: max(height - Self.rowHeight - Self.windowInset, 0), alignment: .top)
             .background(Theme.page)
             .clipShape(RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous))
+            // Light: a hairline inside the window's edge, so a white page
+            // doesn't melt into the paper around it.
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous)
+                    .strokeBorder(Theme.windowHairline, lineWidth: 1)
+            }
             .padding(.horizontal, Self.windowInset)
             .padding(.top, Self.rowHeight)
             .opacity(Double(min(t * 2, 1)))
@@ -233,7 +246,7 @@ struct TabLine: View {
     let tab: FirnCore.Tab
     let close: () -> Void
 
-    static let titleFont = Font.footnote.weight(.semibold)
+    static let titleFont = Font.footnote
     private static let icon: CGFloat = 20
     private var site: String { WebAddress.site(of: tab.url) }
 
@@ -277,8 +290,18 @@ extension Theme {
     /// (`Theme`'s own light-and-dark maker is private to the shared file.)
     static let cardPaper = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x2B / 255, green: 0x28 / 255, blue: 0x26 / 255, alpha: 1)
+            ? UIColor(red: 0x34 / 255, green: 0x30 / 255, blue: 0x2D / 255, alpha: 1)
             : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
+    })
+    /// Dark cards' top edge: white at 6%; nothing in light.
+    static let cardTopLight = Color(uiColor: UIColor { traits in
+        UIColor(white: 1, alpha: traits.userInterfaceStyle == .dark ? 0.06 : 0)
+    })
+    /// The page window's inside edge in light: ink at 8%; nothing in dark.
+    static let windowHairline = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .clear
+            : UIColor(red: 0x24 / 255, green: 0x1F / 255, blue: 0x1B / 255, alpha: 0.08)
     })
 }
 
@@ -325,13 +348,19 @@ struct SidewaysPan: UIGestureRecognizerRepresentable {
 struct CardRing: View {
     let color: Color
     let radius: CGFloat
+    /// 2pt, 2pt off the card: thinner than Basecamp's 3.5pt, so it reads
+    /// as a mark, not a frame around a frame (David, 2026-11-16).
+    static let width: CGFloat = 2
+    static let gap: CGFloat = 2
+    /// How far the ring's outside edge sits from the card's.
+    static let reach = width + gap
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let dark = colorScheme == .dark
-        shape.strokeBorder(color, lineWidth: BasecampTiles.ringWidth)
+        shape.strokeBorder(color, lineWidth: Self.width)
             .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
             .overlay {
                 // Light catching the ring's outer edge along the top, gone by the middle.

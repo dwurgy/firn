@@ -142,8 +142,8 @@ struct OverviewRow: View {
         .overlay(alignment: .top) { TabLine(tab: tab, close: close) }
         .overlay {
             if isOnScreen {
-                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t) + CardRing.reach)
-                    .padding(-CardRing.reach)
+                // On the card's inside edge, as Basecamp's tiles (David, 2026-11-16).
+                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t))
                     .allowsHitTesting(false)
             }
         }
@@ -348,12 +348,8 @@ struct SidewaysPan: UIGestureRecognizerRepresentable {
 struct CardRing: View {
     let color: Color
     let radius: CGFloat
-    /// 2pt, 2pt off the card: thinner than Basecamp's 3.5pt, so it reads
-    /// as a mark, not a frame around a frame (David, 2026-11-16).
-    static let width: CGFloat = 2
-    static let gap: CGFloat = 2
-    /// How far the ring's outside edge sits from the card's.
-    static let reach = width + gap
+    /// Basecamp's ring width, drawn on the card's inside edge.
+    static let width = BasecampTiles.ringWidth
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 

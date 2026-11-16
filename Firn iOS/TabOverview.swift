@@ -325,18 +325,17 @@ struct TabOverview: View {
             .overlay { LandingDim(landing: landing) }
             .overlay {
                 if store.openTabs.isEmpty {
-                    // Muted ink in light, warm white in dark, a third of the
-                    // way down (David, 2026-11-16). Light's haze is a
-                    // mid-tone there: about 2.6:1 (see docs/HISTORY.md).
+                    // Ink in light, warm white in dark, centered (David,
+                    // 2026-11-16): muted read about 2.6:1 on light's haze.
                     GeometryReader { proxy in
                         Text("No open tabs")
                             .font(.subheadline)
                             .foregroundStyle(Color(uiColor: UIColor { traits in
                                 traits.userInterfaceStyle == .dark
                                     ? UIColor(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255, alpha: 1)
-                                    : UIColor(red: 0x5E / 255, green: 0x56 / 255, blue: 0x4E / 255, alpha: 1)
+                                    : UIColor(red: 0x24 / 255, green: 0x1F / 255, blue: 0x1B / 255, alpha: 1)
                             }))
-                            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.3)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
                     }
                 }
             }

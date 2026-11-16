@@ -690,8 +690,8 @@ struct TabOverview: View {
 
     /// Pinched together (0): every tab but the one on screen becomes a slim
     /// row, until it's looked at again. Pinched apart (1): the tidy is
-    /// undone and the last day's cards come back. Every row's fill glides into
-    /// its card's pill (0.3s, ease-out, no bounce), the held tab staying in
+    /// undone and the last day's cards come back. Every card's window folds
+    /// away under its line or opens below it (0.2s, ease-out, no bounce), the held tab staying in
     /// place, or the tab on screen held in the middle (VoiceOver's action).
     /// With Reduce Motion, the list fades out, changes, and fades back in.
     private func setCards(_ target: CGFloat, _ scroller: ScrollViewProxy,
@@ -709,7 +709,7 @@ struct TabOverview: View {
             }
             return
         }
-        withAnimation(.easeOut(duration: 0.3)) {
+        withAnimation(.easeOut(duration: 0.2)) {
             tidiedAt = tidy
             cards = target
             if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
@@ -733,7 +733,7 @@ struct TabOverview: View {
             loadPicture: { await pictures.loadImage(for: tab.id) },
             ring: Theme.spaceRing(space),
             space: space,
-            lineShown: !onScreen || landing.lineShown,
+            windowShown: gliding != tab.id && (!onScreen || landing.lineShown),
             open: { openCard(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,
@@ -900,7 +900,10 @@ struct TabOverview: View {
         return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down)
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
-            .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: gliding == tab.id))
+            // A card stays while its page glides (only its window empties,
+            // `windowShown`); a slim row has no window, so it empties whole.
+            .modifier(EmptyWhileHeld(finger: finger, id: tab.id,
+                                     gliding: gliding == tab.id && tallness(tab, onScreen: isOnScreen(tab)) < 1))
             // Hold, then move, lifts it (the list's HoldToDrag). Holding
             // still opens Firn's own menu beside the tab (`openMenu`);
             // moving away from it drags the tab on.

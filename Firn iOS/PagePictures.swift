@@ -43,7 +43,6 @@ final class PagePictures {
             MainActor.assumeIsolated {
                 self?.slots.values.forEach { $0.image = nil }
                 self?.recent.removeAll()
-                PillBackdrop.forgetAll()
             }
         }
     }
@@ -73,14 +72,6 @@ final class PagePictures {
         while recent.count > Self.memoryLimit {
             slots[recent.removeFirst()]?.image = nil
         }
-        // Read from disk on the spot: its pills' blur comes a moment later,
-        // and the cards are drawn again to use it.
-        if PillBackdrop.band(for: image, dark: false) == nil {
-            Task {
-                await PillBackdrop.prepare(image)
-                if let slot = slots[tabID], slot.image === image { slot.blurs += 1 }
-            }
-        }
     }
 
     /// The tab's slot, made the first time it's asked for (never watched
@@ -109,7 +100,6 @@ final class PagePictures {
             return UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
         }.value
         guard let image else { return }
-        await PillBackdrop.prepare(image)
         if slots[tabID]?.image == nil { keep(image, for: tabID) }
     }
 
@@ -135,9 +125,6 @@ final class PagePictures {
             let taken: CGImage? = if let failed { failed } else { await page.snapshot(width: width) }
             guard let picture = taken else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
-            // Its pills' blur first (a few milliseconds, off the main
-            // thread), so the card gliding in never blurs live.
-            await PillBackdrop.prepare(image)
             keep(image, for: id)
             // Encoding and writing happen off the main thread.
             Task.detached(priority: .utility) {
@@ -173,14 +160,8 @@ extension PagePictures {
 @MainActor @Observable
 final class PictureSlot {
     var image: UIImage?
-    /// Counts the picture's pill blurs made after it was shown, so its card
-    /// is drawn again to use them.
-    var blurs = 0
-    /// The picture, for a view: reading this watches the blurs too.
-    var shown: UIImage? {
-        _ = blurs
-        return image
-    }
+    /// The picture, for a view.
+    var shown: UIImage? { image }
 }
 
 extension UIImage {

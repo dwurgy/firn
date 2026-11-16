@@ -1,137 +1,10 @@
-import Accelerate
 import FirnCore
 import SwiftUI
 import UIKit
 
-/// What a card's pills show through: the top of the page's picture, blurred
-/// (and lifted, for light mode) once, off the main thread, as a picture is
-/// taken or read. Blurred live, every card's title pill and X blurred again
-/// on every frame anything moved: about ten blurs at once behind a swipe
-/// up, which held the glide to about 40 frames a second on David's iPhone
-/// while Basecamp's tiles (no pills) glided at full speed (his recording,
-/// 2026-11-13). The picture never changes, so neither does its blur.
-@MainActor enum PillBackdrop {
-    /// How much of the picture's top is kept, in its own points: enough
-    /// for the pills at any stage of a pinch (44pt at most) on the
-    /// narrowest card, with room for the blur to reach in.
-    nonisolated static let bandHeight: CGFloat = 72
-    /// How soft the page is through a pill: enough that no shape can be
-    /// made out, while its light and color still come through.
-    nonisolated static let blurRadius: CGFloat = 10
-    /// Frost scatters light, so it's brighter than what's behind it: in
-    /// light mode the blurred page is lifted a fixed amount, so a dark
-    /// page's pill turns a lighter grey and its dark title reads (David,
-    /// 2026-11-08). Bright pages barely change. Dark mode reads as is.
-    nonisolated static let frostLift: Double = 0.15
-
-    private struct Made {
-        let picture: UIImage
-        let light: UIImage
-        let dark: UIImage
-    }
-    private static var made: [ObjectIdentifier: Made] = [:]
-    private static var order: [ObjectIdentifier] = []
-    /// A few more than the pictures kept in memory; each is small (1x, the
-    /// top band only).
-    private static let limit = PagePictures.memoryLimit + 8
-
-    /// The picture's blurred band, if it's been made. Checked against the
-    /// picture itself, so a reused identifier can't show another page.
-    static func band(for picture: UIImage, dark: Bool) -> UIImage? {
-        guard let made = made[ObjectIdentifier(picture)], made.picture === picture else { return nil }
-        return dark ? made.dark : made.light
-    }
-
-    /// Makes the picture's band, unless it's there already.
-    static func prepare(_ picture: UIImage) async {
-        let id = ObjectIdentifier(picture)
-        if let made = made[id], made.picture === picture { return }
-        guard let source = picture.cgImage else { return }
-        let scale = picture.scale
-        let bands = await Task.detached(priority: .userInitiated) { blurredBands(source, scale: scale) }.value
-        guard let bands else { return }
-        made[id] = Made(picture: picture, light: UIImage(cgImage: bands.light, scale: 1, orientation: .up),
-                        dark: UIImage(cgImage: bands.dark, scale: 1, orientation: .up))
-        order.removeAll { $0 == id }
-        order.append(id)
-        while order.count > limit { made[order.removeFirst()] = nil }
-    }
-
-    static func forgetAll() {
-        made.removeAll()
-        order.removeAll()
-    }
-
-    /// The top band, shrunk to one pixel a point (it's blurred, so nothing
-    /// is lost), blurred with its edges held, and a lifted copy for light
-    /// mode. The radius is the card's 10pt, in the picture's points: a card
-    /// is a little narrower than the page it shows. Three box blurs, which
-    /// together are a Gaussian, on the CPU: well under a millisecond for so
-    /// small an image (Core Image took about 20ms, mostly its setup, and
-    /// held up the picture the glide waits for).
-    private nonisolated static func blurredBands(_ source: CGImage, scale: CGFloat)
-        -> (light: CGImage, dark: CGImage)? {
-        let bandPixels = min(Int((bandHeight * scale).rounded()), source.height)
-        guard bandPixels > 0, scale > 0,
-              let band = source.cropping(to: CGRect(x: 0, y: 0, width: source.width, height: bandPixels))
-        else { return nil }
-        let width = max(Int((CGFloat(source.width) / scale).rounded()), 1)
-        let height = max(Int((CGFloat(bandPixels) / scale).rounded()), 1)
-        let rowBytes = width * 4
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        let info = CGImageAlphaInfo.premultipliedLast.rawValue
-        var pixels = [UInt8](repeating: 0, count: rowBytes * height)
-        var spare = [UInt8](repeating: 0, count: rowBytes * height)
-        // A Gaussian of this size is three box blurs about 2σ+1 wide.
-        let radius = blurRadius * CGFloat(width) / max(CGFloat(width) - 32, 1)
-        let box = UInt32(Int(radius * 2) | 1)
-        let blurred: Bool = pixels.withUnsafeMutableBytes { raw in
-            spare.withUnsafeMutableBytes { other in
-                guard let context = CGContext(data: raw.baseAddress, width: width, height: height,
-                                              bitsPerComponent: 8, bytesPerRow: rowBytes, space: space,
-                                              bitmapInfo: info) else { return false }
-                context.interpolationQuality = .high
-                context.draw(band, in: CGRect(x: 0, y: 0, width: width, height: height))
-                var a = vImage_Buffer(data: raw.baseAddress, height: vImagePixelCount(height),
-                                      width: vImagePixelCount(width), rowBytes: rowBytes)
-                var b = vImage_Buffer(data: other.baseAddress, height: vImagePixelCount(height),
-                                      width: vImagePixelCount(width), rowBytes: rowBytes)
-                let flags = vImage_Flags(kvImageEdgeExtend)
-                guard vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError,
-                      vImageBoxConvolve_ARGB8888(&b, &a, nil, 0, 0, box, box, nil, flags) == kvImageNoError,
-                      vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError
-                else { return false }
-                return true
-            }
-        }
-        // The blur ended in `spare`.
-        guard blurred, let dark = image(from: spare, width: width, height: height, space: space, info: info)
-        else { return nil }
-        // Lifted: the same amount added to every color, as SwiftUI's
-        // `brightness` adds it (the picture is opaque, so no alpha to mind).
-        let lift = Int((frostLift * 255).rounded())
-        for i in stride(from: 0, to: spare.count, by: 4) {
-            spare[i] = UInt8(min(Int(spare[i]) + lift, 255))
-            spare[i + 1] = UInt8(min(Int(spare[i + 1]) + lift, 255))
-            spare[i + 2] = UInt8(min(Int(spare[i + 2]) + lift, 255))
-        }
-        guard let light = image(from: spare, width: width, height: height, space: space, info: info)
-        else { return nil }
-        return (light, dark)
-    }
-
-    private nonisolated static func image(from pixels: [UInt8], width: Int, height: Int,
-                                          space: CGColorSpace, info: UInt32) -> CGImage? {
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
-        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: width * 4, space: space, bitmapInfo: CGBitmapInfo(rawValue: info),
-                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
-    }
-}
-
-/// A slim row on glass: the site's icon and the page's title, one line, as
-/// in Safari and Firn's Mac sidebar. The tab on screen stands out on solid page white with a frost
-/// ring. An X closes it in one tap; a swipe left follows the finger and,
+/// A tab in the overview: a slim row (the site's icon and the page's title,
+/// one line, as in Safari and Firn's Mac sidebar) or a tall card (the same
+/// line over the page's picture). An X closes it in one tap; a swipe left follows the finger and,
 /// past a third of the row or with a flick, slides it off and closes it
 /// (a short swipe glides back), as in Safari.
 struct OverviewRow: View {
@@ -153,12 +26,13 @@ struct OverviewRow: View {
     let loadPicture: () async -> Void
     /// The ring around the tab on screen: the space's color, calmed (`Theme.spaceRing`).
     let ring: Color
-    /// The space's color name, for the card's frost.
+    /// The space's color name.
     let space: String
-    var lineShown = true
+    /// The page's picture under the line; empty while the page glides.
+    var windowShown = true
     let open: () -> Void
     let close: () -> Void
-    /// Reports where the card's picture (or the slim row) is on screen.
+    /// Reports where the card (or the slim row) is on screen.
     let spot: (CGRect) -> Void
     /// VoiceOver's way to reorder (a drag can't be found by it); nil at an end.
     var moveUp: (() -> Void)?
@@ -172,6 +46,7 @@ struct OverviewRow: View {
     var actionsKey: [Int] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// How far the finger has pulled the row left (0 or less).
     @State private var pull: CGFloat = 0
     @State private var width: CGFloat = 0
@@ -180,7 +55,10 @@ struct OverviewRow: View {
 
     private var site: String { WebAddress.site(of: tab.url) }
     private var t: CGFloat { min(max(tallness, 0), 1) }
+    /// A slim row's corners (and the group cards' are built on them).
     static let cornerRadius: CGFloat = 14
+    /// A tall card's corners.
+    static let cardCornerRadius: CGFloat = 18
     private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     /// The top of the page, a glance rather than a screenshot: a fixed
     /// 160pt on every iPhone (David, 2026-11-05; the mockup's was 148), so
@@ -214,27 +92,33 @@ struct OverviewRow: View {
         }
     }
 
-    /// A slim row is one line on a flat fill; a tall card is the same line on its
-    /// page's picture. One view for both, so a pinch glides between them:
-    /// the row's fill shrinks into the card's frosted pill as the tile grows
-    /// around it, and the picture fades in behind. The tab on screen is ringed
-    /// in the space's color on the card's inside edge, as Basecamp's tile on
-    /// screen is (`CardRing`), so it reads at a glance.
+    /// A slim row is the tab's line (`TabLine`) on flat paper; a tall card
+    /// is the same line, in the same place, on a warm paper card, with the
+    /// page's picture in a rounded window below it (David, 2026-11-16: the
+    /// frosted pills picked up whatever was under them and were hard to
+    /// read on busy pages). One view for both, so a pinch only opens or
+    /// folds the window under the line, which never moves. The tab on
+    /// screen is ringed in the space's color just outside the card.
     private var tile: some View {
-        Button(action: open) {
+        let shape = RoundedRectangle(cornerRadius: mix(Self.cornerRadius, Self.cardCornerRadius, t),
+                                     style: .continuous)
+        let height = Self.rowHeight + (Self.cardHeight - Self.rowHeight) * t
+        return Button(action: open) {
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: Self.rowHeight + (Self.cardHeight - Self.rowHeight) * t)
-                .contentShape(Self.shape)
+                .frame(height: height)
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .background {
-            // The page fades in behind the pill as the card grows; the
-            // row's fill itself is the line's (it becomes the pill).
-            Theme.page
-                .overlay(alignment: .top) { pictureView }
-                .clipShape(Self.shape)
-                .opacity(t)
+            // The row's paper, then the card's: solid, no glass or blur, so
+            // the title reads the same on any page.
+            ZStack {
+                shape.fill(reduceTransparency ? Theme.tileSolid : Theme.slimRowFill).opacity(1 - t)
+                shape.fill(Theme.cardPaper).opacity(t)
+            }
+            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+            .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
         .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
@@ -245,12 +129,16 @@ struct OverviewRow: View {
             if let moveDown { Button("Move Down", action: moveDown) }
         }
         .overlay(alignment: .top) {
-            CardTop(tab: tab, close: close, progress: t, space: space, picture: picture)
-                .opacity(lineShown ? 1 : 0)
+            window(height: height)
+                // Empty while its page glides out of it or into it; the
+                // picture gliding stands in for it.
+                .opacity(windowShown ? 1 : 0)
         }
+        .overlay(alignment: .top) { TabLine(tab: tab, close: close) }
         .overlay {
             if isOnScreen {
-                CardRing(color: ring, radius: Self.cornerRadius)
+                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t) + BasecampTiles.ringWidth)
+                    .padding(-BasecampTiles.ringWidth)
                     .allowsHitTesting(false)
             }
         }
@@ -261,13 +149,43 @@ struct OverviewRow: View {
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
+    /// The window's distance from the card's sides and bottom, and its
+    /// corners (the card's 18pt less the 5pt, so they run evenly).
+    static let windowInset: CGFloat = 5
+    static let windowCornerRadius: CGFloat = cardCornerRadius - windowInset
+    private static let windowHeight = cardHeight - rowHeight - windowInset
+
+    /// Where a card's picture sits, in a card's frame: what a page glides
+    /// out of and into.
+    static func window(in card: CGRect) -> CGRect {
+        CGRect(x: card.minX + windowInset, y: card.minY + rowHeight,
+               width: max(card.width - windowInset * 2, 1),
+               height: max(card.height - rowHeight - windowInset, 1))
+    }
+
+    /// The page's picture under the line, cropped from the page's top at
+    /// the window's width. As the card folds, the window's bottom edge
+    /// rises with the card's, so the picture folds away under the line.
+    private func window(height: CGFloat) -> some View {
+        pictureView
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.windowHeight, alignment: .top)
+            .frame(height: max(height - Self.rowHeight - Self.windowInset, 0), alignment: .top)
+            .background(Theme.page)
+            .clipShape(RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous))
+            .padding(.horizontal, Self.windowInset)
+            .padding(.top, Self.rowHeight)
+            .opacity(Double(min(t * 2, 1)))
+            .allowsHitTesting(false)
+    }
+
     /// A slim row's height.
     static let rowHeight: CGFloat = 44
 
     @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
-            // As wide as the card, from the page's top: exactly where the
-            // glide lands, so swapping one for the other shows nothing.
+            // As wide as the window, from the page's top: exactly where
+            // the glide lands, so swapping one for the other shows nothing.
             GeometryReader { box in
                 let scale = box.size.width / picture.size.width
                 Image(uiImage: picture)
@@ -278,7 +196,6 @@ struct OverviewRow: View {
         } else {
             SiteIconView(icon: tab.icon, size: 40) { LetterMark(site: site) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, 22)  // half the card's title line
                 .accessibilityHidden(true)
         }
     }
@@ -309,242 +226,62 @@ struct OverviewRow: View {
     }
 }
 
-/// A tile's title line, from a slim row (0) to a tall card (1). A slim row
-/// and a card's pill are one shape (David, 2026-11-05): as the tile grows,
-/// the row's flat fill shrinks into the pill in the card's top-left corner
-/// and gives way to Firn's frost (the group cards', over a real blur), the
-/// icon and title slide with it as one piece, and the row's X moves to the
-/// top-right as its round frost forms around it (2026-11-08: one kind of
-/// glass in the overview, Firn's own).
-/// Drawn on the card, and on the page's picture as it glides into the card
-/// (there at 1, without a working X), so the two match when they swap.
-struct CardTop: View {
+/// A tab's line: the site's icon, the page's title (13pt semibold, one
+/// line), and a plain X, the same in a slim row and at the top of a tall
+/// card (David, 2026-11-16), so nothing on it moves as a row opens into a
+/// card. Taps on the icon and title fall through to the tile; only the X
+/// is its own, 44pt to tap.
+struct TabLine: View {
     let tab: FirnCore.Tab
-    /// Closes the tab; nil draws the X without one (on the gliding picture).
-    var close: (() -> Void)?
-    /// 0 a slim row, 1 a tall card, anything between while a pinch moves.
-    var progress: CGFloat = 1
-    /// The space's color, which tints the pill as it tints the slim rows' haze.
-    var space = "glacier"
-    /// The page's picture, drawn as wide as the card from its top: blurred
-    /// under the pills, so the page's light comes through them.
-    var picture: UIImage?
+    let close: () -> Void
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    /// The title's own width on one line, so the pill is only as wide as
-    /// the icon and title.
-    @State private var titleWidth: CGFloat = 0
-
-    /// Rounded at the top only, as the card's corners.
-    static func shape(_ radius: CGFloat) -> UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous)
-    }
+    static let titleFont = Font.footnote.weight(.semibold)
+    private static let icon: CGFloat = 20
+    private var site: String { WebAddress.site(of: tab.url) }
 
     var body: some View {
-        CardLine(tab: tab, close: close, progress: progress, space: space,
-                 titleWidth: titleWidth, solid: reduceTransparency, picture: picture)
-            .background(alignment: .topLeading) {
-                Text(tab.title)
-                    .font(CardLine.titleFont)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .hidden()
-                    .onGeometryChange(for: CGFloat.self, of: \.size.width) { titleWidth = $0 }
-                    .accessibilityHidden(true)
+        HStack(spacing: 0) {
+            SiteIconView(icon: tab.icon, size: Self.icon) { LetterMark(site: site, size: Self.icon) }
+                .frame(width: Self.icon, height: Self.icon)
+                .padding(.leading, 14)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            Text(tab.title)
+                .font(Self.titleFont)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.leading, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
-            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .buttonStyle(.plain)
+            .padding(.trailing, 2)
+            .accessibilityLabel("Close \(tab.title)")
+        }
+        .frame(height: OverviewRow.rowHeight)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 }
 
 private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
-/// The line itself, laid out from `progress` alone so SwiftUI can glide it
-/// frame by frame (it's `Animatable`): every size and spot is a mix of the
-/// row's and the card's.
-struct CardLine: View, Animatable {
-    let tab: FirnCore.Tab
-    let close: (() -> Void)?
-    var progress: CGFloat
-    let space: String
-    let titleWidth: CGFloat
-    /// Reduce Transparency: the card's frost becomes the solid frame color.
-    let solid: Bool
-    let picture: UIImage?
-    @Environment(\.colorScheme) private var colorScheme
-
-    nonisolated var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    /// One font for both sizes (the row's semibold), so the text can't jump.
-    /// 13pt, as Safari's tab titles (David, 2026-11-08): smaller pills, more
-    /// of the picture.
-    static let titleFont = Font.footnote.weight(.semibold)
-
-    // The row's measures, then the card's.
-    private static let rowHeight = OverviewRow.rowHeight          // 44
-    private static let glassHeight: CGFloat = 30                  // the pill and round X
-    private static let inset: CGFloat = 8                         // the pill's and X's distance in
-    private static let rowIcon: CGFloat = 20                      // the site icon, row then pill
-    private static let pillIcon: CGFloat = 18
-    private static let pillPad: CGFloat = 8                       // pill edge to icon
-    private static let iconGap: CGFloat = 6                       // icon to title, in the pill
-    private static let cardLineHeight: CGFloat = inset + glassHeight + 6
-    private static let tapSize: CGFloat = 44
-    /// The X's middle, this far in from the right in a row and on a card
-    /// alike, so it only moves up and down as the tile grows (David, 2026-11-08).
-    private static let xCenterIn: CGFloat = 24
-    /// Room on the card's right for the X and a gap before it.
-    private static let xRoom: CGFloat = 52
-
-    private var site: String { WebAddress.site(of: tab.url) }
-
-    var body: some View {
-        let t = min(max(progress, 0), 1)
-        GeometryReader { box in
-            let w = box.size.width
-            // The fill: the whole row, then the pill.
-            let pillLead = Self.pillPad + Self.pillIcon + Self.iconGap
-            let pillWidth = min(max(w - Self.xRoom, 0), pillLead + titleWidth + 12)
-            let glassWidth = mix(w, pillWidth, t)
-            let glassHeight = mix(Self.rowHeight, Self.glassHeight, t)
-            let glassShape = RoundedRectangle(cornerRadius: mix(OverviewRow.cornerRadius, Self.glassHeight / 2, t),
-                                              style: .continuous)
-            // The line's middle: the row's, then the pill's.
-            let middle = mix(Self.rowHeight / 2, Self.inset + Self.glassHeight / 2, t)
-            let titleX = mix(46, Self.inset + pillLead, t)
-            let titleRoom = max(mix(w - 92, pillWidth - pillLead - 12, t), 0)
-            ZStack(alignment: .topLeading) {
-                ZStack {
-                    // A slim row is flat (David, 2026-11-08): only group cards
-                    // and a card's pills are frost. As the tile grows, the
-                    // row's flat fill shrinks into the pill and gives way to
-                    // its frost, one shape all the way. The frost is always
-                    // there, only faded: added mid-pinch, SwiftUI gave it a
-                    // glide of its own, and it trailed the title (David's
-                    // recording, 2026-11-08).
-                    // A slim row: flat paper, the same loose and grouped,
-                    // with a hairline and a faint shadow so it reads as
-                    // something to tap (`Theme.slimRowFill`).
-                    glassShape.fill(solid ? Theme.tileSolid : Theme.slimRowFill)
-                        .overlay { glassShape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-                        .shadow(color: solid ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
-                        .opacity(1 - t)
-                    pillFrost(glassShape, at: CGPoint(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t)),
-                              size: CGSize(width: glassWidth, height: glassHeight), cardWidth: w)
-                        .opacity(t)
-                }
-                .frame(width: glassWidth, height: glassHeight)
-                .offset(x: mix(0, Self.inset, t), y: mix(0, Self.inset, t))
-                .allowsHitTesting(false)
-                SiteIconView(icon: tab.icon, size: Self.rowIcon) { LetterMark(site: site, size: Self.rowIcon) }
-                    .scaleEffect(mix(1, Self.pillIcon / Self.rowIcon, t))
-                    .frame(width: Self.rowIcon, height: Self.rowIcon)
-                    .offset(x: mix(24, Self.inset + Self.pillPad + Self.pillIcon / 2, t) - Self.rowIcon / 2,
-                            y: middle - Self.rowIcon / 2)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                Text(tab.title)
-                    .font(Self.titleFont)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(width: titleRoom, height: 30, alignment: .leading)
-                    // A change of the row's width (a group forming or
-                    // thawing around it) sets the title's room at once: its
-                    // width gliding made the title wrap and ride up to the
-                    // row's top edge mid-glide (David's recording,
-                    // 2026-11-08). The pinch, which changes `t`, still glides.
-                    .animation(nil, value: w)
-                    .offset(x: titleX, y: middle - 15)
-                    // Taps on the icon and title open the tile; only the X is its own.
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                closeButton(t, cardWidth: w, middle: middle)
-                    .offset(x: (w - Self.xCenterIn) - Self.tapSize / 2,
-                            y: middle - Self.tapSize / 2)
-            }
-        }
-        .frame(height: mix(Self.rowHeight, Self.cardLineHeight, t), alignment: .top)
-    }
-
-    private static let noPicture = UIImage()
-
-    /// A pill's frost: the group cards' recipe, light, over the page's own
-    /// picture blurred (David, 2026-11-08: light pouring through frozen
-    /// glass). Firn's own blur, not iOS's material, which laid a grey veil
-    /// and dulled the colors and can't be tuned. `origin` and `size` are
-    /// the pill's spot in the card, so the blur lines up with the picture
-    /// around it. Always drawn, even without a picture (an empty image),
-    /// so nothing is added mid-pinch.
-    private func pillFrost<S: InsettableShape>(_ shape: S, at origin: CGPoint, size: CGSize,
-                                               cardWidth: CGFloat) -> some View {
-        let image = solid ? Self.noPicture : (picture ?? Self.noPicture)
-        // Already blurred (`PillBackdrop`): a plain picture, nothing worked
-        // out per frame. Until it's made (a moment after a picture is read
-        // from disk), blurred live as before.
-        let band = solid ? nil : picture.flatMap { PillBackdrop.band(for: $0, dark: colorScheme == .dark) }
-        let shown = band ?? image
-        let scale = shown.size.width > 0 ? cardWidth / shown.size.width : 0
-        return Frost(shape: shape, space: space, fill: Theme.cardPillVeil, solid: solid)
-            .background {
-                Image(uiImage: shown)
-                    .resizable()
-                    .frame(width: cardWidth, height: shown.size.height * scale)
-                    .offset(x: -origin.x, y: -origin.y)
-                    .frame(width: size.width, height: size.height, alignment: .topLeading)
-                    .clipped()
-                    .modifier(LiveBlur(on: band == nil, lift: colorScheme == .light))
-                    .clipShape(shape)
-                    .accessibilityHidden(true)
-            }
-    }
-
-    /// The row's small X, moving to the card's corner as its round frost
-    /// forms around it.
-    @ViewBuilder private func closeButton(_ t: CGFloat, cardWidth w: CGFloat, middle: CGFloat) -> some View {
-        let size = mix(28, Self.glassHeight, t)
-        let formed = min(max((t - 0.3) / 0.7, 0), 1)
-        let center = CGPoint(x: (w - Self.xCenterIn), y: middle)
-        let mark = ZStack {
-            pillFrost(Circle(), at: CGPoint(x: center.x - size / 2, y: center.y - size / 2),
-                      size: CGSize(width: size, height: size), cardWidth: w)
-                .frame(width: size, height: size)
-                .opacity(formed)
-            ZStack {
-                Image(systemName: "xmark").foregroundStyle(Theme.muted)
-                Image(systemName: "xmark").foregroundStyle(Theme.ink).opacity(t)
-            }
-            .font(.system(size: 12, weight: .semibold))
-            .scaleEffect(mix(11 / 12, 1, t))
-        }
-        .frame(width: Self.tapSize, height: Self.tapSize)
-        .contentShape(.circle)
-        if let close {
-            Button(action: close) { mark }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close \(tab.title)")
-        } else {
-            mark.allowsHitTesting(false).accessibilityHidden(true)
-        }
-    }
-}
-
-/// A pill's live blur, only until its picture's `PillBackdrop` is made.
-private struct LiveBlur: ViewModifier {
-    let on: Bool
-    let lift: Bool
-
-    func body(content: Content) -> some View {
-        if on {
-            content
-                .blur(radius: PillBackdrop.blurRadius, opaque: true)
-                .brightness(lift ? PillBackdrop.frostLift : 0)
-        } else {
-            content
-        }
-    }
+extension Theme {
+    /// A tall card's paper: the page's warm white in light, a step above
+    /// the overview's frame in dark (David, 2026-11-16). The iPhone's only.
+    /// (`Theme`'s own light-and-dark maker is private to the shared file.)
+    static let cardPaper = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0x2B / 255, green: 0x28 / 255, blue: 0x26 / 255, alpha: 1)
+            : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
+    })
 }
 
 /// A sideways pan for a row in a scrolling list: it starts only when the
@@ -636,7 +373,7 @@ extension OverviewRow: @MainActor Equatable {
     static func == (a: Self, b: Self) -> Bool {
         a.tab === b.tab && a.isOnScreen == b.isOnScreen && a.tallness == b.tallness
             && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.ring == b.ring && a.space == b.space
-            && a.lineShown == b.lineShown && a.groupName == b.groupName
+            && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey
     }

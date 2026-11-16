@@ -100,23 +100,6 @@ struct BrowserScreen: View {
         get { hold.standInTab }
         nonmutating set { if hold.standInTab !== newValue { hold.standInTab = newValue } }
     }
-    /// The page is gliding into its own card as the overview opens: the
-    /// picture wears the card's ring, fading in over the glide's second
-    /// half, so it's there when the card swaps in (David, 2026-11-08: it
-    /// came in only after landing).
-    private var ringOnGlide: Bool {
-        get { hold.ringOnGlide }
-        nonmutating set { if hold.ringOnGlide != newValue { hold.ringOnGlide = newValue } }
-    }
-    /// The width of the card the picture glides into or out of. A tab in a
-    /// group is narrower than a loose one (the group card's padding); the
-    /// line riding on the picture is laid out at this width, so it matches
-    /// the card's own and nothing jumps as they swap (David, 2026-11-08: the
-    /// title pill jittered and resized, only in groups).
-    private var standInCardWidth: CGFloat? {
-        get { hold.standInCardWidth }
-        nonmutating set { if hold.standInCardWidth != newValue { hold.standInCardWidth = newValue } }
-    }
     /// Where the shown part of the picture sits on screen: the page's own
     /// place, a card, a row, or wherever the finger has pulled it. Its
     /// corners, and how much the card's line on it has faded in.
@@ -142,10 +125,6 @@ struct BrowserScreen: View {
     private var settle: CGFloat {
         get { landing.settle }
         nonmutating set { if landing.settle != newValue { landing.settle = newValue } }
-    }
-    private var lineOnPicture: Double {
-        get { hold.lineOnPicture }
-        nonmutating set { if hold.lineOnPicture != newValue { hold.lineOnPicture = newValue } }
     }
     /// The page being pulled up from the bar (step 3c), while the finger
     /// is down.
@@ -596,10 +575,7 @@ struct BrowserScreen: View {
         // Hidden at the start of its swap's stretch, not 0, so the swap
         // can later run on its own clock from here (`land(inCardOf:)`).
         if tab.place == .basecamp { tileReveal = BasecampTiles.glideSwap.lowerBound }
-        ringOnGlide = true
-        standInCardWidth = spots.frames[tab.id].map { fullSize($0).width }
         lineShown = false
-        lineOnPicture = 0
         showingTabs = true
     }
 
@@ -641,7 +617,7 @@ struct BrowserScreen: View {
     /// card takes its place in one frame. A card off screen: a cross-fade.
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double) {
         Task {
-            guard let measured = await spot(of: tab.id) else { return fadeToTabs() }
+            guard let measured = await spot(of: tab) else { return fadeToTabs() }
             let tile = tab.place == .basecamp
             // Aimed at its card's full-size place, and it stays there: the
             // closing tab is its own thing, never part of the overview
@@ -652,7 +628,6 @@ struct BrowserScreen: View {
             if tile {
                 tileCrop = (from: box, to: spot.size)
             }
-            standInCardWidth = spot.width
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
             withAnimation(Self.listComes) { listIn = 1 }
             // The overview comes forward over the glide itself, finishing
@@ -708,7 +683,7 @@ struct BrowserScreen: View {
             let setsDown = false
             withAnimation(curve) {
                 box = spot
-                boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius
+                boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.windowCornerRadius
                 arrival = 1
                 neighborsOpacity = 0
             }
@@ -735,14 +710,6 @@ struct BrowserScreen: View {
                     settle = 1
                 }
             }
-            // The line's fade starts on the glide's first frame (where the
-            // page has just become its picture, so a hiccup can't show) and
-            // eases in, so it's mostly seen over the second half. Started
-            // 0.12s in, it froze a frame there (David's recordings,
-            // 2026-11-04). A tile has no line.
-            if !tile {
-                withAnimation(.easeIn(duration: 0.26)) { lineOnPicture = 1 }
-            }
         }
     }
 
@@ -751,7 +718,6 @@ struct BrowserScreen: View {
         neighbors = []
         lineShown = true
         gliding = nil
-        ringOnGlide = false
         standIn = nil
         standInTab = nil
         tileCrop = nil
@@ -774,7 +740,6 @@ struct BrowserScreen: View {
             pageHidden = true
         } completion: {
             gliding = nil
-            ringOnGlide = false
         }
         lineShown = true
     }
@@ -783,7 +748,7 @@ struct BrowserScreen: View {
     /// behind it; the overview leaves once the page has its room.
     private func openTab(_ tab: FirnCore.Tab) {
         guard showingTabs, gliding == nil else { return }
-        let spot = spots.frames[tab.id].flatMap { visible($0) }
+        let spot = spots.frames[tab.id].flatMap { visible($0) }.map { pictureSpot($0, of: tab) }
         // The tab already on screen is still drawn, hidden, so it swaps in
         // at once; another tab's page is made (or woken) now and can be
         // blank for a moment, so its picture fades off it.
@@ -800,16 +765,12 @@ struct BrowserScreen: View {
         // Out of a tile: the tile shows at first, and the picture comes up
         // over it as it starts to grow.
         tileReveal = tile ? 1 : 0
-        standInCardWidth = spot.width
         putStandIn(image, of: tab, at: spot,
-                   radius: tile ? BasecampTiles.cornerRadius : OverviewRow.cornerRadius)
-        // A card's line leaves first; a slim row has none on its picture.
-        lineOnPicture = fromCard ? 1 : 0
-        ringOnGlide = false
+                   radius: tile ? BasecampTiles.cornerRadius
+                       : fromCard ? OverviewRow.windowCornerRadius : OverviewRow.cornerRadius)
         gliding = tab.id
         Task {
             await Task.yield()
-            withAnimation(.easeOut(duration: 0.1)) { lineOnPicture = 0 }
             // On the glide's own curve: the tile and picture swap as it
             // starts to grow (`BasecampTiles.glideSwap`).
             if tile { withAnimation(Self.glide) { tileReveal = 0 } }
@@ -840,7 +801,6 @@ struct BrowserScreen: View {
             swiping = false
             neighbors = []
             gliding = nil
-            ringOnGlide = false
             heldCard = nil
             lineShown = true
             standInTab = nil
@@ -902,7 +862,6 @@ struct BrowserScreen: View {
             showingTabs = false
         } completion: {
             gliding = nil
-            ringOnGlide = false
             lineShown = true
         }
     }
@@ -973,7 +932,6 @@ struct BrowserScreen: View {
         } else {
             // The overview stays out of a sideways swipe.
             gliding = tab.id
-            lineOnPicture = 0
             swiping = true
             // The page carries its own strip now (`topBand`).
             stripOpacity = 0
@@ -1103,7 +1061,7 @@ struct BrowserScreen: View {
                 return open(neighbor, carrying: velocity)
             }
             if toTabs {
-                guard let spot = await spot(of: pull.tab.id) else { return fadeToTabs() }
+                guard let spot = await spot(of: pull.tab) else { return fadeToTabs() }
                 if pull.tab.place == .basecamp {
                     land(inCardOf: pull.tab,
                          curve: carrying(velocity, to: spot, duration: Self.tileCloseDuration, x1: 0.3,
@@ -1296,12 +1254,19 @@ struct BrowserScreen: View {
     /// Asked at once first: it always waited a frame, and the let-go asks
     /// twice, so the page sat still under the lifted finger for two or
     /// three frames before it moved (David's recording, 2026-11-13).
-    private func spot(of id: UUID) async -> CGRect? {
+    private func spot(of tab: FirnCore.Tab) async -> CGRect? {
         for attempt in 0..<7 {
             if attempt > 0 { try? await Task.sleep(for: .milliseconds(16)) }
-            if let frame = spots.frames[id], let spot = visible(frame) { return spot }
+            if let frame = spots.frames[tab.id], let spot = visible(frame) { return pictureSpot(spot, of: tab) }
         }
         return nil
+    }
+
+    /// Where a tab's picture sits in the overview: a tall card's window
+    /// under its line (`OverviewRow.window(in:)`), or the whole slim row
+    /// or Basecamp tile.
+    private func pictureSpot(_ frame: CGRect, of tab: FirnCore.Tab) -> CGRect {
+        spots.cards.contains(tab.id) && tab.place != .basecamp ? OverviewRow.window(in: frame) : frame
     }
 
     /// The spot, if it's on screen (a card scrolled away has no glide).

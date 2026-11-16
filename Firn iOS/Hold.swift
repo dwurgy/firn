@@ -47,12 +47,9 @@ final class Hold {
     var stripOpacity: Double = 1
     var standInFade: Double = 1
     var standInTab: FirnCore.Tab?
-    var ringOnGlide = false
-    var standInCardWidth: CGFloat?
     var box: CGRect = .zero
     var boxRadius: CGFloat = 0
     var tileCrop: (from: CGRect, to: CGSize)?
-    var lineOnPicture: Double = 0
     var pull: Pull?
     var neighbors: [Neighbor] = []
     var neighborsOpacity: Double = 1
@@ -169,7 +166,6 @@ struct StandInLayer: View {
             // layer's own corner isn't the screen's).
             let width = hold.pageFrame.width
             let height = width * standInSize.height / standInSize.width
-            let cardWidth = max(hold.standInCardWidth ?? width - 32, 1)
             GeometryReader { layer in
                 let corner = layer.frame(in: .global).origin
                 ZStack(alignment: .topLeading) {
@@ -227,29 +223,6 @@ struct StandInLayer: View {
                                         face: tileFace))
                     .modifier(ArrivalBand(arrival: hold.standInTab?.place == .basecamp ? landing.tileReveal : 0,
                                           range: BasecampTiles.glideSwap, fadesIn: false))
-                    if hold.ringOnGlide, let standInTab = hold.standInTab, standInTab.place != .basecamp {
-                        // The card's ring (`CardRing`), on the picture's inside edge.
-                        CardRing(color: Theme.spaceRing(store.activeSpace.color), radius: boxRadius)
-                            .frame(width: box.width, height: box.height)
-                            .offset(x: box.minX, y: box.minY)
-                            .modifier(RingFade(arrival: landing.arrival))
-                    }
-                    // The card's line, drawn at the card's size and
-                    // scaled with the picture (no layout while it moves).
-                    // A tile has no line: only cards get it.
-                    if let standInTab = hold.standInTab, standInTab.place != .basecamp {
-                        CardTop(tab: standInTab, space: store.activeSpace.color, picture: hold.standIn)
-                            .frame(width: cardWidth)
-                            .clipShape(CardTop.shape(OverviewRow.cornerRadius))
-                            .scaleEffect(box.width / cardWidth, anchor: .topLeading)
-                            .offset(x: box.minX, y: box.minY)
-                            // Never quite 0 while it rides the
-                            // picture: at 0 iOS drops the line's blur,
-                            // and building it again (or dropping it)
-                            // froze a frame about 100ms into every
-                            // glide (David's recording, 2026-11-04).
-                            .opacity(max(hold.lineOnPicture, 0.002))
-                    }
                 }
                 // Around the card's middle, so it settles in place.
                 .scaleEffect(landing.settle, anchor: UnitPoint(x: box.midX / max(layer.size.width, 1),
@@ -470,20 +443,5 @@ private struct NewTabHint: View {
             .scaleEffect(0.7 + 0.3 * reach)
             .opacity(Double(reach))
             .animation(.smooth(duration: 0.2), value: reach >= 1)
-    }
-}
-
-/// The gliding card's ring: nothing over the glide's first half, then in
-/// with the page's arrival, full as it lands (as `ArrivalFade` does for the
-/// rest of the overview).
-private struct RingFade: ViewModifier, Animatable {
-    var arrival: CGFloat
-    nonisolated var animatableData: CGFloat {
-        get { arrival }
-        set { arrival = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content.opacity(min(max((arrival - 0.5) / 0.5, 0), 1))
     }
 }

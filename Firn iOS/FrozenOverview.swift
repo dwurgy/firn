@@ -60,7 +60,7 @@ struct FrozenOverview {
         return FrozenOverview(image: UIImage(cgImage: blurred, scale: scale, orientation: .up), look: look)
     }
 
-    /// Three box blurs, together a Gaussian, edges held (as `PillBackdrop`),
+    /// Three box blurs, together a Gaussian, edges held,
     /// then the edges faded out over `feather` pixels.
     private nonisolated static func blur(_ source: CGImage, radius: CGFloat, feather: CGFloat) -> CGImage? {
         let width = source.width, height = source.height

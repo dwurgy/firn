@@ -15,11 +15,22 @@ extension BrowserStore {
         let fields = syncFields()
         var changes = SyncChanges()
 
-        // Tabs said to have left their group last time: their records go now.
-        for id in state.announced.sorted(by: Self.byID) where state.tabs[id]?.groupID == nil {
-            if state.tabs.removeValue(forKey: id) != nil { changes.deletes.append(Self.recordID(.tab, id)) }
+        // Tabs said to have left their group: their records go once iCloud
+        // has that word (`SyncState.sent`). One back in a group, or gone,
+        // is no longer waiting.
+        let sentLoose = state.sentLoose ?? []
+        for id in state.announced.sorted(by: Self.byID) {
+            guard let record = state.tabs[id], record.groupID == nil else {
+                state.announced.remove(id)
+                continue
+            }
+            guard sentLoose.contains(id) else { continue }
+            state.tabs[id] = nil
+            state.announced.remove(id)
+            changes.deletes.append(Self.recordID(.tab, id))
         }
-        state.announced = []
+        state.sentLoose = sentLoose.intersection(state.announced)
+        if state.sentLoose?.isEmpty == true { state.sentLoose = nil }
 
         Self.takeEdits(fields.spaces, seen: state.seen.spaces, into: &state.spaces, at: stamp, as: SyncItem.space, &changes)
         Self.takeEdits(fields.groups, seen: state.seen.groups, into: &state.groups, at: stamp, as: SyncItem.group, &changes)
@@ -105,7 +116,7 @@ extension BrowserStore {
         var spaceSaves: [SyncedSpace] = []
         var groupSaves: [SyncedGroup] = []
         var tabSaves: [SyncedTab] = []
-        for item in saves {
+        for item in Self.latest(saves, without: deletes) {
             switch item {
             case let .space(space): spaceSaves.append(space)
             case let .group(group): groupSaves.append(group)
@@ -118,9 +129,8 @@ extension BrowserStore {
             if !state.firstSyncDone { join(space, in: &state) }
             apply(state.fromCloud(space), to: &state)
         }
-        if !state.firstSyncDone { giveWay(in: &state) }
-        // A space that joined goes by iCloud's id now, and one that gave way
-        // is gone: what was taken to send is taken again in today's terms.
+        // A space that joined goes by iCloud's id now: what was taken to
+        // send is taken again in today's terms.
         toSend.saves = toSend.saves.compactMap { state.item(for: $0.id) }
 
         for group in groupSaves where !apply(state.fromCloud(group), to: &state) { waiting.append(.group(group)) }
@@ -138,6 +148,29 @@ extension BrowserStore {
         // What's here now came in: it isn't an edit of this device's.
         state.seen = syncFields()
         return SyncApplied(toSend: toSend, waiting: waiting)
+    }
+
+    /// The engine's whole first fetch is in (the app calls this then, not
+    /// after each batch): untouched spaces of this device's give way now,
+    /// so one whose same-named match came in a later batch still joined it.
+    /// Afterward, what was held to send is taken again in today's terms
+    /// (`SyncState.item(for:)`), as one that gave way is gone.
+    public func finishFirstSync(_ state: inout SyncState) {
+        guard !state.firstSyncDone else { return }
+        giveWay(in: &state)
+        state.finishFirstSync()
+    }
+
+    /// One of each record, the one that came last (records still waiting
+    /// come before newer arrivals), and none that are being deleted: a
+    /// record left waiting and deleted since waits no longer.
+    static func latest(_ saves: [SyncItem], without deletes: [SyncRecordID]) -> [SyncItem] {
+        var taken = Set(deletes)
+        var kept: [SyncItem] = []
+        for item in saves.reversed() where taken.insert(item.id).inserted {
+            kept.append(item)
+        }
+        return kept.reversed()
     }
 
     /// Whether an incoming change is newer than the record this device has.

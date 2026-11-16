@@ -21,8 +21,14 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// This device's own fields at its last look (their times mean nothing).
     var seen = Fields()
     /// Tabs this device said had left their group; their records go at the
-    /// next look, once the word is out.
+    /// first look after iCloud has the word (`sent`). Deleting sooner would
+    /// let CloudKit drop the word unsent (a save followed by a delete of the
+    /// same record goes as the delete alone), and other devices would close
+    /// those tabs instead of keeping them loose.
     var announced: Set<UUID> = []
+    /// Announced tabs whose loose record iCloud has. Optional so sync files
+    /// from before it still open.
+    var sentLoose: Set<UUID>?
 
     // The first sync (David, 2026-11-13): a space of this device's joins
     // another device's space of the same name. It keeps its own id and data
@@ -43,7 +49,16 @@ public struct SyncState: Codable, Equatable, Sendable {
     public init() {}
 
     /// The engine's first fetch is done: from now on spaces arrive as new.
+    /// (The app calls `BrowserStore.finishFirstSync`, which lets untouched
+    /// spaces give way first.)
     public mutating func finishFirstSync() { firstSyncDone = true }
+
+    /// iCloud saved this record, as sent (the app passes each saved tab
+    /// record, opened). A loose tab's word is out, so its record can go.
+    public mutating func sent(_ item: SyncItem) {
+        guard case let .tab(tab) = item, tab.groupID == nil, announced.contains(tab.id) else { return }
+        sentLoose = (sentLoose ?? []).union([tab.id])
+    }
 
     /// The fields that sync, as they are on a device right now.
     struct Fields: Codable, Equatable, Sendable {

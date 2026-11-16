@@ -49,15 +49,15 @@ struct SyncTests {
         // Each device's first look; they agree on the one space.
         send(from: mac, to: phone)
         send(from: phone, to: mac)
-        mac.state.finishFirstSync()
-        phone.state.finishFirstSync()
+        mac.store.finishFirstSync(&mac.state)
+        phone.store.finishFirstSync(&phone.state)
         return (mac, phone)
     }
 
     /// A Mac already syncing, and a phone turning sync on with its own spaces.
     func firstSync(phoneSpaces: [Space]) -> (SyncDevice, SyncDevice) {
         let mac = SyncDevice(spaces: [personal], clock: clock)
-        mac.state.finishFirstSync()
+        mac.store.finishFirstSync(&mac.state)
         let phone = SyncDevice(spaces: phoneSpaces, clock: clock)
         return (mac, phone)
     }
@@ -69,6 +69,8 @@ struct SyncTests {
         let changes = sender.store.takeSyncChanges(into: &sender.state)
         let seal = SyncSeal(keyData: key)!
         let saves = changes.saves.map { try! seal.open(try! seal.seal($0)) }
+        // iCloud saved them: the sender hears so.
+        for item in saves { sender.state.sent(item) }
         if deletesFirst {
             _ = receiver.store.applySync(saves: [], deletes: changes.deletes, to: &receiver.state)
             return receiver.store.applySync(saves: saves, deletes: [], to: &receiver.state)
@@ -145,7 +147,7 @@ struct SyncTests {
         // Nothing of the phone's own id goes up.
         #expect(fromPhone.saves.allSatisfy { $0.id.name != phonePersonal.id.uuidString })
         #expect(phone.state.item(for: SyncRecordID(kind: .space, name: phonePersonal.id.uuidString)) == nil)
-        phone.state.finishFirstSync()
+        phone.store.finishFirstSync(&phone.state)
 
         // From now on each side's edits reach the other in its own terms.
         phone.store.updateSpace(phone.space, name: "Home", color: phone.space.color)
@@ -164,9 +166,30 @@ struct SyncTests {
         let untouched = Space(name: "New Space", color: "glacier", order: 0, dataStoreID: UUID())
         let (mac, phone) = firstSync(phoneSpaces: [untouched])
         let fromPhone = send(from: mac, to: phone).toSend
+        phone.store.finishFirstSync(&phone.state)
         #expect(phone.store.spaces.map(\.id) == [personal.id])
-        #expect(fromPhone.isEmpty)
+        // What was held to send is taken again once it gave way (the app's
+        // `finishFirstSync`): nothing of the untouched space goes up.
+        #expect(fromPhone.saves.compactMap { phone.state.item(for: $0.id) }.isEmpty)
         #expect(phone.state.item(for: SyncRecordID(kind: .space, name: untouched.id.uuidString)) == nil)
+    }
+
+    /// The first fetch can come in several batches: an untouched space
+    /// still joins its match if that arrives after another space.
+    @Test func anUntouchedSpaceWaitsForTheWholeFirstFetch() throws {
+        let phonePersonal = Space(name: "Personal", color: "sage", order: 0, dataStoreID: UUID())
+        let (mac, phone) = firstSync(phoneSpaces: [phonePersonal])
+        mac.store.addSpace(name: "Work", color: "sand")
+        let changes = mac.store.takeSyncChanges(into: &mac.state)
+        let seal = SyncSeal(keyData: key)!
+        let opened = changes.saves.map { try! seal.open(try! seal.seal($0)) }
+        let isPersonal = { (item: SyncItem) in item.id.name == personal.id.uuidString }
+        _ = phone.store.applySync(saves: opened.filter { !isPersonal($0) }, deletes: [], to: &phone.state)
+        _ = phone.store.applySync(saves: opened.filter(isPersonal), deletes: [], to: &phone.state)
+        phone.store.finishFirstSync(&phone.state)
+        #expect(phone.store.spaces.contains { $0.id == phonePersonal.id && $0.dataStoreID == phonePersonal.dataStoreID })
+        #expect(phone.store.spaces.count == 2)
+        #expect(phone.erased.ids.isEmpty)
     }
 
     @Test func aSpaceInUseArrivesOnTheOtherDevice() throws {
@@ -175,7 +198,7 @@ struct SyncTests {
         makeGroup("Desk", "a", on: phone)
         let fromPhone = send(from: mac, to: phone).toSend
         #expect(Set(phone.store.spaces.map(\.id)) == [work.id, personal.id])
-        phone.state.finishFirstSync()
+        phone.store.finishFirstSync(&phone.state)
         let seal = SyncSeal(keyData: key)!
         _ = mac.store.applySync(saves: fromPhone.saves.map { try! seal.open(try! seal.seal($0)) },
                                 deletes: fromPhone.deletes, to: &mac.state)
@@ -295,6 +318,57 @@ struct SyncTests {
         #expect(phone.store.looseTabs.count == 2)
         send(from: mac, to: phone)
         #expect(phone.store.looseTabs.count == 2)
+    }
+
+    /// CloudKit keeps one pending change per record, and a delete after a
+    /// save goes alone. A look that comes before the loose word has gone up
+    /// must not delete those records, or the phone closes the tabs.
+    @Test func ungroupingSurvivesALookBeforeItGoesUp() throws {
+        let (mac, phone) = devices()
+        let group = makeGroup("Trip", "a", "b", on: mac)
+        send(from: mac, to: phone)
+        mac.store.ungroup(group)
+        let first = mac.store.takeSyncChanges(into: &mac.state)
+        let second = mac.store.takeSyncChanges(into: &mac.state)
+        #expect(second.deletes.isEmpty)
+        // The engine's pending list, as it merges the two looks.
+        let deleted = Set(first.deletes + second.deletes)
+        let saves = (first.saves + second.saves).filter { !deleted.contains($0.id) }
+        _ = phone.store.applySync(saves: saves, deletes: Array(deleted), to: &phone.state)
+        #expect(phone.store.looseTabs.count == 2)
+        // Once iCloud has them, the records go, and the phone keeps its tabs.
+        for item in saves { mac.state.sent(item) }
+        send(from: mac, to: phone)
+        #expect(phone.store.looseTabs.count == 2)
+        #expect(mac.state.tabs.isEmpty)
+    }
+
+    /// A tab back in a group before its loose word went up stays synced.
+    @Test func aTabRegroupedBeforeTheWordWentUpKeepsItsRecord() throws {
+        let (mac, phone) = devices()
+        let group = makeGroup("Trip", "a", "b", on: mac)
+        send(from: mac, to: phone)
+        let b = try #require(mac.store.tabs(in: group).last)
+        mac.store.takeOutOfGroup(b)
+        _ = mac.store.takeSyncChanges(into: &mac.state)
+        mac.store.move(b, toEndOf: try #require(mac.group(named: "Trip")))
+        send(from: mac, to: phone)
+        #expect(mac.state.tabs[b.id]?.groupID == group.id)
+        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a", "b"])
+    }
+
+    @Test func aRecordWaitingAndDeletedSinceWaitsNoLonger() throws {
+        let (mac, phone) = devices()
+        makeGroup("Trip", "a", on: mac)
+        let changes = mac.store.takeSyncChanges(into: &mac.state)
+        let tabs = changes.saves.filter { if case .tab = $0 { true } else { false } }
+        let first = phone.store.applySync(saves: tabs, deletes: [], to: &phone.state)
+        #expect(first.waiting.count == 1)
+        // The same record again keeps one waiting, and its delete ends it.
+        let again = phone.store.applySync(saves: first.waiting + tabs, deletes: [], to: &phone.state)
+        #expect(again.waiting.count == 1)
+        let gone = phone.store.applySync(saves: again.waiting, deletes: tabs.map(\.id), to: &phone.state)
+        #expect(gone.waiting.isEmpty)
     }
 
     @Test func closingAGroupClosesItsTabsEverywhere() throws {
@@ -429,7 +503,7 @@ struct SyncTests {
         let (mac, phone) = firstSync(phoneSpaces: [phonePersonal])
         let work = mac.store.addSpace(name: "Work", color: "sage")
         send(from: mac, to: phone)
-        phone.state.finishFirstSync()
+        phone.store.finishFirstSync(&phone.state)
         // The phone's own Personal joined the Mac's: it goes by iCloud's id.
         let ids = Set(phone.state.recordIDs(of: [.space]))
         #expect(ids == Set([personal.id, work.id].map { SyncRecordID(kind: .space, name: $0.uuidString) }))

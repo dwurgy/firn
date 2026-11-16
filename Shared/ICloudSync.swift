@@ -58,6 +58,7 @@ final class ICloudSync {
     /// The first sync: this device's changes, held until its fetch is done.
     private var held = SyncChanges()
     private var firstFetch: Task<Void, Never>?
+    private var firstFetchFailedAt: Date?
     /// A record came sealed with a key this device doesn't have.
     private var otherKeySeen = false
 
@@ -189,6 +190,7 @@ final class ICloudSync {
             } catch {
                 // Offline, most likely: tried again with the next change.
                 Self.log.error("The first sync's fetch failed")
+                firstFetchFailedAt = .now
                 firstFetch = nil
                 return
             }
@@ -202,8 +204,8 @@ final class ICloudSync {
     /// and this device's changes go up, in today's terms (a space that
     /// joined goes by iCloud's id; one that gave way is gone).
     private func finishFirstSync() {
-        guard let engine else { return }
-        saved.state.finishFirstSync()
+        guard let engine, !saved.state.firstSyncDone else { return }
+        store.finishFirstSync(&saved.state)
         var changes = held
         held = SyncChanges()
         let taken = store.takeSyncChanges(into: &saved.state)
@@ -261,6 +263,10 @@ final class ICloudSync {
     private func sent(_ sent: CKSyncEngine.Event.SentRecordZoneChanges) {
         for record in sent.savedRecords {
             saved.systemFields[record.recordID.recordName] = Self.systemFields(of: record)
+            // A loose tab's word is in iCloud: its record can go next time.
+            if let id = Self.syncID(record.recordID), id.kind == .tab, let item = open(record, as: id) {
+                saved.state.sent(item)
+            }
         }
         var again: [SyncRecordID] = []
         for failure in sent.failedRecordSaves {
@@ -432,6 +438,14 @@ final class ICloudSync {
             self.sent(sent)
         case .didFetchChanges:
             if otherKeySeen { checkKey() }
+            // The first fetch failed (offline at launch, say) and the engine
+            // has fetched on its own since: finish the first sync now rather
+            // than waiting for a change on this device.
+            // At most once a minute after a failure, so it can't spin offline.
+            if !saved.state.firstSyncDone,
+               firstFetchFailedAt.map({ Date.now.timeIntervalSince($0) > 60 }) ?? true {
+                fetchFirst()
+            }
         default:
             break
         }

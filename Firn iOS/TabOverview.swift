@@ -307,17 +307,15 @@ struct TabOverview: View {
             .overlay { LandingDim(landing: landing) }
             .overlay {
                 if store.openTabs.isEmpty {
-                    // Ink in light, warm white in dark, centered (David,
-                    // 2026-11-16): muted read about 2.6:1 on light's haze.
+                    // Muted, centered across and a little above the middle
+                    // (optical center): the wash deepens toward the bottom,
+                    // and at the true middle Clay in light dipped to 4.4:1
+                    // through the grain. Here every space color passes 4.5:1.
                     GeometryReader { proxy in
                         Text("No open tabs")
                             .font(.subheadline)
-                            .foregroundStyle(Color(uiColor: UIColor { traits in
-                                traits.userInterfaceStyle == .dark
-                                    ? UIColor(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255, alpha: 1)
-                                    : UIColor(red: 0x24 / 255, green: 0x1F / 255, blue: 0x1B / 255, alpha: 1)
-                            }))
-                            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                            .foregroundStyle(Theme.muted)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.38)
                     }
                 }
             }
@@ -375,8 +373,8 @@ struct TabOverview: View {
             }
         }
         .background {
-            // Sunrise's haze, the same whichever tab was open.
-            OverviewHaze(space: space, shown: shown)
+            // The space wash: the space's color, as the Mac's tinted frame.
+            SpaceWash(space: space)
         }
         // Only while shown: it takes the keyboard's focus to hear a shake.
         .background { if shown { ShakeToUndo(undoManager: undoManager, closes: closes) } }

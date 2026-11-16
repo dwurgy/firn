@@ -22,7 +22,7 @@ Planned 2026-11-12. The welcome and the empty page move from "First light" to "S
 | Mac empty page | `Firn/PageArea.swift`, `Firn/PagePanes.swift` | `FirstLightScene(spaceColor:)`, whole |
 | Mac welcome | `Firn/Welcome.swift` | `.whole` while it runs; `.back` and `.front` around the rising window for "Welcome in." |
 | iPhone and iPad empty page | `Firn iOS/BrowserScreen.swift` | `FirstLightScene(spaceColor:)`, whole |
-| iPhone overview's haze | `Firn iOS/OverviewHaze.swift` | only the grain image (not the scene; an everyday screen) |
+| iPhone overview's space wash | `Firn iOS/SpaceWash.swift` | only the grain image (not the scene; an everyday screen) |
 | iPhone welcome | not built yet | `docs/IOS-PLAN.md`, phase 8 |
 
 ## What changes

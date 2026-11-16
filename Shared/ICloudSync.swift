@@ -32,8 +32,8 @@ final class ICloudSync {
 
     /// What turning sync on does, in plain words, under the switch on the
     /// Mac and the iPhone (and the welcome's step, later). Keep it literally
-    /// true: when history (step 6), "On your Mac" (step 5), or passwords
-    /// (step 8) start syncing, change these words in the same commit.
+    /// true: when history (step 6), "On your Mac" (step 5), Basecamp between Macs (step 7), or passwords
+    /// (step 9) start syncing, change these words in the same commit.
     static func whatSyncs(on device: String) -> [String] {
         [
             "Your spaces, and your groups with the tabs in them, stay the same on your Mac, iPhone, and iPad. Make, rename, or close one anywhere, and the others follow.",

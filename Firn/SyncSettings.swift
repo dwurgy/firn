@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Settings › Sync (docs/SYNC-PLAN.md, step 3, part 3): one switch, "Sync
 /// with iCloud", off until the person turns it on. The Passwords switch
-/// joins it in step 8, once it would do something.
+/// joins it in step 9, once it would do something.
 ///
 /// The switch reads the saved setting, so it also goes off by itself when
 /// the engine turns sync off (signed out of iCloud, another account, or

@@ -10,7 +10,7 @@ Sync is off until the person says yes, and goes only to their own iCloud, never 
 
 | Syncs | Found in the command bar | Never |
 | --- | --- | --- |
-| Spaces: name, color, order, separate or shared | Other devices' loose tabs ("On your Mac", "On your iPhone", "On your iPad") | Basecamp (no sync at all, not even iPhone to iPad) |
+| Spaces: name, color, order, separate or shared | Other devices' loose tabs ("On your Mac", "On your iPhone", "On your iPad") | Basecamp, except Mac to Mac (step 7); never to or from an iPhone or iPad |
 | Groups and the tabs in them | | Loose tabs as a list (each device keeps its own) |
 | Saved passwords (iCloud Keychain) | | Sign-ins, cookies, and site data (WebKit can't sync them) |
 | History, the last 30 days | | Settings (each device keeps its own) |
@@ -54,7 +54,7 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
    - **Waits for the iPhone's phase 4** (David, 2026-11-13): the iPhone can't switch spaces yet, so a space from the Mac couldn't be reached there. Build phase 4 (`docs/IOS-PLAN.md`) first, then this step.
    - **Decided (David, 2026-11-13):**
      - **The iPhone's switch:** a small Settings sheet with only a Sync section for now, opened from the space menu; phase 6 fills it in.
-     - **Only "Sync with iCloud" in step 3.** The Passwords switch comes in step 8, since before then it would do nothing.
+     - **Only "Sync with iCloud" in step 3.** The Passwords switch comes in step 9, since before then it would do nothing.
      - **The first sync, same name joins:** a space that never synced joins another device's space with the same name. Its tabs, groups, and Basecamp stay, but it takes that space's id and data store, so it starts signed out on this device (sign-ins can't travel). A never-synced space with no tabs, groups, or tiles simply gives way. Every other space arrives as a new one.
        - **Changed (David, 2026-11-13, part 1):** taking the other's data store would have erased this device's history and saved passwords for that space too, so a joining space **keeps its own id and data store** on this device (sign-ins, history, and passwords stay), and `SyncState` translates to the other's ids at iCloud's edge. It joins only during the first sync (before the engine's first fetch is done); after that, same-named spaces stay apart. If spaces share sign-ins on one device but not the other, it doesn't join and arrives as new.
    - **Found while planning (2026-11-13), to handle in this step:**
@@ -77,14 +77,21 @@ This replaces the sync tables in `docs/IOS-BRIEF.md` (Basecamp and loose tabs no
           2. Claude: `xcrun cktool export-schema --team-id 72LHR8K4P5 --container-id iCloud.com.firnbrowser.firn --environment development` (to see Development as it is), then `validate-schema` and `import-schema` with the same three options and `--file docs/cloudkit-schema.ckdb`. Development only.
           3. David: CloudKit Console › CloudKit Database › `iCloud.com.firnbrowser.firn` › Development › Deploy Schema Changes…; check the list shows `Space`, `TabGroup`, `Tab`, and `Visit`; Deploy. (Production record types can't be deleted afterward, only added to.)
           4. The test: the Mac app from Xcode, and the iPhone build on David's iPhone, both signed in to the same iCloud. Turn on Sync with iCloud on the Mac, then on the iPhone. *Done:* a space made on the Mac appears on the iPhone, and a separate one is signed out there; a rename on either shows on the other.
-        - **Worth knowing before the test:** it uses David's real spaces (sync is off in demo mode). Their names and colors go to his iCloud, sealed. Turning the switch off stops syncing but doesn't yet delete what's in iCloud ("Turn off and delete from iCloud" is step 9).
+        - **Worth knowing before the test:** it uses David's real spaces (sync is off in demo mode). Their names and colors go to his iCloud, sealed. Turning the switch off stops syncing but doesn't yet delete what's in iCloud ("Turn off and delete from iCloud" is step 10).
 4. **Groups.** Groups and their tabs. Deleting a group or space asks "from all your devices", and a group's delete has an Undo. *Done:* a group made on the Mac appears on the iPhone, and renaming it on the iPhone renames it on the Mac.
-   - **Built (2026-11-16), not yet tried against iCloud:** the merge for groups was already in FirnCore from step 2, so this step turned `ICloudSync.kinds` on for groups and their tabs (a device that synced only spaces sends everything once and fetches again, as planned in step 3). Two new tests: Close Group followed by ⇧⌘T (or a shake) brings the group back on the other device too, whichever order the words arrive in, and an Undo made before the close went out changes nothing elsewhere. Deleting a space now asks "Delete “Work” from all your devices?" while sync is on, Mac and iPhone. No question before Close Group (David, 2026-11-16: Undo is enough); instead, the words under the switch say plainly what syncs and what stays on the device (`ICloudSync.whatSyncs`, one place for the Mac, the iPhone, and the welcome's step in step 9). Whenever a later step makes something new sync, those words change in the same commit.
+   - **Built (2026-11-16), not yet tried against iCloud:** the merge for groups was already in FirnCore from step 2, so this step turned `ICloudSync.kinds` on for groups and their tabs (a device that synced only spaces sends everything once and fetches again, as planned in step 3). Two new tests: Close Group followed by ⇧⌘T (or a shake) brings the group back on the other device too, whichever order the words arrive in, and an Undo made before the close went out changes nothing elsewhere. Deleting a space now asks "Delete “Work” from all your devices?" while sync is on, Mac and iPhone. No question before Close Group (David, 2026-11-16: Undo is enough); instead, the words under the switch say plainly what syncs and what stays on the device (`ICloudSync.whatSyncs`, one place for the Mac, the iPhone, and the welcome's step in step 10). Whenever a later step makes something new sync, those words change in the same commit.
 5. **"On your Mac" and "On your iPhone":** each device shares its open loose tabs' addresses and titles (kept current, removed as they close), and the command bar lists the other devices' under their names. *Mac change:* a command bar section.
 6. **History.**
-7. **Handoff.**
-8. **Passwords to iCloud Keychain.** Its own short plan first: it moves where people's passwords live, so never a quiet switch.
-9. **A look over.** The privacy wording (David's OK; `docs/privacy-page.md` and the README), "Turn off and delete from iCloud", the welcome's "Use iCloud" step (Mac and iPhone), the security check, VoiceOver, and the two-device test. *Done:* with sync off, nothing leaves either device.
+7. **Basecamp between Macs** (David, 2026-11-16). Someone with two Macs gets the same Basecamp on both; an iPhone or iPad never sends or takes Basecamp, so for them sync stays exactly as before. Purely additive: a new record kind, nothing built before changes.
+   - **Why:** between a Mac and an iPhone, each device's own Basecamp is right (people use different sites there). Between two Macs, setting up the same tiles twice isn't calm, and Arc's favorites matched across computers.
+   - **The record:** a tile (address, its home address, title, space, order), sealed like the rest, marked with the kind of device it came from. A Mac takes only Mac tiles; the iPhone and iPad ignore them. No new switch: it's part of Sync with iCloud.
+   - **Per Mac, never synced:** a tile's resting state (⌘W on one Mac doesn't rest it on the other) and where its page has wandered to; only its home address and place in the grid travel.
+   - **Still not synced between Macs** (David, 2026-11-16): loose tabs (closing one on one Mac would close it mid-read on the other, and tidying away would fight; the other Mac's tabs are in the command bar) and settings (a work Mac and a home Mac often differ).
+   - **To work out when planning the step:** the first sync between two Macs that each have their own tiles (join by address, likely, keeping the 12-tile limit), a new record type in CloudKit (adding one to Production is allowed; removing isn't), and the words under the switch.
+   - *Done:* a tile added on one Mac appears on the other in the same space, and the iPhone's Basecamp doesn't change.
+8. **Handoff.**
+9. **Passwords to iCloud Keychain.** Its own short plan first: it moves where people's passwords live, so never a quiet switch.
+10. **A look over.** The privacy wording (David's OK; `docs/privacy-page.md` and the README), "Turn off and delete from iCloud", the welcome's "Use iCloud" step (Mac and iPhone), the security check, VoiceOver, and the two-device test. *Done:* with sync off, nothing leaves either device.
 
 ## Step 1: what the facts turned out to be (2026-11-13)
 

@@ -242,7 +242,7 @@ struct SettingsSheet: View {
     }
 
     /// "Sync with iCloud", the Mac's switch in the Mac's words. Only the
-    /// one switch until passwords sync (step 8).
+    /// one switch until passwords sync (step 9).
     private var syncSection: some View {
         let canSync = availability == .available
         return Section {

@@ -111,14 +111,12 @@ struct OverviewRow: View {
         }
         .buttonStyle(.plain)
         .background {
-            // The row's paper, then the card's: solid, no glass or blur, so
-            // the title reads the same on any page.
-            ZStack {
-                shape.fill(reduceTransparency ? Theme.tileSolid : Theme.slimRowFill).opacity(1 - t)
-                shape.fill(Theme.cardPaper).opacity(t)
-            }
-            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-            .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
+            // One solid paper for the row and the card (David, 2026-11-16:
+            // no see-through), so a pinch only opens or folds the window and
+            // the title reads the same over anything.
+            shape.fill(Theme.cardPaper)
+                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
         .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)

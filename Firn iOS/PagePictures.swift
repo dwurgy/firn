@@ -89,6 +89,14 @@ final class PagePictures {
         recent.append(tabID)
     }
 
+    /// How far the page's header runs down the tab's picture, in points at
+    /// the page's own size: the card starts its picture there, so it shows
+    /// what was being read (`docs/IOS-PLAN.md` 2j). 0 for a picture read
+    /// back from disk (not saved with it) and when there's no header.
+    func headerDepth(for tabID: UUID) -> CGFloat {
+        slots[tabID]?.depth ?? 0
+    }
+
     /// Reads the tab's picture from disk and decodes it off the main thread
     /// (for the overview's older cards, as they come into view), so
     /// scrolling never waits on it.
@@ -122,9 +130,14 @@ final class PagePictures {
         // so the card and every glide show what the page shows.
         let failed = errorPicture(for: page)
         return Task {
+            // Measured alongside the picture, not after it, so the picture
+            // isn't kept waiting.
+            let depth = Task { failed == nil ? await page.headerDepth() : 0 }
             let taken: CGImage? = if let failed { failed } else { await page.snapshot(width: width) }
+            let measured = await depth.value
             guard let picture = taken else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
+            slot(for: id).depth = measured
             keep(image, for: id)
             // Encoding and writing happen off the main thread.
             Task.detached(priority: .utility) {
@@ -160,6 +173,8 @@ extension PagePictures {
 @MainActor @Observable
 final class PictureSlot {
     var image: UIImage?
+    /// Where the page's header ends in the picture (`headerDepth(for:)`).
+    var depth: CGFloat = 0
     /// The picture, for a view.
     var shown: UIImage? { image }
 }

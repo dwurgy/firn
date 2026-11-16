@@ -33,6 +33,10 @@ public protocol PageController: AnyObject, Observable {
     /// A small picture of the page as it is now, `width` points wide, or nil
     /// if there's nothing to show. Kept in memory only, never saved.
     func snapshot(width: CGFloat) async -> CGImage?
+    /// How far the page's header runs down its picture, in points from the
+    /// picture's top: bars pinned to the top of the screen, and the site's
+    /// own banner while it's in view. 0 if there's none, and on the Mac.
+    func headerDepth() async -> CGFloat
     /// The color behind the status bar, above the page on iPhone: the
     /// page's theme color, else its background. Nil on the Mac.
     var topColor: CGColor? { get }
@@ -224,4 +228,5 @@ public extension PageController {
     func setReaderLook(_ look: ReaderLook) {}
     func summarizeArticle() {}
     var topColor: CGColor? { nil }
+    func headerDepth() async -> CGFloat { 0 }
 }

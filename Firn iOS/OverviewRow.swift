@@ -170,8 +170,8 @@ struct OverviewRow: View {
                height: max(card.height - rowHeight - windowInset, 1))
     }
 
-    /// The page's picture under the line, cropped from the page's top at
-    /// the window's width. As the card folds, the window's bottom edge
+    /// The page's picture under the line, at the window's width, from just
+    /// below the page's header. As the card folds, the window's bottom edge
     /// rises with the card's, so the picture folds away under the line.
     private func window(height: CGFloat) -> some View {
         pictureView
@@ -197,13 +197,15 @@ struct OverviewRow: View {
 
     @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
-            // As wide as the window, from the page's top: exactly where
-            // the glide lands, so swapping one for the other shows nothing.
+            // As wide as the window, from just below the page's header, so
+            // it shows what was being read (2j): exactly where the glide
+            // lands, so swapping one for the other shows nothing.
             GeometryReader { box in
                 let scale = box.size.width / picture.size.width
                 Image(uiImage: picture)
                     .resizable()
                     .frame(width: box.size.width, height: picture.size.height * scale)
+                    .offset(y: -pictures.headerDepth(for: tab.id) * scale)
             }
             .accessibilityHidden(true)
         } else {

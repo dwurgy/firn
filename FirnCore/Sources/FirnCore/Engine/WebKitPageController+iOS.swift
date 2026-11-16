@@ -25,6 +25,68 @@ extension WebKitPageController {
         return image?.cgImage
     }
 
+    /// Where the header ends, measured in Firn's own world (the page never
+    /// sees it): from the top of the screen down, each band that's pinned
+    /// there (fixed or sticky) or is the site's banner (a header, a nav, or
+    /// something named for one), at least half the screen wide, each
+    /// starting where the last ended; or, if lower, where the page's
+    /// `<main>` starts. What the page says is only a number:
+    /// anything but one between 0 and a third of the shown page is 0.
+    func headerDepth() async -> CGFloat {
+        guard url != nil, loadError == nil, !isReading else { return 0 }
+        let webView = frontView
+        let shown = webView.bounds.height - min(webView.obscuredContentInsets.top, webView.bounds.height)
+        guard shown > 0, webView.bounds.width > 0,
+              let result = try? await webView.callAsyncJavaScript(
+                  Self.headerScript, arguments: [:], in: nil, contentWorld: WebKitPageController.firnWorld),
+              let numbers = result as? [Any], numbers.count == 2,
+              let depth = (numbers[0] as? NSNumber)?.doubleValue, let width = (numbers[1] as? NSNumber)?.doubleValue,
+              depth.isFinite, width.isFinite, depth > 0, width > 0 else { return 0 }
+        // CSS pixels to points: the shown width is the screen's.
+        let points = CGFloat(depth) * webView.bounds.width / CGFloat(width)
+        return points <= shown / 3 ? points : 0
+    }
+
+    /// Returns [the header's bottom below the top of the screen, the
+    /// screen's width], both in CSS pixels.
+    private static let headerScript = """
+        const view = window.visualViewport;
+        if (!view || !document.body) return [0, 1];
+        const width = view.width, height = view.height, top = view.offsetTop;
+        const named = /(^|[-_ ])(header|masthead|banner|navbar|nav|topbar|top-bar)([-_ ]|$)/i;
+        const isBand = (el, y) => {
+            if (el === document.body || el === document.documentElement) return null;
+            const box = el.getBoundingClientRect();
+            if (box.top > y + 1 || box.bottom <= y + 1 || box.width < width * 0.5 || box.height > height / 3) return null;
+            const style = getComputedStyle(el);
+            const pinned = style.position === 'fixed' || style.position === 'sticky';
+            const banner = el.matches('header, nav, [role=banner], [role=navigation]')
+                || named.test(el.id || '') || named.test(typeof el.className === 'string' ? el.className : '');
+            return pinned || banner ? box : null;
+        };
+        let bottom = top;
+        for (let step = 0; step < 4; step++) {
+            const y = bottom + 1;
+            let found = null;
+            for (const x of [width * 0.25, width * 0.5, width * 0.75]) {
+                for (let el = document.elementFromPoint(x, y); el; el = el.parentElement) {
+                    const box = isBand(el, y);
+                    if (box && (!found || box.bottom > found.bottom)) found = box;
+                }
+            }
+            if (!found || found.bottom <= bottom) break;
+            bottom = found.bottom;
+        }
+        // Where the page's main part starts, if that's lower: a header
+        // with no telling name (made-up class names) still ends there.
+        const main = document.querySelector('main, [role=main]');
+        if (main) {
+            const box = main.getBoundingClientRect();
+            if (box.top > bottom && box.top - top <= height / 3 && box.width >= width * 0.5) bottom = box.top;
+        }
+        return [bottom - top, width];
+        """
+
     var topColor: CGColor? {
         let webView = frontView
         return (webView.themeColor ?? webView.underPageBackgroundColor)?.cgColor

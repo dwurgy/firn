@@ -111,6 +111,12 @@ struct BrowserScreen: View {
         get { hold.boxRadius }
         nonmutating set { if hold.boxRadius != newValue { hold.boxRadius = newValue } }
     }
+    /// How much of the page's top the picture leaves out (`CardGlide.skip`):
+    /// the header's depth in a tall card, 0 on the page.
+    private var boxSkip: CGFloat {
+        get { hold.boxSkip }
+        nonmutating set { if hold.boxSkip != newValue { hold.boxSkip = newValue } }
+    }
     /// Gliding into a tile: where it started and the tile's size, so the
     /// picture takes the tile's shape early (`CardGlide`).
     private var tileCrop: (from: CGRect, to: CGSize)? {
@@ -589,9 +595,11 @@ struct BrowserScreen: View {
     }
 
     /// The picture takes the page's place (or a card's), and the page hides.
-    private func putStandIn(_ image: UIImage, of tab: FirnCore.Tab, at frame: CGRect, radius: CGFloat = 0) {
+    private func putStandIn(_ image: UIImage, of tab: FirnCore.Tab, at frame: CGRect, radius: CGFloat = 0,
+                            skip: CGFloat = 0) {
         box = frame
         boxRadius = radius
+        boxSkip = skip
         stripOpacity = radius == 0 ? 1 : 0
         standInTop = image.topEdgeColor ?? tab.page?.topColor
         standInTab = tab
@@ -681,9 +689,12 @@ struct BrowserScreen: View {
             // (David, 2026-11-13: "just copy it exactly"). The set-down's
             // code stays, switched off.
             let setsDown = false
+            // Into a tall card: from just below the header, as the card shows.
+            let skip = !tile && spots.cards.contains(tab.id) ? pictures.headerDepth(for: tab.id) : 0
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.windowCornerRadius
+                boxSkip = skip
                 arrival = 1
                 neighborsOpacity = 0
             }
@@ -721,6 +732,7 @@ struct BrowserScreen: View {
         standIn = nil
         standInTab = nil
         tileCrop = nil
+        boxSkip = 0
         settle = 1
     }
 
@@ -767,7 +779,8 @@ struct BrowserScreen: View {
         tileReveal = tile ? 1 : 0
         putStandIn(image, of: tab, at: spot,
                    radius: tile ? BasecampTiles.cornerRadius
-                       : fromCard ? OverviewRow.windowCornerRadius : OverviewRow.cornerRadius)
+                       : fromCard ? OverviewRow.windowCornerRadius : OverviewRow.cornerRadius,
+                   skip: fromCard && !tile ? pictures.headerDepth(for: tab.id) : 0)
         gliding = tab.id
         Task {
             await Task.yield()
@@ -790,6 +803,7 @@ struct BrowserScreen: View {
         withAnimation(curve) {
             box = pageBox(size: standInSize)
             boxRadius = 0
+            boxSkip = 0
             arrival = 0
             // The tabs beside it glide from where they are to beside it.
             neighborsPeek = false

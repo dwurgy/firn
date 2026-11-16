@@ -49,6 +49,7 @@ final class Hold {
     var standInTab: FirnCore.Tab?
     var box: CGRect = .zero
     var boxRadius: CGFloat = 0
+    var boxSkip: CGFloat = 0
     var tileCrop: (from: CGRect, to: CGSize)?
     var pull: Pull?
     var neighbors: [Neighbor] = []
@@ -218,7 +219,7 @@ struct StandInLayer: View {
                         if let standIn = hold.standIn { Image(uiImage: standIn).resizable() }
                     }
                     .frame(width: width, height: height)
-                    .modifier(CardGlide(width: width, box: box, radius: boxRadius,
+                    .modifier(CardGlide(width: width, box: box, radius: boxRadius, skip: hold.boxSkip,
                                         cropFrom: hold.tileCrop?.from, cropTo: hold.tileCrop?.to,
                                         face: tileFace))
                     .modifier(ArrivalBand(arrival: hold.standInTab?.place == .basecamp ? landing.tileReveal : 0,
@@ -343,6 +344,10 @@ private struct CardGlide: ViewModifier, Animatable {
     let width: CGFloat
     var box: CGRect
     var radius: CGFloat
+    /// How much of the page's top the shown part leaves out, in the page's
+    /// own points: 0 on the page, the header's depth in a tall card (2j),
+    /// so the header slides away as the page becomes its card.
+    var skip: CGFloat = 0
     /// Into a tile: where the glide started, and the tile's size. The
     /// shown part takes the tile's shape over the first 60% of the way, so
     /// the page becomes a tile as it shrinks, rather than flying as a tall
@@ -367,9 +372,9 @@ private struct CardGlide: ViewModifier, Animatable {
 
     // Worked out on every frame, so the shown part, the ring, and the line
     // all agree on the box mid-glide.
-    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
-        get { AnimatablePair(box.animatableData, radius) }
-        set { box.animatableData = newValue.first; radius = newValue.second }
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(box.animatableData, AnimatablePair(radius, skip)) }
+        set { box.animatableData = newValue.first; radius = newValue.second.first; skip = newValue.second.second }
     }
 
     /// The shown part's height on screen.
@@ -415,7 +420,10 @@ private struct CardGlide: ViewModifier, Animatable {
             .mask(alignment: .top) {
                 RoundedRectangle(cornerRadius: radius / scale, style: .continuous)
                     .frame(height: shownHeight / scale)
+                    .offset(y: skip)
             }
+            // The part below the skip moves up to the box's top.
+            .offset(y: -skip)
             .scaleEffect(scale, anchor: .topLeading)
             .offset(x: box.minX, y: box.minY)
     }

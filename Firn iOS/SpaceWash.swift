@@ -44,8 +44,9 @@ struct SpaceWash: View {
         static let lightGlowWhite: CGFloat = 0.45
         /// …at this opacity in the glow's middle, fading to clear at its edge.
         static let lightGlowOpacity: Double = 0.55
-        /// Dark: the space's color itself at this opacity.
-        static let darkGlowOpacity: Double = 0.20
+        /// Dark: the space's color itself at this opacity. 0.20 read as a
+        /// spotlight; light's glow reads as haze (David, 2026-11-16).
+        static let darkGlowOpacity: Double = 0.09
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6

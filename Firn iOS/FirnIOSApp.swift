@@ -23,6 +23,9 @@ struct FirnIOSApp: App {
     /// safe to register this early; only web views must wait (above).
     init() {
         BrandFont.register()
+        // The overview's old saved pinches (it opens slim each time now).
+        UserDefaults.standard.removeObject(forKey: "overviewTidiedAt")
+        UserDefaults.standard.removeObject(forKey: "overviewSlimRows")
     }
 
     var body: some Scene {

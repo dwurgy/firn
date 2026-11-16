@@ -57,26 +57,17 @@ struct TabOverview: View {
 
     /// Counts closes, so the shake listener takes focus again after each.
     @State private var closes = 0
-    /// When this space's tabs were last pinched together ("tidied"): tabs
-    /// looked at before then are slim rows, and every tab looked at since
-    /// becomes a card again, so there's no mode to remember (David,
-    /// 2026-11-05). Pinching apart undoes it. Saved per space.
-    @State private var tidiedAt: Date?
     /// Counts pinches between cards and rows, for their tap.
     @State private var tidyChanges = 0
-    /// How tall the tidied tabs from the last day are: 0 slim rows (tidied),
-    /// 1 cards (not tidied), and anything between while a pinch glides.
-    @State private var cards: CGFloat = 1
+    /// How tall every tab but the one on screen is: 0 slim rows (as the
+    /// overview always opens), 1 cards (pinched apart, for this visit
+    /// only), and anything between while a pinch glides (David, 2026-11-16).
+    @State private var cards: CGFloat = 0
     /// Set once a pinch has switched the list, so the rest of that pinch
     /// does nothing more.
     @State private var pinchDone = false
     /// The list fades out and back in around a switch with Reduce Motion.
     @State private var listFade: Double = 1
-    /// "Now" and each tab's last-viewed time, taken as the overview opens,
-    /// so nothing changes size while it's open (picking a tab marks it
-    /// viewed, which would grow its row into a card behind the glide).
-    @State private var openedAt = Date.now
-    @State private var lastViewed: [UUID: Date] = [:]
     /// When a pinch last moved: a finger lifting off a card at the end of a
     /// pinch would otherwise count as a tap and open it.
     @State private var lastPinch = Date.distantPast
@@ -176,20 +167,12 @@ struct TabOverview: View {
     private var space: String { store.activeSpace.color }
     /// The room above the list's first item.
     private static let topMargin: CGFloat = 8
-    /// How long a tab stays a tall card after it was last looked at.
-    private static let cardAge: TimeInterval = 24 * 60 * 60
-
-    /// How tall a tab's tile is, 0 (slim row) to 1 (card): the tab on
-    /// screen is always a card, tabs looked at in the last day follow the
-    /// pinch, and older tabs stay rows.
+    /// How tall a tab's tile is, 0 (slim row) to 1 (card): only the tab on
+    /// screen is a card each time the overview opens; a pinch apart opens
+    /// every other tab into one for that visit (David, 2026-11-16). A
+    /// Basecamp tile carried into the list takes the list's shape.
     private func tallness(_ tab: FirnCore.Tab, onScreen: Bool) -> CGFloat {
-        // A Basecamp tile carried into the list: a card, as it will be once
-        // it's there (it counts as just seen).
-        if onScreen || tab.place == .basecamp { return 1 }
-        let viewed = lastViewed[tab.id] ?? tab.lastActiveAt
-        guard openedAt.timeIntervalSince(viewed) < Self.cardAge else { return 0 }
-        if let tidiedAt, viewed > tidiedAt { return 1 }
-        return cards
+        onScreen ? 1 : cards
     }
 
     var body: some View {
@@ -310,13 +293,12 @@ struct TabOverview: View {
                         pinchEnded()
                     }
             )
-            // Only a pinch (or its VoiceOver action) taps: on tidiedAt, it
-            // tapped every time a tidied overview opened, as it read the
-            // setting back (David, 2026-11-09: no haptic on the swipe up).
+            // Only a pinch (or its VoiceOver action) taps, never an opening
+            // (David, 2026-11-09: no haptic on the swipe up).
             .sensoryFeedback(.selection, trigger: tidyChanges)
             // Pinching can't be found by VoiceOver: the same choice as an action.
-            .accessibilityAction(named: tidiedAt != nil ? "Show Cards" : "Show Rows") {
-                setCards(tidiedAt != nil ? 1 : 0, scroller)
+            .accessibilityAction(named: cards < 0.5 ? "Show Cards" : "Show Rows") {
+                setCards(cards < 0.5 ? 1 : 0, scroller)
             }
             .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -437,7 +419,7 @@ struct TabOverview: View {
             groups: Dictionary(store.tabGroups.map { ($0.id, $0.folded) }) { a, _ in a },
             grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
             tiles: store.basecampTabs.map(\.id),
-            rows: tidiedAt != nil,
+            rows: cards < 0.5,
             scroll: scroll ?? Int(((spots.scroll?.contentOffset.y ?? 0) / 16).rounded()),
             dark: colorScheme == .dark)
     }
@@ -457,19 +439,13 @@ struct TabOverview: View {
         }
     }
 
-    /// What an opening takes as it starts: each tab's last-viewed time
-    /// (so nothing changes size while it's open), this space's tidy, and
-    /// the list scrolled to the tab on screen.
-    /// Only what has changed is set: every card reads these, so setting
-    /// them as a swipe up began rebuilt the whole list in the frame the
-    /// finger grabbed (a 35–55ms frame on David's iPhone, 2026-11-13). The
-    /// opening time only matters against a day (`cardAge`), so a minute's
-    /// difference is nothing.
+    /// What an opening takes as it starts: slim rows again (a pinch apart
+    /// lasts one visit), and the list scrolled to the tab on screen.
+    /// Only what has changed is set: every card reads it, so setting it as
+    /// a swipe up began rebuilt the whole list in the frame the finger
+    /// grabbed (a 35–55ms frame on David's iPhone, 2026-11-13).
     private func getReady(_ scroller: ScrollViewProxy) {
-        if Date.now.timeIntervalSince(openedAt) > 60 { openedAt = .now }
-        let viewed = Dictionary(store.openTabs.map { ($0.id, $0.lastActiveAt) }) { a, _ in a }
-        if viewed != lastViewed { lastViewed = viewed }
-        loadTidied()
+        if cards != 0 { cards = 0 }
         guard let id = store.activeTab?.id else { return }
         scroll(to: id, scroller)
     }
@@ -638,42 +614,14 @@ struct TabOverview: View {
     private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
         guard !pinchDone, drag == nil else { return }
         let target: CGFloat
-        if tidiedAt != nil, m.magnification > Self.pinchStart { target = 1 }
-        else if hasCardsToTidy, m.magnification < 1 / Self.pinchStart { target = 0 }
+        if cards < 0.5, m.magnification > Self.pinchStart { target = 1 }
+        else if cards > 0.5, m.magnification < 1 / Self.pinchStart { target = 0 }
         else { return }
         pinchDone = true
         setCards(target, scroller, hold: anchor(at: m.startLocation))
     }
 
     private func pinchEnded() { pinchDone = false }
-
-    /// A tall card besides the tab on screen, which pinching together
-    /// would tidy into a row.
-    private var hasCardsToTidy: Bool {
-        store.openTabs.contains { !isOnScreen($0) && tallness($0, onScreen: false) > 0.5 }
-    }
-
-    private static let tidiedKey = "overviewTidiedAt"
-
-    /// This space's tidy, as the overview opens. A tidy older than a day
-    /// has nothing left to hold (those tabs are rows anyway), so it's
-    /// forgotten.
-    private func loadTidied() {
-        UserDefaults.standard.removeObject(forKey: "overviewSlimRows")  // the old mode
-        let saved = UserDefaults.standard.dictionary(forKey: Self.tidiedKey) as? [String: Double] ?? [:]
-        let at = saved[store.activeSpace.id.uuidString].map(Date.init(timeIntervalSince1970:))
-        let tidied = at.flatMap { openedAt.timeIntervalSince($0) < Self.cardAge ? $0 : nil }
-        if tidied != tidiedAt { tidiedAt = tidied }
-        let shape: CGFloat = tidied == nil ? 1 : 0
-        if shape != cards { cards = shape }
-        if at != nil, tidiedAt == nil { saveTidied() }
-    }
-
-    private func saveTidied() {
-        var saved = UserDefaults.standard.dictionary(forKey: Self.tidiedKey) as? [String: Double] ?? [:]
-        saved[store.activeSpace.id.uuidString] = tidiedAt?.timeIntervalSince1970
-        UserDefaults.standard.set(saved, forKey: Self.tidiedKey)
-    }
 
     /// The tab under a point in the list (the nearest if it's between
     /// tabs), and the anchor that keeps it where it is: the point at the
@@ -696,20 +644,17 @@ struct TabOverview: View {
         y < frame.minY ? frame.minY - y : (y > frame.maxY ? y - frame.maxY : 0)
     }
 
-    /// Pinched together (0): every tab but the one on screen becomes a slim
-    /// row, until it's looked at again. Pinched apart (1): the tidy is
-    /// undone and the last day's cards come back. Every card's window folds
+    /// Pinched together (0): every tab but the one on screen is a slim row,
+    /// as the overview opens. Pinched apart (1): every tab is a card, until
+    /// the overview closes. Every card's window folds
     /// away under its line or opens below it (0.2s, ease-out, no bounce), the held tab staying in
     /// place, or the tab on screen held in the middle (VoiceOver's action).
     /// With Reduce Motion, the list fades out, changes, and fades back in.
     private func setCards(_ target: CGFloat, _ scroller: ScrollViewProxy,
                           hold: (id: UUID, anchor: UnitPoint)? = nil) {
-        let tidy: Date? = target < 0.5 ? .now : nil
         let held = hold ?? store.activeTab.map { ($0.id, UnitPoint.center) }
-        defer { saveTidied() }
-        if (tidy == nil) != (tidiedAt == nil) { tidyChanges += 1 }
+        if (target > 0.5) != (cards > 0.5) { tidyChanges += 1 }
         if reduceMotion {
-            tidiedAt = tidy
             withAnimation(.easeOut(duration: 0.15)) { listFade = 0 } completion: {
                 cards = target
                 if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
@@ -718,7 +663,6 @@ struct TabOverview: View {
             return
         }
         withAnimation(.easeOut(duration: 0.2)) {
-            tidiedAt = tidy
             cards = target
             if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
         }
@@ -1732,7 +1676,7 @@ struct TabOverview: View {
         var new = old
         new.tabs = true
         new.reshaping = .now + 0.3
-        new.rowHeight = OverviewRow.cardHeight
+        new.rowHeight = cards > 0.5 ? OverviewRow.cardHeight : OverviewRow.rowHeight
         let lane = lane(in: nil)
         // Drawn at the card's own size and grown as one picture.
         new.rowSize = CGSize(width: lane.width, height: new.rowHeight)

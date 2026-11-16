@@ -60,11 +60,10 @@ struct OverviewRow: View {
     /// A tall card's corners.
     static let cardCornerRadius: CGFloat = 18
     private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    /// The top of the page, a glance rather than a screenshot: a fixed
-    /// 160pt on every iPhone (David, 2026-11-05; the mockup's was 148), so
-    /// a 15 Pro shows four whole cards and a sliver of the fifth, and
-    /// bigger phones simply show more of the list.
-    static let cardHeight: CGFloat = 160
+    /// The top of the page, worth looking at: a fixed 240pt on every
+    /// iPhone (David, 2026-11-16: taller, now that only the tab on screen
+    /// is a card unless pinched apart; was 160).
+    static let cardHeight: CGFloat = 240
 
     var body: some View {
         tile
@@ -155,8 +154,11 @@ struct OverviewRow: View {
     }
 
     /// The window's distance from the card's sides and bottom, and its
-    /// corners (the card's 18pt less the 5pt, so they run evenly).
-    static let windowInset: CGFloat = 5
+    /// corners (the card's 18pt less the inset, so they run evenly). 8pt,
+    /// so the tab on screen's 3.5pt ring leaves a clear 4.5pt of paper
+    /// before the window, a mat rather than a thread (David, 2026-11-16:
+    /// at 5pt, a 1.5pt sliver between ring and window looked like a mistake).
+    static let windowInset: CGFloat = 8
     static let windowCornerRadius: CGFloat = cardCornerRadius - windowInset
     private static let windowHeight = cardHeight - rowHeight - windowInset
 

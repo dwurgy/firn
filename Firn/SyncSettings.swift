@@ -46,7 +46,7 @@ struct SyncSettings: View {
     }
 
     private var footer: String {
-        "Keeps your spaces the same on your Mac, iPhone, and iPad, through your own iCloud. They’re encrypted on this Mac, so only your devices can read them. Sign-ins stay on each device, so a separate space starts signed out on the others."
+        ICloudSync.whatSyncs(on: "Mac").joined(separator: "\n\n")
     }
 
     private func refresh() async {

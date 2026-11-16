@@ -30,6 +30,18 @@ final class ICloudSync {
     /// joins in step 6.
     static let kinds: Set<SyncKind> = [.space, .group, .tab]
 
+    /// What turning sync on does, in plain words, under the switch on the
+    /// Mac and the iPhone (and the welcome's step, later). Keep it literally
+    /// true: when history (step 6), "On your Mac" (step 5), or passwords
+    /// (step 8) start syncing, change these words in the same commit.
+    static func whatSyncs(on device: String) -> [String] {
+        [
+            "Your spaces, and your groups with the tabs in them, stay the same on your Mac, iPhone, and iPad. Make, rename, or close one anywhere, and the others follow.",
+            "Tabs outside a group, Basecamp, history, and settings stay on this \(device). So do sign-ins and passwords: a separate space starts signed out on your other devices.",
+            "Everything is encrypted on this \(device) before it goes to your iCloud, so only your devices can read it.",
+        ]
+    }
+
     private static let containerID = "iCloud.com.firnbrowser.firn"
     private static let zoneID = CKRecordZone.ID(zoneName: "Firn", ownerName: CKCurrentUserDefaultName)
     /// The one field every record has: its sealed bytes. Also in CloudKit's

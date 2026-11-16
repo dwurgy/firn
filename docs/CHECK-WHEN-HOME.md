@@ -56,6 +56,7 @@ Everything built but not yet seen by David, gathered from the brief on 2026-11-1
 ## Mac and iPhone together
 
 - [ ] **Sync, step 4 (groups):** with Sync with iCloud on in both, make a group on the Mac: it appears on the iPhone. Rename it on the iPhone: the Mac follows. Close it on the Mac, then ⇧⌘T: it comes back on both. Delete a test space: the question says "from all your devices".
+- [ ] **The words under Sync with iCloud** (Mac Settings › Sync, iPhone Settings › iCloud): what syncs, what stays on the device, and the encryption, in three short paragraphs; on the iPhone they show even when signed out of iCloud.
 
 ## Things only David can do
 

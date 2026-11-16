@@ -259,13 +259,16 @@ struct SettingsSheet: View {
         } header: {
             sectionTitle("iCloud")
         } footer: {
-            switch availability {
-            case .available:
-                footnote("Keeps your spaces the same on your iPhone, iPad, and Mac, through your own iCloud. They’re encrypted on this iPhone, so only your devices can read them. Sign-ins stay on each device, so a separate space starts signed out on the others.")
-            case .signedOut:
-                footnote("Sign in to iCloud in the Settings app to use sync.")
-            case .unavailable:
-                footnote("iCloud isn’t available on this iPhone.")
+            // What syncs shows even when the switch can't be used yet, so
+            // the choice is clear before signing in.
+            let device = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+            VStack(alignment: .leading, spacing: 8) {
+                switch availability {
+                case .available: EmptyView()
+                case .signedOut: footnote("Sign in to iCloud in the Settings app to use sync.")
+                case .unavailable: footnote("iCloud isn’t available on this \(device).")
+                }
+                ForEach(ICloudSync.whatSyncs(on: device), id: \.self) { footnote($0) }
             }
         }
     }

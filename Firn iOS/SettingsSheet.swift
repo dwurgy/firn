@@ -131,7 +131,7 @@ struct SettingsSheet: View {
             Text(stopSharingMessage(for: space))
         }
         .confirmationDialog(
-            deleting.map { "Delete “\($0.name)”?" } ?? "",
+            deleting.map { ICloudSync.isOn ? "Delete “\($0.name)” from all your devices?" : "Delete “\($0.name)”?" } ?? "",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             titleVisibility: .visible,
             presenting: deleting

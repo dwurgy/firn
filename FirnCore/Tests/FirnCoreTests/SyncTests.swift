@@ -309,6 +309,39 @@ struct SyncTests {
         }
     }
 
+    /// Step 4's Undo: ⇧⌘T (or a shake) after Close Group brings it back on
+    /// the other device too, whichever order the words arrive in.
+    @Test func reopeningAClosedGroupBringsItBackEverywhere() throws {
+        for deletesFirst in [false, true] {
+            let (mac, phone) = devices()
+            let group = makeGroup("Trip", "a", "b", on: mac)
+            send(from: mac, to: phone)
+            mac.store.close(group)
+            send(from: mac, to: phone, deletesFirst: deletesFirst)
+            #expect(phone.store.groups.isEmpty)
+            mac.store.reopenClosed()
+            send(from: mac, to: phone, deletesFirst: deletesFirst)
+            let back = try #require(phone.group(named: "Trip"))
+            #expect(phone.hosts(in: back) == ["a", "b"])
+            // And it keeps syncing afterward.
+            mac.store.rename(try #require(mac.group(named: "Trip")), to: "Japan")
+            send(from: mac, to: phone)
+            #expect(phone.group(named: "Japan") != nil)
+        }
+    }
+
+    /// Undo before the other device heard about the close: nothing changes there.
+    @Test func undoingACloseBeforeItGoesOutChangesNothingElsewhere() throws {
+        let (mac, phone) = devices()
+        let group = makeGroup("Trip", "a", "b", on: mac)
+        send(from: mac, to: phone)
+        mac.store.close(group)
+        mac.store.reopenClosed()
+        send(from: mac, to: phone)
+        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a", "b"])
+        #expect(phone.store.groups.count == 1)
+    }
+
     @Test func aGroupDeletedFirstLeavesTabsUntilTheirWordComes() throws {
         let (mac, phone) = devices()
         let group = makeGroup("Trip", "a", "b", on: mac)

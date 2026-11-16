@@ -53,6 +53,10 @@ Everything built but not yet seen by David, gathered from the brief on 2026-11-1
 
 - [ ] **Basecamp tiles:** reorder by hold and move, and with Reduce Motion a tab becoming a tile fades in place.
 
+## Mac and iPhone together
+
+- [ ] **Sync, step 4 (groups):** with Sync with iCloud on in both, make a group on the Mac: it appears on the iPhone. Rename it on the iPhone: the Mac follows. Close it on the Mac, then ⇧⌘T: it comes back on both. Delete a test space: the question says "from all your devices".
+
 ## Things only David can do
 
 - [ ] **Default browser:** turn on the browser entitlement for the app ID in the developer portal, save the Mac's "Firn Developer ID" profile again, then pick Firn in Settings › Apps › Firn › Default Browser App (`docs/IOS-PLAN.md`, section 5).

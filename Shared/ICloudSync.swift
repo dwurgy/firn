@@ -25,9 +25,10 @@ final class ICloudSync {
     /// The "Sync with iCloud" switch (Settings, step 3, part 3).
     static let enabledKey = "syncWithICloud"
     static var isOn: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
-    /// What syncs so far: spaces. Groups join in step 4 (and catch up then:
-    /// see `begin`), history in step 6.
-    static let kinds: Set<SyncKind> = [.space]
+    /// What syncs so far: spaces, and groups with their tabs (step 4; a
+    /// device that synced only spaces catches up: see `begin`). History
+    /// joins in step 6.
+    static let kinds: Set<SyncKind> = [.space, .group, .tab]
 
     private static let containerID = "iCloud.com.firnbrowser.firn"
     private static let zoneID = CKRecordZone.ID(zoneName: "Firn", ownerName: CKCurrentUserDefaultName)

@@ -33,6 +33,10 @@ struct OverviewHaze: View {
     /// into grey fog over the snow.
     static let darkBottomStrength: CGFloat = 0.85
     static let darkBottomShare: CGFloat = 0.4
+    /// Dark only: how far the dawn glow's warm pixels are eased toward the
+    /// blue-hour sky (the haze's top), baked in, so the glow reads as a
+    /// faint ember, not a brown patch (David, 2026-11-16).
+    static let darkGlowReduction: CGFloat = 0.27
 
     @State private var haze: UIImage?
     /// The screen's height over its width, rounded, so a turned iPad gets a
@@ -116,7 +120,7 @@ struct OverviewHaze: View {
             else { return }
             let dark = colorScheme == .dark
             let made = await Task.detached(priority: .userInitiated) {
-                Self.blurred(source).flatMap { dark ? Self.darkenedBottom($0) : $0 }
+                Self.blurred(source).flatMap { dark ? Self.cooledGlow($0).flatMap(Self.darkenedBottom) : $0 }
             }.value
             guard !Task.isCancelled, let made else { return }
             let image = UIImage(cgImage: made)
@@ -159,6 +163,38 @@ struct OverviewHaze: View {
             .applyingGaussianBlur(sigma: Double(wide / tiny) / 2)
             .cropped(to: extent)
         return softener.createCGImage(soft, from: extent)
+    }
+
+    /// Dark's haze with its warm glow eased toward the sky at its top, in
+    /// proportion to how warm each pixel is (red over blue); cool pixels
+    /// stay as they are. A small image (128 wide), so a plain loop.
+    private nonisolated static func cooledGlow(_ image: CGImage) -> CGImage? {
+        let width = image.width, height = image.height
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = context.data else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        // The sky: the average of the image's top row (first in memory).
+        var sky = (r: 0.0, g: 0.0, b: 0.0)
+        for x in 0..<width {
+            sky.r += Double(pixels[x * 4]); sky.g += Double(pixels[x * 4 + 1]); sky.b += Double(pixels[x * 4 + 2])
+        }
+        sky = (sky.r / Double(width), sky.g / Double(width), sky.b / Double(width))
+        let strength = Double(darkGlowReduction)
+        for i in stride(from: 0, to: width * height * 4, by: 4) {
+            let r = Double(pixels[i]), g = Double(pixels[i + 1]), b = Double(pixels[i + 2])
+            // Fully warm once red leads blue by 24 (of 255).
+            let warmth = min(max((r - b) / 24, 0), 1)
+            guard warmth > 0 else { continue }
+            let k = strength * warmth
+            pixels[i] = UInt8((r + (sky.r - r) * k).rounded())
+            pixels[i + 1] = UInt8((g + (sky.g - g) * k).rounded())
+            pixels[i + 2] = UInt8((b + (sky.b - b) * k).rounded())
+        }
+        return context.makeImage()
     }
 
     /// Dark's haze with its bottom eased toward warm charcoal (the dark

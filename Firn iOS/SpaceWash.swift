@@ -46,14 +46,22 @@ struct SpaceWash: View {
         static let lightGlowOpacity: Double = 0.55
         /// Dark: the space's color itself at this opacity. 0.20 read as a
         /// spotlight; light's glow reads as haze (David, 2026-11-16).
-        static let darkGlowOpacity: Double = 0.09
+        static let darkGlowOpacity: Double = 0.065
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6
+
+        /// The dither: a fine, fixed noise over the wash that melts the
+        /// gradients' 1-shade steps (rings around the dark glow, measured
+        /// 2026-11-16) into a smooth fade. Overlay-blended, so its strength
+        /// depends on the color under it; these give about ±1.5 shades
+        /// (of 255) on each look's mid tones. Too faint to read as texture.
+        static let ditherOpacity: (light: Double, dark: Double) = (light: 0.5, dark: 0.7)
     }
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
 
     /// The space faded from, held under the new one until it's fully in.
     @State private var under: String?
@@ -75,7 +83,19 @@ struct SpaceWash: View {
                 .resizable(resizingMode: .tile)
                 .opacity(Theme.Sunrise.grainOpacity(dark: dark))
                 .blendMode(dark ? .softLight : .multiply)
+            // One noise pixel per screen pixel, never smoothed, or it can't
+            // dither. A static image: nothing redraws.
+            Image(uiImage: Self.dither(scale: displayScale))
+                .resizable(resizingMode: .tile)
+                .interpolation(.none)
+                .opacity(dark ? Tuning.ditherOpacity.dark : Tuning.ditherOpacity.light)
+                .blendMode(.overlay)
         }
+        // Drawn in 16-bit, so the dither mixes into the gradients before
+        // they're rounded to the screen's 256 shades. Drawn in the usual
+        // 8 bits, the gradients were rounded first and the noise only sat
+        // on top of the steps (boosted crops, 2026-11-16).
+        .drawingGroup(opaque: true, colorMode: .linear)
         .onChange(of: space) { old, new in
             guard !reduceMotion else { return under = new }
             under = old
@@ -109,6 +129,34 @@ struct SpaceWash: View {
                     .position(x: size.width * Tuning.glowCenter.x, y: size.height * Tuning.glowCenter.y)
             }
         }
+    }
+
+    /// The dither's tile: 128 pixels of grey noise around middle grey
+    /// (±8 of 255), made once per screen scale with a fixed seed, so it's
+    /// the same pattern every launch. Middle grey leaves overlay unchanged;
+    /// the wash blends in linear light (`drawingGroup`), where middle grey
+    /// is 188, not 128 (128 darkened everything by about 8 shades).
+    @MainActor private static var dithers: [CGFloat: UIImage] = [:]
+
+    @MainActor private static func dither(scale: CGFloat) -> UIImage {
+        if let kept = dithers[scale] { return kept }
+        let side = 128
+        var seed: UInt32 = 0x9E37_79B9
+        var pixels = [UInt8](repeating: 128, count: side * side)
+        for i in pixels.indices {
+            seed = seed &* 1_664_525 &+ 1_013_904_223
+            pixels[i] = UInt8(180 + Int(seed >> 24) % 17)
+        }
+        let image = pixels.withUnsafeMutableBytes { bytes -> UIImage in
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: side, height: side, bitsPerComponent: 8,
+                bytesPerRow: side, space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ), let cgImage = context.makeImage() else { return UIImage() }
+            return UIImage(cgImage: cgImage, scale: max(scale, 1), orientation: .up)
+        }
+        dithers[scale] = image
+        return image
     }
 
     /// `share` of `other` mixed into `base`, channel by channel in sRGB.

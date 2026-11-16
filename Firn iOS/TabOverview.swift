@@ -325,9 +325,16 @@ struct TabOverview: View {
             .overlay { LandingDim(landing: landing) }
             .overlay {
                 if store.openTabs.isEmpty {
-                    Text("No open tabs")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.faint)
+                    // Warm white on Sunrise's sky, in both looks, a third of
+                    // the way down, where the sky is still deep enough for
+                    // it to read (about 6:1 in light; the middle, nearer the
+                    // dawn, is a mid-tone nothing reads well on).
+                    GeometryReader { proxy in
+                        Text("No open tabs")
+                            .font(.subheadline)
+                            .foregroundStyle(Color(red: 0xF5 / 255, green: 0xF1 / 255, blue: 0xEC / 255))
+                            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.3)
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -384,9 +391,8 @@ struct TabOverview: View {
             }
         }
         .background {
-            // Hidden, only a picture already in memory: browsing never
-            // waits on the disk.
-            OverviewHazeLayer(tab: store.activeTab?.id, pictures: pictures, readsDisk: shown, space: space)
+            // Sunrise's haze, the same whichever tab was open.
+            OverviewHaze(space: space, shown: shown)
         }
         // Only while shown: it takes the keyboard's focus to hear a shake.
         .background { if shown { ShakeToUndo(undoManager: undoManager, closes: closes) } }

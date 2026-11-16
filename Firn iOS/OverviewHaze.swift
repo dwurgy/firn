@@ -2,126 +2,109 @@ import CoreImage
 import FirnCore
 import SwiftUI
 
-/// The overview's backdrop, as Firn's Mac window shows a haze of what's
-/// behind it: the page you came from, blurred by shrinking its picture to
-/// a few pixels and stretching it back up (one still image, no live blur),
-/// under a wash of the frame's color, the space's tint, and the paper
-/// grain. With no tab, Sunrise shines through the same way, as the empty
-/// page you came from (David, 2026-11-13). Reduce Transparency: the plain
-/// tinted frame. Nothing redraws while idle or scrolling; the haze is
-/// remade only when the tab on screen or its picture changes, and a space
-/// change cross-fades the tint.
-/// The haze, reading the tab's picture itself, so a picture arriving runs
-/// only this, never the overview it's behind (2i step 3, part 3).
-struct OverviewHazeLayer: View {
-    let tab: UUID?
-    let pictures: PagePictures
-    /// The picture may be read from disk (the overview is shown).
-    let readsDisk: Bool
-    let space: String
-
-    var body: some View {
-        OverviewHaze(tab: tab, picture: tab.flatMap {
-            readsDisk ? pictures.image(for: $0) : pictures.cachedImage(for: $0)
-        }, space: space)
-    }
-}
-
+/// The overview's backdrop: Sunrise, always, as a haze (David, 2026-11-16).
+/// It used to be a blur of the tab you came from, so it looked different
+/// every time (often plain white or black); now warm dawn light shines
+/// through behind the cards, the way the Mac's window shows the desktop.
+/// A deliberate exception to "Sunrise is for moments" (CLAUDE.md).
+///
+/// The scene (its snow in the space's color, the sky and sun Firn's own) is
+/// rendered once, small, blurred off the main thread, and kept per space
+/// color, look, and screen shape; on screen it's a plain image under a light
+/// wash of the space's color. Nothing redraws while idle or scrolling. A
+/// space change cross-fades both over 600ms, as the site's snow does
+/// (instantly with Reduce Motion). Reduce Transparency: the plain tinted frame.
 struct OverviewHaze: View {
-    let tab: UUID?
-    let picture: UIImage?
     let space: String
+    /// The overview is on screen: the clock goes light over the blue sky.
+    let shown: Bool
+
+    /// The haze's own tint: the space's color over the whole blurred scene,
+    /// light and dark. One place to tune it.
+    static let hazeTint: (light: CGFloat, dark: CGFloat) = (light: 0.08, dark: 0.06)
+
     @State private var haze: UIImage?
+    /// The screen's height over its width, rounded, so a turned iPad gets a
+    /// scene of its own shape (a portrait one, filled in, lost the horizon).
+    @State private var aspect: Double = 0
+    /// The baked scenes, per space color, look, and shape (a handful at most).
+    @MainActor private static var kept: [String: UIImage] = [:]
 
-    /// Each tab's last haze, kept while Firn runs (a few small images), so
-    /// the overview opens with it already there. Made afresh every time, it
-    /// came in after the page had landed, a second change once everything
-    /// should be still (David's recording, 2026-11-09); a fresh one still
-    /// cross-fades in over it when the page has changed.
-    @MainActor private static var kept: [UUID: UIImage] = [:]
-    /// Sunrise's haze, per space color and look (a handful at most).
-    @MainActor private static var sunriseKept: [String: UIImage] = [:]
-
-    init(tab: UUID?, picture: UIImage?, space: String) {
-        self.tab = tab
-        self.picture = picture
-        self.space = space
-        _haze = State(initialValue: tab.flatMap { Self.kept[$0] })
-    }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The space's color at the haze's level for the current look.
+    private static func tint(_ space: String) -> Color {
+        let hex = Theme.spaceHex(space)
+        let red = CGFloat((hex >> 16) & 0xFF) / 255, green = CGFloat((hex >> 8) & 0xFF) / 255
+        let blue = CGFloat(hex & 0xFF) / 255
+        return Color(uiColor: UIColor { traits in
+            UIColor(red: red, green: green, blue: blue,
+                    alpha: traits.userInterfaceStyle == .dark ? hazeTint.dark : hazeTint.light)
+        })
+    }
+
+    private var key: String { "\(space)|\(colorScheme == .dark)|\(aspect)" }
+    private var fade: Animation? { reduceMotion ? nil : .easeOut(duration: 0.6) }
 
     var body: some View {
         ZStack {
             Theme.frame
-            if !reduceTransparency, let haze {
-                // Filling the screen, never sizing the backdrop itself.
-                Color.clear
-                    .overlay {
-                        Image(uiImage: haze)
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                    }
-                    .clipped()
-                    // Each haze its own layer, so a new one cross-fades in
-                    // by opacity alone. Changed in place, SwiftUI blended
-                    // the two images on the CPU at full screen size every
-                    // frame of the glide into the overview: three stalls
-                    // of 55–110ms each (David's iPhone, 2026-11-10).
-                    .id(ObjectIdentifier(haze))
-                    .transition(.opacity)
-                // One level for every page, as honest as the Mac's
-                // window: whatever is behind is what shows.
-                Theme.overviewWash
-            }
-            Rectangle()
-                .fill(Theme.frameTint(space))
-                .animation(.easeOut(duration: 0.2), value: space)
-            if !reduceTransparency {
+            if reduceTransparency {
+                Rectangle()
+                    .fill(Theme.frameTint(space))
+                    .animation(fade, value: space)
+            } else {
+                if let haze {
+                    // Filling the screen, never sizing the backdrop itself.
+                    Color.clear
+                        .overlay {
+                            Image(uiImage: haze)
+                                .resizable()
+                                .interpolation(.high)
+                                .scaledToFill()
+                        }
+                        .clipped()
+                        // Each scene its own layer, so a new one cross-fades
+                        // in by opacity alone, never blended on the CPU.
+                        .id(ObjectIdentifier(haze))
+                        .transition(.opacity)
+                }
+                Rectangle()
+                    .fill(Self.tint(space))
+                    .animation(fade, value: space)
                 Image("PaperGrain")
                     .resizable(resizingMode: .tile)
                     .opacity(Theme.Sunrise.grainOpacity(dark: colorScheme == .dark))
                     .blendMode(colorScheme == .dark ? .softLight : .multiply)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: haze)
+        .animation(fade, value: haze)
         .ignoresSafeArea()
+        .onGeometryChange(for: Double.self) { proxy in
+            let size = proxy.size
+            return size.width > 0 ? (size.height / size.width * 20).rounded() / 20 : 0
+        } action: { aspect = $0 }
+        .background(LightStatusBar(on: shown && !reduceTransparency))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        // Another tab on screen: its own kept haze at once, as when the
-        // overview was built for each opening (it stays built now).
-        .onChange(of: tab) {
-            var now = Transaction()
-            now.disablesAnimations = true
-            withTransaction(now) { haze = tab.flatMap { Self.kept[$0] } }
-        }
-        // No tab: the empty page's Sunrise, in this space's snow and the
-        // current look, through the same blur as a page's picture.
-        .task(id: tab == nil ? "\(space)|\(colorScheme == .dark)" : nil) {
-            guard tab == nil else { return }
-            let key = "\(space)|\(colorScheme == .dark)"
-            if let kept = Self.sunriseKept[key] { return haze = kept }
+        .task(id: aspect > 0 && !reduceTransparency ? key : nil) {
+            guard aspect > 0, !reduceTransparency else { return }
+            let key = key
+            if let kept = Self.kept[key] { return haze = kept }
+            let width: CGFloat = 200
             let renderer = ImageRenderer(content: SunriseScene(spaceColor: space)
-                .frame(width: 200, height: 434)
+                .frame(width: width, height: (width * aspect).rounded())
                 .environment(\.colorScheme, colorScheme))
             renderer.scale = 1
             guard let source = renderer.cgImage else { return }
             let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
-            guard !Task.isCancelled, tab == nil else { return }
-            haze = made.map { UIImage(cgImage: $0) }
-            Self.sunriseKept[key] = haze
-        }
-        .task(id: picture.map(ObjectIdentifier.init)) {
-            // No picture in memory (hidden): the kept haze stays.
-            guard let source = picture?.cgImage else { return }
-            let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
-            guard !Task.isCancelled else { return }
-            haze = made.map { UIImage(cgImage: $0) }
-            if let tab {
-                if Self.kept.count > 30 { Self.kept.removeAll() }
-                Self.kept[tab] = haze
-            }
+            guard !Task.isCancelled, let made else { return }
+            let image = UIImage(cgImage: made)
+            if Self.kept.count > 16 { Self.kept.removeAll() }
+            Self.kept[key] = image
+            haze = image
         }
     }
 

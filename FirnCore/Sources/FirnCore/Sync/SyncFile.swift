@@ -3,8 +3,8 @@ import os
 
 /// What sync keeps between launches (docs/SYNC-PLAN.md, step 3), in one file
 /// next to the session: this device's `SyncState`, the sync engine's own
-/// state (CloudKit's, saved as the app hands it over), and records still
-/// waiting for their space or group. Only there while sync is on.
+/// state (CloudKit's, saved as the app hands it over). Only there while
+/// sync is on.
 public struct SyncSaved: Codable, Equatable, Sendable {
     public static let currentVersion = 1
 
@@ -12,7 +12,6 @@ public struct SyncSaved: Codable, Equatable, Sendable {
     public var state = SyncState()
     /// The engine's state, as opaque bytes (CloudKit's own encoding).
     public var engineState: Data?
-    public var waiting: [SyncItem] = []
     /// Each record's CloudKit change tag and such (its "system fields", as
     /// CloudKit encodes them), by record name, so a save isn't taken for a
     /// clash. No fields of Firn's are in them.
@@ -27,7 +26,7 @@ public struct SyncSaved: Codable, Equatable, Sendable {
 }
 
 /// `~/Library/Application Support/Firn/sync.json` (in the container). It
-/// holds what the session file does for spaces and groups, and never leaves
+/// holds what the session file does for spaces, and never leaves
 /// the device.
 public struct SyncFile: Sendable {
     public let url: URL

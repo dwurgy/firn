@@ -15,20 +15,11 @@ import Foundation
 /// saves the session.
 public struct SyncState: Codable, Equatable, Sendable {
     /// The records as iCloud has them, as far as this device knows.
+    /// (Sync files from when groups and tabs synced still open: the fields
+    /// they had are passed over.)
     var spaces: [UUID: SyncedSpace] = [:]
-    var groups: [UUID: SyncedGroup] = [:]
-    var tabs: [UUID: SyncedTab] = [:]
     /// This device's own fields at its last look (their times mean nothing).
     var seen = Fields()
-    /// Tabs this device said had left their group; their records go at the
-    /// first look after iCloud has the word (`sent`). Deleting sooner would
-    /// let CloudKit drop the word unsent (a save followed by a delete of the
-    /// same record goes as the delete alone), and other devices would close
-    /// those tabs instead of keeping them loose.
-    var announced: Set<UUID> = []
-    /// Announced tabs whose loose record iCloud has. Optional so sync files
-    /// from before it still open.
-    var sentLoose: Set<UUID>?
 
     // The first sync (David, 2026-11-13): a space of this device's joins
     // another device's space of the same name. It keeps its own id and data
@@ -53,18 +44,9 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// spaces give way first.)
     public mutating func finishFirstSync() { firstSyncDone = true }
 
-    /// iCloud saved this record, as sent (the app passes each saved tab
-    /// record, opened). A loose tab's word is out, so its record can go.
-    public mutating func sent(_ item: SyncItem) {
-        guard case let .tab(tab) = item, tab.groupID == nil, announced.contains(tab.id) else { return }
-        sentLoose = (sentLoose ?? []).union([tab.id])
-    }
-
     /// The fields that sync, as they are on a device right now.
     struct Fields: Codable, Equatable, Sendable {
         var spaces: [UUID: SyncedSpace] = [:]
-        var groups: [UUID: SyncedGroup] = [:]
-        var tabs: [UUID: SyncedTab] = [:]
     }
 
     /// Every record this device would hand iCloud now, for a first upload
@@ -77,9 +59,7 @@ public struct SyncState: Codable, Equatable, Sendable {
             let local = localSpace(uuid)
             guard remoteSpace(local) == uuid else { return nil }
             return spaces[local].map { .space(toCloud($0)) }
-        case .group: return groups[uuid].map { .group(toCloud($0)) }
-        case .tab: return tabs[uuid].map { .tab(toCloud($0)) }
-        case .visit: return nil
+        case .group, .tab, .visit: return nil
         }
     }
 
@@ -90,8 +70,6 @@ public struct SyncState: Codable, Equatable, Sendable {
         if kinds.contains(.space) {
             ids += spaces.keys.map { toCloud(SyncRecordID(kind: .space, name: $0.uuidString)) }
         }
-        if kinds.contains(.group) { ids += groups.keys.map { SyncRecordID(kind: .group, name: $0.uuidString) } }
-        if kinds.contains(.tab) { ids += tabs.keys.map { SyncRecordID(kind: .tab, name: $0.uuidString) } }
         return ids.filter { item(for: $0) != nil }
     }
 
@@ -109,23 +87,11 @@ public struct SyncState: Codable, Equatable, Sendable {
         return space
     }
 
-    func toCloud(_ group: SyncedGroup) -> SyncedGroup {
-        var group = group
-        group.spaceID = remoteSpace(group.spaceID)
-        return group
-    }
 
-    func toCloud(_ tab: SyncedTab) -> SyncedTab {
-        var tab = tab
-        tab.spaceID = remoteSpace(tab.spaceID)
-        return tab
-    }
 
     func toCloud(_ item: SyncItem) -> SyncItem {
         switch item {
         case let .space(space): .space(toCloud(space))
-        case let .group(group): .group(toCloud(group))
-        case let .tab(tab): .tab(toCloud(tab))
         case .visit: item
         }
     }
@@ -141,18 +107,6 @@ public struct SyncState: Codable, Equatable, Sendable {
         space.dataStoreID = localStore(space.dataStoreID)
         return space
     }
-
-    func fromCloud(_ group: SyncedGroup) -> SyncedGroup {
-        var group = group
-        group.spaceID = localSpace(group.spaceID)
-        return group
-    }
-
-    func fromCloud(_ tab: SyncedTab) -> SyncedTab {
-        var tab = tab
-        tab.spaceID = localSpace(tab.spaceID)
-        return tab
-    }
 }
 
 /// A synced record kept per id, with a time that doesn't count as a field.
@@ -162,8 +116,6 @@ protocol SyncedFields: Equatable, Sendable {
 }
 
 extension SyncedSpace: SyncedFields {}
-extension SyncedGroup: SyncedFields {}
-extension SyncedTab: SyncedFields {}
 
 extension SyncedFields {
     /// The same fields, whenever they changed.
@@ -172,13 +124,4 @@ extension SyncedFields {
         other.changedAt = changedAt
         return self == other
     }
-}
-
-/// What came in and what it means to send.
-public struct SyncApplied: Equatable, Sendable {
-    /// This device's own changes, taken before applying what came in.
-    public var toSend: SyncChanges
-    /// Records that can't be placed yet (their space or group hasn't
-    /// arrived); hand them in again with the next batch.
-    public var waiting: [SyncItem]
 }

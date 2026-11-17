@@ -67,8 +67,6 @@ public struct SyncSeal: Sendable {
         let encoder = JSONEncoder()
         switch item {
         case let .space(space): fields = try encoder.encode(space)
-        case let .group(group): fields = try encoder.encode(group)
-        case let .tab(tab): fields = try encoder.encode(tab)
         case let .visit(visit): fields = try encoder.encode(visit)
         }
         let box = try AES.GCM.seal(fields, using: key, authenticating: Self.binding(id))
@@ -92,8 +90,7 @@ public struct SyncSeal: Sendable {
         do {
             switch record.id.kind {
             case .space: item = .space(try decoder.decode(SyncedSpace.self, from: fields))
-            case .group: item = .group(try decoder.decode(SyncedGroup.self, from: fields))
-            case .tab: item = .tab(try decoder.decode(SyncedTab.self, from: fields))
+            case .group, .tab: throw Failure.malformed  // no longer synced
             case .visit: item = .visit(try decoder.decode(SyncedVisit.self, from: fields))
             }
         } catch {

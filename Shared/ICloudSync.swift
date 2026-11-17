@@ -25,19 +25,21 @@ final class ICloudSync {
     /// The "Sync with iCloud" switch (Settings, step 3, part 3).
     static let enabledKey = "syncWithICloud"
     static var isOn: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
-    /// What syncs so far: spaces, and groups with their tabs (step 4; a
-    /// device that synced only spaces catches up: see `begin`). History
-    /// joins in step 6.
-    static let kinds: Set<SyncKind> = [.space, .group, .tab]
+    /// What syncs so far: spaces. Groups and tabs synced briefly (step 4),
+    /// then stayed on each device (David, 2026-11-16): a device that sent
+    /// them takes them out of iCloud again (see `begin`). History joins in
+    /// step 7.
+    static let kinds: Set<SyncKind> = [.space]
 
     /// What turning sync on does, in plain words, under the switch on the
     /// Mac and the iPhone (and the welcome's step, later). Keep it literally
-    /// true: when history (step 6), "On your Mac" (step 5), Basecamp between Macs (step 7), or passwords
-    /// (step 9) start syncing, change these words in the same commit.
+    /// true: when "On your Mac" (step 5), Send to (step 6), history (step 7),
+    /// Basecamp between Macs (step 8), or passwords (step 10) start syncing,
+    /// change these words in the same commit.
     static func whatSyncs(on device: String) -> [String] {
         [
-            "Your spaces, and your groups with the tabs in them, stay the same on your Mac, iPhone, and iPad. Make, rename, or close one anywhere, and the others follow.",
-            "Tabs outside a group, Basecamp, history, and settings stay on this \(device). So do sign-ins and passwords: a separate space starts signed out on your other devices.",
+            "Your spaces stay the same on your Mac, iPhone, and iPad. Make, rename, or delete one anywhere, and the others follow.",
+            "Tabs, groups, Basecamp, history, and settings stay on this \(device). So do sign-ins and passwords: a separate space starts signed out on your other devices.",
             "Everything is encrypted on this \(device) before it goes to your iCloud, so only your devices can read it.",
         ]
     }
@@ -128,6 +130,7 @@ final class ICloudSync {
         let keyChanged = saved.keyID != nil && saved.keyID != seal.keyID
         let sendAgain = saved.state.firstSyncDone && (keyChanged || !saved.kinds.isSuperset(of: Self.kinds))
         if keyChanged || sendAgain { saved.engineState = nil }
+        let dropped = saved.kinds.subtracting(Self.kinds)
         saved.keyID = seal.keyID
         saved.kinds = Self.kinds
 
@@ -146,8 +149,21 @@ final class ICloudSync {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
             queue(SyncChanges(saves: [], deletes: []), andAgain: saved.state.recordIDs(of: Self.kinds))
         }
+        if !dropped.isEmpty { takeOut(dropped, from: engine) }
         if saved.state.firstSyncDone { takeChanges() } else { fetchFirst() }
         save()
+    }
+
+    /// Kinds that no longer sync (groups and tabs, David, 2026-11-16): the
+    /// records this device put in iCloud go, so nothing lingers there.
+    private func takeOut(_ kinds: Set<SyncKind>, from engine: CKSyncEngine) {
+        let names = saved.systemFields.keys.filter { name in
+            Self.syncID(CKRecord.ID(recordName: name, zoneID: Self.zoneID)).map { kinds.contains($0.kind) } ?? false
+        }
+        for name in names { saved.systemFields[name] = nil }
+        engine.state.add(pendingRecordZoneChanges: names.map {
+            .deleteRecord(CKRecord.ID(recordName: $0, zoneID: Self.zoneID))
+        })
     }
 
     // MARK: - This device's changes
@@ -238,9 +254,7 @@ final class ICloudSync {
 
     private func apply(saves: [SyncItem], deletes: [SyncRecordID]) {
         guard !saves.isEmpty || !deletes.isEmpty else { return save() }
-        let applied = store.applySync(saves: saved.waiting + saves, deletes: deletes, to: &saved.state)
-        saved.waiting = applied.waiting
-        send(applied.toSend)
+        send(store.applySync(saves: saves, deletes: deletes, to: &saved.state))
         save()
     }
 
@@ -263,10 +277,6 @@ final class ICloudSync {
     private func sent(_ sent: CKSyncEngine.Event.SentRecordZoneChanges) {
         for record in sent.savedRecords {
             saved.systemFields[record.recordID.recordName] = Self.systemFields(of: record)
-            // A loose tab's word is in iCloud: its record can go next time.
-            if let id = Self.syncID(record.recordID), id.kind == .tab, let item = open(record, as: id) {
-                saved.state.sent(item)
-            }
         }
         var again: [SyncRecordID] = []
         for failure in sent.failedRecordSaves {

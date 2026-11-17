@@ -65,16 +65,10 @@ struct SyncTests {
     /// Sends one device's changes to the other, sealed and opened on the
     /// way, and returns what the receiver had of its own to send.
     @discardableResult
-    func send(from sender: SyncDevice, to receiver: SyncDevice, deletesFirst: Bool = false) -> SyncApplied {
+    func send(from sender: SyncDevice, to receiver: SyncDevice) -> SyncChanges {
         let changes = sender.store.takeSyncChanges(into: &sender.state)
         let seal = SyncSeal(keyData: key)!
         let saves = changes.saves.map { try! seal.open(try! seal.seal($0)) }
-        // iCloud saved them: the sender hears so.
-        for item in saves { sender.state.sent(item) }
-        if deletesFirst {
-            _ = receiver.store.applySync(saves: [], deletes: changes.deletes, to: &receiver.state)
-            return receiver.store.applySync(saves: saves, deletes: [], to: &receiver.state)
-        }
         return receiver.store.applySync(saves: saves, deletes: changes.deletes, to: &receiver.state)
     }
 
@@ -92,7 +86,8 @@ struct SyncTests {
 
     @Test func sealedRecordsOpenOnlyWithTheSameKey() throws {
         let seal = try #require(SyncSeal(keyData: key))
-        let item = SyncItem.group(SyncedGroup(id: UUID(), spaceID: UUID(), name: "Trip", changedAt: clock.time))
+        let item = SyncItem.space(SyncedSpace(id: UUID(), name: "Trip", color: "sage", order: 0,
+                                              dataStoreID: UUID(), changedAt: clock.time))
         let record = try seal.seal(item)
         #expect(try seal.open(record) == item)
         // The name is nowhere in what iCloud holds.
@@ -107,12 +102,13 @@ struct SyncTests {
 
     @Test func aSealedRecordCantPassAsAnother() throws {
         let seal = try #require(SyncSeal(keyData: key))
-        let record = try seal.seal(.group(SyncedGroup(id: UUID(), spaceID: UUID(), name: "Trip", changedAt: clock.time)))
+        let record = try seal.seal(.space(SyncedSpace(id: UUID(), name: "Trip", color: "sage", order: 0,
+                                                      dataStoreID: UUID(), changedAt: clock.time)))
         var moved = record
         moved.id.name = UUID().uuidString
         #expect(throws: SyncSeal.Failure.unreadable) { try seal.open(moved) }
         var retyped = record
-        retyped.id.kind = .space
+        retyped.id.kind = .visit
         #expect(throws: SyncSeal.Failure.unreadable) { try seal.open(retyped) }
         var tampered = record
         tampered.sealed[tampered.sealed.count - 1] ^= 1
@@ -135,14 +131,15 @@ struct SyncTests {
         let (mac, phone) = firstSync(phoneSpaces: [phonePersonal])
         makeGroup("Trip", "a", on: mac)
         phone.store.openTab(url("b"))
-        let fromPhone = send(from: mac, to: phone).toSend
+        let fromPhone = send(from: mac, to: phone)
         // One space: the phone's own, under the Mac's name and color, its
         // data store (sign-ins, history, passwords) untouched.
         #expect(phone.store.spaces.map(\.id) == [phonePersonal.id])
         #expect(phone.space.name == "Personal" && phone.space.color == "glacier")
         #expect(phone.space.dataStoreID == phonePersonal.dataStoreID)
         #expect(phone.erased.ids.isEmpty)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a"])
+        // Groups and tabs stay on each device.
+        #expect(phone.group(named: "Trip") == nil)
         #expect(phone.store.tabs.contains { $0.url == url("b") && $0.spaceID == phonePersonal.id })
         // Nothing of the phone's own id goes up.
         #expect(fromPhone.saves.allSatisfy { $0.id.name != phonePersonal.id.uuidString })
@@ -151,21 +148,19 @@ struct SyncTests {
 
         // From now on each side's edits reach the other in its own terms.
         phone.store.updateSpace(phone.space, name: "Home", color: phone.space.color)
-        makeGroup("Work", "c", on: phone)
         send(from: phone, to: mac)
         #expect(mac.store.spaces.count == 1 && mac.space.name == "Home")
         #expect(mac.space.dataStoreID == personal.dataStoreID && mac.erased.ids.isEmpty)
-        #expect(mac.group(named: "Work")?.spaceID == personal.id)
-        makeGroup("Later", "d", on: mac)
+        mac.store.updateSpace(mac.space, name: "Later", color: "sand")
         send(from: mac, to: phone)
-        #expect(phone.group(named: "Later")?.spaceID == phonePersonal.id)
+        #expect(phone.store.spaces.map(\.id) == [phonePersonal.id] && phone.space.name == "Later")
         #expect(phone.space.dataStoreID == phonePersonal.dataStoreID && phone.erased.ids.isEmpty)
     }
 
     @Test func anUntouchedSpaceGivesWay() throws {
         let untouched = Space(name: "New Space", color: "glacier", order: 0, dataStoreID: UUID())
         let (mac, phone) = firstSync(phoneSpaces: [untouched])
-        let fromPhone = send(from: mac, to: phone).toSend
+        let fromPhone = send(from: mac, to: phone)
         phone.store.finishFirstSync(&phone.state)
         #expect(phone.store.spaces.map(\.id) == [personal.id])
         // What was held to send is taken again once it gave way (the app's
@@ -196,14 +191,14 @@ struct SyncTests {
         let work = Space(name: "Work", color: "sand", order: 0, dataStoreID: UUID())
         let (mac, phone) = firstSync(phoneSpaces: [work])
         makeGroup("Desk", "a", on: phone)
-        let fromPhone = send(from: mac, to: phone).toSend
+        let fromPhone = send(from: mac, to: phone)
         #expect(Set(phone.store.spaces.map(\.id)) == [work.id, personal.id])
         phone.store.finishFirstSync(&phone.state)
         let seal = SyncSeal(keyData: key)!
         _ = mac.store.applySync(saves: fromPhone.saves.map { try! seal.open(try! seal.seal($0)) },
                                 deletes: fromPhone.deletes, to: &mac.state)
         #expect(mac.store.spaces.contains { $0.id == work.id && $0.dataStoreID == work.dataStoreID })
-        #expect(mac.group(named: "Desk")?.spaceID == work.id)
+        #expect(mac.group(named: "Desk") == nil)
     }
 
     @Test func afterTheFirstSyncSpacesNeverJoin() {
@@ -215,272 +210,16 @@ struct SyncTests {
         #expect(Set(phone.store.spaces.map(\.id)) == [personal.id, macWork.id, phoneWork.id])
     }
 
-    // MARK: - Groups
+    // MARK: - What stays on each device
 
-    @Test func aGroupMadeOnOneDeviceAppearsOnTheOther() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", "b", "c", on: mac)
-        send(from: mac, to: phone)
-        let group = try #require(phone.group(named: "Trip"))
-        #expect(phone.hosts(in: group) == ["a", "b", "c"])
-        #expect(phone.store.tabListItems.count == 1)
-        // Nothing comes back: it arrived, it wasn't edited there.
-        #expect(phone.store.takeSyncChanges(into: &phone.state).isEmpty)
-    }
-
-    @Test func renamingOnThePhoneRenamesOnTheMac() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", on: mac)
-        send(from: mac, to: phone)
-        phone.store.rename(try #require(phone.group(named: "Trip")), to: "Japan")
-        send(from: phone, to: mac)
-        #expect(mac.group(named: "Japan") != nil)
-        #expect(mac.store.groups.count == 1)
-    }
-
-    @Test func theLatestRenameWins() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", on: mac)
-        send(from: mac, to: phone)
-        mac.store.rename(try #require(mac.group(named: "Trip")), to: "Mac's")
-        _ = mac.store.takeSyncChanges(into: &mac.state) // stamped first
-        phone.store.rename(try #require(phone.group(named: "Trip")), to: "Phone's")
-        let phoneChanges = send(from: mac, to: phone).toSend
-        // The mac's change came in after the phone's later rename: the phone's stays.
-        #expect(phone.group(named: "Phone's") != nil)
-        let seal = SyncSeal(keyData: key)!
-        _ = mac.store.applySync(saves: phoneChanges.saves.map { try! seal.open(try! seal.seal($0)) },
-                                deletes: phoneChanges.deletes, to: &mac.state)
-        #expect(mac.group(named: "Phone's") != nil)
-    }
-
-    @Test func foldingAndPlaceStayOnEachDevice() throws {
-        let (mac, phone) = devices()
-        let trip = makeGroup("Trip", "a", on: mac)
-        makeGroup("Home", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.setFolded(trip, true)
-        mac.store.move(trip, to: 1)
-        #expect(mac.store.takeSyncChanges(into: &mac.state).isEmpty)
-    }
-
-    @Test func looseTabsAndBasecampNeverSync() {
-        let (mac, phone) = devices()
-        let tab = mac.store.openTab(url("a"))
-        _ = mac.store.addToBasecamp(mac.store.openTab(url("b")))
-        _ = tab
-        #expect(mac.store.takeSyncChanges(into: &mac.state).isEmpty)
-        #expect(phone.store.tabs.isEmpty)
-    }
-
-    @Test func aGroupALinkMadeSyncsOnlyOnceKept() throws {
-        let (mac, phone) = devices()
-        let opener = mac.store.openTab(url("a"))
-        mac.store.add(FirnCore.Tab(spaceID: personal.id, url: url("b"), lastActiveAt: clock.time), below: opener, inBackground: true)
-        let group = try #require(mac.store.groups.first)
-        #expect(group.tidies)
-        #expect(mac.store.takeSyncChanges(into: &mac.state).isEmpty)
-        mac.store.rename(group, to: "Kept")
-        send(from: mac, to: phone)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Kept"))) == ["a", "b"])
-    }
-
-    @Test func theOrderInsideAGroupSyncs() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", "c", on: mac)
-        send(from: mac, to: phone)
-        let c = try #require(mac.store.tabs.first { $0.url?.host()?.replacingOccurrences(of: ".example", with: "") == "c" })
-        mac.store.move(c, into: group, at: 0)
-        send(from: mac, to: phone)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["c", "a", "b"])
-    }
-
-    @Test func ungroupingLeavesTheTabsLooseEverywhere() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.ungroup(group)
-        send(from: mac, to: phone)
-        #expect(phone.store.groups.isEmpty)
-        #expect(phone.store.looseTabs.map { $0.url?.host()?.replacingOccurrences(of: ".example", with: "") } == ["a", "b"])
-        // The mac tidies up the records; the phone keeps its loose tabs.
-        send(from: mac, to: phone)
-        #expect(phone.store.looseTabs.count == 2)
-        #expect(mac.state.tabs.isEmpty && phone.state.tabs.isEmpty)
-    }
-
-    @Test func ungroupingWorksWhicheverWordArrivesFirst() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.ungroup(group)
-        send(from: mac, to: phone, deletesFirst: true)
-        #expect(phone.store.looseTabs.count == 2)
-        send(from: mac, to: phone)
-        #expect(phone.store.looseTabs.count == 2)
-    }
-
-    /// CloudKit keeps one pending change per record, and a delete after a
-    /// save goes alone. A look that comes before the loose word has gone up
-    /// must not delete those records, or the phone closes the tabs.
-    @Test func ungroupingSurvivesALookBeforeItGoesUp() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.ungroup(group)
-        let first = mac.store.takeSyncChanges(into: &mac.state)
-        let second = mac.store.takeSyncChanges(into: &mac.state)
-        #expect(second.deletes.isEmpty)
-        // The engine's pending list, as it merges the two looks.
-        let deleted = Set(first.deletes + second.deletes)
-        let saves = (first.saves + second.saves).filter { !deleted.contains($0.id) }
-        _ = phone.store.applySync(saves: saves, deletes: Array(deleted), to: &phone.state)
-        #expect(phone.store.looseTabs.count == 2)
-        // Once iCloud has them, the records go, and the phone keeps its tabs.
-        for item in saves { mac.state.sent(item) }
-        send(from: mac, to: phone)
-        #expect(phone.store.looseTabs.count == 2)
-        #expect(mac.state.tabs.isEmpty)
-    }
-
-    /// A tab back in a group before its loose word went up stays synced.
-    @Test func aTabRegroupedBeforeTheWordWentUpKeepsItsRecord() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        let b = try #require(mac.store.tabs(in: group).last)
-        mac.store.takeOutOfGroup(b)
-        _ = mac.store.takeSyncChanges(into: &mac.state)
-        mac.store.move(b, toEndOf: try #require(mac.group(named: "Trip")))
-        send(from: mac, to: phone)
-        #expect(mac.state.tabs[b.id]?.groupID == group.id)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a", "b"])
-    }
-
-    @Test func aRecordWaitingAndDeletedSinceWaitsNoLonger() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", on: mac)
-        let changes = mac.store.takeSyncChanges(into: &mac.state)
-        let tabs = changes.saves.filter { if case .tab = $0 { true } else { false } }
-        let first = phone.store.applySync(saves: tabs, deletes: [], to: &phone.state)
-        #expect(first.waiting.count == 1)
-        // The same record again keeps one waiting, and its delete ends it.
-        let again = phone.store.applySync(saves: first.waiting + tabs, deletes: [], to: &phone.state)
-        #expect(again.waiting.count == 1)
-        let gone = phone.store.applySync(saves: again.waiting, deletes: tabs.map(\.id), to: &phone.state)
-        #expect(gone.waiting.isEmpty)
-    }
-
-    @Test func closingAGroupClosesItsTabsEverywhere() throws {
-        for deletesFirst in [false, true] {
-            let (mac, phone) = devices()
-            let group = makeGroup("Trip", "a", "b", on: mac)
-            send(from: mac, to: phone)
-            mac.store.close(group)
-            send(from: mac, to: phone, deletesFirst: deletesFirst)
-            #expect(phone.store.tabs.isEmpty)
-            #expect(phone.store.groups.isEmpty)
-        }
-    }
-
-    /// Step 4's Undo: ⇧⌘T (or a shake) after Close Group brings it back on
-    /// the other device too, whichever order the words arrive in.
-    @Test func reopeningAClosedGroupBringsItBackEverywhere() throws {
-        for deletesFirst in [false, true] {
-            let (mac, phone) = devices()
-            let group = makeGroup("Trip", "a", "b", on: mac)
-            send(from: mac, to: phone)
-            mac.store.close(group)
-            send(from: mac, to: phone, deletesFirst: deletesFirst)
-            #expect(phone.store.groups.isEmpty)
-            mac.store.reopenClosed()
-            send(from: mac, to: phone, deletesFirst: deletesFirst)
-            let back = try #require(phone.group(named: "Trip"))
-            #expect(phone.hosts(in: back) == ["a", "b"])
-            // And it keeps syncing afterward.
-            mac.store.rename(try #require(mac.group(named: "Trip")), to: "Japan")
-            send(from: mac, to: phone)
-            #expect(phone.group(named: "Japan") != nil)
-        }
-    }
-
-    /// Undo before the other device heard about the close: nothing changes there.
-    @Test func undoingACloseBeforeItGoesOutChangesNothingElsewhere() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.close(group)
-        mac.store.reopenClosed()
-        send(from: mac, to: phone)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a", "b"])
-        #expect(phone.store.groups.count == 1)
-    }
-
-    @Test func aGroupDeletedFirstLeavesTabsUntilTheirWordComes() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.close(group)
-        let changes = mac.store.takeSyncChanges(into: &mac.state)
-        let groupDelete = changes.deletes.filter { $0.kind == .group }
-        _ = phone.store.applySync(saves: [], deletes: groupDelete, to: &phone.state)
-        // Loose for now, and the phone doesn't announce anything about them.
-        #expect(phone.store.looseTabs.count == 2)
-        #expect(phone.store.takeSyncChanges(into: &phone.state).isEmpty)
-        _ = phone.store.applySync(saves: [], deletes: changes.deletes, to: &phone.state)
-        #expect(phone.store.tabs.isEmpty)
-    }
-
-    @Test func closingAGroupedTabClosesItEverywhere() throws {
+    /// Groups, tabs, and Basecamp never sync (David, 2026-11-16).
+    @Test func groupsTabsAndBasecampNeverSync() {
         let (mac, phone) = devices()
         makeGroup("Trip", "a", "b", on: mac)
-        send(from: mac, to: phone)
-        mac.store.close(try #require(mac.store.tabs.first { $0.url?.host()?.replacingOccurrences(of: ".example", with: "") == "a" }))
-        send(from: mac, to: phone)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["b"])
-    }
-
-    @Test func aTabThatArrivesBeforeItsGroupWaits() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", on: mac)
-        let changes = mac.store.takeSyncChanges(into: &mac.state)
-        let tabs = changes.saves.filter { if case .tab = $0 { true } else { false } }
-        let groups = changes.saves.filter { if case .group = $0 { true } else { false } }
-        let first = phone.store.applySync(saves: tabs, deletes: [], to: &phone.state)
-        #expect(first.waiting == tabs)
-        #expect(phone.store.tabs.isEmpty)
-        _ = phone.store.applySync(saves: groups + first.waiting, deletes: [], to: &phone.state)
-        #expect(phone.hosts(in: try #require(phone.group(named: "Trip"))) == ["a"])
-    }
-
-    @Test func aPageSomeoneIsLookingAtIsNeverPulledAway() throws {
-        let (mac, phone) = devices()
-        makeGroup("Trip", "a", on: mac)
-        send(from: mac, to: phone)
-        let onPhone = try #require(phone.store.tabs.first)
-        phone.store.select(onPhone)
-        _ = phone.store.takeSyncChanges(into: &phone.state)
-        let onMac = try #require(mac.store.tabs.first)
-        onMac.page?.load(url("elsewhere"))
-        send(from: mac, to: phone)
-        #expect(onPhone.url?.host()?.replacingOccurrences(of: ".example", with: "") == "a")
-        // And the phone doesn't send its own address back.
-        #expect(phone.store.takeSyncChanges(into: &phone.state).isEmpty)
-        // A tab not on screen follows.
-        phone.store.select(phone.store.openTab(url("z")))
-        onMac.page?.load(url("further"))
-        send(from: mac, to: phone)
-        #expect(onPhone.url?.host()?.replacingOccurrences(of: ".example", with: "") == "further")
-    }
-
-    @Test func onlyWebAddressesArrive() throws {
-        let (mac, phone) = devices()
-        let group = makeGroup("Trip", "a", on: mac)
-        send(from: mac, to: phone)
-        let bad = SyncedTab(id: UUID(), spaceID: personal.id, groupID: group.id,
-                            url: URL(string: "javascript:alert(1)")!, title: "x", order: 1, changedAt: clock.tick())
-        _ = phone.store.applySync(saves: [.tab(bad)], deletes: [], to: &phone.state)
-        #expect(phone.store.tabs.count == 1)
+        _ = mac.store.addToBasecamp(mac.store.openTab(url("c")))
+        mac.store.openTab(url("d"))
+        #expect(mac.store.takeSyncChanges(into: &mac.state).isEmpty)
+        #expect(phone.store.tabs.isEmpty && phone.store.groups.isEmpty)
     }
 
     // MARK: - Spaces
@@ -530,13 +269,10 @@ struct SyncTests {
     @Test func deletingASpaceDeletesItEverywhere() throws {
         let (mac, phone) = devices()
         let work = mac.store.addSpace(name: "Work", color: "sage")
-        makeGroup("Trip", "a", on: mac)
         send(from: mac, to: phone)
-        #expect(phone.store.tabs.count == 1)
         mac.store.deleteSpace(work)
         send(from: mac, to: phone)
         #expect(phone.store.spaces.map(\.id) == [personal.id])
-        #expect(phone.store.tabs.isEmpty)
         #expect(phone.erased.ids == [work.dataStoreID])
     }
 
@@ -574,10 +310,26 @@ struct SyncTests {
         var saved = SyncSaved()
         saved.engineState = Data([1, 2, 3])
         // A fraction of a second must survive: latest change wins by it.
-        saved.waiting = [.group(SyncedGroup(id: UUID(), spaceID: UUID(), name: "Trip",
-                                            changedAt: Date(timeIntervalSinceReferenceDate: 1000.25)))]
+        let space = SyncedSpace(id: UUID(), name: "Trip", color: "sage", order: 0, dataStoreID: UUID(),
+                                changedAt: Date(timeIntervalSinceReferenceDate: 1000.25))
+        saved.state.spaces[space.id] = space
+        saved.kinds = [.space]
         try file.save(saved)
         #expect(file.load() == saved)
+
+        // A file from when groups and tabs synced still opens, their parts passed over.
+        var old = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file.url)) as? [String: Any])
+        var state = try #require(old["state"] as? [String: Any])
+        state["groups"] = [:] as [String: Any]
+        state["tabs"] = [:] as [String: Any]
+        state["announced"] = [] as [Any]
+        old["state"] = state
+        old["waiting"] = [] as [Any]
+        old["kinds"] = ["Space", "TabGroup", "Tab"]
+        try JSONSerialization.data(withJSONObject: old).write(to: file.url)
+        var expected = saved
+        expected.kinds = [.space, .group, .tab]
+        #expect(file.load() == expected)
 
         try Data("not json".utf8).write(to: file.url)
         #expect(file.load() == SyncSaved())

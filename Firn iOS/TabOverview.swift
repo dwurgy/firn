@@ -112,6 +112,9 @@ struct TabOverview: View {
     @State private var name = ""
     @State private var lastDrop = Date.distantPast
     @State private var lifts = 0
+    /// The grid on iOS 27: what iOS's drag is carrying, so its X hides
+    /// (the lift is only the picture, as the menu's).
+    @State private var systemDragged: Set<UUID> = []
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
     /// Where the tab last opened from here sat in the list's view, so the
     /// page closes back into the same spot (David, 2026-11-13: "tabs should
@@ -257,7 +260,8 @@ struct TabOverview: View {
                 // the drag under a finger still down (David's recording,
                 // 2026-11-08).
                 // The grid on iOS 27 leaves holds and drags to iOS.
-                .modifier(GridReorderContainer(on: systemDrag, enabled: gliding == nil && !busy) { move in
+                .modifier(GridReorderContainer(on: systemDrag, enabled: gliding == nil && !busy,
+                                               dragging: { systemDragged = $0 }) { move in
                     withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { move.apply(to: store) }
                 })
                 .gesture(HoldToDrag(enabled: gliding == nil,
@@ -709,7 +713,8 @@ struct TabOverview: View {
 
     /// A tab's tile: in the list, or lifted under the finger.
     private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
-                      moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil) -> some View {
+                      moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil,
+                      holdMenu: (() -> [[HoldMenuItem]])? = nil) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
             tab: tab,
@@ -731,7 +736,9 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: cardHeight,
-            inGrid: grid
+            inGrid: grid,
+            holdMenu: holdMenu,
+            carried: systemDragged.contains(tab.id)
         )
         // Runs again only when what it shows changes (`OverviewRow.==`).
         .equatable()
@@ -935,10 +942,11 @@ struct TabOverview: View {
         }
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
-        return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down)
-            // The grid on iOS 27: iOS's own menu, lifting the card.
-            .systemHoldMenu(systemDrag, shape: RoundedRectangle(cornerRadius: OverviewRow.gridCornerRadius,
-                                                                style: .continuous)) { menu(for: tab) }
+        return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down,
+                    holdMenu: systemDrag ? { menu(for: tab) } : nil)
+            // The grid on iOS 27: iOS's own menu sits on the card's picture
+            // (`OverviewRow.holdMenu`); the drag lifts that same picture.
+            .modifier(GridDragShape(on: systemDrag))
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
             // A card stays while its page glides (only its window empties,

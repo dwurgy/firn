@@ -50,6 +50,12 @@ struct OverviewRow: View {
     /// TestFlight's grid: the card is drawn as Safari's (`gridCard`), and
     /// VoiceOver's moves read as Move Left and Move Right.
     var inGrid = false
+    /// The grid on iOS 27: iOS's own hold menu, on the picture only, as
+    /// Safari's (nil: none here; the list keeps Firn's own menu).
+    var holdMenu: (() -> [[HoldMenuItem]])?
+    /// Carried by iOS's drag (the grid on iOS 27): its X hides, so the
+    /// drag lifts only the picture, as the menu does.
+    var carried = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -58,6 +64,8 @@ struct OverviewRow: View {
     @State private var width: CGFloat = 0
     /// Set once the row is on its way out, so it takes no more touches.
     @State private var leaving = false
+    /// iOS's hold menu is open on the grid card.
+    @State private var menuOpen = false
 
     private var site: String { WebAddress.site(of: tab.url) }
     private var t: CGFloat { min(max(tallness, 0), 1) }
@@ -224,17 +232,25 @@ struct OverviewRow: View {
                     .contentShape(shape)
             }
             .buttonStyle(.plain)
+            // iOS's menu lifts only the picture, as Safari's: the title, the
+            // X, and the shadow stay behind under iOS's blur (David,
+            // 2026-11-16). The drag that can follow lifts the same shape
+            // (`gridPictureShape`, on the whole tile).
+            .systemHoldMenu(holdMenu != nil, shape: shape, opened: { menuOpen = $0 },
+                            sections: holdMenu ?? { [] })
             .background {
                 shape.fill(Theme.page)
                     .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 6, y: 2)
                     .opacity(windowShown ? 1 : 0)
             }
-            .overlay(alignment: .topTrailing) { GridCloseButton(title: tab.title, close: close) }
-            .overlay {
-                if isOnScreen {
-                    CardRing(color: ring, radius: Self.gridCornerRadius).allowsHitTesting(false)
-                }
+            .overlay(alignment: .topTrailing) {
+                // Hidden while its menu is open too: a drag pulled off the
+                // menu takes its picture then, and Safari's carries no X.
+                GridCloseButton(title: tab.title, close: close).opacity(carried || menuOpen ? 0 : 1)
             }
+            // No ring on the tab on screen in the grid, as Safari's: the
+            // landing glide and opening scrolled to it already say which
+            // it is (David, 2026-11-16); VoiceOver still hears "On screen."
             .frame(height: max(cardHeight - Self.gridTitleHeight, 1))
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
@@ -257,6 +273,12 @@ struct OverviewRow: View {
     /// The grid card's corners: Safari's 15pt, measured from David's
     /// screenshots (2026-11-16); the X's disc sits concentric in the corner.
     static let gridCornerRadius: CGFloat = 15
+    /// A grid card's picture within its whole tile (the title under it
+    /// left out), for the drag's lift, so it matches the menu's.
+    static var gridPictureShape: some Shape {
+        UnevenInsetShape(bottom: gridTitleHeight,
+                         shape: RoundedRectangle(cornerRadius: gridCornerRadius, style: .continuous))
+    }
     /// The icon and title under a grid card.
     nonisolated static let gridTitleHeight: CGFloat = 30
 
@@ -409,6 +431,18 @@ struct GridCloseButton: View {
     }
 }
 
+/// A shape drawn in its rect with the bottom left out.
+struct UnevenInsetShape<S: Shape>: Shape {
+    let bottom: CGFloat
+    let shape: S
+
+    func path(in rect: CGRect) -> Path {
+        var r = rect
+        r.size.height = max(r.height - bottom, 1)
+        return shape.path(in: r)
+    }
+}
+
 private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
 extension Theme {
@@ -534,5 +568,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.inGrid == b.inGrid
+            && a.carried == b.carried
     }
 }

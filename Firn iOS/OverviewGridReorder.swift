@@ -99,11 +99,20 @@ struct GridMove {
 struct GridReorderContainer: ViewModifier {
     let on: Bool
     let enabled: Bool
+    /// What iOS's drag is carrying, as it changes (empty once it lands).
+    let dragging: (Set<UUID>) -> Void
     let move: (GridMove) -> Void
 
     func body(content: Content) -> some View {
         if on, #available(iOS 27, *) {
-            content.reorderContainer(for: GridEntry.self, in: GridCollection.self, isEnabled: enabled) { difference in
+            content.onDragSessionUpdated { session in
+                // Through the landing too: the X comes back once it's down.
+                switch session.phase {
+                case .ended, .dataTransferCompleted: dragging([])
+                default: dragging(Set(session.draggedItemIDs(for: UUID.self)))
+                }
+            }
+            .reorderContainer(for: GridEntry.self, in: GridCollection.self, isEnabled: enabled) { difference in
                 let before: UUID? = switch difference.destination.position {
                 case let .before(id): id
                 case .end: nil
@@ -124,6 +133,8 @@ struct GridReorderContainer: ViewModifier {
 /// as the menu opens.
 struct SystemHoldMenu: View {
     let sections: () -> [[HoldMenuItem]]
+    /// Told as the menu opens and closes.
+    var opened: (Bool) -> Void = { _ in }
 
     var body: some View {
         let sections = sections()
@@ -134,6 +145,8 @@ struct SystemHoldMenu: View {
                 }
             }
         }
+        .onAppear { opened(true) }
+        .onDisappear { opened(false) }
     }
 
     @ViewBuilder private static func item(_ item: HoldMenuItem) -> some View {
@@ -161,13 +174,28 @@ extension View {
     /// iOS's hold menu on a grid card or a folder's name line, lifting it
     /// in the shape given, and the same shape for the drag that can follow.
     @ViewBuilder func systemHoldMenu(_ on: Bool, shape: some Shape,
+                                     opened: @escaping (Bool) -> Void = { _ in },
                                      sections: @escaping () -> [[HoldMenuItem]]) -> some View {
         if on {
             contentShape(.contextMenuPreview, shape)
                 .contentShape(.dragPreview, shape)
-                .contextMenu { SystemHoldMenu(sections: sections) }
+                .contextMenu { SystemHoldMenu(sections: sections, opened: opened) }
         } else {
             self
+        }
+    }
+}
+
+/// The drag's lift for a grid card: its picture only, the title under it
+/// left out, the same shape iOS's menu lifts (as Safari's).
+struct GridDragShape: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content.contentShape(.dragPreview, OverviewRow.gridPictureShape)
+        } else {
+            content
         }
     }
 }

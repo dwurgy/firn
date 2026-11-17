@@ -272,6 +272,7 @@ struct OverviewRow: View {
                 // menu takes its picture then, and Safari's carries no X.
                 GridCloseButton(title: tab.title, close: close)
                     .opacity(carried || menuOpen || swiped || gridSwipe == .swiping ? 0 : 1)
+                    .animation(Self.swipeFade(gridSwipe), value: gridSwipe)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
             // landing glide and opening scrolled to it already say which
@@ -285,6 +286,7 @@ struct OverviewRow: View {
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
                 .opacity(swiped || gridSwipe == .swiping ? 0 : 1)
+                .animation(Self.swipeFade(gridSwipe), value: gridSwipe)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -299,6 +301,19 @@ struct OverviewRow: View {
         }
         .task(id: picture == nil) { if picture == nil { await loadPicture() } }
         .animation(.easeOut(duration: 0.15), value: picture != nil)
+    }
+
+    /// The grid's UIKit cards fade their title and X here, on the card
+    /// itself: the overview's animation never reached them through the
+    /// collection view's cell, so they snapped out and back in a frame
+    /// (David's recording, 2026-11-17). Quickly out as the swipe starts;
+    /// back over the ease home.
+    private static func swipeFade(_ phase: GridSwipe) -> Animation? {
+        switch phase {
+        case .swiping: .easeOut(duration: 0.12)
+        case .easingHome: .easeInOut(duration: 0.35)
+        case .none: nil
+        }
     }
 
     /// How long a grid card takes to ease home after a swipe, shrinking

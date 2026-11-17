@@ -35,6 +35,26 @@ final class GridCardCell: UICollectionViewCell {
         didSet { transform = swipe }
     }
 
+    /// A swiped card's growth, apart from its slide (`swipe`) so each has
+    /// its own curve: the growth a quick spring of its own as the swipe
+    /// starts, the slide following the finger. On the cell's sublayer
+    /// transform, which UIKit's layout never touches.
+    func grow(to scale: CGFloat, stiffness: CGFloat) {
+        let target = CATransform3DMakeScale(scale, scale, 1)
+        let from = layer.presentation()?.sublayerTransform ?? layer.sublayerTransform
+        layer.removeAnimation(forKey: "grow")
+        layer.sublayerTransform = target
+        guard !CATransform3DEqualToTransform(from, target) else { return }
+        let spring = CASpringAnimation(keyPath: "sublayerTransform")
+        spring.fromValue = NSValue(caTransform3D: from)
+        spring.toValue = NSValue(caTransform3D: target)
+        spring.mass = 1
+        spring.stiffness = stiffness
+        spring.damping = 2 * sqrt(stiffness)
+        spring.duration = spring.settlingDuration
+        layer.add(spring, forKey: "grow")
+    }
+
     /// On top for a swipe, whether or not the finger's first touch raised it.
     func raise() {
         for case let other as GridCardCell in superview?.subviews ?? [] where other !== self {
@@ -48,6 +68,8 @@ final class GridCardCell: UICollectionViewCell {
         settle?.stopAnimation(true)
         settle = nil
         swipe = .identity
+        layer.removeAnimation(forKey: "grow")
+        layer.sublayerTransform = CATransform3DIdentity
         contentView.alpha = 1
     }
 
@@ -172,7 +194,7 @@ struct GridCards: UIViewRepresentable {
         /// The swipe to close (`swiped`).
         private let sideways = UIPanGestureRecognizer()
         /// The card being swiped, until it's let go.
-        private var swiping: (id: UUID, cell: GridCardCell, start: CGFloat, travel: CGFloat)?
+        private var swiping: (id: UUID, cell: GridCardCell, start: CGFloat)?
 
         func attach(to view: UICollectionView) {
             let cell = UICollectionView.CellRegistration<GridCardCell, UUID> { [weak self] cell, _, id in
@@ -207,8 +229,11 @@ struct GridCards: UIViewRepresentable {
         // runs only as the title and X go and come back.
 
         /// How much a swiped card grows: Safari's, about 6% (David's
-        /// recording, 2026-11-17), over the swipe's first 24pt.
-        private static let growth: CGFloat = 0.06
+        /// recording, 2026-11-17), on a quick spring as the swipe starts
+        /// (halfway in about 0.08s). It followed the finger's first 24pt
+        /// before, and read as a stepped resize (David, 2026-11-17).
+        private static let growth: CGFloat = 1.06
+        private static let growStiffness: CGFloat = 400
         /// The ease home, shrinking as it goes: a spring with no bounce and
         /// Safari's pace, measured from David's recordings (2026-11-17):
         /// halfway home in about 0.15s, nearly there by 0.4s, a 0.56s
@@ -236,14 +261,12 @@ struct GridCards: UIViewRepresentable {
                 cell.settle?.stopAnimation(true)
                 cell.settle = nil
                 cell.swipe = cell.transform
-                swiping = (id, cell, cell.swipe.tx - pan.translation(in: view).x, 0)
+                if parent?.reduceMotion != true { cell.grow(to: Self.growth, stiffness: Self.growStiffness) }
+                swiping = (id, cell, cell.swipe.tx - pan.translation(in: view).x)
                 parent?.swipe(id, .swiping)
             case .changed:
-                guard var swipe = swiping else { return }
-                let dx = swipe.start + pan.translation(in: view).x
-                swipe.travel = max(swipe.travel, abs(dx))
-                swiping = swipe
-                follow(swipe.cell, dx: dx, travel: swipe.travel)
+                guard let swipe = swiping else { return }
+                follow(swipe.cell, dx: swipe.start + pan.translation(in: view).x)
             case .ended:
                 let dx = (swiping?.start ?? 0) + pan.translation(in: view).x
                 letGo(dx: dx, speed: pan.velocity(in: view).x)
@@ -255,16 +278,14 @@ struct GridCards: UIViewRepresentable {
         /// Left, the card stays under the finger; right, it follows with
         /// some give (Safari's). It grows as it starts and stays grown
         /// either way until let go.
-        private func follow(_ cell: GridCardCell, dx: CGFloat, travel: CGFloat) {
-            let x = dx < 0 ? dx : dx * 0.4
-            let grow = parent?.reduceMotion == true ? 1 : 1 + Self.growth * min(1, travel / 24)
-            cell.swipe = CGAffineTransform(translationX: x, y: 0).scaledBy(x: grow, y: grow)
+        private func follow(_ cell: GridCardCell, dx: CGFloat) {
+            cell.swipe = CGAffineTransform(translationX: dx < 0 ? dx : dx * 0.4, y: 0)
         }
 
         /// Past a third of the card, or a flick left, it slides off and its
         /// tab closes; otherwise it eases home.
         private func letGo(dx: CGFloat, speed: CGFloat) {
-            guard let (id, cell, _, _) = swiping else { return }
+            guard let (id, cell, _) = swiping else { return }
             swiping = nil
             let far = -dx > cell.bounds.width / 3
             let flick = speed < -700 && dx < -20
@@ -280,6 +301,7 @@ struct GridCards: UIViewRepresentable {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     guard let self, shown.contains(id) else { return }
                     cell.swipe = .identity
+                    cell.grow(to: 1, stiffness: Self.homeStiffness)
                     cell.contentView.alpha = 1
                 }
             }
@@ -291,13 +313,11 @@ struct GridCards: UIViewRepresentable {
                 return
             }
             // Off the left edge at the flick's pace, then closed.
-            let now = cell.swipe
             // Where the card's right edge would be unmoved, in the window.
             let gone = -(cell.superview?.convert(cell.center, to: nil).x ?? 0) - cell.bounds.width / 2 - 40
-            let duration = min(0.25, max(0.12, Double((gone - now.tx) / min(speed, -900))))
+            let duration = min(0.25, max(0.12, Double((gone - cell.swipe.tx) / min(speed, -900))))
             let slide = UIViewPropertyAnimator(duration: duration, curve: .easeOut) {
                 cell.swipe = CGAffineTransform(translationX: gone, y: 0)
-                    .scaledBy(x: now.a, y: now.d)
             }
             slide.addCompletion { _ in close() }
             slide.startAnimation()
@@ -319,6 +339,8 @@ struct GridCards: UIViewRepresentable {
                                                   initialVelocity: CGVector(dx: share, dy: share))
             let home = UIViewPropertyAnimator(duration: 0, timingParameters: spring)
             home.addAnimations { cell.swipe = .identity }
+            // Shrinking on the same spring, so it settles as one motion.
+            cell.grow(to: 1, stiffness: Self.homeStiffness)
             home.addCompletion { [weak self, weak cell] _ in
                 guard let cell, cell.settle === home else { return }
                 cell.settle = nil

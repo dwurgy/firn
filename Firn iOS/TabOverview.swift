@@ -734,7 +734,7 @@ struct TabOverview: View {
         ForEach(OverviewGridRun.runs(items)) { run in
             switch run {
             case let .tabs(_, tabs):
-                LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.spacing) {
+                LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
                     ForEach(tabs, id: \.tab.id) { entry in
                         listTile(entry.tab, at: entry.index, of: items.count, loose: true)
                     }

@@ -20,14 +20,17 @@ struct OverviewGridMetrics: Equatable {
     let columns: Int
     let cardHeight: CGFloat
 
-    /// Between cards, across and down: the list's 12pt.
-    static let spacing: CGFloat = 12
+    /// Between columns, and between a card's title and the card below it:
+    /// Safari's grid, measured from David's screenshots (2026-11-16).
+    static let spacing: CGFloat = 17
+    static let rowSpacing: CGFloat = 9
     /// The list's sides.
     static let margin: CGFloat = 16
     private static let minColumn: CGFloat = 220
     private static let maxColumns = 5
     /// The picture's height for its width (portrait, as a phone's page).
-    private static let pictureShape: CGFloat = 1.25
+    /// Safari's 1.41 (David, 2026-11-16: 1.25 looked stubby beside it).
+    private static let pictureShape: CGFloat = 1.41
 
     /// `width` is the overview's; `height` its view's, so a card on a
     /// phone on its side still fits on screen with room around it.

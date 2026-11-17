@@ -237,7 +237,7 @@ struct OverviewRow: View {
             }
             .frame(height: max(cardHeight - Self.gridTitleHeight, 1))
             GridTitle(tab: tab)
-                .frame(height: Self.gridTitleHeight)
+                .frame(height: Self.gridTitleHeight, alignment: .top)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -257,7 +257,7 @@ struct OverviewRow: View {
     /// The grid card's corners: rounder than the list's, as Safari's.
     static let gridCornerRadius: CGFloat = 22
     /// The icon and title under a grid card.
-    nonisolated static let gridTitleHeight: CGFloat = 36
+    nonisolated static let gridTitleHeight: CGFloat = 30
 
     /// Where a grid card's picture sits in its frame: all but the title
     /// under it.
@@ -376,7 +376,7 @@ struct GridTitle: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 4)
-        .padding(.top, 2)
+        .padding(.top, 5)
         .accessibilityHidden(true)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
@@ -394,13 +394,15 @@ struct GridCloseButton: View {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Theme.closeDiscMark)
-                .frame(width: 26, height: 26)
+                .frame(width: 24, height: 24)
                 .background(Theme.closeDisc, in: .circle)
+                // Its middle 15pt from the corner, as Safari's; the 44pt
+                // to tap reaches past the card's edge.
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(2)
+        .padding(-7)
         .accessibilityLabel("Close \(title)")
     }
 }

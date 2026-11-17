@@ -301,11 +301,17 @@ struct SyncTests {
 }
 
 @Suite struct SyncFileTests {
+    /// A fresh start (each has its own random device id, so they're never equal).
+    func isFresh(_ saved: SyncSaved) -> Bool {
+        saved.engineState == nil && saved.systemFields.isEmpty && saved.kinds.isEmpty && saved.keyID == nil
+            && saved.state.spaces.isEmpty && saved.state.devices.isEmpty && !saved.state.firstSyncDone
+    }
+
     @Test func savedSyncComesBackExactly() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = SyncFile(url: folder.appending(path: "sync.json"))
-        #expect(file.load() == SyncSaved())
+        #expect(isFresh(file.load()))
 
         var saved = SyncSaved()
         saved.engineState = Data([1, 2, 3])
@@ -332,7 +338,7 @@ struct SyncTests {
         #expect(file.load() == expected)
 
         try Data("not json".utf8).write(to: file.url)
-        #expect(file.load() == SyncSaved())
+        #expect(isFresh(file.load()))
         #expect(!FileManager.default.fileExists(atPath: file.url.path(percentEncoded: false)))
     }
 }

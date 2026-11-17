@@ -37,7 +37,31 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// first fetch is done (nothing of this device's goes up before then).
     public private(set) var firstSyncDone = false
 
+    /// This install's own id: its `Device` record's name (step 5). A random
+    /// id that says nothing.
+    public private(set) var deviceID = UUID().uuidString
+    /// The other devices' records, by their ids, as they arrived (checked).
+    public internal(set) var devices: [String: SyncedDevice] = [:]
+
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case spaces, seen, joinedSpaces, joinedStores, arrived, firstSyncDone, deviceID, devices
+    }
+
+    /// Anything a sync file from an older Firn lacks starts fresh, so the
+    /// file still opens (and a dropped file would lose the first sync's joins).
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        spaces = try values.decodeIfPresent([UUID: SyncedSpace].self, forKey: .spaces) ?? [:]
+        seen = try values.decodeIfPresent(Fields.self, forKey: .seen) ?? Fields()
+        joinedSpaces = try values.decodeIfPresent([UUID: UUID].self, forKey: .joinedSpaces) ?? [:]
+        joinedStores = try values.decodeIfPresent([UUID: UUID].self, forKey: .joinedStores) ?? [:]
+        arrived = try values.decodeIfPresent(Set<UUID>.self, forKey: .arrived) ?? []
+        firstSyncDone = try values.decodeIfPresent(Bool.self, forKey: .firstSyncDone) ?? false
+        deviceID = try values.decodeIfPresent(String.self, forKey: .deviceID) ?? UUID().uuidString
+        devices = try values.decodeIfPresent([String: SyncedDevice].self, forKey: .devices) ?? [:]
+    }
 
     /// The engine's first fetch is done: from now on spaces arrive as new.
     /// (The app calls `BrowserStore.finishFirstSync`, which lets untouched
@@ -59,7 +83,7 @@ public struct SyncState: Codable, Equatable, Sendable {
             let local = localSpace(uuid)
             guard remoteSpace(local) == uuid else { return nil }
             return spaces[local].map { .space(toCloud($0)) }
-        case .group, .tab, .visit: return nil
+        case .group, .tab, .visit, .device: return nil
         }
     }
 
@@ -92,7 +116,8 @@ public struct SyncState: Codable, Equatable, Sendable {
     func toCloud(_ item: SyncItem) -> SyncItem {
         switch item {
         case let .space(space): .space(toCloud(space))
-        case .visit: item
+        // A device's record is made in iCloud's terms (`deviceRecord`).
+        case .visit, .device: item
         }
     }
 

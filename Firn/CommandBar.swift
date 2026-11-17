@@ -203,6 +203,8 @@ private struct CommandBar: View {
                 store.openTab(url)
             case let .history(page):
                 store.openTab(page.url)
+            case let .otherDevice(remote):
+                store.openTab(remote.url)
             case let .tab(tab):
                 store.select(tab)
             case let .tidied(tab):
@@ -228,6 +230,8 @@ private struct CommandBar: View {
                 incoming = store.openTab(url, inBackground: true)
             case let .history(page):
                 incoming = store.openTab(page.url, inBackground: true)
+            case let .otherDevice(remote):
+                incoming = store.openTab(remote.url, inBackground: true)
             case let .tab(tab), let .tidied(tab):
                 incoming = tab
             case let .closed(entry):
@@ -410,6 +414,9 @@ private struct CommandRowView: View {
             }
         case .history:
             Image(systemName: "clock")
+        // Favicons don't travel (step 5's part 2 shows one Firn already has).
+        case .otherDevice:
+            Image(systemName: "globe")
         case .action:
             Image(systemName: "command")
         }
@@ -424,6 +431,7 @@ private struct CommandRowView: View {
         case let .closed(entry): entry.title
         // A page that never had a title shows where it was.
         case let .history(page): page.title.isEmpty ? page.url.absoluteString : page.title
+        case let .otherDevice(remote): remote.shownTitle
         case let .action(action): action.name
         }
     }
@@ -437,6 +445,7 @@ private struct CommandRowView: View {
         case .tidied: "Tidied away"
         case .closed: "Recently closed"
         case .history: "History"
+        case let .otherDevice(remote): remote.deviceLabel
         case let .action(action): action.shortcut
         }
     }

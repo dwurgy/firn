@@ -68,6 +68,7 @@ public struct SyncSeal: Sendable {
         switch item {
         case let .space(space): fields = try encoder.encode(space)
         case let .visit(visit): fields = try encoder.encode(visit)
+        case let .device(device): fields = try encoder.encode(device)
         }
         let box = try AES.GCM.seal(fields, using: key, authenticating: Self.binding(id))
         guard let combined = box.combined else { throw Failure.unreadable }
@@ -92,6 +93,7 @@ public struct SyncSeal: Sendable {
             case .space: item = .space(try decoder.decode(SyncedSpace.self, from: fields))
             case .group, .tab: throw Failure.malformed  // no longer synced
             case .visit: item = .visit(try decoder.decode(SyncedVisit.self, from: fields))
+            case .device: item = .device(try decoder.decode(SyncedDevice.self, from: fields).checked())
             }
         } catch {
             throw Failure.malformed

@@ -212,6 +212,9 @@ struct AddressBar: View {
             if let page, !typingNewTab { page.load(url) } else { store.openTab(url) }
         case let .history(visit):
             if let page, !typingNewTab { page.load(visit.url) } else { store.openTab(visit.url) }
+        // This device's own copy, where new tabs go (step 5).
+        case let .otherDevice(remote):
+            store.openTab(remote.url)
         case let .tab(tab), let .tidied(tab):
             store.select(tab)
         case let .closed(entry):

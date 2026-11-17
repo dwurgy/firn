@@ -112,6 +112,9 @@ private struct CommandResultRow: View {
             }
         case .history:
             Image(systemName: "clock")
+        // Favicons don't travel (step 5's part 3 shows one Firn already has).
+        case .otherDevice:
+            Image(systemName: "globe")
         case let .action(action) where action.id == "reader":
             // Reader's own book, as in the page menu.
             ReaderBookShape()
@@ -151,6 +154,7 @@ private struct CommandResultRow: View {
         case let .tab(tab), let .tidied(tab): tab.title.isEmpty ? WebAddress.site(of: tab.url) : tab.title
         case let .closed(entry): entry.title
         case let .history(page): page.title.isEmpty ? page.url.absoluteString : page.title
+        case let .otherDevice(remote): remote.shownTitle
         case let .action(action): action.name
         }
     }
@@ -164,6 +168,7 @@ private struct CommandResultRow: View {
         case .tidied: "Tidied away"
         case .closed: "Recently closed"
         case .history: "History"
+        case let .otherDevice(remote): remote.deviceLabel
         case .action: nil
         }
     }

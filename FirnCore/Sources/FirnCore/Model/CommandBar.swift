@@ -32,6 +32,8 @@ public enum CommandRow: Identifiable {
     case closed(ClosedEntry)
     /// Go back to a page from this space's history.
     case history(HistoryPage)
+    /// Open this device's own copy of a tab open on another device.
+    case otherDevice(DeviceTab)
     case action(CommandAction)
 
     public var id: String {
@@ -42,6 +44,7 @@ public enum CommandRow: Identifiable {
         case let .tidied(tab): "tidied \(tab.id)"
         case let .closed(entry): "closed \(entry.id)"
         case let .history(page): "history \(page.url.absoluteString)"
+        case let .otherDevice(tab): "device \(tab.id)"
         case let .action(action): "action \(action.id)"
         }
     }
@@ -97,8 +100,9 @@ extension BrowserStore {
     }
 
     /// The command bar's rows for what's typed, from the space on screen
-    /// only: first the address or search, then this space's tabs, its
-    /// history (from `historyPages`), actions, its tidied-away and recently
+    /// only: first the address or search, then this space's tabs, its tabs
+    /// on other devices (from `otherDeviceTabs`, at most two), its history
+    /// (from `historyPages`), actions, its tidied-away and recently
     /// closed tabs, and the engine's suggestions (which keep up to three
     /// rows when there are some). Nothing typed, no rows.
     public func commandRows(
@@ -106,6 +110,7 @@ extension BrowserStore {
         searchEngine: SearchEngine,
         suggestions: [String] = [],
         history: [HistoryPage] = [],
+        otherDevices: [DeviceTab] = [],
         actions: [CommandAction] = []
     ) -> [CommandRow] {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -125,10 +130,22 @@ extension BrowserStore {
 
         let shown = (basecampTabs + openTabs).filter { $0.id != activeTabID }
         let tabRows = best(shown, 3, fields: tabFields, recency: \.lastActiveAt).map(CommandRow.tab)
-        // History keeps the store's order (how often and how recently); a
-        // page already open, or the address typed, isn't offered again.
+        // A page already open, or the address typed, isn't offered again.
         var offered = Set((basecampTabs + openTabs).compactMap { $0.url?.absoluteString })
         if case let .go(url) = top.first { offered.insert(url.absoluteString) }
+        // Other devices' tabs keep their order (the most recently sent
+        // device, then its most recently used tabs) among equal matches.
+        let deviceRows = otherDevices.enumerated()
+            .compactMap { index, tab -> (DeviceTab, Int, Int)? in
+                guard !offered.contains(tab.url.absoluteString),
+                      let score = CommandMatch.score(text, in: [tab.title, WebAddress.site(of: tab.url)]) else { return nil }
+                return (tab, score, index)
+            }
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.2 < $1.2 }
+            .map(\.0)
+            .filter { offered.insert($0.url.absoluteString).inserted }
+            .prefix(2).map(CommandRow.otherDevice)
+        // History keeps the store's order (how often and how recently).
         let historyRows = history
             .filter { page in
                 offered.insert(page.url.absoluteString).inserted
@@ -144,7 +161,7 @@ extension BrowserStore {
             searchEngine.searchURL(for: line).map { CommandRow.search(line, $0, isSuggestion: true) }
         }
         let room = Self.commandRowLimit - top.count
-        let local = Array((tabRows + historyRows + actionRows + pastRows).prefix(room - min(3, suggestionRows.count)))
+        let local = Array((tabRows + deviceRows + historyRows + actionRows + pastRows).prefix(room - min(3, suggestionRows.count)))
         return top + local + suggestionRows.prefix(room - local.count)
     }
 }

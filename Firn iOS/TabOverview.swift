@@ -751,6 +751,25 @@ struct TabOverview: View {
         let metrics = gridMetrics
         ForEach(OverviewGridRun.runs(items)) { run in
             switch run {
+            case let .tabs(after, tabs) where systemDrag:
+                // UIKit's collection view: iOS's menu and iOS's drag, the
+                // card full size as it's carried (`OverviewGridCards.swift`).
+                let byID = Dictionary(tabs.map { ($0.tab.id, $0) }) { a, _ in a }
+                GridCards(ids: tabs.map(\.tab.id), columns: metrics.columns, cardHeight: metrics.cardHeight,
+                          card: { id in
+                              guard let entry = byID[id] else { return AnyView(EmptyView()) }
+                              return AnyView(gridCell(entry.tab, at: entry.index, of: items.count))
+                          },
+                          menu: { id in byID[id].map { menu(for: $0.tab) } ?? [] },
+                          held: { id, held in
+                              withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+                                  if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
+                              }
+                          },
+                          move: { id, before in
+                              GridMove(sources: [id], collection: .loose(after: after), before: before).apply(to: store)
+                          },
+                          reduceMotion: reduceMotion)
             case let .tabs(after, tabs):
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
                     let cards = ForEach(tabs.map { GridEntry(id: $0.tab.id, index: $0.index, tab: $0.tab) }) { entry in
@@ -766,6 +785,18 @@ struct TabOverview: View {
                 groupTiles(group, at: index, of: items.count)
             }
         }
+    }
+
+    /// A loose card in UIKit's grid (`GridCards`): its menu and drag are
+    /// the collection view's, so none of the list's holds or SwiftUI's.
+    private func gridCell(_ tab: FirnCore.Tab, at index: Int, of count: Int) -> some View {
+        let spot: (CGRect) -> Void = { frame in
+            spots.frames[tab.id] = frame
+            spots.cards.insert(tab.id)
+        }
+        return tile(tab, spot: spot, at: index,
+                    moveUp: index > 0 ? { move(tab, to: index - 1) } : nil,
+                    moveDown: index < count - 1 ? { move(tab, to: index + 1) } : nil)
     }
 
     /// A group: a flat tint in the space's color behind its name line and

@@ -239,9 +239,13 @@ struct OverviewRow: View {
             .systemHoldMenu(holdMenu != nil, shape: shape, opened: { menuOpen = $0 },
                             sections: holdMenu ?? { [] })
             .background {
+                // Gone while iOS lifts the picture: it sits outside what
+                // iOS lifts, so it showed as a dark copy left behind when
+                // the lifted picture moved aside for the menu (David's
+                // recording, 2026-11-16).
                 shape.fill(Theme.page)
                     .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 6, y: 2)
-                    .opacity(windowShown ? 1 : 0)
+                    .opacity(windowShown && !menuOpen && !carried ? 1 : 0)
             }
             .overlay(alignment: .topTrailing) {
                 // Hidden while its menu is open too: a drag pulled off the

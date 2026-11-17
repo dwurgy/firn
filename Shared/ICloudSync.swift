@@ -312,13 +312,16 @@ final class ICloudSync {
 
     /// Sends a tab to another device: held in the sync file until iCloud
     /// has it, and sent at once (it's a deliberate act, not a background one).
-    func send(_ tab: FirnCore.Tab, to target: SendTarget) {
+    /// Whether it's on its way (the app says so).
+    @discardableResult
+    func send(_ tab: FirnCore.Tab, to target: SendTarget) -> Bool {
         guard let engine, saved.state.firstSyncDone,
-              let sent = store.sentTab(tab, to: target, from: Self.deviceKind, state: saved.state) else { return }
+              let sent = store.sentTab(tab, to: target, from: Self.deviceKind, state: saved.state) else { return false }
         saved.state.queueSend(sent)
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID(sent.recordID))])
         save()
         Task { try? await engine.sendChanges() }
+        return true
     }
 
     /// Back in front: anything waiting opens, then a quick look for more

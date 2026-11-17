@@ -7,12 +7,13 @@ import SwiftUI
 // device known. Tabs sent here open while Firn is in front, with a quiet
 // frost note in the bottom row ("From iPhone").
 
-/// The bottom row's note as sent tabs arrive.
+/// The bottom row's note as sent tabs arrive, or as one is sent.
 struct SentArrivalNote: Equatable {
     let id = UUID()
     let text: String
     let from: SyncedDevice.Kind?
-    /// The first tab that arrived: a click on the note shows it.
+    /// The first tab that arrived: a click on the note shows it. None for
+    /// a tab sent from here.
     let tabID: UUID?
 }
 
@@ -22,6 +23,15 @@ extension WindowModel {
     func tabsArrived(_ arrival: SentTabsArrival) {
         guard let text = arrival.note else { return }
         sentArrival = SentArrivalNote(text: text, from: arrival.from, tabID: arrival.tabIDs.first)
+        AccessibilityNotification.Announcement(text).post()
+    }
+
+    /// Sends a tab, and the bottom row quietly says so ("Sent to iPhone"),
+    /// so it's clear it went.
+    func send(_ tab: FirnCore.Tab, to target: SendTarget) {
+        guard sendTab(tab, target) else { return }
+        let text = "Sent to \(target.kind.plainName)"
+        sentArrival = SentArrivalNote(text: text, from: target.kind, tabID: nil)
         AccessibilityNotification.Announcement(text).post()
     }
 
@@ -67,14 +77,14 @@ struct SendTabMenu: View {
             let words = inFileMenu ? title.replacingOccurrences(of: "Send to", with: "Send Tab to") : title
             if targets.count == 1 {
                 if inFileMenu {
-                    Button(words) { window.sendTab(tab, first) }
+                    Button(words) { window.send(tab, to: first) }
                 } else {
-                    Button(words, systemImage: first.kind.symbol) { window.sendTab(tab, first) }
+                    Button(words, systemImage: first.kind.symbol) { window.send(tab, to: first) }
                 }
             } else {
                 Menu {
                     ForEach(targets) { target in
-                        Button(target.name, systemImage: target.kind.symbol) { window.sendTab(tab, target) }
+                        Button(target.name, systemImage: target.kind.symbol) { window.send(tab, to: target) }
                     }
                 } label: {
                     if inFileMenu {
@@ -122,7 +132,7 @@ struct SentPill: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help("Show the tab")
+        .help(note.tabID == nil ? "" : "Show the tab")
         // The announcement covers it (`tabsArrived`).
         .accessibilityHidden(true)
     }

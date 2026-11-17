@@ -13,9 +13,10 @@ final class WindowModel {
     /// The other devices a tab can be sent to (Send to My iPhone, step 6;
     /// `ICloudSync`). None while sync is off, so the items don't show.
     var sendTargets: [SendTarget] = []
-    /// Sends a tab to one of them (`ICloudSync.send`).
-    @ObservationIgnored var sendTab: (FirnCore.Tab, SendTarget) -> Void = { _, _ in }
-    /// Tabs sent here just opened: the bottom row's note ("From iPhone").
+    /// Sends a tab to one of them (`ICloudSync.send`); whether it's on its way.
+    @ObservationIgnored var sendTab: (FirnCore.Tab, SendTarget) -> Bool = { _, _ in false }
+    /// The bottom row's note: tabs sent here just opened ("From iPhone"),
+    /// or a tab sent from here ("Sent to iPhone").
     var sentArrival: SentArrivalNote?
     /// History › Clear History… was chosen: the History window opens and
     /// asks (see `HistoryWindow`).

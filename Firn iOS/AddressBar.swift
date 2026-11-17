@@ -836,6 +836,10 @@ private struct AddressField: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(Theme.menuDanger)
                             .fixedSize()
+                            // Reaches into the gap beside the page menu, so it
+                            // sits nearer the ••• and leaves the name more room
+                            // (David, 2026-11-16).
+                            .padding(.leading, -7)
                         Text(verbatim: WebAddress.shortSite(of: frontURL)).foregroundStyle(Theme.ink)
                             .truncationMode(.head)
                     }

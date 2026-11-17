@@ -12,6 +12,17 @@ import UIKit
 // SwiftUI scroll view, as tall as its cards (step 3 makes it the whole
 // overview).
 
+/// A grid card's cell. Its own card hides the moment iOS starts lifting it:
+/// the lift is a picture taken just before, and on a quick drag the cell
+/// left showing under it read as a second copy (David's recording,
+/// 2026-11-16).
+final class GridCardCell: UICollectionViewCell {
+    override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
+        super.dragStateDidChange(state)
+        contentView.alpha = state == .none ? 1 : 0
+    }
+}
+
 /// A run of loose cards in the grid, as one UIKit collection view.
 struct GridCards: UIViewRepresentable {
     /// The run's tabs, in order.
@@ -86,7 +97,7 @@ struct GridCards: UIViewRepresentable {
         private var carried: UUID?
 
         func attach(to view: UICollectionView) {
-            let cell = UICollectionView.CellRegistration<UICollectionViewCell, UUID> { [weak self] cell, _, id in
+            let cell = UICollectionView.CellRegistration<GridCardCell, UUID> { [weak self] cell, _, id in
                 self?.configure(cell, id)
             }
             dataSource = UICollectionViewDiffableDataSource(collectionView: view) { view, path, id in

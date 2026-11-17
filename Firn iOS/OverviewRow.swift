@@ -254,8 +254,9 @@ struct OverviewRow: View {
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
-    /// The grid card's corners: rounder than the list's, as Safari's.
-    static let gridCornerRadius: CGFloat = 22
+    /// The grid card's corners: Safari's 15pt, measured from David's
+    /// screenshots (2026-11-16); the X's disc sits concentric in the corner.
+    static let gridCornerRadius: CGFloat = 15
     /// The icon and title under a grid card.
     nonisolated static let gridTitleHeight: CGFloat = 30
 
@@ -394,9 +395,10 @@ struct GridCloseButton: View {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Theme.closeDiscMark)
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 22)
                 .background(Theme.closeDisc, in: .circle)
-                // Its middle 15pt from the corner, as Safari's; the 44pt
+                // Its middle 15pt from the corner, as Safari's, so it sits
+                // concentric with the card's 15pt corner; the 44pt
                 // to tap reaches past the card's edge.
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
@@ -419,9 +421,10 @@ extension Theme {
             ? UIColor(red: 0x42 / 255, green: 0x3D / 255, blue: 0x39 / 255, alpha: 1)
             : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
     })
-    /// A grid card's X: a disc of neutral dark grey at 55% (menus and cards
-    /// stay neutral, David, 2026-11-15), the X in near-white, light and dark.
-    static let closeDisc = Color(white: 0.16).opacity(0.55)
+    /// A grid card's X: a disc of neutral dark grey at 80% (menus and cards
+    /// stay neutral, David, 2026-11-15), the X in near-white, light and dark;
+    /// stronger than Safari's so it reads over bright pages (David, 2026-11-16).
+    static let closeDisc = Color(white: 0.13).opacity(0.8)
     static let closeDiscMark = Color(white: 0.97)
     /// Dark cards' top edge: white at 6%; nothing in light.
     static let cardTopLight = Color(uiColor: UIColor { traits in

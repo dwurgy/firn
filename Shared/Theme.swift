@@ -204,11 +204,12 @@ enum Theme {
     }
 
     /// The ring around the tab on screen's card (iOS): the space's color
-    /// eased a quarter toward warm grey, so it reads as frost, not paint
-    /// (David, 2026-11-15: Sage's ring read vivid green over a white page).
+    /// eased a tenth toward warm grey, so it reads as frost, not paint
+    /// (David, 2026-11-15: Sage's ring read vivid green over a white page;
+    /// 2026-11-16: a quarter left Glacier's looking washed out).
     static func spaceRing(_ name: String) -> Color {
         let hex = spaceHex(name)
-        return Color(light: mix(hex, 0x9D9389, 0.25), dark: mix(hex, 0x958D85, 0.25))
+        return Color(light: mix(hex, 0x9D9389, 0.1), dark: mix(hex, 0x958D85, 0.1))
     }
 
     /// The tab overview's haze (iOS): the frame's color washed over the

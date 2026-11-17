@@ -141,7 +141,9 @@ struct OverviewRow: View {
         .overlay(alignment: .top) { TabLine(tab: tab, close: close) }
         .overlay {
             if isOnScreen {
-                // On the card's inside edge, as Basecamp's tiles (David, 2026-11-16).
+                // Just outside the card's edge, so the line inside sits the same
+                // as every other row's (David, 2026-11-16: inside, the title
+                // looked off center).
                 CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t))
                     .allowsHitTesting(false)
             }
@@ -154,11 +156,10 @@ struct OverviewRow: View {
     }
 
     /// The window's distance from the card's sides and bottom, and its
-    /// corners (the card's 18pt less the inset, so they run evenly). 8pt,
-    /// so the tab on screen's 3.5pt ring leaves a clear 4.5pt of paper
-    /// before the window, a mat rather than a thread (David, 2026-11-16:
-    /// at 5pt, a 1.5pt sliver between ring and window looked like a mistake).
-    static let windowInset: CGFloat = 8
+    /// corners (the card's 18pt less the inset, so they run evenly). 5pt,
+    /// a thin frame of paper, now that the ring sits outside the card
+    /// (David, 2026-11-16: 8pt read as too much paper).
+    static let windowInset: CGFloat = 5
     static let windowCornerRadius: CGFloat = cardCornerRadius - windowInset
     private static let windowHeight = cardHeight - rowHeight - windowInset
 
@@ -250,7 +251,7 @@ struct TabLine: View {
     let tab: FirnCore.Tab
     let close: () -> Void
 
-    static let titleFont = Font.footnote
+    static let titleFont = Font.footnote.weight(.semibold)
     private static let icon: CGFloat = 20
     private var site: String { WebAddress.site(of: tab.url) }
 
@@ -289,12 +290,13 @@ struct TabLine: View {
 private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
 extension Theme {
-    /// A tall card's paper: the page's warm white in light, a step above
-    /// the overview's frame in dark (David, 2026-11-16). The iPhone's only.
+    /// A tall card's paper: the page's warm white in light; in dark, a
+    /// clear step above the overview's wash so cards stand off it as they
+    /// do in light (#34302D was too close; David, 2026-11-16). The iPhone's only.
     /// (`Theme`'s own light-and-dark maker is private to the shared file.)
     static let cardPaper = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x34 / 255, green: 0x30 / 255, blue: 0x2D / 255, alpha: 1)
+            ? UIColor(red: 0x42 / 255, green: 0x3D / 255, blue: 0x39 / 255, alpha: 1)
             : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
     })
     /// Dark cards' top edge: white at 6%; nothing in light.
@@ -346,19 +348,20 @@ struct SidewaysPan: UIGestureRecognizerRepresentable {
 }
 
 /// The ring around the tab on screen's card: Basecamp's ring on the tile on
-/// screen (`BasecampTiles`), on the card's inside edge with light on its top
+/// screen (`BasecampTiles`), just outside the card's edge with light on its top
 /// and a faint glow, but always the space's color, never the page's (David,
 /// 2026-11-08). Drawn on the card and on the page's picture gliding into it.
 struct CardRing: View {
     let color: Color
     let radius: CGFloat
-    /// Basecamp's ring width, drawn on the card's inside edge.
+    /// Basecamp's ring width, drawn just outside the card's edge.
     static let width = BasecampTiles.ringWidth
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        // Grown by its width, so it hugs the card's outside edge.
+        let shape = RoundedRectangle(cornerRadius: radius + Self.width, style: .continuous)
         let dark = colorScheme == .dark
         shape.strokeBorder(color, lineWidth: Self.width)
             .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
@@ -370,6 +373,7 @@ struct CardRing: View {
                     lineWidth: 1)
             }
             .shadow(color: color.opacity(dark ? 0.14 : 0.2), radius: 5)
+            .padding(-Self.width)
     }
 }
 

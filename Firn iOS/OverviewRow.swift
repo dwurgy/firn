@@ -47,8 +47,9 @@ struct OverviewRow: View {
     /// A card's height: the list's 240pt, or the grid's, which grows with
     /// its column so the picture stays portrait (TestFlight's grid).
     var cardHeight: CGFloat = OverviewRow.cardHeight
-    /// In the grid, VoiceOver's moves read as Move Left and Move Right.
-    var movesSideways = false
+    /// TestFlight's grid: the card is drawn as Safari's (`gridCard`), and
+    /// VoiceOver's moves read as Move Left and Move Right.
+    var inGrid = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -71,7 +72,9 @@ struct OverviewRow: View {
     static let cardHeight: CGFloat = 240
 
     var body: some View {
-        tile
+        Group {
+            if inGrid { gridCard } else { tile }
+        }
             .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             .offset(x: pull)
@@ -134,8 +137,8 @@ struct OverviewRow: View {
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .accessibilityActions {
-            if let moveUp { Button(movesSideways ? "Move Left" : "Move Up", action: moveUp) }
-            if let moveDown { Button(movesSideways ? "Move Right" : "Move Down", action: moveDown) }
+            if let moveUp { Button(inGrid ? "Move Left" : "Move Up", action: moveUp) }
+            if let moveDown { Button(inGrid ? "Move Right" : "Move Down", action: moveDown) }
         }
         .overlay(alignment: .top) {
             window(height: height)
@@ -200,6 +203,68 @@ struct OverviewRow: View {
 
     /// A slim row's height.
     static let rowHeight: CGFloat = 44
+
+    // MARK: The grid's card (TestFlight)
+
+    /// The grid's card, as Safari's (David, 2026-11-16): the page's picture
+    /// is the card, with a round X on its corner, and the site's icon and
+    /// the title sit under it on the overview's wash, so the title has the
+    /// card's whole width (in the paper card's line it had about six
+    /// letters). No paper: the wash and the ring are Firn's.
+    private var gridCard: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.gridCornerRadius, style: .continuous)
+        return VStack(spacing: 0) {
+            Button(action: open) {
+                pictureView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Theme.page)
+                    .clipShape(shape)
+                    .overlay { shape.strokeBorder(Theme.windowHairline, lineWidth: 1) }
+                    .opacity(windowShown ? 1 : 0)
+                    .contentShape(shape)
+            }
+            .buttonStyle(.plain)
+            .background {
+                shape.fill(Theme.page)
+                    .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 6, y: 2)
+                    .opacity(windowShown ? 1 : 0)
+            }
+            .overlay(alignment: .topTrailing) { GridCloseButton(title: tab.title, close: close) }
+            .overlay {
+                if isOnScreen {
+                    CardRing(color: ring, radius: Self.gridCornerRadius).allowsHitTesting(false)
+                }
+            }
+            .frame(height: max(cardHeight - Self.gridTitleHeight, 1))
+            GridTitle(tab: tab)
+                .frame(height: Self.gridTitleHeight)
+                .contentShape(.rect)
+                .onTapGesture(perform: open)
+        }
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
+        .accessibilityValue(isOnScreen ? "On screen" : "")
+        .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+        .accessibilityActions {
+            if let moveUp { Button("Move Left", action: moveUp) }
+            if let moveDown { Button("Move Right", action: moveDown) }
+        }
+        .task(id: picture == nil) { if picture == nil { await loadPicture() } }
+        .animation(.easeOut(duration: 0.15), value: picture != nil)
+    }
+
+    /// The grid card's corners: rounder than the list's, as Safari's.
+    static let gridCornerRadius: CGFloat = 22
+    /// The icon and title under a grid card.
+    nonisolated static let gridTitleHeight: CGFloat = 36
+
+    /// Where a grid card's picture sits in its frame: all but the title
+    /// under it.
+    static func gridWindow(in card: CGRect) -> CGRect {
+        CGRect(x: card.minX, y: card.minY, width: card.width,
+               height: max(card.height - gridTitleHeight, 1))
+    }
 
     @ViewBuilder private var pictureView: some View {
         if let picture, picture.size.width > 0 {
@@ -292,6 +357,54 @@ struct TabLine: View {
     }
 }
 
+/// Under a grid card: the site's icon and the page's title, one line, on
+/// the overview's wash (TestFlight's grid, after Safari's).
+struct GridTitle: View {
+    let tab: FirnCore.Tab
+    private static let icon: CGFloat = 16
+    private var site: String { WebAddress.site(of: tab.url) }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            SiteIconView(icon: tab.icon, size: Self.icon) { LetterMark(site: site, size: Self.icon) }
+                .frame(width: Self.icon, height: Self.icon)
+            Text(tab.title)
+                .font(TabLine.titleFont)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+        .accessibilityHidden(true)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+}
+
+/// A grid card's X, on the picture's corner as Safari's: a small disc of
+/// ink with the X in the page's white, so it reads over any page; 44pt to
+/// tap.
+struct GridCloseButton: View {
+    let title: String
+    let close: () -> Void
+
+    var body: some View {
+        Button(action: close) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.closeDiscMark)
+                .frame(width: 26, height: 26)
+                .background(Theme.closeDisc, in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(2)
+        .accessibilityLabel("Close \(title)")
+    }
+}
+
 private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
 extension Theme {
@@ -304,6 +417,10 @@ extension Theme {
             ? UIColor(red: 0x42 / 255, green: 0x3D / 255, blue: 0x39 / 255, alpha: 1)
             : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
     })
+    /// A grid card's X: a disc of neutral dark grey at 55% (menus and cards
+    /// stay neutral, David, 2026-11-15), the X in near-white, light and dark.
+    static let closeDisc = Color(white: 0.16).opacity(0.55)
+    static let closeDiscMark = Color(white: 0.97)
     /// Dark cards' top edge: white at 6%; nothing in light.
     static let cardTopLight = Color(uiColor: UIColor { traits in
         UIColor(white: 1, alpha: traits.userInterfaceStyle == .dark ? 0.06 : 0)
@@ -411,6 +528,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.ring == b.ring && a.space == b.space
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
-            && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.movesSideways == b.movesSideways
+            && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.inGrid == b.inGrid
     }
 }

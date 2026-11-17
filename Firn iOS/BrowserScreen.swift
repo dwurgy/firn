@@ -254,6 +254,17 @@ struct BrowserScreen: View {
     /// screen until something else did.
     @State private var sheets = SpaceSheets()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if TESTFLIGHT
+    /// TestFlight's grid: its cards' pictures sit above their titles, with
+    /// rounder corners, so a page glides into and out of them there.
+    @AppStorage(OverviewLayout.key) private var overviewLayout = OverviewLayout.list
+    private var gridCards: Bool { overviewLayout == .grid }
+    #else
+    private let gridCards = false
+    #endif
+    private var cardRadius: CGFloat {
+        gridCards ? OverviewRow.gridCornerRadius : OverviewRow.windowCornerRadius
+    }
     /// VoiceOver always has the whole bar (phase 5): its buttons stay where
     /// a swipe through them finds them.
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
@@ -693,7 +704,7 @@ struct BrowserScreen: View {
             let skip = !tile && spots.cards.contains(tab.id) ? pictures.headerDepth(for: tab.id) : 0
             withAnimation(curve) {
                 box = spot
-                boxRadius = tile ? BasecampTiles.cornerRadius : OverviewRow.windowCornerRadius
+                boxRadius = tile ? BasecampTiles.cornerRadius : cardRadius
                 boxSkip = skip
                 arrival = 1
                 neighborsOpacity = 0
@@ -779,7 +790,7 @@ struct BrowserScreen: View {
         tileReveal = tile ? 1 : 0
         putStandIn(image, of: tab, at: spot,
                    radius: tile ? BasecampTiles.cornerRadius
-                       : fromCard ? OverviewRow.windowCornerRadius : OverviewRow.cornerRadius,
+                       : fromCard ? cardRadius : OverviewRow.cornerRadius,
                    skip: fromCard && !tile ? pictures.headerDepth(for: tab.id) : 0)
         gliding = tab.id
         Task {
@@ -1280,7 +1291,8 @@ struct BrowserScreen: View {
     /// under its line (`OverviewRow.window(in:)`), or the whole slim row
     /// or Basecamp tile.
     private func pictureSpot(_ frame: CGRect, of tab: FirnCore.Tab) -> CGRect {
-        spots.cards.contains(tab.id) && tab.place != .basecamp ? OverviewRow.window(in: frame) : frame
+        guard spots.cards.contains(tab.id), tab.place != .basecamp else { return frame }
+        return gridCards ? OverviewRow.gridWindow(in: frame) : OverviewRow.window(in: frame)
     }
 
     /// The spot, if it's on screen (a card scrolled away has no glide).

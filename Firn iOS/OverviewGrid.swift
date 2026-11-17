@@ -36,8 +36,9 @@ struct OverviewGridMetrics: Equatable {
         let fit = Int(((room + Self.spacing) / (Self.minColumn + Self.spacing)).rounded(.down))
         columns = min(max(fit, 2), Self.maxColumns)
         let column = (room - Self.spacing * CGFloat(columns - 1)) / CGFloat(columns)
-        let picture = max(column - 2 * OverviewRow.windowInset, 1) * Self.pictureShape
-        var card = OverviewRow.rowHeight + OverviewRow.windowInset + picture
+        // The picture is the card (as Safari's), its title under it.
+        let picture = column * Self.pictureShape
+        var card = picture + OverviewRow.gridTitleHeight
         if height > 0 { card = min(card, max(height * 0.62, OverviewRow.cardHeight)) }
         cardHeight = card.rounded()
     }

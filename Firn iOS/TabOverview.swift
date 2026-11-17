@@ -720,7 +720,7 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: cardHeight,
-            movesSideways: grid
+            inGrid: grid
         )
         // Runs again only when what it shows changes (`OverviewRow.==`).
         .equatable()

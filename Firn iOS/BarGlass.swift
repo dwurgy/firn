@@ -11,6 +11,11 @@ enum BarGlass: String, CaseIterable {
     case light
     /// Regular glass with a faint neutral tint.
     case medium
+    /// Plain glass over a weaker blur with less milk: about half of the
+    /// system's thinnest (`PartialBlur`). Between Medium and Frosty.
+    case soft
+    /// Frosty without Firn's tint.
+    case frostyUntinted
     /// The tinted glass over the system's thinnest blur in the same shape.
     case frosty
 
@@ -21,6 +26,8 @@ enum BarGlass: String, CaseIterable {
         case .firn: "Firn"
         case .light: "Light"
         case .medium: "Medium"
+        case .soft: "Soft"
+        case .frostyUntinted: "Frosty, no tint"
         case .frosty: "Frosty"
         }
     }
@@ -46,11 +53,80 @@ struct NativeBarGlass<S: Shape>: View {
             Color.clear.glassEffect(.regular, in: shape)
         case .medium:
             Color.clear.glassEffect(.regular.tint(BarGlass.frostTint), in: shape)
+        case .soft:
+            PartialBlur(fraction: PartialBlur.softFraction)
+                .clipShape(shape)
+                .overlay { Color.clear.glassEffect(.regular, in: shape) }
+        case .frostyUntinted:
+            shape.fill(.ultraThinMaterial)
+                .overlay { Color.clear.glassEffect(.regular, in: shape) }
         case .frosty:
             // The blur first, so the glass above it sees soft color rather
             // than the page's shapes, and keeps its lit edge.
             shape.fill(.ultraThinMaterial)
                 .overlay { Color.clear.glassEffect(.regular.tint(BarGlass.frostTint), in: shape) }
         }
+    }
+}
+
+/// A blur weaker than any of iOS's materials, with less of their milk: the
+/// thinnest material's blur, stopped part of the way in. UIKit has no blur
+/// radius setting; a paused animator from no effect to the material is the
+/// public way to get one in between (it scales the blur and its tint
+/// together). UIKit, since SwiftUI's materials come only in fixed strengths.
+struct PartialBlur: UIViewRepresentable {
+    let fraction: CGFloat
+    /// Soft's strength: about half.
+    static let softFraction: CGFloat = 0.5
+
+    func makeUIView(context: Context) -> PartialBlurView { PartialBlurView(fraction: fraction) }
+    func updateUIView(_ view: PartialBlurView, context: Context) { view.fraction = fraction }
+}
+
+final class PartialBlurView: UIVisualEffectView {
+    var fraction: CGFloat { didSet { animator?.fractionComplete = fraction } }
+    private var animator: UIViewPropertyAnimator?
+    private var foreground: (any NSObjectProtocol)?
+
+    init(fraction: CGFloat) {
+        self.fraction = fraction
+        super.init(effect: nil)
+        isUserInteractionEnabled = false
+        // iOS finishes paused animators when the app leaves the screen, so
+        // the blur would come back at full strength: set it up again.
+        foreground = NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.start() } }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { stop() } else if animator == nil { start() }
+    }
+
+    private func start() {
+        stop()
+        effect = nil
+        let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) { [weak self] in
+            self?.effect = UIBlurEffect(style: .systemUltraThinMaterial)
+        }
+        animator.pausesOnCompletion = true
+        animator.fractionComplete = fraction
+        self.animator = animator
+    }
+
+    /// A paused animator must be stopped before it's let go, or UIKit stops
+    /// the app.
+    private func stop() {
+        guard let animator else { return }
+        animator.stopAnimation(true)
+        self.animator = nil
+    }
+
+    isolated deinit {
+        animator?.stopAnimation(true)
+        if let foreground { NotificationCenter.default.removeObserver(foreground) }
     }
 }

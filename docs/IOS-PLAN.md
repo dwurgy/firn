@@ -417,6 +417,9 @@ David: the address bar and its buttons back to native iOS, the glass as frosty a
   - **Light:** `.glassEffect(.regular)`, the milkier of iOS's two glasses (never `.clear`, the bubbly one).
   - **Medium:** the same, with a faint neutral tint (white in light, warm white in dark; never the space's color).
   - **Frosty:** Medium over the system's thinnest blur (`.ultraThinMaterial`) in the same shape, so the page behind turns to soft color while the glass keeps its lit edge. Claude's guess for the winner.
+  - **Soft** (added after David's look, 2026-11-17: Frosty too solid, little of the page coming through): plain glass, no tint, over a blur about half of the thinnest material's, with half its milk (`PartialBlur`: a paused animator, the public way to an in-between blur; set up again on coming back to the front).
+  - **Frosty, no tint:** Frosty without Firn's tint.
+  - **iOS's own glass setting** (Settings › Display & Brightness, Clear or Tinted, and any newer slider): Apple gives apps no way to read it. The glass layer follows it by itself; the blur under it and Firn's tint don't, so in Soft and the Frostys the setting changes only the glass on top. Firn's own frost ignores it.
 - Never `.interactive()` (the bubbly press). Reduce Transparency keeps the solid look.
 - **Risks to watch:** the bar's glide stuttered in Liquid Glass before (2026-11-03), and fades left dark discs (2026-11-04).
 - **Steps:** (1) the try-out, a Release build on David's iPhone, light and dark over busy and plain pages; (2) the chosen recipe for every `BarFrost`, the menu growing out of the field, and the small pill (glass morphing if it glides cleanly), the try-out switch out; (3) a look over: Reduce Transparency, Reduce Motion, frame drops; CLAUDE.md's open question and the memory "One consistent frost" updated.

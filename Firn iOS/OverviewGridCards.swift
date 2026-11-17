@@ -209,8 +209,12 @@ struct GridCards: UIViewRepresentable {
         /// How much a swiped card grows: Safari's, about 6% (David's
         /// recording, 2026-11-17), over the swipe's first 24pt.
         private static let growth: CGFloat = 0.06
-        /// The ease home, shrinking as it goes: Safari's, about half a second.
-        private static let home: TimeInterval = 0.45
+        /// The ease home, shrinking as it goes: a spring with no bounce and
+        /// Safari's pace, measured from David's recordings (2026-11-17):
+        /// halfway home in about 0.15s, nearly there by 0.4s, a 0.56s
+        /// response (stiffness (2π / 0.56)² ≈ 125). Firn's 0.45s animator
+        /// got there in half that and read as stiff.
+        private static let homeStiffness: CGFloat = 125
 
         @objc private func swiped(_ pan: UIPanGestureRecognizer) {
             guard let view = pan.view as? UICollectionView else { return }
@@ -265,7 +269,8 @@ struct GridCards: UIViewRepresentable {
             let far = -dx > cell.bounds.width / 3
             let flick = speed < -700 && dx < -20
             guard far || flick, carried == nil else {
-                easeHome(id, cell)
+                // The card's own speed: the finger's going left, 40% going right.
+                easeHome(id, cell, speed: dx < 0 ? speed : speed * 0.4)
                 return
             }
             let close = { [weak self] in
@@ -300,11 +305,20 @@ struct GridCards: UIViewRepresentable {
 
         /// The card eases home and shrinks together, unhurried, its title
         /// and X coming back on the same ease.
-        private func easeHome(_ id: UUID, _ cell: GridCardCell) {
+        /// It carries the finger's speed as it's let go, as Safari's: a card
+        /// thrown outward drifts on a moment before it turns home, rather
+        /// than starting from a standstill.
+        private func easeHome(_ id: UUID, _ cell: GridCardCell, speed: CGFloat = 0) {
             parent?.swipe(id, .easingHome)
-            let home = UIViewPropertyAnimator(duration: Self.home, dampingRatio: 1) {
-                cell.swipe = .identity
-            }
+            // UIKit takes the starting speed as a share of the way left to
+            // go, per second; capped so a card let go almost home can't fly.
+            let away = cell.swipe.tx
+            let share = abs(away) > 1 ? min(max(-speed / away, -12), 12) : 0
+            let spring = UISpringTimingParameters(mass: 1, stiffness: Self.homeStiffness,
+                                                  damping: 2 * sqrt(Self.homeStiffness),
+                                                  initialVelocity: CGVector(dx: share, dy: share))
+            let home = UIViewPropertyAnimator(duration: 0, timingParameters: spring)
+            home.addAnimations { cell.swipe = .identity }
             home.addCompletion { [weak self, weak cell] _ in
                 guard let cell, cell.settle === home else { return }
                 cell.settle = nil

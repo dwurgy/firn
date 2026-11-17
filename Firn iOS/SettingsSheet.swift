@@ -30,6 +30,7 @@ struct SettingsSheet: View {
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
     #if TESTFLIGHT
     @AppStorage(OverviewLayout.key) private var overviewLayout = OverviewLayout.list
+    @AppStorage(BarGlass.key) private var barGlass = BarGlass.firn
     #endif
 
     /// The space picked, or the one on screen when none is (or it's gone).
@@ -262,10 +263,18 @@ struct SettingsSheet: View {
             .tint(Theme.accent)
             .frame(minHeight: 44)
             .listRowBackground(Theme.hover)
+            Picker("Bar glass", selection: $barGlass) {
+                ForEach(BarGlass.allCases, id: \.self) { Text($0.name).tag($0) }
+            }
+            .font(.body)
+            .foregroundStyle(Theme.ink)
+            .tint(Theme.accent)
+            .frame(minHeight: 44)
+            .listRowBackground(Theme.hover)
         } header: {
             sectionTitle("TestFlight")
         } footer: {
-            footnote("Try the tabs as a grid of cards. Only in test builds, and kept on this device.")
+            footnote("Try the tabs as a grid of cards, and the bar in iOS's own glass. Only in test builds, and kept on this device.")
         }
     }
     #endif

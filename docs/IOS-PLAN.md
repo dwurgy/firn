@@ -408,6 +408,19 @@ Decided (David, 2026-11-16): the grid is likely to become the only overview, so 
 
 **The address bar's two menus, whatever the glass (David, 2026-11-17):** tapping ••• and holding the address bar open the same physical menu, growing out of the bar, as Firn's does today. Safari does it two ways (a tap turns the bar into the menu; a hold lifts the bar away from Back and Tabs and pops a separate menu above it), and Firn doesn't follow that. The two may hold slightly different rows. Keep this when the bar goes back to stock glass.
 
+#### Try-out: the bar in iOS's own glass, as frosty as it goes (David, 2026-11-17)
+
+David: the address bar and its buttons back to native iOS, the glass as frosty as it can be, before the three menus (sync step 6, part 3b). Liquid Glass has no blur setting, so frost comes from three levers, tried side by side first.
+
+- **The recipes,** in Settings › TestFlight › Bar glass (Debug and TestFlight builds only, kept on the device; App Store builds keep Firn's frost until decided). Every place that uses `BarFrost` follows it at once: the bar, the overview's bar, the pills above the bar, and Reader's controls.
+  - **Firn:** today's frost (the default).
+  - **Light:** `.glassEffect(.regular)`, the milkier of iOS's two glasses (never `.clear`, the bubbly one).
+  - **Medium:** the same, with a faint neutral tint (white in light, warm white in dark; never the space's color).
+  - **Frosty:** Medium over the system's thinnest blur (`.ultraThinMaterial`) in the same shape, so the page behind turns to soft color while the glass keeps its lit edge. Claude's guess for the winner.
+- Never `.interactive()` (the bubbly press). Reduce Transparency keeps the solid look.
+- **Risks to watch:** the bar's glide stuttered in Liquid Glass before (2026-11-03), and fades left dark discs (2026-11-04).
+- **Steps:** (1) the try-out, a Release build on David's iPhone, light and dark over busy and plain pages; (2) the chosen recipe for every `BarFrost`, the menu growing out of the field, and the small pill (glass morphing if it glides cleanly), the try-out switch out; (3) a look over: Reduce Transparency, Reduce Motion, frame drops; CLAUDE.md's open question and the memory "One consistent frost" updated.
+
 **The iPhone's three menus (David, 2026-11-17, after Safari's; built with step 6 of `docs/SYNC-PLAN.md`, part 3, except where noted):**
 - **Tapping ••• (about the page),** in quiet sections: Show Reader, Summarize (and Ask Siri, only if iOS adds it itself; Firn doesn't build one) · Share…, Send to My Mac · Add to Basecamp, Move to Group › · Find on Page, Stop Blocking. Downloads only while there are some, as now. No Copy Link (Share has Copy; holding the bar has it). Find on Page doesn't exist on the iPhone yet: its own small step (WebKit's built-in find bar).
 - **Holding the address bar (this tab, quick):** Copy Link, Paste and Go (only when something is copied; iOS may ask "Allow Paste?" the first time), Move to Group ›, Send to My Mac, Close Tab.

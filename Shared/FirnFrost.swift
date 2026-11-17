@@ -105,8 +105,26 @@ struct FrostPress<S: Shape>: ButtonStyle {
 struct BarFrost<S: InsettableShape>: View {
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    #if os(iOS) && TESTFLIGHT
+    /// The try-out of iOS's own glass (`BarGlass`, Settings › TestFlight).
+    @AppStorage(BarGlass.key) private var glass = BarGlass.firn
+    #endif
 
     var body: some View {
+        #if os(iOS) && TESTFLIGHT
+        if glass != .firn, !reduceTransparency {
+            NativeBarGlass(shape: shape, glass: glass)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        } else {
+            firnFrost
+        }
+        #else
+        firnFrost
+        #endif
+    }
+
+    private var firnFrost: some View {
         FirnFrost(shape: shape, fill: Theme.barFrost, solid: reduceTransparency) {
             shape.fill(.ultraThinMaterial)
         }

@@ -66,6 +66,9 @@ struct OverviewRow: View {
     @State private var leaving = false
     /// iOS's hold menu is open on the grid card.
     @State private var menuOpen = false
+    /// A grid card being swiped: grown, its title and X gone, from the
+    /// first move until it's eased home (or closed), as Safari's.
+    @State private var swiped = false
 
     private var site: String { WebAddress.site(of: tab.url) }
     private var t: CGFloat { min(max(tallness, 0), 1) }
@@ -104,6 +107,7 @@ struct OverviewRow: View {
         withTransaction(now) {
             leaving = false
             pull = 0
+            swiped = false
         }
     }
 
@@ -250,7 +254,7 @@ struct OverviewRow: View {
             .overlay(alignment: .topTrailing) {
                 // Hidden while its menu is open too: a drag pulled off the
                 // menu takes its picture then, and Safari's carries no X.
-                GridCloseButton(title: tab.title, close: close).opacity(carried || menuOpen ? 0 : 1)
+                GridCloseButton(title: tab.title, close: close).opacity(carried || menuOpen || swiped ? 0 : 1)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
             // landing glide and opening scrolled to it already say which
@@ -258,12 +262,12 @@ struct OverviewRow: View {
             .frame(height: max(cardHeight - Self.gridTitleHeight, 1))
             // Swiped to close, it grows a touch and its title goes, as
             // Safari's (David's recording, 2026-11-17).
+            // Animated where `swiped` changes (`follow`, `letGo`), so it
+            // shrinks on the same ease as the slide home, as Safari's.
             .scaleEffect(swiped && !reduceMotion ? Self.swipeGrowth : 1)
-            .animation(.smooth(duration: 0.2), value: swiped)
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
                 .opacity(swiped ? 0 : 1)
-                .animation(.easeOut(duration: 0.15), value: swiped)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -280,8 +284,10 @@ struct OverviewRow: View {
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
-    /// Being swiped left (the grid's card grows and drops its title).
-    private var swiped: Bool { pull < 0 || leaving }
+    /// How long a grid card takes to ease home after a swipe, shrinking
+    /// as it goes: Safari's, about half a second (David's recording,
+    /// 2026-11-17).
+    private static let swipeHome: Double = 0.45
     /// How much a grid card grows while swiped: Safari's, about 6%,
     /// measured from David's recording (2026-11-17).
     private static let swipeGrowth: CGFloat = 1.06
@@ -328,14 +334,26 @@ struct OverviewRow: View {
     /// The row stays under the finger going left; going right it barely
     /// gives, so it's clear that way does nothing.
     private func follow(_ dx: CGFloat) {
-        pull = dx < 0 ? dx : dx * 0.15
+        guard inGrid else {
+            pull = dx < 0 ? dx : dx * 0.15
+            return
+        }
+        // The grid's card grows as the swipe starts and stays grown, either
+        // way, until it's let go; right, it follows with some give (Safari's).
+        if !swiped { withAnimation(.smooth(duration: 0.2)) { swiped = true } }
+        pull = dx < 0 ? dx : dx * 0.4
     }
 
     private func letGo(_ dx: CGFloat, _ speed: CGFloat) {
         let far = width > 0 && -dx > width / 3
         let flick = speed < -700 && dx < -20
         guard far || flick else {
-            withAnimation(.smooth(duration: 0.25)) { pull = 0 }
+            // The grid's card eases home and shrinks together, unhurried;
+            // the list's row glides back as before.
+            withAnimation(.smooth(duration: inGrid ? Self.swipeHome : 0.25)) {
+                pull = 0
+                swiped = false
+            }
             return
         }
         if reduceMotion {

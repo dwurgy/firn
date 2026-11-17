@@ -45,7 +45,12 @@ final class GridCardCell: UICollectionViewCell {
 
     override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
         super.dragStateDidChange(state)
-        contentView.alpha = state == .none ? 1 : 0
+        // At once, never faded: a lift cut short by a swipe left the card
+        // half see-through as it slid, as if under its neighbor (David's
+        // recording, 2026-11-17).
+        UIView.performWithoutAnimation {
+            contentView.alpha = state == .none ? 1 : 0
+        }
     }
 }
 

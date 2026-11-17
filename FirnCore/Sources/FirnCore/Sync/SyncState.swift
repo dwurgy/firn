@@ -42,11 +42,16 @@ public struct SyncState: Codable, Equatable, Sendable {
     public private(set) var deviceID = UUID().uuidString
     /// The other devices' records, by their ids, as they arrived (checked).
     public internal(set) var devices: [String: SyncedDevice] = [:]
+    /// Tabs sent to this device and not yet opened, by id (step 6).
+    var inbox: [String: SentTab] = [:]
+    /// Sends already opened here (id → when sent), so one fetched again
+    /// before its delete went through never opens twice.
+    var opened: [String: Date] = [:]
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case spaces, seen, joinedSpaces, joinedStores, arrived, firstSyncDone, deviceID, devices
+        case spaces, seen, joinedSpaces, joinedStores, arrived, firstSyncDone, deviceID, devices, inbox, opened
     }
 
     /// Anything a sync file from an older Firn lacks starts fresh, so the
@@ -61,6 +66,8 @@ public struct SyncState: Codable, Equatable, Sendable {
         firstSyncDone = try values.decodeIfPresent(Bool.self, forKey: .firstSyncDone) ?? false
         deviceID = try values.decodeIfPresent(String.self, forKey: .deviceID) ?? UUID().uuidString
         devices = try values.decodeIfPresent([String: SyncedDevice].self, forKey: .devices) ?? [:]
+        inbox = try values.decodeIfPresent([String: SentTab].self, forKey: .inbox) ?? [:]
+        opened = try values.decodeIfPresent([String: Date].self, forKey: .opened) ?? [:]
     }
 
     /// The engine's first fetch is done: from now on spaces arrive as new.
@@ -93,7 +100,7 @@ public struct SyncState: Codable, Equatable, Sendable {
             let local = localSpace(uuid)
             guard remoteSpace(local) == uuid else { return nil }
             return spaces[local].map { .space(toCloud($0)) }
-        case .group, .tab, .visit, .device: return nil
+        case .group, .tab, .visit, .device, .sentTab: return nil
         }
     }
 
@@ -126,8 +133,8 @@ public struct SyncState: Codable, Equatable, Sendable {
     func toCloud(_ item: SyncItem) -> SyncItem {
         switch item {
         case let .space(space): .space(toCloud(space))
-        // A device's record is made in iCloud's terms (`deviceRecord`).
-        case .visit, .device: item
+        // A device's record and a send are made in iCloud's terms.
+        case .visit, .device, .sentTab: item
         }
     }
 

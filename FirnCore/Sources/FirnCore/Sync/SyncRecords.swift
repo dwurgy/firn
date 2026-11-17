@@ -17,6 +17,8 @@ public enum SyncKind: String, Codable, Sendable, CaseIterable {
     case visit = "Visit"
     /// One device's open tabs, for "On your Mac" (step 5).
     case device = "Device"
+    /// A tab sent to one device, deleted once it's opened (step 6).
+    case sentTab = "SentTab"
 }
 
 /// One record's address in iCloud: its kind and its name (a random id that
@@ -88,12 +90,14 @@ public enum SyncItem: Codable, Equatable, Sendable {
     case space(SyncedSpace)
     case visit(SyncedVisit)
     case device(SyncedDevice)
+    case sentTab(SentTab)
 
     public var id: SyncRecordID {
         switch self {
         case let .space(space): SyncRecordID(kind: .space, name: space.id.uuidString)
         case let .visit(visit): SyncRecordID(kind: .visit, name: visit.id)
         case let .device(device): SyncRecordID(kind: .device, name: device.id)
+        case let .sentTab(tab): tab.recordID
         }
     }
 }

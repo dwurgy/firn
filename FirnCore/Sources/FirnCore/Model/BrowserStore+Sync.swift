@@ -62,12 +62,17 @@ extension BrowserStore {
     public func applySync(saves: [SyncItem], deletes: [SyncRecordID], to state: inout SyncState) -> SyncChanges {
         var toSend = takeSyncChanges(into: &state)
         var spaceSaves: [SyncedSpace] = []
+        let stamp = now()
         for item in Self.latest(saves, without: deletes) {
             switch item {
             case let .space(space): spaceSaves.append(space)
             // Another device's open tabs, for the command bar (never this
             // device's own, coming back).
             case let .device(device) where device.id != state.deviceID: state.devices[device.id] = device.checked()
+            // A tab sent to this device waits to be opened; an expired one,
+            // for any device, is deleted.
+            case let .sentTab(tab):
+                if state.receive(tab, at: stamp) { toSend.deletes.append(tab.recordID) }
             case .device, .visit: break
             }
         }
@@ -82,6 +87,7 @@ extension BrowserStore {
         let deleted = { (kind: SyncKind) in deletes.filter { $0.kind == kind }.compactMap { UUID(uuidString: $0.name) } }
         for id in deleted(.space) { applySpaceDelete(state.localSpace(id), to: &state) }
         for id in deletes where id.kind == .device { state.devices[id.name] = nil }
+        for id in deletes where id.kind == .sentTab { state.inbox[id.name] = nil }
 
         // What's here now came in: it isn't an edit of this device's.
         state.seen = syncFields()

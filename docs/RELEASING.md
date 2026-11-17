@@ -166,3 +166,19 @@ an update that can't download.
 feed on this Mac only. Install 0.99.0 from its DMG, choose Firn › Check for Updates…, and it should update itself
 to 0.99.1. `appcast.xml`, GitHub, and the website are never touched. Afterwards, put the usual Firn back in
 Applications. It takes about 20 minutes; `scripts/test-update.sh --serve` serves copies already built.
+
+## iPhone and iPad: TestFlight and the App Store
+
+The iOS app has three build configurations:
+
+- **Debug**: Xcode and the Simulator. Test-only features are on (the Swift flag `TESTFLIGHT`).
+- **TestFlight**: Release's settings plus `TESTFLIGHT`. The `Firn iOS` scheme's Archive uses it, so Product › Archive makes a TestFlight build. Today that adds Settings › TestFlight › "Tab overview: List / Grid" (`docs/IOS-PLAN.md`, "Experiment: a grid overview").
+- **Release**: the App Store build. Anything inside `#if TESTFLIGHT` isn't compiled in at all.
+
+App Store Connect lets a build that's already in TestFlight be submitted for App Store review. **Never submit a TestFlight build to the App Store.** For an App Store version, set the scheme's Archive to Release (Product › Scheme › Edit Scheme… › Archive), or run:
+
+    xcodebuild archive -scheme "Firn iOS" -configuration Release -destination 'generic/platform=iOS' -archivePath Firn-iOS.xcarchive
+
+Give it a build number the TestFlight builds haven't used. To check a build, search its binary for the row's words; a Release build has none:
+
+    strings - "Firn iOS.app/Firn iOS" | grep -c "Try the tabs as a grid"

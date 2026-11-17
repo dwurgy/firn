@@ -28,6 +28,9 @@ struct SettingsSheet: View {
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
     @State private var availability = ICloudSync.Availability.available
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
+    #if TESTFLIGHT
+    @AppStorage(OverviewLayout.key) private var overviewLayout = OverviewLayout.list
+    #endif
 
     /// The space picked, or the one on screen when none is (or it's gone).
     private var selected: Space {
@@ -93,6 +96,9 @@ struct SettingsSheet: View {
 
                 privacySection
                 syncSection
+                #if TESTFLIGHT
+                overviewSection
+                #endif
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -240,6 +246,29 @@ struct SettingsSheet: View {
             footnote("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the page menu; each space keeps its own choices.")
         }
     }
+
+    #if TESTFLIGHT
+    /// "Tab overview: List / Grid", a TestFlight experiment (David,
+    /// 2026-11-16): compiled only into TestFlight and Debug builds, kept on
+    /// this device only.
+    private var overviewSection: some View {
+        Section {
+            Picker("Tab overview", selection: $overviewLayout) {
+                Text("List").tag(OverviewLayout.list)
+                Text("Grid").tag(OverviewLayout.grid)
+            }
+            .font(.body)
+            .foregroundStyle(Theme.ink)
+            .tint(Theme.accent)
+            .frame(minHeight: 44)
+            .listRowBackground(Theme.hover)
+        } header: {
+            sectionTitle("TestFlight")
+        } footer: {
+            footnote("Try the tabs as a grid of cards. Only in test builds, and kept on this device.")
+        }
+    }
+    #endif
 
     /// "Sync with iCloud", the Mac's switch in the Mac's words. Only the
     /// one switch until passwords sync (step 9).

@@ -363,6 +363,23 @@ TestFlight for a few friends, the App Store listing and its privacy label, the i
 
 ---
 
+### Experiment: a grid overview (TestFlight only; David, 2026-11-16)
+
+A second look for the tab overview, so testers can compare it with the list: Settings › "Tab overview: List / Grid" (List by default), only in TestFlight and Debug builds, never in a Release (App Store) build. The choice stays on the device (`@AppStorage`), nothing logged or sent.
+
+- **The flag:** a third build configuration, `TestFlight` (Release's settings plus the Swift flag `TESTFLIGHT`); Debug sets the flag too. The row and the grid are compiled only `#if TESTFLIGHT`; a Release build always shows the list, even where Grid was saved. The Mac target gets an identical `TestFlight` copy of its Release (Xcode needs every target to have it), no flag. Archive a TestFlight build with `-configuration TestFlight`; App Store builds are archived with Release and never promoted from a TestFlight build.
+- **The grid:** Basecamp on top, then every tab as a tall card (`OverviewRow`, all tallness 1) in two columns on iPhone, cards about 250pt so the picture is portrait; on iPad as many columns as fit at 200pt each (up to 5), height growing with width. Titles 13pt semibold, as the list (David). No pinch.
+- **Groups:** a full-width folder card: name, a few site icons, the chevron; no count (David). Open, its tabs are a grid inside it.
+- **Motion:** the list's glides (0.25s, no bounce), its close fade, and the page gliding into the card's window; Reduce Motion as the list.
+
+Steps:
+1. The configuration, the flag, and the Settings row.
+2. The grid and the folder groups (open, close, add, Basecamp, the glide), iPhone and iPad.
+3. Reordering in the grid: among loose tabs, within an open group, and into and out of groups.
+4. A look over: light and dark, 30+ tabs, Reduce Motion, VoiceOver, iPhone and iPad Simulators.
+
+Progress (2026-11-16): steps 1 to 3 built, and step 4's Simulator checks on the iPhone (18 Pro): grid and list, light and dark, 34 tabs with two groups, a folder opening and folding, closing (the next card slides into place), + adding a tab, and a drag reordering (the grid reflows). Builds: Release has none of it (checked in its binary), TestFlight and Debug do; the Mac app builds. Not yet checked: the iPad's look (the app runs on the iPad Pro 13" Simulator; 4 columns portrait, 5 landscape by the math), the open and close glides frame by frame, Reduce Motion, VoiceOver, and David's iPhone. Left out for now: hold to form in the grid (its forming card is the list's shape) and the pinch.
+
 ## 4. What goes into CLAUDE.md
 
 A short section after "How spaces work" (draft):

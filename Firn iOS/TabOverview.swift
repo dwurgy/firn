@@ -132,6 +132,23 @@ struct TabOverview: View {
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
+    #if TESTFLIGHT
+    /// TestFlight's grid of cards, or the list (Settings, this device only).
+    @AppStorage(OverviewLayout.key) private var layout = OverviewLayout.list
+    private var grid: Bool { layout == .grid }
+    #else
+    private let grid = false
+    #endif
+    /// Where across the held card the finger took it (0 left, 1 right), so
+    /// in the grid it follows the finger sideways as well as up and down.
+    @State private var grabAcross: CGFloat = 0.5
+    /// The overview's size, for the grid's columns and card height.
+    @State private var size: CGSize = .zero
+    private var gridMetrics: OverviewGridMetrics {
+        OverviewGridMetrics(width: size.width, height: size.height)
+    }
+    /// A card's height: the list's, or the grid's.
+    private var cardHeight: CGFloat { grid ? gridMetrics.cardHeight : OverviewRow.cardHeight }
 
     /// Groups and loose tabs in the order shown: the store's, or the drag's
     /// while one moves.
@@ -172,7 +189,7 @@ struct TabOverview: View {
     /// every other tab into one for that visit (David, 2026-11-16). A
     /// Basecamp tile carried into the list takes the list's shape.
     private func tallness(_ tab: FirnCore.Tab, onScreen: Bool) -> CGFloat {
-        onScreen ? 1 : cards
+        grid || onScreen ? 1 : cards
     }
 
     var body: some View {
@@ -201,10 +218,14 @@ struct TabOverview: View {
                                       }
                                   })
                     let items = shownItems
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        switch item {
-                        case let .tab(tab): listTile(tab, at: index, of: items.count, loose: true)
-                        case let .group(group): groupTiles(group, at: index, of: items.count)
+                    if grid {
+                        gridTiles(items)
+                    } else {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            switch item {
+                            case let .tab(tab): listTile(tab, at: index, of: items.count, loose: true)
+                            case let .group(group): groupTiles(group, at: index, of: items.count)
+                            }
                         }
                     }
                 }
@@ -265,6 +286,7 @@ struct TabOverview: View {
                                          scalesWithList: true, inScroll: true))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
+            .onGeometryChange(for: CGSize.self, of: \.size) { size = $0 }
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
             // A new picture for the landing once a scroll comes to rest.
@@ -297,8 +319,11 @@ struct TabOverview: View {
             // (David, 2026-11-09: no haptic on the swipe up).
             .sensoryFeedback(.selection, trigger: tidyChanges)
             // Pinching can't be found by VoiceOver: the same choice as an action.
-            .accessibilityAction(named: cards < 0.5 ? "Show Cards" : "Show Rows") {
-                setCards(cards < 0.5 ? 1 : 0, scroller)
+            // The grid is all cards already.
+            .accessibilityActions {
+                if !grid {
+                    Button(cards < 0.5 ? "Show Cards" : "Show Rows") { setCards(cards < 0.5 ? 1 : 0, scroller) }
+                }
             }
             .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -418,6 +443,7 @@ struct TabOverview: View {
             grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
             tiles: store.basecampTabs.map(\.id),
             rows: cards < 0.5,
+            grid: grid,
             scroll: scroll ?? Int(((spots.scroll?.contentOffset.y ?? 0) / 16).rounded()),
             dark: colorScheme == .dark)
     }
@@ -610,7 +636,7 @@ struct TabOverview: View {
     private static let pinchStart: CGFloat = 1.08
 
     private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
-        guard !pinchDone, drag == nil else { return }
+        guard !pinchDone, drag == nil, !grid else { return }
         let target: CGFloat
         if cards < 0.5, m.magnification > Self.pinchStart { target = 1 }
         else if cards > 0.5, m.magnification < 1 / Self.pinchStart { target = 0 }
@@ -692,10 +718,31 @@ struct TabOverview: View {
             // From every group directly: `tabGroups` walks the whole tab
             // list, and this runs for every tile on every redraw.
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
-            actionsKey: [index ?? -1, reduceMotion ? 1 : 0]
+            actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
+            cardHeight: cardHeight,
+            movesSideways: grid
         )
         // Runs again only when what it shows changes (`OverviewRow.==`).
         .equatable()
+    }
+
+    /// TestFlight's grid: loose tabs as cards in columns, each run between
+    /// groups one grid; a group a full-width folder card, its tabs a grid
+    /// inside it once opened.
+    @ViewBuilder private func gridTiles(_ items: [TabListItem]) -> some View {
+        let metrics = gridMetrics
+        ForEach(OverviewGridRun.runs(items)) { run in
+            switch run {
+            case let .tabs(_, tabs):
+                LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.spacing) {
+                    ForEach(tabs, id: \.tab.id) { entry in
+                        listTile(entry.tab, at: entry.index, of: items.count, loose: true)
+                    }
+                }
+            case let .group(index, group):
+                groupTiles(group, at: index, of: items.count)
+            }
+        }
     }
 
     /// A group: a flat tint in the space's color behind its name line and
@@ -736,21 +783,30 @@ struct TabOverview: View {
         let movable = !lifted && tabs.count == store.tabs(in: group).count
         return VStack(spacing: 0) {
             GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
-                      naming: store.isNaming(group), toggle: { fold(group) })
+                      naming: store.isNaming(group), toggle: { fold(group) },
+                      icons: grid && closed ? store.tabs(in: group) : [])
                 // Hold the name line, then move, to drag the whole group
                 // to a new place, as a tab drags (the list's HoldToDrag);
                 // holding still opens its menu.
                 .modifier(groupMenu(group).actions)
                 .modifier(GroupMoveActions(moves: moves))
             // The header's own 44pt sets the room above the first tab.
-            VStack(spacing: GroupCard.inset) {
-                ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                    if lifted {
-                        tile(tab, spot: { _ in })
-                    } else {
-                        listTile(tab, at: movable ? index : nil, of: tabs.count, loose: false)
-                    }
+            let groupTabs = ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                if lifted {
+                    tile(tab, spot: { _ in })
+                } else {
+                    listTile(tab, at: movable ? index : nil, of: tabs.count, loose: false)
                 }
+            }
+            if grid {
+                // Opened, a folder shows its tabs as a grid inside it,
+                // the same columns as outside, 8pt apart as in the list.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.inset,
+                                                             alignment: .top),
+                                         count: gridMetrics.columns),
+                          spacing: GroupCard.inset) { groupTabs }
+            } else {
+                VStack(spacing: GroupCard.inset) { groupTabs }
             }
         }
         .padding(.horizontal, GroupCard.inset)
@@ -1255,6 +1311,7 @@ struct TabOverview: View {
         }
         finger.top = new.start.minY
         finger.left = new.start.minX
+        grabAcross = new.start.width > 0 ? min(max((point.x - new.start.minX) / new.start.width, 0), 1) : 0.5
         finger.width = new.start.width
         finger.y = point.y
         finger.liftFrom = 1
@@ -1403,7 +1460,27 @@ struct TabOverview: View {
             }.map { others[$0] }
         }
 
-        if into == nil {
+        // In the grid: before every card in a row above the finger, and
+        // every card to its left in its own row; a group's card (full
+        // width) is before it once the finger is past its middle.
+        let groupIDs = Set(store.tabGroups.map(\.id))
+        func gridPlace(among others: [UUID]) -> Int? {
+            let shown = others.indices.filter { shownFrame(others[$0]) != nil }
+            guard let first = shown.first else { return others.isEmpty ? 0 : nil }
+            let before = shown.filter { index in
+                guard let frame = shownFrame(others[index]) else { return false }
+                if groupIDs.contains(others[index]) { return frame.midY < finger.y }
+                if frame.maxY <= finger.y { return true }
+                if frame.minY > finger.y { return false }
+                return frame.midX < finger.x
+            }.count
+            return first + before
+        }
+
+        if grid {
+            // No hold to form in the grid (yet): its forming card is the
+            // list's shape.
+        } else if into == nil {
             let others = ids.filter { $0 != drag.id }
             let resting = restingOn(others, was: now == nil ? ids.firstIndex(of: drag.id) : nil)
             waitToForm(over: resting)
@@ -1415,7 +1492,7 @@ struct TabOverview: View {
         if let into, var others = groups[into] {
             let was = now == into ? others.firstIndex(of: drag.id) : nil
             others.removeAll { $0 == drag.id }
-            guard let at = place(among: others, was: was) else { return }
+            guard let at = grid ? gridPlace(among: others) : place(among: others, was: was) else { return }
             others.insert(drag.id, at: at)
             if let now, now != into { groups[now]?.removeAll { $0 == drag.id } }
             ids.removeAll { $0 == drag.id }
@@ -1423,7 +1500,7 @@ struct TabOverview: View {
         } else {
             let was = now == nil ? ids.firstIndex(of: drag.id) : nil
             var others = ids.filter { $0 != drag.id }
-            guard let at = place(among: others, was: was) else { return }
+            guard let at = grid ? gridPlace(among: others) : place(among: others, was: was) else { return }
             others.insert(drag.id, at: at)
             if let now { groups[now]?.removeAll { $0 == drag.id } }
             ids = others
@@ -1441,10 +1518,19 @@ struct TabOverview: View {
     /// Where a tab's tile sits across the list: inside a group's tint, or
     /// the list's full width.
     private func lane(in group: UUID?) -> (minX: CGFloat, width: CGFloat) {
+        let whole: (minX: CGFloat, width: CGFloat)
         if let group, let frame = spots.frames[group] {
-            return (frame.minX + GroupCard.inset, frame.width - 2 * GroupCard.inset)
+            whole = (frame.minX + GroupCard.inset, frame.width - 2 * GroupCard.inset)
+        } else {
+            whole = (spots.viewport.minX + 16, spots.viewport.width - 32)
         }
-        return (spots.viewport.minX + 16, spots.viewport.width - 32)
+        guard grid else { return whole }
+        // In the grid, one column's width, under the finger.
+        let columns = CGFloat(gridMetrics.columns)
+        let gap = group == nil ? OverviewGridMetrics.spacing : GroupCard.inset
+        let width = (whole.width - gap * (columns - 1)) / columns
+        let left = min(max(finger.x - grabAcross * width, whole.minX), whole.minX + whole.width - width)
+        return (left, width)
     }
 
     // MARK: Into Basecamp
@@ -1491,7 +1577,8 @@ struct TabOverview: View {
             followAsTile()
             return makeRoomForTile()
         }
-        let left = drag.basecamp ? lane(in: nil).minX : finger.left
+        let left = drag.basecamp ? lane(in: nil).minX
+            : grid ? finger.x - grabAcross * finger.width : finger.left
         if drag.basecamp { carryOutOfBasecamp(drag) }
         place(finger.y - drag.grab, left)
         if over {
@@ -1674,7 +1761,7 @@ struct TabOverview: View {
         var new = old
         new.tabs = true
         new.reshaping = .now + 0.3
-        new.rowHeight = cards > 0.5 ? OverviewRow.cardHeight : OverviewRow.rowHeight
+        new.rowHeight = cards > 0.5 || grid ? cardHeight : OverviewRow.rowHeight
         let lane = lane(in: nil)
         // Drawn at the card's own size and grown as one picture.
         new.rowSize = CGSize(width: lane.width, height: new.rowHeight)

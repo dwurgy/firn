@@ -12,6 +12,8 @@ struct GroupLine: View {
     /// New, and its name is on the way from the on-device model.
     let naming: Bool
     let toggle: () -> Void
+    /// A folded group's site icons in TestFlight's grid (`GroupIcons`).
+    var icons: [FirnCore.Tab] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -47,6 +49,11 @@ struct GroupLine: View {
                     .rotationEffect(.degrees(group.folded ? -90 : 0))
                     .fixedSize()
                 Spacer(minLength: 14)
+                if !icons.isEmpty {
+                    GroupIcons(tabs: icons)
+                        .padding(.trailing, 14)
+                        .transition(.opacity)
+                }
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: naming)
             // Only a name Firn chose fades; a rename by hand just shows.

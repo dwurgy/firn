@@ -44,6 +44,11 @@ struct OverviewRow: View {
     /// are compared on what they show (`==`), and a row found unchanged
     /// keeps its old actions.
     var actionsKey: [Int] = []
+    /// A card's height: the list's 240pt, or the grid's, which grows with
+    /// its column so the picture stays portrait (TestFlight's grid).
+    var cardHeight: CGFloat = OverviewRow.cardHeight
+    /// In the grid, VoiceOver's moves read as Move Left and Move Right.
+    var movesSideways = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -101,7 +106,7 @@ struct OverviewRow: View {
     private var tile: some View {
         let shape = RoundedRectangle(cornerRadius: mix(Self.cornerRadius, Self.cardCornerRadius, t),
                                      style: .continuous)
-        let height = Self.rowHeight + (Self.cardHeight - Self.rowHeight) * t
+        let height = Self.rowHeight + (cardHeight - Self.rowHeight) * t
         return Button(action: open) {
             Color.clear
                 .frame(maxWidth: .infinity)
@@ -129,8 +134,8 @@ struct OverviewRow: View {
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
         .accessibilityActions {
-            if let moveUp { Button("Move Up", action: moveUp) }
-            if let moveDown { Button("Move Down", action: moveDown) }
+            if let moveUp { Button(movesSideways ? "Move Left" : "Move Up", action: moveUp) }
+            if let moveDown { Button(movesSideways ? "Move Right" : "Move Down", action: moveDown) }
         }
         .overlay(alignment: .top) {
             window(height: height)
@@ -161,7 +166,7 @@ struct OverviewRow: View {
     /// (David, 2026-11-16: 8pt read as too much paper).
     static let windowInset: CGFloat = 5
     static let windowCornerRadius: CGFloat = cardCornerRadius - windowInset
-    private static let windowHeight = cardHeight - rowHeight - windowInset
+    private var windowHeight: CGFloat { cardHeight - Self.rowHeight - Self.windowInset }
 
     /// Where a card's picture sits, in a card's frame: what a page glides
     /// out of and into.
@@ -177,7 +182,7 @@ struct OverviewRow: View {
     private func window(height: CGFloat) -> some View {
         pictureView
             .frame(maxWidth: .infinity)
-            .frame(height: Self.windowHeight, alignment: .top)
+            .frame(height: windowHeight, alignment: .top)
             .frame(height: max(height - Self.rowHeight - Self.windowInset, 0), alignment: .top)
             .background(Theme.page)
             .clipShape(RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous))
@@ -406,6 +411,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.ring == b.ring && a.space == b.space
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
-            && a.actionsKey == b.actionsKey
+            && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.movesSideways == b.movesSideways
     }
 }

@@ -101,6 +101,9 @@ public struct DeviceTab: Identifiable, Equatable, Sendable {
     /// "On your iPhone", "On David's Mac mini", …
     public var deviceLabel: String
     public var deviceID: String
+    /// The site's icon, if a tab in this space already has one for that
+    /// site (icons never travel, and fetching one would be new traffic).
+    public var icon: Data?
 
     public var id: String { "\(deviceID) \(url.absoluteString)" }
 
@@ -142,11 +145,19 @@ extension BrowserStore {
             .sorted { $0.sentAt > $1.sentAt }
         let macs = devices.filter { $0.kind == .mac }.count + (thisDevice == .mac ? 1 : 0)
         let space = activeSpace.id
+        // Icons this space already has, by site; never another space's.
+        var icons: [String: Data] = [:]
+        for tab in tabs where tab.spaceID == space {
+            if let host = tab.url?.host(), icons[host] == nil, let icon = tab.icon { icons[host] = icon }
+        }
         return devices.flatMap { device in
             let label = device.label(macCount: macs)
             return device.tabs
                 .filter { state.localSpace($0.spaceID) == space }
-                .map { DeviceTab(url: $0.url, title: $0.title, deviceLabel: label, deviceID: device.id) }
+                .map {
+                    DeviceTab(url: $0.url, title: $0.title, deviceLabel: label, deviceID: device.id,
+                              icon: $0.url.host().flatMap { icons[$0] })
+                }
         }
     }
 }

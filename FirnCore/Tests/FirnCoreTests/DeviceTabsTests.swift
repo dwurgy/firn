@@ -173,6 +173,40 @@ struct DeviceTabsTests {
         #expect(mac.store.otherDeviceTabs(in: mac.state, thisDevice: .mac).isEmpty)
     }
 
+    @Test func staleDevicesAreForgottenAndComeBackWithTheirNextSend() throws {
+        let (mac, phone) = devices()
+        open("trail", title: "Trail map", on: phone)
+        try sendTabs(from: phone, as: .iPhone, to: mac)
+        let sentAt = try #require(mac.state.devices.values.first?.sentAt)
+
+        mac.state.forgetDevices(sentBefore: sentAt)
+        #expect(mac.state.devices.count == 1)
+        mac.state.forgetDevices(sentBefore: sentAt.addingTimeInterval(1))
+        #expect(mac.state.devices.isEmpty)
+
+        try sendTabs(from: phone, as: .iPhone, to: mac)
+        #expect(mac.store.otherDeviceTabs(in: mac.state, thisDevice: .mac).count == 1)
+        #expect(mac.state.deviceRecordID == SyncRecordID(kind: .device, name: mac.state.deviceID))
+    }
+
+    @Test func aSiteIconComesOnlyFromThisSpacesOwnTabs() throws {
+        let (mac, phone) = devices()
+        open("trail", title: "Trail map", on: phone)
+        try sendTabs(from: phone, as: .iPhone, to: mac)
+        #expect(mac.store.otherDeviceTabs(in: mac.state, thisDevice: .mac).first?.icon == nil)
+
+        // Work has the site, with its icon: Personal still gets no icon.
+        mac.store.selectSpace(mac.store.spaces[1])
+        let there = mac.store.openTab(URL(string: "https://trail.example/other")!)
+        (there.page as? FakePage)?.icon = Data([1, 2, 3])
+        mac.store.selectSpace(mac.store.spaces[0])
+        #expect(mac.store.otherDeviceTabs(in: mac.state, thisDevice: .mac).first?.icon == nil)
+
+        let here = mac.store.openTab(URL(string: "https://trail.example/else")!)
+        (here.page as? FakePage)?.icon = Data([4, 5])
+        #expect(mac.store.otherDeviceTabs(in: mac.state, thisDevice: .mac).first?.icon == Data([4, 5]))
+    }
+
     @Test func aDevicesOwnRecordComingBackIsIgnored() throws {
         let (mac, _) = devices()
         open("trail", title: "Trail map", on: mac)

@@ -7,6 +7,9 @@ import SwiftUI
 @Observable
 final class WindowModel {
     let store: BrowserStore
+    /// The other devices' tabs in the space on screen, for the command bar
+    /// ("On your iPhone"; `ICloudSync.otherDeviceTabs`). None until sync starts.
+    @ObservationIgnored var otherDeviceTabs: () -> [DeviceTab] = { [] }
     /// History › Clear History… was chosen: the History window opens and
     /// asks (see `HistoryWindow`).
     var asksToClearHistory = false

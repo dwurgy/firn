@@ -62,6 +62,7 @@ struct FirnApp: App {
         self.sync = sync
         if !DemoMode.isOn {
             saver.afterSave = { sync.takeChanges() }
+            window.otherDeviceTabs = { sync.otherDeviceTabs() }
             sync.start()
         }
         // Starts Sparkle, so its scheduled checks (once allowed) run.

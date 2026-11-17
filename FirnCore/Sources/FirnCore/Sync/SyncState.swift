@@ -68,6 +68,16 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// spaces give way first.)
     public mutating func finishFirstSync() { firstSyncDone = true }
 
+    /// This device's own `Device` record's address in iCloud.
+    public var deviceRecordID: SyncRecordID { SyncRecordID(kind: .device, name: deviceID) }
+
+    /// Forgets other devices not sent from since `date` (they no longer
+    /// show), so the sync file doesn't keep every device ever used. One that
+    /// comes back simply arrives again with its next send.
+    public mutating func forgetDevices(sentBefore date: Date) {
+        devices = devices.filter { $0.value.sentAt >= date }
+    }
+
     /// The fields that sync, as they are on a device right now.
     struct Fields: Codable, Equatable, Sendable {
         var spaces: [UUID: SyncedSpace] = [:]

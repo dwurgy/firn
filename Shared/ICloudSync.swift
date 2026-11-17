@@ -3,6 +3,7 @@ import FirnCore
 import os
 #if os(macOS)
 import AppKit
+import SystemConfiguration
 #else
 import UIKit
 #endif
@@ -25,11 +26,11 @@ final class ICloudSync {
     /// The "Sync with iCloud" switch (Settings, step 3, part 3).
     static let enabledKey = "syncWithICloud"
     static var isOn: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
-    /// What syncs so far: spaces. Groups and tabs synced briefly (step 4),
-    /// then stayed on each device (David, 2026-11-16): a device that sent
-    /// them takes them out of iCloud again (see `begin`). History joins in
-    /// step 7.
-    static let kinds: Set<SyncKind> = [.space]
+    /// What syncs so far: spaces, and each device's open tabs for "On your
+    /// Mac" (step 5). Groups and tabs synced briefly (step 4), then stayed
+    /// on each device (David, 2026-11-16): a device that sent them takes
+    /// them out of iCloud again (see `begin`). History joins in step 7.
+    static let kinds: Set<SyncKind> = [.space, .device]
 
     /// What turning sync on does, in plain words, under the switch on the
     /// Mac and the iPhone (and the welcome's step, later). Keep it literally
@@ -39,6 +40,7 @@ final class ICloudSync {
     static func whatSyncs(on device: String) -> [String] {
         [
             "Your spaces stay the same on your Mac, iPhone, and iPad. Make, rename, or delete one anywhere, and the others follow.",
+            "Your open tabs' addresses and titles can be found from your other devices' command bars, in the same space.",
             "Tabs, groups, Basecamp, history, and settings stay on this \(device). So do sign-ins and passwords: a separate space starts signed out on your other devices.",
             "Everything is encrypted on this \(device) before it goes to your iCloud, so only your devices can read it.",
         ]
@@ -63,6 +65,11 @@ final class ICloudSync {
     private var firstFetchFailedAt: Date?
     /// A record came sealed with a key this device doesn't have.
     private var otherKeySeen = false
+    /// This device's open tabs as last sent (step 5), and when.
+    private var deviceSent: (tabs: [SyncedDevice.OpenTab], at: Date)?
+    /// A send waiting out the 30 seconds since the last one.
+    private var deviceSendLater: Task<Void, Never>?
+    private var frontObserver: (any NSObjectProtocol)?
 
     init(store: BrowserStore, file: SyncFile = .standard) {
         self.store = store
@@ -106,13 +113,36 @@ final class ICloudSync {
         start()
     }
 
-    /// The switch, turned off; also when the person signs out of iCloud or
-    /// into another account, or deletes Firn's data in iCloud's settings.
-    /// What's on this device stays; only what sync kept goes.
+    /// The switch, turned off: this device's open tabs leave iCloud (so the
+    /// other devices stop offering them), then sync stops.
     func turnOff() {
+        if engine != nil, saved.systemFields[Self.recordID(saved.state.deviceRecordID).recordName] != nil {
+            let recordID = Self.recordID(saved.state.deviceRecordID)
+            let database = CKContainer(identifier: Self.containerID).privateCloudDatabase
+            Task.detached(priority: .utility) {
+                do {
+                    try await database.deleteRecord(withID: recordID)
+                } catch {
+                    // Offline, say: the other devices stop showing it after 14 days.
+                    Self.log.error("This device's tabs couldn't be taken out of iCloud")
+                }
+            }
+        }
+        stop()
+    }
+
+    /// Sync stops: from the switch, and when the person signs out of iCloud
+    /// or into another account, or deletes Firn's data in iCloud's settings.
+    /// What's on this device stays; only what sync kept goes.
+    private func stop() {
         UserDefaults.standard.set(false, forKey: Self.enabledKey)
         if let engine { Task { await engine.cancelOperations() } }
         engine = nil
+        deviceSendLater?.cancel()
+        deviceSendLater = nil
+        deviceSent = nil
+        if let frontObserver { NotificationCenter.default.removeObserver(frontObserver) }
+        frontObserver = nil
         seal = nil
         firstFetch?.cancel()
         firstFetch = nil
@@ -150,6 +180,7 @@ final class ICloudSync {
             queue(SyncChanges(saves: [], deletes: []), andAgain: saved.state.recordIDs(of: Self.kinds))
         }
         if !dropped.isEmpty { takeOut(dropped, from: engine) }
+        watchLeavingFront()
         if saved.state.firstSyncDone { takeChanges() } else { fetchFirst() }
         save()
     }
@@ -172,7 +203,90 @@ final class ICloudSync {
     func takeChanges() {
         guard engine != nil else { return }
         send(store.takeSyncChanges(into: &saved.state))
+        sendDevice()
         save()
+    }
+
+    // MARK: - This device's open tabs ("On your Mac", step 5)
+
+    /// Sends this device's open tabs when the pages open changed, at most
+    /// every 30 seconds; a title change alone waits. Leaving the front sends
+    /// whatever changed, and at least once a day, so an idle device doesn't
+    /// go stale on the others. Only after the first sync, so a quit during
+    /// it can't leave a record under an id that's then forgotten.
+    private func sendDevice(leavingFront: Bool = false) {
+        guard let engine, saved.state.firstSyncDone else { return }
+        let tabs = currentDevice().tabs
+        let pages = { (tabs: [SyncedDevice.OpenTab]) in Set(tabs.map { "\($0.spaceID) \($0.url.absoluteString)" }) }
+        let changed: Bool
+        if let sent = deviceSent {
+            changed = leavingFront
+                ? sent.tabs != tabs || Date.now.timeIntervalSince(sent.at) > 24 * 60 * 60
+                : pages(sent.tabs) != pages(tabs)
+        } else {
+            changed = true
+        }
+        guard changed else { return }
+        if !leavingFront, let sent = deviceSent, Date.now.timeIntervalSince(sent.at) < Self.deviceSendGap {
+            guard deviceSendLater == nil else { return }
+            let wait = Self.deviceSendGap - Date.now.timeIntervalSince(sent.at)
+            deviceSendLater = Task {
+                try? await Task.sleep(for: .seconds(wait))
+                guard !Task.isCancelled else { return }
+                deviceSendLater = nil
+                sendDevice()
+            }
+            return
+        }
+        deviceSendLater?.cancel()
+        deviceSendLater = nil
+        deviceSent = (tabs, .now)
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID(saved.state.deviceRecordID))])
+        if leavingFront { Task { try? await engine.sendChanges() } }
+    }
+
+    private static let deviceSendGap: TimeInterval = 30
+
+    /// This device's record as it is now (built again as it's sent).
+    private func currentDevice() -> SyncedDevice {
+        store.deviceRecord(kind: Self.deviceKind, name: Self.deviceName, state: saved.state)
+    }
+
+    private func watchLeavingFront() {
+        guard frontObserver == nil else { return }
+        #if os(macOS)
+        let name = NSApplication.didResignActiveNotification
+        #else
+        let name = UIApplication.didEnterBackgroundNotification
+        #endif
+        frontObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sendDevice(leavingFront: true) }
+        }
+    }
+
+    private static var deviceKind: SyncedDevice.Kind {
+        #if os(macOS)
+        .mac
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+        #endif
+    }
+
+    /// A Mac's own name ("David's Mac mini"), shown on the other devices only
+    /// when there are two Macs. An iPhone or iPad can't read theirs.
+    private static var deviceName: String? {
+        #if os(macOS)
+        SCDynamicStoreCopyComputerName(nil, nil) as String?
+        #else
+        nil
+        #endif
+    }
+
+    /// The other devices' tabs open in the space on screen, for the command
+    /// bar. None while sync is off.
+    func otherDeviceTabs() -> [DeviceTab] {
+        guard engine != nil, saved.state.firstSyncDone else { return [] }
+        return store.otherDeviceTabs(in: saved.state, thisDevice: Self.deviceKind)
     }
 
     /// Sends now, or holds until the first sync's fetch is done.
@@ -229,6 +343,7 @@ final class ICloudSync {
         changes.deletes += taken.deletes
         engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
         queue(changes)
+        sendDevice()
         save()
     }
 
@@ -249,6 +364,7 @@ final class ICloudSync {
             saved.systemFields[deletion.recordID.recordName] = nil
             if Self.kinds.contains(id.kind) { deletes.append(id) }
         }
+        saved.state.forgetDevices(sentBefore: Date.now.addingTimeInterval(-SyncedDevice.staleAfter))
         apply(saves: saves, deletes: deletes)
     }
 
@@ -377,8 +493,10 @@ final class ICloudSync {
 
     /// The record to send, sealed now from what this device knows.
     private func record(for recordID: CKRecord.ID) -> CKRecord? {
-        guard let id = Self.syncID(recordID), Self.kinds.contains(id.kind), let seal,
-              let item = saved.state.item(for: id), let sealed = try? seal.seal(item) else { return nil }
+        guard let id = Self.syncID(recordID), Self.kinds.contains(id.kind), let seal else { return nil }
+        // This device's open tabs, as they are now; never another device's.
+        let item = id == saved.state.deviceRecordID ? .device(currentDevice()) : saved.state.item(for: id)
+        guard let item, let sealed = try? seal.seal(item) else { return nil }
         let record = savedRecord(named: recordID.recordName)
             ?? CKRecord(recordType: id.kind.rawValue, recordID: recordID)
         record.encryptedValues[Self.field] = sealed.sealed
@@ -424,7 +542,7 @@ final class ICloudSync {
             case .signIn: break
             case .signOut, .switchAccounts:
                 Self.log.info("iCloud account changed; sync turned off")
-                turnOff()
+                stop()
             @unknown default: break
             }
         case let .fetchedDatabaseChanges(changes):
@@ -438,7 +556,7 @@ final class ICloudSync {
                 } else {
                     // Deleted in iCloud's settings: nothing is put back.
                     Self.log.info("Firn's iCloud data was deleted; sync turned off")
-                    turnOff()
+                    stop()
                     return
                 }
             }

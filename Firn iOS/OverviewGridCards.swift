@@ -157,6 +157,16 @@ struct GridCards: UIViewRepresentable {
         private var shown: [UUID] = []
         /// The card iOS's drag carries, until it's down.
         private var carried: UUID?
+        /// From the finger to the carried card's middle, as it was grabbed.
+        private var grabOffset = CGVector.zero
+        /// When the finger last came down, for telling a swipe from a hold.
+        private var touchedAt: TimeInterval = 0
+        /// How long after the finger comes down a move sideways may still be
+        /// a swipe; later, it's iOS's hold and drag (Safari's way). Swiping
+        /// there too ran the two together: the card slid, then iOS's drag
+        /// lifted it anyway and the swipe snapped back (David's recording,
+        /// 2026-11-17).
+        private static let swipeWindow: TimeInterval = 0.25
         /// iOS's hold menu is showing.
         private var menuShown = false
         /// The swipe to close (`swiped`).
@@ -263,7 +273,7 @@ struct GridCards: UIViewRepresentable {
                 self?.parent?.close(id)
                 // Not closed after all (the overview was busy): back home.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    guard let self, shown.contains(id), cell.swipe != .identity else { return }
+                    guard let self, shown.contains(id) else { return }
                     cell.swipe = .identity
                     cell.contentView.alpha = 1
                 }
@@ -306,10 +316,17 @@ struct GridCards: UIViewRepresentable {
 
         func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
             guard gesture === sideways else { return true }
-            // A card iOS has lifted or opened its menu on is theirs.
-            guard carried == nil, !menuShown else { return false }
+            // A card iOS has lifted or opened its menu on is theirs, and so
+            // is a card held a moment before it moved.
+            guard carried == nil, !menuShown,
+                  ProcessInfo.processInfo.systemUptime - touchedAt < Self.swipeWindow else { return false }
             let speed = sideways.velocity(in: sideways.view)
             return abs(speed.x) > abs(speed.y)
+        }
+
+        func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if gesture === sideways, touch.phase == .began { touchedAt = touch.timestamp }
+            return true
         }
 
         /// Alongside iOS's press on the collection view (until it's called
@@ -423,6 +440,12 @@ struct GridCards: UIViewRepresentable {
             // A card being swiped isn't lifted.
             guard swiping == nil, let id = dataSource?.itemIdentifier(for: path) else { return [] }
             carried = id
+            if let cell = view.cellForItem(at: path) {
+                let finger = session.location(in: view)
+                grabOffset = CGVector(dx: cell.center.x - finger.x, dy: cell.center.y - finger.y)
+            } else {
+                grabOffset = .zero
+            }
             parent?.held(id, true)
             // Firn's own: never to another app (no address handed over).
             let item = UIDragItem(itemProvider: NSItemProvider())
@@ -454,6 +477,13 @@ struct GridCards: UIViewRepresentable {
             // Let go outside the grid: it stays where it was last moved to.
             if let id = carried { settle(id); parent?.held(id, false) }
             carried = nil
+            // Every card shown again once the drop has landed: a card hidden
+            // while carried stayed invisible once (David, 2026-11-17, not
+            // caught on a recording), likely never told its drag had ended.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self, weak view] in
+                guard let self, carried == nil, let view else { return }
+                for case let cell as GridCardCell in view.visibleCells { cell.contentView.alpha = 1 }
+            }
         }
 
         // MARK: Putting it down
@@ -471,16 +501,18 @@ struct GridCards: UIViewRepresentable {
             // room-making ticks a haptic at every spot and again on letting
             // go, with no way to turn it off; Safari's grid only taps once,
             // on the grab (David, 2026-11-17).
-            // The spot is the card under the finger, found at once: UIKit's
-            // own destination waits for the finger to settle, so the carried
-            // card sat over its neighbor about 0.4s before it moved, where
-            // Safari's moves as the card arrives (David's recording beside
-            // Safari's, 2026-11-17). The carried card's own (hidden) cell
-            // takes the finger's spot as it moves, so it can't flip back.
-            // Between cards nothing moves (UIKit's late guess could pull a
-            // card back to a spot already left).
-            if let id = carried, let under = view.indexPathForItem(at: session.location(in: view)) {
-                makeRoom(for: id, at: under.item, in: view)
+            // The spot is the one nearest the carried card's middle, found
+            // at once: UIKit's own destination waits for the finger to
+            // settle, so the carried card sat over its neighbor about 0.4s
+            // before it moved, where Safari's moves as the card arrives
+            // (David's recording beside Safari's, 2026-11-17). Its middle,
+            // not the finger: a card grabbed near an edge had to go almost
+            // a whole card before the finger reached the next, and between
+            // cards nothing moved (David, 2026-11-17).
+            if let id = carried {
+                let finger = session.location(in: view)
+                let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
+                if let spot = nearestSpot(to: middle, in: view) { makeRoom(for: id, at: spot, in: view) }
             }
             let proposal = UICollectionViewDropProposal(operation: .move, intent: .unspecified)
             // The card stays its own size as it's carried, as Safari's: the
@@ -505,6 +537,18 @@ struct GridCards: UIViewRepresentable {
             UIViewPropertyAnimator(duration: reduce ? 0 : 0.2, dampingRatio: 1) {
                 self.dataSource?.apply(snapshot, animatingDifferences: !reduce)
             }.startAnimation()
+        }
+
+        /// The spot whose middle is nearest a point. A spot changes only
+        /// once the carried card's middle passes halfway to the next, so it
+        /// can't flip back and forth.
+        private func nearestSpot(to point: CGPoint, in view: UICollectionView) -> Int? {
+            let layout = view.collectionViewLayout
+            return shown.indices.min { a, b in
+                let ca = layout.layoutAttributesForItem(at: IndexPath(item: a, section: 0))?.center ?? .zero
+                let cb = layout.layoutAttributesForItem(at: IndexPath(item: b, section: 0))?.center ?? .zero
+                return hypot(ca.x - point.x, ca.y - point.y) < hypot(cb.x - point.x, cb.y - point.y)
+            }
         }
 
         /// Saves where the carried card now sits, once.

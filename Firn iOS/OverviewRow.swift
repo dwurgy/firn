@@ -347,6 +347,16 @@ struct OverviewRow: View {
             pull = dx < 0 ? dx : dx * 0.15
             return
         }
+        // Once iOS has begun lifting the card (`carried`), a move sideways is
+        // its drag's, never a swipe, as Safari's. Both used to run: the swipe
+        // slid the card while iOS faded it for the lift, so it went half
+        // see-through and seemed to pass under its neighbor, then snapped
+        // back as the drag took over (David's recording beside Safari's,
+        // 2026-11-17). A swipe already under way eases home.
+        if carried {
+            if pull != 0 || swiped { easeHome() }
+            return
+        }
         // The grid's card grows as the swipe starts and stays grown, either
         // way, until it's let go; right, it follows with some give (Safari's).
         if !swiped { withAnimation(.smooth(duration: 0.2)) { swiped = true } }
@@ -356,13 +366,9 @@ struct OverviewRow: View {
     private func letGo(_ dx: CGFloat, _ speed: CGFloat) {
         let far = width > 0 && -dx > width / 3
         let flick = speed < -700 && dx < -20
-        guard far || flick else {
-            // The grid's card eases home and shrinks together, unhurried;
-            // the list's row glides back as before.
-            withAnimation(.smooth(duration: inGrid ? Self.swipeHome : 0.25)) {
-                pull = 0
-                swiped = false
-            }
+        // A card iOS lifted is never closed by the swipe it took over.
+        guard (far || flick) && !(inGrid && carried) else {
+            easeHome()
             return
         }
         if reduceMotion {
@@ -375,6 +381,15 @@ struct OverviewRow: View {
         let gone = -(width + 40)
         let duration = min(0.25, max(0.12, Double((gone - pull) / min(speed, -900))))
         withAnimation(.easeOut(duration: duration)) { pull = gone } completion: { close() }
+    }
+
+    /// The grid's card eases home and shrinks together, unhurried; the
+    /// list's row glides back as before.
+    private func easeHome() {
+        withAnimation(.smooth(duration: inGrid ? Self.swipeHome : 0.25)) {
+            pull = 0
+            swiped = false
+        }
     }
 }
 

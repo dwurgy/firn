@@ -8,6 +8,7 @@ struct BrowserScreen: View {
     let store: BrowserStore
     let pictures: PagePictures
     let sync: ICloudSync
+    let sending: Sending
     /// A link from another app, opened as a new tab once it arrives.
     @Binding var incoming: URL?
     @FocusState private var editing: Bool
@@ -313,6 +314,11 @@ struct BrowserScreen: View {
                          barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) {
                 sheets.downloads = true
             }
+
+            // Just above the bar as a sent tab arrives ("From Mac"), or as
+            // one is sent ("Sent to Mac"; sync step 6).
+            SentPill(sending: sending, hold: hold, away: showingTabs || pageHidden || editing || menuOpen,
+                     barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop)
 
             StandInLayer(hold: hold, landing: landing, store: store, pictures: pictures)
 

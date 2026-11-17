@@ -53,6 +53,8 @@ struct TabOverview: View {
 
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Send to My Mac, in a tab's menu (sync step 6).
+    @Environment(Sending.self) private var sending: Sending?
     @Environment(\.scenePhase) private var scenePhase
 
     /// Counts closes, so the shake listener takes focus again after each.
@@ -1065,9 +1067,11 @@ struct TabOverview: View {
                 closeOthers(than: tab)
             })
         }
+        // Any tab, not only the one on screen (David, 2026-11-17).
+        let send = sending?.menuItems(for: tab) ?? []
         // No line under Copy Link, so a pointing finger's highlight glides
         // through every row down to the Close rows (David, 2026-11-09).
-        return [link + keep, close]
+        return [link + keep + send, close]
     }
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no

@@ -688,3 +688,15 @@ extension ICloudSync: CKSyncEngineDelegate {
         }
     }
 }
+
+extension SyncedDevice.Kind {
+    /// Its symbol in menus and the arrival note: an iPhone, an iPad, or a
+    /// Mac laptop (both apps).
+    var symbol: String {
+        switch self {
+        case .mac: "laptopcomputer"
+        case .iPhone: "iphone"
+        case .iPad: "ipad"
+        }
+    }
+}

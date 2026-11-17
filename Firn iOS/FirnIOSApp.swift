@@ -32,7 +32,10 @@ struct FirnIOSApp: App {
         WindowGroup {
             Group {
                 if let browser {
-                    BrowserScreen(store: browser.store, pictures: browser.pictures, sync: browser.sync, incoming: $incoming)
+                    BrowserScreen(store: browser.store, pictures: browser.pictures, sync: browser.sync,
+                                  sending: browser.sending, incoming: $incoming)
+                        // Send to My Mac's rows, in the bar's and the overview's menus.
+                        .environment(browser.sending)
                 } else {
                     Theme.page.ignoresSafeArea()
                 }
@@ -60,6 +63,8 @@ final class Browser {
     let sleeper: TabSleeper
     let pictures: PagePictures
     let sync: ICloudSync
+    /// Send to My Mac: the devices to send to, and the note (step 6).
+    let sending: Sending
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -107,6 +112,7 @@ final class Browser {
         // iCloud sync, only if it's been turned on.
         let sync = ICloudSync(store: store)
         self.sync = sync
+        sending = Sending(sync: sync, store: store)
         saver.afterSave = { sync.takeChanges() }
         sync.start()
     }

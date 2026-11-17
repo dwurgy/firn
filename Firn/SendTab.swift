@@ -52,17 +52,6 @@ extension WindowModel {
     }
 }
 
-extension SyncedDevice.Kind {
-    /// Its symbol: an iPhone, an iPad, or a Mac laptop.
-    var symbol: String {
-        switch self {
-        case .mac: "laptopcomputer"
-        case .iPhone: "iphone"
-        case .iPad: "ipad"
-        }
-    }
-}
-
 /// "Send to My iPhone" in a menu, or, with several devices, "Send to…" with
 /// each one's name. Nothing without another device to send to.
 struct SendTabMenu: View {

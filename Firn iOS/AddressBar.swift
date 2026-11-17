@@ -46,6 +46,10 @@ struct AddressBar: View {
     /// Add to Basecamp was picked with 12 tiles already there.
     @State private var basecampFull = false
     @Environment(\.newSpace) private var newSpace
+    /// Send to My Mac (sync step 6): the devices to send to.
+    @Environment(Sending.self) private var sending: Sending?
+    /// The page menu's "Send to…" was picked: iOS's own list of devices.
+    @State private var choosingDevice = false
     @Environment(\.showDownloads) private var showDownloads
     @Environment(\.barQuiet) private var barQuiet
     /// A finger is holding the field (from the touch, before it's a hold).
@@ -94,6 +98,18 @@ struct AddressBar: View {
         return PageMenuPanel.DownloadsRow(detail: detail) { showDownloads() }
     }
 
+    /// The page menu's Send to My Mac, with another device known: sent at
+    /// once, or, with several, iOS's list of them.
+    private var sendRow: PageMenuPanel.SendRow? {
+        guard let sending, let tab = store.activeTab else { return nil }
+        let targets = sending.targets(for: tab)
+        guard let title = SendTarget.menuTitle(for: targets), let first = targets.first else { return nil }
+        if targets.count == 1 {
+            return PageMenuPanel.SendRow(title: title, symbol: first.kind.symbol) { sending.send(tab, to: first) }
+        }
+        return PageMenuPanel.SendRow(title: title, symbol: "laptopcomputer.and.iphone") { choosingDevice = true }
+    }
+
     /// The page menu's Reader row, on pages that read as articles.
     private var readingRow: PageMenuPanel.Reading? {
         guard let page, page.isArticle || page.isReading else { return nil }
@@ -139,6 +155,14 @@ struct AddressBar: View {
         .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
         .basecampFullAlert(isPresented: $basecampFull)
+        // "Send to…" with more than one other device: each one's name.
+        .confirmationDialog("Send to…", isPresented: $choosingDevice, titleVisibility: .visible) {
+            if let sending, let tab = store.activeTab {
+                ForEach(sending.targets(for: tab)) { target in
+                    Button(target.name) { sending.send(tab, to: target) }
+                }
+            }
+        }
         // History is on this device, so it's read at once; each key cancels
         // the last lookup.
         .task(id: typed) {
@@ -271,6 +295,14 @@ struct AddressBar: View {
             if tab.place != .basecamp, tab.url != nil {
                 add("add-basecamp", "Add to Basecamp", ["tile", "favorite", "keep"]) {
                     if store.canAddToBasecamp { _ = store.addToBasecamp(tab) } else { basecampFull = true }
+                }
+            }
+            // Send to My Mac: one row per device, in the Mac's way.
+            let targets = sending?.targets(for: tab) ?? []
+            for target in targets {
+                let name = targets.count == 1 ? SendTarget.menuTitle(for: targets) ?? "" : "Send to \(target.name)"
+                add("send \(target.id)", name, ["send", "device", "iphone", "ipad", "mac", "share", "handoff"]) {
+                    sending?.send(tab, to: target)
                 }
             }
             add("close", "Close Tab", []) { store.close(tab) }
@@ -477,6 +509,7 @@ struct AddressBar: View {
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
         let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
+                                          + (sendRow == nil ? 0 : 1)
                                           + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
@@ -517,7 +550,7 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }, reading: readingRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
+            }, reading: readingRow, send: sendRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
                liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -1049,6 +1082,13 @@ private struct PageMenuPanel: View {
         let summarize: (() -> Void)?
     }
     let reading: Reading?
+    /// Send to My Mac, just under Share (sync step 6).
+    struct SendRow {
+        let title: String
+        let symbol: String
+        let send: () -> Void
+    }
+    let send: SendRow?
     /// Downloads, last, while the space has any.
     struct DownloadsRow {
         let detail: String
@@ -1101,6 +1141,12 @@ private struct PageMenuPanel: View {
             close()
             ShareSheet.present(url)
         })
+        if let send {
+            list.append(Entry(key: "send", title: send.title, symbol: send.symbol) {
+                close()
+                send.send()
+            })
+        }
         list.append(Entry(key: "copy", title: "Copy Link", symbol: "link") { [url] in
             UIPasteboard.general.url = url
             close()

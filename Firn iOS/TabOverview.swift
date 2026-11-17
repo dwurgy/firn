@@ -115,6 +115,8 @@ struct TabOverview: View {
     /// The grid on iOS 27: what iOS's drag is carrying, so its X hides
     /// (the lift is only the picture, as the menu's).
     @State private var systemDragged: Set<UUID> = []
+    /// The grid's UIKit cards being swiped to close (`GridCards`).
+    @State private var gridSwipes: [UUID: GridSwipe] = [:]
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
     /// Where the tab last opened from here sat in the list's view, so the
     /// page closes back into the same spot (David, 2026-11-13: "tabs should
@@ -714,7 +716,7 @@ struct TabOverview: View {
     /// A tab's tile: in the list, or lifted under the finger.
     private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
                       moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil,
-                      holdMenu: (() -> [[HoldMenuItem]])? = nil) -> some View {
+                      holdMenu: (() -> [[HoldMenuItem]])? = nil, inCollection: Bool = false) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
             tab: tab,
@@ -738,7 +740,9 @@ struct TabOverview: View {
             cardHeight: cardHeight,
             inGrid: grid,
             holdMenu: holdMenu,
-            carried: systemDragged.contains(tab.id)
+            carried: systemDragged.contains(tab.id),
+            swipesItself: !inCollection,
+            gridSwipe: gridSwipes[tab.id] ?? .none
         )
         // Runs again only when what it shows changes (`OverviewRow.==`).
         .equatable()
@@ -769,6 +773,21 @@ struct TabOverview: View {
                           move: { id, before in
                               GridMove(sources: [id], collection: .loose(after: after), before: before).apply(to: store)
                           },
+                          swipe: { id, phase in
+                              // The title and X go quickly as the swipe starts
+                              // and come back on the card's ease home.
+                              let ease: Animation? = switch phase {
+                              case .swiping: .smooth(duration: 0.2)
+                              case .easingHome: .smooth(duration: 0.45)
+                              case .none: nil
+                              }
+                              withAnimation(reduceMotion ? nil : ease) {
+                                  gridSwipes[id] = phase == .none ? nil : phase
+                              }
+                          },
+                          close: { id in
+                              if !busy, let entry = byID[id] { close(entry.tab) }
+                          },
                           reduceMotion: reduceMotion)
             case let .tabs(after, tabs):
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
@@ -796,7 +815,8 @@ struct TabOverview: View {
         }
         return tile(tab, spot: spot, at: index,
                     moveUp: index > 0 ? { move(tab, to: index - 1) } : nil,
-                    moveDown: index < count - 1 ? { move(tab, to: index + 1) } : nil)
+                    moveDown: index < count - 1 ? { move(tab, to: index + 1) } : nil,
+                    inCollection: true)
     }
 
     /// A group: a flat tint in the space's color behind its name line and

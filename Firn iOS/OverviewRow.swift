@@ -56,6 +56,13 @@ struct OverviewRow: View {
     /// Carried by iOS's drag (the grid on iOS 27): its X hides, so the
     /// drag lifts only the picture, as the menu does.
     var carried = false
+    /// The grid's UIKit cards are swiped by their collection view
+    /// (`GridCards`), not here: one place decides between the swipe and
+    /// iOS's press, menu, and drag. Elsewhere the row swipes itself.
+    var swipesItself = true
+    /// Where such a card is in its swipe: its title and X go while it's
+    /// swiped, and its spot waits until it's home.
+    var gridSwipe: GridSwipe = .none
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -90,7 +97,7 @@ struct OverviewRow: View {
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             .offset(x: pull)
             .opacity(reduceMotion && leaving ? 0 : 1)
-            .gesture(SidewaysPan(changed: follow, ended: letGo))
+            .gesture(SidewaysPan(enabled: swipesItself, changed: follow, ended: letGo))
             .allowsHitTesting(!leaving)
             // A tab brought back (a shake's Undo) comes back in place. The
             // overview stays built now, and its row could keep the swipe
@@ -105,7 +112,7 @@ struct OverviewRow: View {
     /// overview again, so the ease home stuttered (David, 2026-11-17). It
     /// settles back where it was, so the spot from before still holds.
     private func reportSpot(_ frame: CGRect) {
-        guard pull == 0, !swiped, !leaving else { return }
+        guard pull == 0, !swiped, !leaving, gridSwipe == .none else { return }
         spot(frame)
     }
 
@@ -263,7 +270,8 @@ struct OverviewRow: View {
             .overlay(alignment: .topTrailing) {
                 // Hidden while its menu is open too: a drag pulled off the
                 // menu takes its picture then, and Safari's carries no X.
-                GridCloseButton(title: tab.title, close: close).opacity(carried || menuOpen || swiped ? 0 : 1)
+                GridCloseButton(title: tab.title, close: close)
+                    .opacity(carried || menuOpen || swiped || gridSwipe == .swiping ? 0 : 1)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
             // landing glide and opening scrolled to it already say which
@@ -276,7 +284,7 @@ struct OverviewRow: View {
             .scaleEffect(swiped && !reduceMotion ? Self.swipeGrowth : 1)
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
-                .opacity(swiped ? 0 : 1)
+                .opacity(swiped || gridSwipe == .swiping ? 0 : 1)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -535,6 +543,7 @@ extension Theme {
 /// alone. UIKit's pan, because SwiftUI's DragGesture inside a ScrollView
 /// either steals the scroll or never starts.
 struct SidewaysPan: UIGestureRecognizerRepresentable {
+    var enabled = true
     let changed: (CGFloat) -> Void
     /// The distance moved and the speed across, in points per second.
     let ended: (CGFloat, CGFloat) -> Void
@@ -542,7 +551,12 @@ struct SidewaysPan: UIGestureRecognizerRepresentable {
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
         pan.delegate = context.coordinator
+        pan.isEnabled = enabled
         return pan
+    }
+
+    func updateUIGestureRecognizer(_ pan: UIPanGestureRecognizer, context: Context) {
+        pan.isEnabled = enabled
     }
 
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
@@ -626,6 +640,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.inGrid == b.inGrid
-            && a.carried == b.carried
+            && a.carried == b.carried && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
     }
 }

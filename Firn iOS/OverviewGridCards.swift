@@ -24,15 +24,36 @@ final class GridCardCell: UICollectionViewCell {
     private var raised = false {
         didSet { layer.zPosition = raised ? 1 : 0 }
     }
+    /// The swiped card easing home, so a new swipe can catch it mid-way.
+    var settle: UIViewPropertyAnimator?
+    /// Where a swipe has moved the card. The cell itself moves, not its
+    /// content: UIKit sets the content's frame as SwiftUI redraws the card,
+    /// and a frame set over a transform undid the slide (the Simulator,
+    /// 2026-11-17). The collection view resets the cell's transform as it
+    /// lays out, so `apply` puts it back.
+    var swipe: CGAffineTransform = .identity {
+        didSet { transform = swipe }
+    }
+
+    /// On top for a swipe, whether or not the finger's first touch raised it.
+    func raise() {
+        for case let other as GridCardCell in superview?.subviews ?? [] where other !== self {
+            other.raised = false
+        }
+        raised = true
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        settle?.stopAnimation(true)
+        settle = nil
+        swipe = .identity
+        contentView.alpha = 1
+    }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
-        if hit != nil, event?.type == .touches, !raised {
-            for case let other as GridCardCell in superview?.subviews ?? [] where other !== self {
-                other.raised = false
-            }
-            raised = true
-        }
+        if hit != nil, event?.type == .touches, !raised { raise() }
         return hit
     }
 
@@ -41,6 +62,7 @@ final class GridCardCell: UICollectionViewCell {
     override func apply(_ attributes: UICollectionViewLayoutAttributes) {
         super.apply(attributes)
         if raised { layer.zPosition = 1 }
+        transform = swipe
     }
 
     override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
@@ -50,6 +72,13 @@ final class GridCardCell: UICollectionViewCell {
         // recording, 2026-11-17).
         contentView.alpha = state == .none ? 1 : 0
     }
+}
+
+/// Where a grid card is in a swipe to close (`GridCards`): while
+/// `swiping`, its title and X are gone; `easingHome`, they come back as it
+/// settles. Its spot isn't reported until it's home again (`none`).
+enum GridSwipe: Equatable {
+    case none, swiping, easingHome
 }
 
 /// A run of loose cards in the grid, as one UIKit collection view.
@@ -67,6 +96,10 @@ struct GridCards: UIViewRepresentable {
     let held: (UUID, Bool) -> Void
     /// A card let go before another (nil: at the run's end).
     let move: (UUID, UUID?) -> Void
+    /// A card's swipe to close moving on (its title and X follow it).
+    let swipe: (UUID, GridSwipe) -> Void
+    /// A card swiped off: its tab closes.
+    let close: (UUID) -> Void
     let reduceMotion: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -126,8 +159,10 @@ struct GridCards: UIViewRepresentable {
         private var carried: UUID?
         /// iOS's hold menu is showing.
         private var menuShown = false
-        /// Watches for a swipe sideways (`swipeStarted`).
+        /// The swipe to close (`swiped`).
         private let sideways = UIPanGestureRecognizer()
+        /// The card being swiped, until it's let go.
+        private var swiping: (id: UUID, cell: GridCardCell, start: CGFloat, travel: CGFloat)?
 
         func attach(to view: UICollectionView) {
             let cell = UICollectionView.CellRegistration<GridCardCell, UUID> { [weak self] cell, _, id in
@@ -140,36 +175,152 @@ struct GridCards: UIViewRepresentable {
             view.dragDelegate = self
             view.dropDelegate = self
             sideways.delegate = self
-            sideways.cancelsTouchesInView = false
+            // The card's own button lets go of the touch once the card moves.
+            sideways.cancelsTouchesInView = true
             sideways.delaysTouchesEnded = false
-            sideways.addTarget(self, action: #selector(swipeStarted))
+            sideways.addTarget(self, action: #selector(swiped))
             view.addGestureRecognizer(sideways)
         }
 
-        /// A swipe sideways (to close a card) that starts while iOS is
-        /// still pressing the card down for its menu or a drag: iOS's press
-        /// is called off. Left running, it held the card in a frame the
-        /// size of its picture, so the swiped card was cut off at its old
-        /// edge, as if behind an invisible wall, until iOS let go and it
-        /// snapped back (David's recordings, 2026-11-17). Once a drag has
-        /// begun or the menu is open, a move sideways is theirs.
-        @objc private func swipeStarted(_ pan: UIPanGestureRecognizer) {
-            guard pan.state == .began, carried == nil, !menuShown, let view = pan.view else { return }
-            for other in view.gestureRecognizers ?? [] where other !== pan && other.isEnabled {
-                other.isEnabled = false
-                other.isEnabled = true
+        // MARK: The swipe to close
+
+        // The swipe to close is UIKit's, on the collection view, beside
+        // iOS's press, menu, and drag, so only one of them ever has a card.
+        // It was SwiftUI's, inside the card, and the two never knew of each
+        // other: caught as iOS began its lift, the swipe slid a card iOS
+        // was fading, so it went see-through and seemed to pass under its
+        // neighbor (David's recordings, 2026-11-17). Here a swipe that
+        // starts calls iOS's press off, a card iOS has lifted or opened a
+        // menu on takes no swipe, and a card being swiped gets no menu or
+        // drag. The card moves by its layer alone (a transform on the
+        // cell's content), eased home by the render server, so SwiftUI
+        // runs only as the title and X go and come back.
+
+        /// How much a swiped card grows: Safari's, about 6% (David's
+        /// recording, 2026-11-17), over the swipe's first 24pt.
+        private static let growth: CGFloat = 0.06
+        /// The ease home, shrinking as it goes: Safari's, about half a second.
+        private static let home: TimeInterval = 0.45
+
+        @objc private func swiped(_ pan: UIPanGestureRecognizer) {
+            guard let view = pan.view as? UICollectionView else { return }
+            switch pan.state {
+            case .began:
+                guard carried == nil, !menuShown,
+                      let path = view.indexPathForItem(at: pan.location(in: view)),
+                      let id = dataSource?.itemIdentifier(for: path),
+                      let cell = view.cellForItem(at: path) as? GridCardCell else { return }
+                // iOS's press for its menu or a drag, called off: left
+                // running, it held the card in a frame the size of its
+                // picture, cutting the swiped card at its old edge.
+                for other in view.gestureRecognizers ?? [] where other !== pan && other.isEnabled {
+                    other.isEnabled = false
+                    other.isEnabled = true
+                }
+                cell.raise()
+                // Caught while easing home: it carries on from where it is.
+                cell.settle?.stopAnimation(true)
+                cell.settle = nil
+                cell.swipe = cell.transform
+                swiping = (id, cell, cell.swipe.tx - pan.translation(in: view).x, 0)
+                parent?.swipe(id, .swiping)
+            case .changed:
+                guard var swipe = swiping else { return }
+                let dx = swipe.start + pan.translation(in: view).x
+                swipe.travel = max(swipe.travel, abs(dx))
+                swiping = swipe
+                follow(swipe.cell, dx: dx, travel: swipe.travel)
+            case .ended:
+                let dx = (swiping?.start ?? 0) + pan.translation(in: view).x
+                letGo(dx: dx, speed: pan.velocity(in: view).x)
+            default:
+                letGo(dx: 0, speed: 0)
             }
+        }
+
+        /// Left, the card stays under the finger; right, it follows with
+        /// some give (Safari's). It grows as it starts and stays grown
+        /// either way until let go.
+        private func follow(_ cell: GridCardCell, dx: CGFloat, travel: CGFloat) {
+            let x = dx < 0 ? dx : dx * 0.4
+            let grow = parent?.reduceMotion == true ? 1 : 1 + Self.growth * min(1, travel / 24)
+            cell.swipe = CGAffineTransform(translationX: x, y: 0).scaledBy(x: grow, y: grow)
+        }
+
+        /// Past a third of the card, or a flick left, it slides off and its
+        /// tab closes; otherwise it eases home.
+        private func letGo(dx: CGFloat, speed: CGFloat) {
+            guard let (id, cell, _, _) = swiping else { return }
+            swiping = nil
+            let far = -dx > cell.bounds.width / 3
+            let flick = speed < -700 && dx < -20
+            guard far || flick, carried == nil else {
+                easeHome(id, cell)
+                return
+            }
+            let close = { [weak self] in
+                self?.parent?.swipe(id, .none)
+                self?.parent?.close(id)
+                // Not closed after all (the overview was busy): back home.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self, shown.contains(id), cell.swipe != .identity else { return }
+                    cell.swipe = .identity
+                    cell.contentView.alpha = 1
+                }
+            }
+            if parent?.reduceMotion == true {
+                // A fade where it stands, no slide.
+                let fade = UIViewPropertyAnimator(duration: 0.2, curve: .easeOut) { cell.contentView.alpha = 0 }
+                fade.addCompletion { _ in close() }
+                fade.startAnimation()
+                return
+            }
+            // Off the left edge at the flick's pace, then closed.
+            let now = cell.swipe
+            // Where the card's right edge would be unmoved, in the window.
+            let gone = -(cell.superview?.convert(cell.center, to: nil).x ?? 0) - cell.bounds.width / 2 - 40
+            let duration = min(0.25, max(0.12, Double((gone - now.tx) / min(speed, -900))))
+            let slide = UIViewPropertyAnimator(duration: duration, curve: .easeOut) {
+                cell.swipe = CGAffineTransform(translationX: gone, y: 0)
+                    .scaledBy(x: now.a, y: now.d)
+            }
+            slide.addCompletion { _ in close() }
+            slide.startAnimation()
+        }
+
+        /// The card eases home and shrinks together, unhurried, its title
+        /// and X coming back on the same ease.
+        private func easeHome(_ id: UUID, _ cell: GridCardCell) {
+            parent?.swipe(id, .easingHome)
+            let home = UIViewPropertyAnimator(duration: Self.home, dampingRatio: 1) {
+                cell.swipe = .identity
+            }
+            home.addCompletion { [weak self, weak cell] _ in
+                guard let cell, cell.settle === home else { return }
+                cell.settle = nil
+                self?.parent?.swipe(id, .none)
+            }
+            cell.settle = home
+            home.startAnimation()
         }
 
         func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
             guard gesture === sideways else { return true }
+            // A card iOS has lifted or opened its menu on is theirs.
+            guard carried == nil, !menuShown else { return false }
             let speed = sideways.velocity(in: sideways.view)
             return abs(speed.x) > abs(speed.y)
         }
 
+        /// Alongside iOS's press on the collection view (until it's called
+        /// off), and nothing else: once a swipe starts, the card's own tap
+        /// fails (or letting go would open the tab), and the overview
+        /// doesn't scroll.
         func gestureRecognizer(_ gesture: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            gesture === sideways || other === sideways
+            guard gesture === sideways || other === sideways else { return false }
+            let pair = gesture === sideways ? other : gesture
+            return pair.view === sideways.view && pair !== (sideways.view as? UIScrollView)?.panGestureRecognizer
         }
 
         private func configure(_ cell: UICollectionViewCell, _ id: UUID) {
@@ -215,7 +366,9 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, contextMenuConfigurationForItemsAt paths: [IndexPath],
                             point: CGPoint) -> UIContextMenuConfiguration? {
-            guard let path = paths.first, let id = dataSource?.itemIdentifier(for: path), let parent else { return nil }
+            // A card being swiped gets no menu.
+            guard swiping == nil, let path = paths.first, let id = dataSource?.itemIdentifier(for: path),
+                  let parent else { return nil }
             return UIContextMenuConfiguration(identifier: id as NSUUID, previewProvider: nil) { _ in
                 UIMenu(children: parent.menu(id).map { section in
                     UIMenu(options: .displayInline, children: section.map(Self.element))
@@ -267,7 +420,8 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, itemsForBeginning session: any UIDragSession,
                             at path: IndexPath) -> [UIDragItem] {
-            guard let id = dataSource?.itemIdentifier(for: path) else { return [] }
+            // A card being swiped isn't lifted.
+            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path) else { return [] }
             carried = id
             parent?.held(id, true)
             // Firn's own: never to another app (no address handed over).

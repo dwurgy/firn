@@ -24,6 +24,9 @@ struct AddressBar: View {
     /// Scrolling down to read has shrunk the bar (phase 5); a tap on the
     /// small pill grows it back.
     @Binding var shrunk: Bool
+    /// The other devices' tabs in the space on screen ("On your Mac";
+    /// `ICloudSync.otherDeviceTabs`). None until sync's first sync.
+    var otherDeviceTabs: () -> [DeviceTab] = { [] }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.barSlide) private var barSlide
     @Environment(\.barGive) private var barGive
@@ -114,6 +117,7 @@ struct AddressBar: View {
     var body: some View {
         let rows = editing.wrappedValue
             ? store.commandRows(for: typed, searchEngine: engine, history: history,
+                                otherDevices: otherDeviceTabs(),
                                 actions: actions.map(\.action)) : []
         VStack(spacing: Self.spacing) {
             if !rows.isEmpty {

@@ -112,9 +112,9 @@ private struct CommandResultRow: View {
             }
         case .history:
             Image(systemName: "clock")
-        // Favicons don't travel (step 5's part 3 shows one Firn already has).
-        case .otherDevice:
-            Image(systemName: "globe")
+        // Favicons don't travel: one this space already has, else a globe.
+        case let .otherDevice(remote):
+            SiteIconView(icon: remote.icon, size: 24) { Image(systemName: "globe") }
         case let .action(action) where action.id == "reader":
             // Reader's own book, as in the page menu.
             ReaderBookShape()

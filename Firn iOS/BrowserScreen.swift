@@ -435,7 +435,8 @@ struct BrowserScreen: View {
 
     private var bar: some View {
         AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
-                   showTabs: showTabs, opened: hideTabs, menuOpen: $menuOpen, shrunk: $barShrunk)
+                   showTabs: showTabs, opened: hideTabs, menuOpen: $menuOpen, shrunk: $barShrunk,
+                   otherDeviceTabs: { [sync] in sync.otherDeviceTabs() })
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, barQuiet)

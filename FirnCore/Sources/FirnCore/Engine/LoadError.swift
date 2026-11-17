@@ -14,6 +14,11 @@ public struct LoadError: Equatable, Sendable {
     /// the same address over http, to offer (never to open on its own).
     /// See `InsecureFallback`.
     public let insecureFallback: URL?
+    /// The connection itself failed: refused, dropped without an answer,
+    /// or silent. For an address Firn guessed https for, that's how most
+    /// http-only sites fail (neverssl.com hangs up on https without a word;
+    /// David, 2026-11-16), so it offers http as a not-secure failure does.
+    var connectionFailed = false
 
     public init(url: URL, reason: Reason, insecureFallback: URL? = nil) {
         self.url = url
@@ -24,8 +29,8 @@ public struct LoadError: Equatable, Sendable {
     /// This error, with the http address to offer if Firn guessed https.
     @MainActor
     func offeringInsecureFallback() -> LoadError {
-        guard reason == .notSecure, let http = InsecureFallback.fallback(for: url) else { return self }
-        return LoadError(url: url, reason: reason, insecureFallback: http)
+        guard reason == .notSecure || connectionFailed, let http = InsecureFallback.fallback(for: url) else { return self }
+        return LoadError(url: url, reason: .notSecure, insecureFallback: http)
     }
 
     /// The error a load failed with, or nil if it isn't worth showing:
@@ -38,6 +43,8 @@ public struct LoadError: Equatable, Sendable {
         let failed = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL ?? fallbackURL
         guard let failed, WebAddress.isWebURL(failed) else { return nil }
         self.init(url: failed, reason: reason)
+        connectionFailed = error.domain == NSURLErrorDomain
+            && [NSURLErrorNetworkConnectionLost, NSURLErrorCannotConnectToHost, NSURLErrorTimedOut].contains(error.code)
     }
 
     /// nil for errors that mean "nothing went wrong, the load just stopped".

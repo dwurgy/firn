@@ -126,7 +126,11 @@ final class WebKitPageController: NSObject, PageController {
             return
         }
         guard WebAddress.isWebURL(url) else { return }
-        webView.load(URLRequest(url: url))
+        // An https Firn guessed gives up after 10 quiet seconds rather than
+        // a minute, so an http-only site that never answers on https gets
+        // to its Continue Without a Secure Connection soon.
+        let guessed = InsecureFallback.fallback(for: url) != nil
+        webView.load(guessed ? URLRequest(url: url, timeoutInterval: 10) : URLRequest(url: url))
     }
 
     func goBack() { webView.goBack() }

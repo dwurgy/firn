@@ -823,14 +823,18 @@ private struct AddressField: View {
                 } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
                 } else if notSecure {
-                    // Plain http: said first, so a long name is cut short
-                    // before the warning ever is (http-only sites, step 3).
-                    // The hold menu's terracotta, which reads on the glass.
-                    // Only whose site it is ("neverssl.com"), as the words
-                    // leave little room (David, 2026-11-15); if even that is
-                    // too long, it's cut from its start, keeping its end.
-                    HStack(spacing: 0) {
-                        Text("Not Secure\u{2002}").foregroundStyle(Theme.menuDanger)
+                    // Plain http: an open lock before the site, in the hold
+                    // menu's terracotta, which reads on the glass. The words
+                    // "Not Secure" took most of the field and cut the site
+                    // to "...m" (David, 2026-11-16), so they're said to
+                    // VoiceOver instead (`spokenAddress`). The lock comes
+                    // first, so a long name is cut short before it ever is;
+                    // only whose site it is ("neverssl.com"), cut from its
+                    // start if even that is too long.
+                    HStack(spacing: 5) {
+                        Image(systemName: "lock.open.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.menuDanger)
                             .fixedSize()
                         Text(verbatim: WebAddress.shortSite(of: frontURL)).foregroundStyle(Theme.ink)
                             .truncationMode(.head)
@@ -860,7 +864,7 @@ private struct AddressField: View {
         .offset(y: compact ? compactDrop : 0)
         .background {
             Text(verbatim: text.isEmpty ? "Search or enter address"
-                           : notSecure ? "Not Secure\u{2002}" + WebAddress.shortSite(of: frontURL) : text)
+                           : notSecure ? "\u{2003}\u{2002}" + WebAddress.shortSite(of: frontURL) : text)
                 .font(.callout.weight(.medium))
                 .lineLimit(1)
                 .fixedSize()

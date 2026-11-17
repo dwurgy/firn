@@ -33,6 +33,26 @@ struct InsecureFallbackTests {
         #expect(notSecure(failed)?.insecureFallback == URL(string: "http://ipv4.download.thinkbroadband.com/5MB.zip"))
     }
 
+    @Test func aGuessedAddressWhoseConnectionFailsOffersHTTP() {
+        InsecureFallback.remember(typed: "neverssl.com")
+        let failed = URL(string: "https://neverssl.com")!
+        for code in [NSURLErrorNetworkConnectionLost, NSURLErrorCannotConnectToHost, NSURLErrorTimedOut] {
+            let error = NSError(domain: NSURLErrorDomain, code: code, userInfo: [NSURLErrorFailingURLErrorKey: failed])
+            let shown = LoadError(error, fallbackURL: nil)?.offeringInsecureFallback()
+            #expect(shown?.reason == .notSecure)
+            #expect(shown?.insecureFallback == URL(string: "http://neverssl.com"))
+        }
+    }
+
+    @Test func aConnectionFailureOnAnAddressTypedWithHTTPSOffersNothing() {
+        let failed = URL(string: "https://neverssl.com")!
+        let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorNetworkConnectionLost,
+                            userInfo: [NSURLErrorFailingURLErrorKey: failed])
+        let shown = LoadError(error, fallbackURL: nil)?.offeringInsecureFallback()
+        #expect(shown?.reason == .offline)
+        #expect(shown?.insecureFallback == nil)
+    }
+
     @Test func aTrailingSlashAndCaseAreTheSameAddress() {
         InsecureFallback.remember(typed: "Example.com")
         #expect(notSecure(URL(string: "https://example.com/")!)?.insecureFallback == URL(string: "http://Example.com"))

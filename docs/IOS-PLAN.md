@@ -413,7 +413,7 @@ Decided (David, 2026-11-16): the grid is likely to become the only overview, so 
 - **Holding the address bar (this tab, quick):** Copy Link, Paste and Go (only when something is copied; iOS may ask "Allow Paste?" the first time), Move to Group ›, Send to My Mac, Close Tab.
 - **Holding a tab in the overview (that tab), at most 8 rows** (the room a menu has there, counting Ask Siri, which iOS adds): Copy Link, Add to Basecamp, Move to Group › (New Group at the top of its list, replacing "New Group with This Tab"), Duplicate Tab, Select Tabs (see below), Send to My Mac, Close Tab. Close Other Tabs is gone (David: room).
 - **Move to Group ›** reads the same in every menu: New Group first, then the space's groups.
-- **No red** (David): iOS's own menus can only draw a Close row in the system's destructive red, not terracotta, and the iPhone goes to native glass everywhere, so Close rows are plain rows, like the rest.
+- **Close Tab in iOS's red** (David, 2026-11-17): iOS's own menus can only draw a Close row in the system's destructive red, not terracotta. The iPhone goes to native glass everywhere, and red is what people know from every app's menus (light text, so it doesn't shout), so Close rows take iOS's destructive style. Terracotta stays for scam warnings and Firn's own surfaces.
 - **Send to My Mac** shows only with sync on and another device known; with several, "Send to…" and their names (step 6).
 - **Select Tabs, later and optional (David: wanted, not a must):** a mode for ticking several tabs to close or move together, its pretext being the frosted space-color ring as the selection ring. Its own step, after step 6; until then the overview's menu has 6 rows (7 with Ask Siri).
 

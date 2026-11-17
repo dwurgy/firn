@@ -16,7 +16,33 @@ import UIKit
 /// the lift is a picture taken just before, and on a quick drag the cell
 /// left showing under it read as a second copy (David's recording,
 /// 2026-11-16).
+/// The card last touched sits above the rest, so a card swiped left to
+/// close passes over its neighbor, never under it: the collection view
+/// otherwise stacks cells in no set order, and a card could slide under the
+/// one beside it, then snap in front (David's recording, 2026-11-17).
 final class GridCardCell: UICollectionViewCell {
+    private var raised = false {
+        didSet { layer.zPosition = raised ? 1 : 0 }
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        if hit != nil, event?.type == .touches, !raised {
+            for case let other as GridCardCell in superview?.subviews ?? [] where other !== self {
+                other.raised = false
+            }
+            raised = true
+        }
+        return hit
+    }
+
+    /// The layout sets each cell's depth as it lays out; a raised card
+    /// keeps its place on top.
+    override func apply(_ attributes: UICollectionViewLayoutAttributes) {
+        super.apply(attributes)
+        if raised { layer.zPosition = 1 }
+    }
+
     override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
         super.dragStateDidChange(state)
         contentView.alpha = state == .none ? 1 : 0
@@ -231,7 +257,8 @@ struct GridCards: UIViewRepresentable {
         }
 
         func collectionView(_ view: UICollectionView, dragSessionDidEnd session: any UIDragSession) {
-            if let id = carried { parent?.held(id, false) }
+            // Let go outside the grid: it stays where it was last moved to.
+            if let id = carried { settle(id); parent?.held(id, false) }
             carried = nil
         }
 
@@ -246,27 +273,46 @@ struct GridCards: UIViewRepresentable {
             guard session.localDragSession?.localContext as? ObjectIdentifier == ObjectIdentifier(self) else {
                 return UICollectionViewDropProposal(operation: .forbidden)
             }
-            let proposal = UICollectionViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
+            // Firn makes room itself (`makeRoom`), not UIKit: UIKit's own
+            // room-making ticks a haptic at every spot and again on letting
+            // go, with no way to turn it off; Safari's grid only taps once,
+            // on the grab (David, 2026-11-17).
+            if let id = carried, let path { makeRoom(for: id, at: path.item, in: view) }
+            let proposal = UICollectionViewDropProposal(operation: .move, intent: .unspecified)
             // The card stays its own size as it's carried, as Safari's: the
             // one thing SwiftUI's reorder couldn't ask for.
             proposal.prefersFullSizePreview = true
             return proposal
         }
 
-        func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {
-            guard let item = coordinator.items.first, let from = item.sourceIndexPath,
-                  let id = item.dragItem.localObject as? UUID else { return }
-            var order = shown
-            let to = min(coordinator.destinationIndexPath?.item ?? order.count - 1, order.count - 1)
-            order.remove(at: from.item)
-            order.insert(id, at: to)
-            shown = order
+        /// The carried card's place moves to the spot under the finger, the
+        /// others gliding aside (0.25s, no bounce; none with Reduce Motion).
+        private func makeRoom(for id: UUID, at spot: Int, in view: UICollectionView) {
+            guard let from = shown.firstIndex(of: id) else { return }
+            let to = min(max(spot, 0), shown.count - 1)
+            guard to != from else { return }
+            shown.remove(at: from)
+            shown.insert(id, at: to)
             var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
             snapshot.appendSections([0])
-            snapshot.appendItems(order)
-            dataSource?.apply(snapshot, animatingDifferences: false)
-            coordinator.drop(item.dragItem, toItemAt: IndexPath(item: to, section: 0))
-            parent?.move(id, to + 1 < order.count ? order[to + 1] : nil)
+            snapshot.appendItems(shown)
+            let reduce = parent?.reduceMotion ?? false
+            UIViewPropertyAnimator(duration: reduce ? 0 : 0.25, dampingRatio: 1) {
+                self.dataSource?.apply(snapshot, animatingDifferences: !reduce)
+            }.startAnimation()
+        }
+
+        /// Saves where the carried card now sits, once.
+        private func settle(_ id: UUID) {
+            guard let at = shown.firstIndex(of: id), shown != parent?.ids else { return }
+            parent?.move(id, at + 1 < shown.count ? shown[at + 1] : nil)
+        }
+
+        func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {
+            guard let item = coordinator.items.first, let id = item.dragItem.localObject as? UUID,
+                  let at = shown.firstIndex(of: id) else { return }
+            coordinator.drop(item.dragItem, toItemAt: IndexPath(item: at, section: 0))
+            settle(id)
         }
     }
 }

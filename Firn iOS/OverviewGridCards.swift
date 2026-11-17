@@ -317,7 +317,17 @@ struct GridCards: UIViewRepresentable {
             // room-making ticks a haptic at every spot and again on letting
             // go, with no way to turn it off; Safari's grid only taps once,
             // on the grab (David, 2026-11-17).
-            if let id = carried, let path { makeRoom(for: id, at: path.item, in: view) }
+            // The spot is the card under the finger, found at once: UIKit's
+            // own destination waits for the finger to settle, so the carried
+            // card sat over its neighbor about 0.4s before it moved, where
+            // Safari's moves as the card arrives (David's recording beside
+            // Safari's, 2026-11-17). The carried card's own (hidden) cell
+            // takes the finger's spot as it moves, so it can't flip back.
+            // Between cards nothing moves (UIKit's late guess could pull a
+            // card back to a spot already left).
+            if let id = carried, let under = view.indexPathForItem(at: session.location(in: view)) {
+                makeRoom(for: id, at: under.item, in: view)
+            }
             let proposal = UICollectionViewDropProposal(operation: .move, intent: .unspecified)
             // The card stays its own size as it's carried, as Safari's: the
             // one thing SwiftUI's reorder couldn't ask for.
@@ -326,7 +336,8 @@ struct GridCards: UIViewRepresentable {
         }
 
         /// The carried card's place moves to the spot under the finger, the
-        /// others gliding aside (0.25s, no bounce; none with Reduce Motion).
+        /// others gliding aside (0.2s, no bounce, as quick as Safari's; none
+        /// with Reduce Motion).
         private func makeRoom(for id: UUID, at spot: Int, in view: UICollectionView) {
             guard let from = shown.firstIndex(of: id) else { return }
             let to = min(max(spot, 0), shown.count - 1)
@@ -337,7 +348,7 @@ struct GridCards: UIViewRepresentable {
             snapshot.appendSections([0])
             snapshot.appendItems(shown)
             let reduce = parent?.reduceMotion ?? false
-            UIViewPropertyAnimator(duration: reduce ? 0 : 0.25, dampingRatio: 1) {
+            UIViewPropertyAnimator(duration: reduce ? 0 : 0.2, dampingRatio: 1) {
                 self.dataSource?.apply(snapshot, animatingDifferences: !reduce)
             }.startAnimation()
         }

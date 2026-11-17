@@ -100,6 +100,15 @@ struct OverviewRow: View {
             .onChange(of: tab.lastActiveAt) { comeBack() }
     }
 
+    /// Where the card is, for the page's glide, but not while it's being
+    /// swiped: its spot moved every frame, and each move ran the whole
+    /// overview again, so the ease home stuttered (David, 2026-11-17). It
+    /// settles back where it was, so the spot from before still holds.
+    private func reportSpot(_ frame: CGRect) {
+        guard pull == 0, !swiped, !leaving else { return }
+        spot(frame)
+    }
+
     private func comeBack() {
         guard leaving || pull != 0 else { return }
         var now = Transaction()
@@ -144,7 +153,7 @@ struct OverviewRow: View {
                 }
                 .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
         }
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: reportSpot)
         .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
@@ -271,7 +280,7 @@ struct OverviewRow: View {
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: spot)
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: reportSpot)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
         .accessibilityValue(isOnScreen ? "On screen" : "")

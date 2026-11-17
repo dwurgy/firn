@@ -45,12 +45,10 @@ final class GridCardCell: UICollectionViewCell {
 
     override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
         super.dragStateDidChange(state)
-        // At once, never faded: a lift cut short by a swipe left the card
-        // half see-through as it slid, as if under its neighbor (David's
+        // Not forced instant: hidden at once, the card was gone before iOS
+        // took the picture it carries, so drags carried nothing (David's
         // recording, 2026-11-17).
-        UIView.performWithoutAnimation {
-            contentView.alpha = state == .none ? 1 : 0
-        }
+        contentView.alpha = state == .none ? 1 : 0
     }
 }
 
@@ -116,7 +114,7 @@ struct GridCards: UIViewRepresentable {
     }
 
     @MainActor final class Coordinator: NSObject, UICollectionViewDelegate, UICollectionViewDragDelegate,
-        UICollectionViewDropDelegate {
+        UICollectionViewDropDelegate, UIGestureRecognizerDelegate {
         private var dataSource: UICollectionViewDiffableDataSource<Int, UUID>?
         private var parent: GridCards?
         var columns = 0
@@ -126,6 +124,10 @@ struct GridCards: UIViewRepresentable {
         private var shown: [UUID] = []
         /// The card iOS's drag carries, until it's down.
         private var carried: UUID?
+        /// iOS's hold menu is showing.
+        private var menuShown = false
+        /// Watches for a swipe sideways (`swipeStarted`).
+        private let sideways = UIPanGestureRecognizer()
 
         func attach(to view: UICollectionView) {
             let cell = UICollectionView.CellRegistration<GridCardCell, UUID> { [weak self] cell, _, id in
@@ -137,6 +139,37 @@ struct GridCards: UIViewRepresentable {
             view.delegate = self
             view.dragDelegate = self
             view.dropDelegate = self
+            sideways.delegate = self
+            sideways.cancelsTouchesInView = false
+            sideways.delaysTouchesEnded = false
+            sideways.addTarget(self, action: #selector(swipeStarted))
+            view.addGestureRecognizer(sideways)
+        }
+
+        /// A swipe sideways (to close a card) that starts while iOS is
+        /// still pressing the card down for its menu or a drag: iOS's press
+        /// is called off. Left running, it held the card in a frame the
+        /// size of its picture, so the swiped card was cut off at its old
+        /// edge, as if behind an invisible wall, until iOS let go and it
+        /// snapped back (David's recordings, 2026-11-17). Once a drag has
+        /// begun or the menu is open, a move sideways is theirs.
+        @objc private func swipeStarted(_ pan: UIPanGestureRecognizer) {
+            guard pan.state == .began, carried == nil, !menuShown, let view = pan.view else { return }
+            for other in view.gestureRecognizers ?? [] where other !== pan && other.isEnabled {
+                other.isEnabled = false
+                other.isEnabled = true
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard gesture === sideways else { return true }
+            let speed = sideways.velocity(in: sideways.view)
+            return abs(speed.x) > abs(speed.y)
+        }
+
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            gesture === sideways || other === sideways
         }
 
         private func configure(_ cell: UICollectionViewCell, _ id: UUID) {
@@ -215,12 +248,14 @@ struct GridCards: UIViewRepresentable {
         func collectionView(_ view: UICollectionView, willDisplayContextMenu configuration: UIContextMenuConfiguration,
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
+            menuShown = true
             parent?.held(id, true)
         }
 
         func collectionView(_ view: UICollectionView, willEndContextMenuInteraction configuration: UIContextMenuConfiguration,
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
+            menuShown = false
             let back = { [weak self] in
                 // Carried on by the drag: its X stays hidden until it's down.
                 if self?.carried != id { self?.parent?.held(id, false) }

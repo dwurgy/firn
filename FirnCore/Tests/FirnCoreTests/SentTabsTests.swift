@@ -215,4 +215,41 @@ struct SentTabsTests {
         let decoded = try JSONDecoder().decode(SyncState.self, from: JSONEncoder().encode(mac.state))
         #expect(decoded.waitingSentTabs == [sent])
     }
+
+    // MARK: - Waiting to go up (part 2)
+
+    @Test func aSendIsHeldUntilICloudHasIt() throws {
+        let (_, phone) = try devices()
+        let sent = try send("trail", from: phone)
+        phone.state.queueSend(sent)
+        #expect(phone.state.item(for: sent.recordID) == .sentTab(sent))
+        #expect(phone.state.recordIDs(of: [.sentTab]) == [sent.recordID])
+        #expect(phone.state.recordIDs(of: [.space]).contains(sent.recordID) == false)
+
+        // Kept across a quit.
+        let reopened = try JSONDecoder().decode(SyncState.self, from: JSONEncoder().encode(phone.state))
+        #expect(reopened.item(for: sent.recordID) == .sentTab(sent))
+
+        phone.state.sendWentUp(sent.recordID)
+        #expect(phone.state.item(for: sent.recordID) == nil)
+    }
+
+    @Test func aSendThatNeverWentUpIsDroppedAfterAWeek() throws {
+        let (_, phone) = try devices()
+        let sent = try send("trail", from: phone)
+        phone.state.queueSend(sent)
+        phone.state.dropExpiredSends(at: clock.time.addingTimeInterval(6 * 24 * 60 * 60))
+        #expect(phone.state.item(for: sent.recordID) != nil)
+        phone.state.dropExpiredSends(at: clock.time.addingTimeInterval(8 * 24 * 60 * 60))
+        #expect(phone.state.item(for: sent.recordID) == nil)
+    }
+
+    @Test func anArrivalSaysWhichKindOfDeviceItCameFrom() throws {
+        let (mac, phone) = try devices()
+        try deliver([.sentTab(try send("trail", from: phone)), .sentTab(try send("lake", from: phone))], to: mac)
+        let arrival = mac.store.openSentTabs(&mac.state)
+        #expect(arrival.from == .iPhone)
+        #expect(arrival.note == "2 tabs from iPhone")
+        #expect(mac.store.openSentTabs(&mac.state).from == nil)
+    }
 }

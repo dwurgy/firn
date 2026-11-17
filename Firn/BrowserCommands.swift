@@ -37,6 +37,8 @@ struct BrowserCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: [.command, .control])
             .disabled(everydayTab == nil || everydayTab?.groupID != nil)
+            // Sync's Send to My iPhone: only with another device to send to.
+            SendTabMenu(tab: store.activeTab, window: window, inFileMenu: true)
             Divider()
             Button("New Space…") { window.newSpace() }
             Button("Import from Arc…") { window.importFromArc() }

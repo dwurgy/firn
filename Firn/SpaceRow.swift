@@ -13,6 +13,8 @@ struct SpaceRow: View {
     let window: WindowModel
     /// How far along the "Tidied away" pill is.
     @State private var pill = PillPhase.hidden
+    /// How far along the "From iPhone" note is (Send to My Mac, step 6).
+    @State private var sentPill = PillPhase.hidden
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum PillPhase { case hidden, frosted, open }
@@ -33,8 +35,17 @@ struct SpaceRow: View {
                 .padding(.vertical, 2)
                 DownloadsButton(store: store, window: window)
             }
-            // The name steps back while the pill speaks.
-            .opacity(pill == .open ? 0 : 1)
+            // The name steps back while a pill speaks.
+            .opacity(pill == .open || sentPill == .open ? 0 : 1)
+        }
+        .overlay {
+            if sentPill != .hidden, let note = window.sentArrival {
+                SentPill(note: note, open: sentPill == .open,
+                         color: Theme.spaceColor(store.activeSpace.color)) {
+                    window.showArrivedTab()
+                }
+                .transition(.opacity)
+            }
         }
         .overlay(alignment: .leading) {
             if pill != .hidden, let announcement = window.tidyAnnouncement {
@@ -47,6 +58,33 @@ struct SpaceRow: View {
         }
         .frame(minHeight: Theme.rowHeight)
         .task(id: window.tidyAnnouncement?.id) { await announce() }
+        .task(id: window.sentArrival?.id) { await announceArrival() }
+    }
+
+    /// Sent tabs arrived: the same frost as the "Tidied away" pill, over the
+    /// space's name. Waits for that pill, so the two never speak at once.
+    private func announceArrival() async {
+        guard window.sentArrival != nil else { return }
+        while window.tidyAnnouncement != nil {
+            try? await Task.sleep(for: .milliseconds(300))
+            if Task.isCancelled { return }
+        }
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.3)) { sentPill = .open }
+            try? await Task.sleep(for: .seconds(2.8))
+            withAnimation(.easeOut(duration: 0.3)) { sentPill = .hidden }
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) { sentPill = .frosted }
+            try? await Task.sleep(for: .milliseconds(250))
+            withAnimation(Theme.thaw) { sentPill = .open }
+            try? await Task.sleep(for: .seconds(2.6))
+            withAnimation(Theme.thaw) { sentPill = .frosted }
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.25)) { sentPill = .hidden }
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
+        window.sentArrival = nil
     }
 
     /// Frost forms over the overflow button, it widens to say how many tabs

@@ -111,6 +111,22 @@ extension SyncState {
         return false
     }
 
+    /// Holds a send of this device's until iCloud has it (`item(for:)`
+    /// gives it to the engine as it goes up).
+    public mutating func queueSend(_ tab: SentTab) { outbox[tab.id] = tab }
+
+    /// iCloud has this send (or it's gone): no longer held.
+    public mutating func sendWentUp(_ id: SyncRecordID) {
+        guard id.kind == .sentTab else { return }
+        outbox[id.name] = nil
+    }
+
+    /// Sends that never reached iCloud in 7 days (offline all week) are
+    /// dropped: they'd be deleted on arrival anyway.
+    public mutating func dropExpiredSends(at now: Date) {
+        outbox = outbox.filter { !$0.value.isExpired(at: now) }
+    }
+
     /// Forgets opened sends once they'd have expired anyway.
     mutating func forgetOpened(at now: Date) {
         opened = opened.filter { now.timeIntervalSince($0.value) <= SentTab.expiresAfter + 24 * 60 * 60 }
@@ -123,6 +139,8 @@ public struct SentTabsArrival: Sendable {
     public var tabIDs: [UUID] = []
     /// The note to show ("From iPhone"), nil if nothing opened.
     public var note: String?
+    /// The kind of device they came from, when it's one kind (the note's symbol).
+    public var from: SyncedDevice.Kind?
     /// Records to delete from iCloud: the ones opened, and expired ones.
     public var deletes: [SyncRecordID] = []
 }
@@ -160,6 +178,8 @@ extension BrowserStore {
         }
         state.forgetOpened(at: stamp)
         arrival.note = SentTab.arrivalNote(for: arrived)
+        let kinds = Set(arrived.map(\.from))
+        arrival.from = kinds.count == 1 ? kinds.first : nil
         return arrival
     }
 }

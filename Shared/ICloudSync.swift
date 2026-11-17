@@ -26,11 +26,11 @@ final class ICloudSync {
     /// The "Sync with iCloud" switch (Settings, step 3, part 3).
     static let enabledKey = "syncWithICloud"
     static var isOn: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
-    /// What syncs so far: spaces, and each device's open tabs for "On your
-    /// Mac" (step 5). Groups and tabs synced briefly (step 4), then stayed
+    /// What syncs so far: spaces, each device's open tabs for "On your
+    /// Mac" (step 5), and tabs sent on purpose (step 6). Groups and tabs synced briefly (step 4), then stayed
     /// on each device (David, 2026-11-16): a device that sent them takes
     /// them out of iCloud again (see `begin`). History joins in step 7.
-    static let kinds: Set<SyncKind> = [.space, .device]
+    static let kinds: Set<SyncKind> = [.space, .device, .sentTab]
 
     /// What turning sync on does, in plain words, under the switch on the
     /// Mac and the iPhone (and the welcome's step, later). Keep it literally
@@ -40,7 +40,7 @@ final class ICloudSync {
     static func whatSyncs(on device: String) -> [String] {
         [
             "Your spaces stay the same on your Mac, iPhone, and iPad. Make, rename, or delete one anywhere, and the others follow.",
-            "Your open tabs' addresses and titles can be found from your other devices' command bars, in the same space.",
+            "Your open tabs' addresses and titles can be found from your other devices' command bars, in the same space. You can also send a tab to another of your devices, where it opens.",
             "Tabs, groups, Basecamp, history, and settings stay on this \(device). So do sign-ins and passwords: a separate space starts signed out on your other devices.",
             "Everything is encrypted on this \(device) before it goes to your iCloud, so only your devices can read it.",
         ]
@@ -69,7 +69,16 @@ final class ICloudSync {
     private var deviceSent: (tabs: [SyncedDevice.OpenTab], at: Date)?
     /// A send waiting out the 30 seconds since the last one.
     private var deviceSendLater: Task<Void, Never>?
-    private var frontObserver: (any NSObjectProtocol)?
+    private var frontObservers: [any NSObjectProtocol] = []
+    /// When this device last fetched on coming to the front.
+    private var frontFetchedAt: Date?
+    /// The other devices a tab can be sent to, as last told to the app.
+    private var targets: [SendTarget] = []
+
+    /// Tabs sent here just opened (step 6): the app shows its note.
+    var onArrival: ((SentTabsArrival) -> Void)?
+    /// The devices a tab can be sent to changed (none while sync is off).
+    var onTargetsChange: (([SendTarget]) -> Void)?
 
     init(store: BrowserStore, file: SyncFile = .standard) {
         self.store = store
@@ -141,14 +150,16 @@ final class ICloudSync {
         deviceSendLater?.cancel()
         deviceSendLater = nil
         deviceSent = nil
-        if let frontObserver { NotificationCenter.default.removeObserver(frontObserver) }
-        frontObserver = nil
+        for observer in frontObservers { NotificationCenter.default.removeObserver(observer) }
+        frontObservers = []
+        frontFetchedAt = nil
         seal = nil
         firstFetch?.cancel()
         firstFetch = nil
         held = SyncChanges()
         saved = SyncSaved()
         file.remove()
+        publishTargets()
     }
 
     private func begin(with seal: SyncSeal) {
@@ -180,7 +191,8 @@ final class ICloudSync {
             queue(SyncChanges(saves: [], deletes: []), andAgain: saved.state.recordIDs(of: Self.kinds))
         }
         if !dropped.isEmpty { takeOut(dropped, from: engine) }
-        watchLeavingFront()
+        saved.state.dropExpiredSends(at: .now)
+        watchFront()
         if saved.state.firstSyncDone { takeChanges() } else { fetchFirst() }
         save()
     }
@@ -252,16 +264,83 @@ final class ICloudSync {
         store.deviceRecord(kind: Self.deviceKind, name: Self.deviceName, state: saved.state)
     }
 
-    private func watchLeavingFront() {
-        guard frontObserver == nil else { return }
+    /// Leaving the front sends this device's tabs; coming to the front
+    /// looks for sent tabs and opens any waiting.
+    private func watchFront() {
+        guard frontObservers.isEmpty else { return }
         #if os(macOS)
-        let name = NSApplication.didResignActiveNotification
+        let leaving = NSApplication.didResignActiveNotification
+        let coming = NSApplication.didBecomeActiveNotification
         #else
-        let name = UIApplication.didEnterBackgroundNotification
+        let leaving = UIApplication.didEnterBackgroundNotification
+        let coming = UIApplication.didBecomeActiveNotification
         #endif
-        frontObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sendDevice(leavingFront: true) }
-        }
+        let center = NotificationCenter.default
+        frontObservers = [
+            center.addObserver(forName: leaving, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sendDevice(leavingFront: true) }
+            },
+            center.addObserver(forName: coming, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.cameToFront() }
+            },
+        ]
+    }
+
+    private static var isInFront: Bool {
+        #if os(macOS)
+        NSApp.isActive
+        #else
+        UIApplication.shared.applicationState == .active
+        #endif
+    }
+
+    // MARK: - Sent tabs (Send to My Mac, step 6)
+
+    /// The other devices a tab can be sent to now.
+    private func currentTargets() -> [SendTarget] {
+        guard engine != nil, saved.state.firstSyncDone else { return [] }
+        return saved.state.sendTargets(at: .now)
+    }
+
+    /// Tells the app when the devices to send to change, for its menus.
+    private func publishTargets() {
+        let now = currentTargets()
+        guard now != targets else { return }
+        targets = now
+        onTargetsChange?(now)
+    }
+
+    /// Sends a tab to another device: held in the sync file until iCloud
+    /// has it, and sent at once (it's a deliberate act, not a background one).
+    func send(_ tab: FirnCore.Tab, to target: SendTarget) {
+        guard let engine, saved.state.firstSyncDone,
+              let sent = store.sentTab(tab, to: target, from: Self.deviceKind, state: saved.state) else { return }
+        saved.state.queueSend(sent)
+        engine.state.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID(sent.recordID))])
+        save()
+        Task { try? await engine.sendChanges() }
+    }
+
+    /// Back in front: anything waiting opens, then a quick look for more
+    /// (pushes can be missed), at most once a minute.
+    private func cameToFront() {
+        publishTargets()
+        openArrivals()
+        guard let engine, saved.state.firstSyncDone,
+              frontFetchedAt.map({ Date.now.timeIntervalSince($0) > 60 }) ?? true else { return }
+        frontFetchedAt = .now
+        Task { try? await engine.fetchChanges() }
+    }
+
+    /// Opens the tabs sent here, only while Firn is in front (else the next
+    /// time it is), and deletes them from iCloud so they never open twice.
+    private func openArrivals() {
+        guard engine != nil, saved.state.firstSyncDone, !saved.state.waitingSentTabs.isEmpty,
+              Self.isInFront else { return }
+        let arrival = store.openSentTabs(&saved.state)
+        queue(SyncChanges(saves: [], deletes: arrival.deletes))
+        save()
+        if !arrival.tabIDs.isEmpty { onArrival?(arrival) }
     }
 
     private static var deviceKind: SyncedDevice.Kind {
@@ -345,6 +424,8 @@ final class ICloudSync {
         queue(changes)
         sendDevice()
         save()
+        publishTargets()
+        openArrivals()
     }
 
     // MARK: - Other devices' changes
@@ -366,6 +447,8 @@ final class ICloudSync {
         }
         saved.state.forgetDevices(sentBefore: Date.now.addingTimeInterval(-SyncedDevice.staleAfter))
         apply(saves: saves, deletes: deletes)
+        publishTargets()
+        openArrivals()
     }
 
     private func apply(saves: [SyncItem], deletes: [SyncRecordID]) {
@@ -392,6 +475,12 @@ final class ICloudSync {
 
     private func sent(_ sent: CKSyncEngine.Event.SentRecordZoneChanges) {
         for record in sent.savedRecords {
+            // A tab this device sent is iCloud's now, kept there until the
+            // other device opens it: no need to remember it here.
+            if let id = Self.syncID(record.recordID), id.kind == .sentTab {
+                saved.state.sendWentUp(id)
+                continue
+            }
             saved.systemFields[record.recordID.recordName] = Self.systemFields(of: record)
         }
         var again: [SyncRecordID] = []

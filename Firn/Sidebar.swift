@@ -710,6 +710,7 @@ struct TabList: View {
         if tab.url != nil {
             Button("Copy Link", systemImage: "link") { window.copyLink(of: tab) }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+            SendTabMenu(tab: tab, window: window)
             Divider()
         }
         Button("Close Tab", systemImage: "xmark") { window.close(tab) }

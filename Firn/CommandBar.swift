@@ -278,6 +278,15 @@ private struct CommandBar: View {
             window.copyFrontLink()
             window.focusPage()
         }
+        // Send to My iPhone: one row per device ("Send to My iPhone").
+        let targets = window.sendTargets(for: store.activeTab)
+        for target in targets {
+            let name = targets.count == 1 ? SendTarget.menuTitle(for: targets) ?? "" : "Send to \(target.name)"
+            add("send \(target.id)", name, ["send", "device", "iphone", "ipad", "mac", "share", "handoff"]) {
+                if let tab = store.activeTab { window.sendTab(tab, target) }
+                window.focusPage()
+            }
+        }
         add("print", "Print…", ["printer", "pdf"], "⌘P", when: page?.url != nil && page?.loadError == nil) {
             page?.printPage()
         }

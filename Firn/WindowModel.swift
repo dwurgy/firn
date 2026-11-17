@@ -10,6 +10,13 @@ final class WindowModel {
     /// The other devices' tabs in the space on screen, for the command bar
     /// ("On your iPhone"; `ICloudSync.otherDeviceTabs`). None until sync starts.
     @ObservationIgnored var otherDeviceTabs: () -> [DeviceTab] = { [] }
+    /// The other devices a tab can be sent to (Send to My iPhone, step 6;
+    /// `ICloudSync`). None while sync is off, so the items don't show.
+    var sendTargets: [SendTarget] = []
+    /// Sends a tab to one of them (`ICloudSync.send`).
+    @ObservationIgnored var sendTab: (FirnCore.Tab, SendTarget) -> Void = { _, _ in }
+    /// Tabs sent here just opened: the bottom row's note ("From iPhone").
+    var sentArrival: SentArrivalNote?
     /// History › Clear History… was chosen: the History window opens and
     /// asks (see `HistoryWindow`).
     var asksToClearHistory = false

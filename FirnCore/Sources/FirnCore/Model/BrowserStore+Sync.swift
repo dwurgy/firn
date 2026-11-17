@@ -87,7 +87,10 @@ extension BrowserStore {
         let deleted = { (kind: SyncKind) in deletes.filter { $0.kind == kind }.compactMap { UUID(uuidString: $0.name) } }
         for id in deleted(.space) { applySpaceDelete(state.localSpace(id), to: &state) }
         for id in deletes where id.kind == .device { state.devices[id.name] = nil }
-        for id in deletes where id.kind == .sentTab { state.inbox[id.name] = nil }
+        for id in deletes where id.kind == .sentTab {
+            state.inbox[id.name] = nil
+            state.outbox[id.name] = nil
+        }
 
         // What's here now came in: it isn't an edit of this device's.
         state.seen = syncFields()

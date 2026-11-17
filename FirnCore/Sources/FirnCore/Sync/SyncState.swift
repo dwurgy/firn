@@ -47,11 +47,13 @@ public struct SyncState: Codable, Equatable, Sendable {
     /// Sends already opened here (id → when sent), so one fetched again
     /// before its delete went through never opens twice.
     var opened: [String: Date] = [:]
+    /// This device's own sends, held until iCloud has them, by id.
+    var outbox: [String: SentTab] = [:]
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case spaces, seen, joinedSpaces, joinedStores, arrived, firstSyncDone, deviceID, devices, inbox, opened
+        case spaces, seen, joinedSpaces, joinedStores, arrived, firstSyncDone, deviceID, devices, inbox, opened, outbox
     }
 
     /// Anything a sync file from an older Firn lacks starts fresh, so the
@@ -68,6 +70,7 @@ public struct SyncState: Codable, Equatable, Sendable {
         devices = try values.decodeIfPresent([String: SyncedDevice].self, forKey: .devices) ?? [:]
         inbox = try values.decodeIfPresent([String: SentTab].self, forKey: .inbox) ?? [:]
         opened = try values.decodeIfPresent([String: Date].self, forKey: .opened) ?? [:]
+        outbox = try values.decodeIfPresent([String: SentTab].self, forKey: .outbox) ?? [:]
     }
 
     /// The engine's first fetch is done: from now on spaces arrive as new.
@@ -100,7 +103,9 @@ public struct SyncState: Codable, Equatable, Sendable {
             let local = localSpace(uuid)
             guard remoteSpace(local) == uuid else { return nil }
             return spaces[local].map { .space(toCloud($0)) }
-        case .group, .tab, .visit, .device, .sentTab: return nil
+        // Only this device's own sends, while they wait to go up.
+        case .sentTab: return outbox[id.name].map { .sentTab($0) }
+        case .group, .tab, .visit, .device: return nil
         }
     }
 
@@ -111,6 +116,7 @@ public struct SyncState: Codable, Equatable, Sendable {
         if kinds.contains(.space) {
             ids += spaces.keys.map { toCloud(SyncRecordID(kind: .space, name: $0.uuidString)) }
         }
+        if kinds.contains(.sentTab) { ids += outbox.values.map(\.recordID) }
         return ids.filter { item(for: $0) != nil }
     }
 

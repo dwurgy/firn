@@ -1,17 +1,6 @@
 import FirnCore
 import SwiftUI
 
-/// The tab overview's look: the list (always, in an App Store build), or a
-/// grid of cards, a TestFlight experiment (David, 2026-11-16) so testers
-/// can compare the two. Kept on the device only (`@AppStorage`): nothing is
-/// logged or sent.
-enum OverviewLayout: String {
-    case list
-    case grid
-
-    static let key = "overviewLayout"
-}
-
 /// The grid's columns and card height for the list's width: two columns
 /// on an iPhone; on an iPad (or an iPhone on its side) as many as fit at
 /// about 220pt each, up to five. A card grows with its column so its

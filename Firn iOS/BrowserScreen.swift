@@ -255,14 +255,9 @@ struct BrowserScreen: View {
     /// screen until something else did.
     @State private var sheets = SpaceSheets()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    #if TESTFLIGHT
-    /// TestFlight's grid: its cards' pictures sit above their titles, with
+    /// The grid's cards: their pictures sit above their titles, with
     /// rounder corners, so a page glides into and out of them there.
-    @AppStorage(OverviewLayout.key) private var overviewLayout = OverviewLayout.list
-    private var gridCards: Bool { overviewLayout == .grid }
-    #else
-    private let gridCards = false
-    #endif
+    private let gridCards = true
     private var cardRadius: CGFloat {
         gridCards ? OverviewRow.gridCornerRadius : OverviewRow.windowCornerRadius
     }

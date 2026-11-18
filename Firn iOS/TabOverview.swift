@@ -139,13 +139,10 @@ struct TabOverview: View {
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
-    #if TESTFLIGHT
-    /// TestFlight's grid of cards, or the list (Settings, this device only).
-    @AppStorage(OverviewLayout.key) private var layout = OverviewLayout.list
-    private var grid: Bool { layout == .grid }
-    #else
-    private let grid = false
-    #endif
+    /// The grid of cards, the only overview (David, 2026-11-17: "all in on
+    /// the grid"). The list's code stays until it's taken out (step 3 of
+    /// "Plan: iOS's own menus and drag").
+    private let grid = true
     /// The grid on iOS 27: iOS's own hold menu and drag to reorder
     /// (`OverviewGridReorder.swift`) instead of Firn's.
     private var systemDrag: Bool {

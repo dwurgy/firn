@@ -144,7 +144,8 @@ struct OverviewRow: View {
                 // the lifted picture moved aside for the menu (David's
                 // recording, 2026-11-16).
                 shape.fill(Theme.page)
-                    .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 6, y: 2)
+                    .shadow(color: reduceTransparency ? .clear : Theme.gridCardShadow,
+                            radius: Self.gridShadowRadius, y: Self.gridShadowDrop)
                     .opacity(windowShown && !menuOpen && !carried ? 1 : 0)
             }
             .overlay(alignment: .topTrailing) {
@@ -193,6 +194,11 @@ struct OverviewRow: View {
     /// The grid card's corners: Safari's 15pt, measured from David's
     /// screenshots (2026-11-16); the X's disc sits concentric in the corner.
     static let gridCornerRadius: CGFloat = 15
+    /// The grid card's shadow at rest, as Safari's: about 14pt of blur
+    /// (SwiftUI's radius is half that), 5pt down (`Theme.gridCardShadow`).
+    /// A swiped card's shadow grows with it (the cell's growth scales it).
+    private static let gridShadowRadius: CGFloat = 7
+    private static let gridShadowDrop: CGFloat = 5
     /// A grid card's picture within its whole tile (the title under it
     /// left out), for the drag's lift, so it matches the menu's.
     static var gridPictureShape: some Shape {

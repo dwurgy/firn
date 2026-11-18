@@ -48,6 +48,10 @@ enum Theme {
     static let shadowSoft = Color(light: 0x3C2814, lightOpacity: 0.08, dark: 0x000000, darkOpacity: 0.15)
     /// The tab on screen's wider, fainter shadow, under its contact shadow.
     static let shadowLift = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.20)
+    /// Under each card in the iPhone's grid: soft and clearly there, a
+    /// little below, as Safari's, so the grid has depth (docs/IOS-PLAN.md,
+    /// the swipe's idea 4). Stronger in dark, where a shadow reads less.
+    static let gridCardShadow = Color(light: 0x3C2814, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
     static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.16)
     /// The peeking sidebar floats over the page, so it casts a deeper shadow.
     static let shadowPeek = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)

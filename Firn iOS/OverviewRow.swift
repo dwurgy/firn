@@ -146,8 +146,6 @@ struct OverviewRow: View {
                 shape.fill(Theme.page)
                     .shadow(color: reduceTransparency ? .clear : Theme.gridCardShadow,
                             radius: Self.gridShadowRadius, y: Self.gridShadowDrop)
-                    .shadow(color: reduceTransparency ? .clear : Theme.gridCardHalo,
-                            radius: Self.gridHaloRadius, y: Self.gridHaloDrop)
                     .opacity(windowShown && !menuOpen && !carried ? 1 : 0)
             }
             .overlay(alignment: .topTrailing) {
@@ -201,10 +199,6 @@ struct OverviewRow: View {
     /// A swiped card's shadow grows with it (the cell's growth scales it).
     private static let gridShadowRadius: CGFloat = 7
     private static let gridShadowDrop: CGFloat = 5
-    /// And a wide halo under it (`Theme.gridCardHalo`), about 36pt of blur,
-    /// 12pt down, so the card floats as Safari's do (David, 2026-11-18).
-    private static let gridHaloRadius: CGFloat = 18
-    private static let gridHaloDrop: CGFloat = 12
     /// A grid card's picture within its whole tile (the title under it
     /// left out), for the drag's lift, so it matches the menu's.
     static var gridPictureShape: some Shape {

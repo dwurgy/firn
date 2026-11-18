@@ -50,10 +50,10 @@ enum Theme {
     static let shadowLift = Color(light: 0x3C2814, lightOpacity: 0.07, dark: 0x000000, darkOpacity: 0.20)
     /// Under each card in the iPhone's grid: soft and clearly there, a
     /// little below, as Safari's, so the grid has depth (docs/IOS-PLAN.md,
-    /// the swipe's idea 4). Stronger in dark, where a shadow reads less.
-    static let gridCardShadow = Color(light: 0x3C2814, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
-    /// Under it, a wide, faint halo, as Safari's cards float in theirs.
-    static let gridCardHalo = Color(light: 0x3C2814, lightOpacity: 0.12, dark: 0x000000, darkOpacity: 0.35)
+    /// the swipe's idea 4). 
+    /// A wide halo under it read as far too much (David, 2026-11-18), and
+    /// dark softened to match Safari's, barely there.
+    static let gridCardShadow = Color(light: 0x3C2814, lightOpacity: 0.14, dark: 0x000000, darkOpacity: 0.22)
     static let shadowPageFar = Color(light: 0x3C2814, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.16)
     /// The peeking sidebar floats over the page, so it casts a deeper shadow.
     static let shadowPeek = Color(light: 0x3C2814, lightOpacity: 0.22, dark: 0x000000, darkOpacity: 0.45)

@@ -49,13 +49,6 @@ struct OverviewBar: View {
     /// pill took the old space's width again, then glided back (David's
     /// recording, 2026-11-13).
     @State private var landedWidth: CGFloat?
-    /// Whether the space menu is open: + and the check slip toward the
-    /// name, as Back and Tabs do for the page menu, since iOS lays its menu
-    /// over them (David's recording, 2026-11-17). Kept in an object only
-    /// the two buttons read: as a plain state, changing it ran the bar
-    /// again, which rebuilt the menu's rows and told them they'd appeared
-    /// again, so the buttons stayed hidden after the menu closed.
-    @State private var menu = SpaceMenuState()
     /// Bumped by a tap on the pill: the menu opens.
     @State private var opens = 0
 
@@ -107,7 +100,6 @@ struct OverviewBar: View {
                 .buttonStyle(FrostPress(shape: Circle()))
                 .background { BarFrost(shape: Circle()) }
                 .accessibilityLabel("New Tab")
-                .modifier(HidesForMenu(menu: menu, toward: .trailing))
                 Spacer()
                 Button(action: done) {
                     Image(systemName: "checkmark")
@@ -123,7 +115,6 @@ struct OverviewBar: View {
                     FirnFrost(shape: Circle(), fill: Theme.spaceVivid(space.color))
                 }
                 .accessibilityLabel("Done")
-                .modifier(HidesForMenu(menu: menu, toward: .leading))
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -181,14 +172,17 @@ struct OverviewBar: View {
     /// checked, then New Space… and Space Settings…, in the Mac's order. A
     /// tap opens it and a sideways swipe changes space, as before.
     ///
-    /// UIKit, not SwiftUI's `Menu`: + and the check hide while the menu is
-    /// open, and SwiftUI's `Menu` never says when it closes (going by its
-    /// rows' appearing left them hidden on David's iPhone). A UIKit menu
-    /// button reports both, and is opened by Firn's own tap.
+    /// It opens above the name, never over it (David, 2026-11-17: over it,
+    /// the name showed under the menu and + and the check had to hide): the
+    /// menu hangs from an unseen UIKit menu button, a thin strip just above
+    /// the pill, opened by Firn's own tap. SwiftUI's `Menu` can only open
+    /// over its own label.
     private var spaceMenu: some View {
         pill
-            .background {
-                SpaceMenuAnchor(menu: spaceUIMenu, opens: opens) { setMenuShown($0) }
+            .background(alignment: .top) {
+                SpaceMenuAnchor(menu: spaceUIMenu, opens: opens)
+                    .frame(height: 1)
+                    .offset(y: -Self.menuGap)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -222,10 +216,10 @@ struct OverviewBar: View {
         return UIMenu(children: sections)
     }
 
-    private func setMenuShown(_ shown: Bool) {
-        guard menu.shown != shown else { return }
-        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { menu.shown = shown }
-    }
+    /// How far above the pill the strip sits: iOS draws a menu about 18pt
+    /// down over the view it hangs from, so this leaves 8pt between the
+    /// menu and the pill (Simulator, iOS 27).
+    private static let menuGap: CGFloat = 26
 
     /// A space's dot in the menu: its own color, which iOS's menus keep only
     /// for an image drawn in it (they tint symbols otherwise).
@@ -381,33 +375,11 @@ private struct SpaceDots: View {
     }
 }
 
-/// + or the check while the space menu is open: shrinking toward the name
-/// as it fades (only fading with Reduce Motion), and out of reach.
-@MainActor @Observable final class SpaceMenuState {
-    var shown = false
-}
-
-private struct HidesForMenu: ViewModifier {
-    let menu: SpaceMenuState
-    let toward: UnitPoint
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        let hidden = menu.shown
-        return content
-            .scaleEffect(hidden && !reduceMotion ? 0.01 : 1, anchor: toward)
-            .opacity(hidden ? 0 : 1)
-            .allowsHitTesting(!hidden)
-            .accessibilityHidden(hidden)
-    }
-}
-
-/// The space menu's UIKit button, sized to the pill behind it: opened when
-/// `opens` changes, and telling Firn as its menu shows and goes.
+/// The space menu's unseen UIKit button, a thin strip above the pill:
+/// opened when `opens` changes.
 private struct SpaceMenuAnchor: UIViewRepresentable {
     let menu: UIMenu
     let opens: Int
-    let shown: (Bool) -> Void
 
     func makeUIView(context: Context) -> SpaceMenuButton {
         let button = SpaceMenuButton()
@@ -419,7 +391,6 @@ private struct SpaceMenuAnchor: UIViewRepresentable {
 
     func updateUIView(_ button: SpaceMenuButton, context: Context) {
         button.menu = menu
-        button.shown = shown
         if opens != button.opens {
             button.opens = opens
             button.performPrimaryAction()
@@ -429,19 +400,4 @@ private struct SpaceMenuAnchor: UIViewRepresentable {
 
 final class SpaceMenuButton: UIButton {
     var opens = 0
-    var shown: (Bool) -> Void = { _ in }
-
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
-                                         willDisplayMenuFor configuration: UIContextMenuConfiguration,
-                                         animator: (any UIContextMenuInteractionAnimating)?) {
-        super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
-        shown(true)
-    }
-
-    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
-                                         willEndFor configuration: UIContextMenuConfiguration,
-                                         animator: (any UIContextMenuInteractionAnimating)?) {
-        super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
-        shown(false)
-    }
 }

@@ -2,17 +2,13 @@ import FirnCore
 import SwiftUI
 import UIKit
 
-/// A tab in the overview: a slim row (the site's icon and the page's title,
-/// one line, as in Safari and Firn's Mac sidebar) or a tall card (the same
-/// line over the page's picture). An X closes it in one tap; a swipe left follows the finger and,
-/// past a third of the row or with a flick, slides it off and closes it
-/// (a short swipe glides back), as in Safari.
+/// A tab in the overview's grid, as Safari's: the page's picture is the
+/// card, with the site's icon and the title under it. An X closes it in one
+/// tap; a swipe left follows the finger and, past a third of the card or
+/// with a flick, slides it off and closes it (a short swipe eases home).
 struct OverviewRow: View {
     let tab: FirnCore.Tab
     let isOnScreen: Bool
-    /// 1 a tall card with the page's picture (the tab on screen, and tabs
-    /// looked at in the last day), 0 a slim row, between while a pinch moves.
-    let tallness: CGFloat
     /// Where the page's picture comes from, for a tall card (read here, so
     /// a picture arriving runs only its own card), and whether it may be
     /// read from disk on the spot (the tab on screen, while shown);
@@ -24,15 +20,13 @@ struct OverviewRow: View {
     }
     /// Reads the picture from disk when a card comes into view without one.
     let loadPicture: () async -> Void
-    /// The ring around the tab on screen: the space's color, calmed (`Theme.spaceRing`).
-    let ring: Color
     /// The space's color name.
     let space: String
     /// The page's picture under the line; empty while the page glides.
     var windowShown = true
     let open: () -> Void
     let close: () -> Void
-    /// Reports where the card (or the slim row) is on screen.
+    /// Reports where the card is on screen.
     let spot: (CGRect) -> Void
     /// VoiceOver's way to reorder (a drag can't be found by it); nil at an end.
     var moveUp: (() -> Void)?
@@ -44,14 +38,11 @@ struct OverviewRow: View {
     /// are compared on what they show (`==`), and a row found unchanged
     /// keeps its old actions.
     var actionsKey: [Int] = []
-    /// A card's height: the list's 240pt, or the grid's, which grows with
-    /// its column so the picture stays portrait (TestFlight's grid).
+    /// A card's height, which grows with its column so the picture stays
+    /// portrait (`OverviewGridMetrics`).
     var cardHeight: CGFloat = OverviewRow.cardHeight
-    /// TestFlight's grid: the card is drawn as Safari's (`gridCard`), and
-    /// VoiceOver's moves read as Move Left and Move Right.
-    var inGrid = false
     /// The grid on iOS 27: iOS's own hold menu, on the picture only, as
-    /// Safari's (nil: none here; the list keeps Firn's own menu).
+    /// Safari's (nil: none here).
     var holdMenu: (() -> [[HoldMenuItem]])?
     /// Carried by iOS's drag (the grid on iOS 27): its X hides, so the
     /// drag lifts only the picture, as the menu does.
@@ -78,21 +69,13 @@ struct OverviewRow: View {
     @State private var swiped = false
 
     private var site: String { WebAddress.site(of: tab.url) }
-    private var t: CGFloat { min(max(tallness, 0), 1) }
-    /// A slim row's corners (and the group cards' are built on them).
+    /// The corners a group card and a lifted tab are built on.
     static let cornerRadius: CGFloat = 14
-    /// A tall card's corners.
-    static let cardCornerRadius: CGFloat = 18
-    private static let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    /// The top of the page, worth looking at: a fixed 240pt on every
-    /// iPhone (David, 2026-11-16: taller, now that only the tab on screen
-    /// is a card unless pinched apart; was 160).
+    /// The shortest a grid card is (`OverviewGridMetrics`).
     static let cardHeight: CGFloat = 240
 
     var body: some View {
-        Group {
-            if inGrid { gridCard } else { tile }
-        }
+        gridCard
             .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             .offset(x: pull)
@@ -127,112 +110,10 @@ struct OverviewRow: View {
         }
     }
 
-    /// A slim row is the tab's line (`TabLine`) on flat paper; a tall card
-    /// is the same line, in the same place, on a warm paper card, with the
-    /// page's picture in a rounded window below it (David, 2026-11-16: the
-    /// frosted pills picked up whatever was under them and were hard to
-    /// read on busy pages). One view for both, so a pinch only opens or
-    /// folds the window under the line, which never moves. The tab on
-    /// screen is ringed in the space's color just outside the card.
-    private var tile: some View {
-        let shape = RoundedRectangle(cornerRadius: mix(Self.cornerRadius, Self.cardCornerRadius, t),
-                                     style: .continuous)
-        let height = Self.rowHeight + (cardHeight - Self.rowHeight) * t
-        return Button(action: open) {
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .background {
-            // One solid paper for the row and the card (David, 2026-11-16:
-            // no see-through), so a pinch only opens or folds the window and
-            // the title reads the same over anything.
-            shape.fill(Theme.cardPaper)
-                .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
-                // Dark: a faint light along the top edge, so cards stand
-                // off the blue-hour sky.
-                .overlay {
-                    shape.strokeBorder(LinearGradient(colors: [Theme.cardTopLight, .clear],
-                                                      startPoint: .top, endPoint: .center),
-                                       lineWidth: 1)
-                }
-                .shadow(color: reduceTransparency ? .clear : Theme.shadowSoft, radius: 1, y: 0.5)
-        }
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: reportSpot)
-        .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
-        .accessibilityValue(isOnScreen ? "On screen" : "")
-        .accessibilityAddTraits(isOnScreen ? .isSelected : [])
-        .accessibilityActions {
-            if let moveUp { Button(inGrid ? "Move Left" : "Move Up", action: moveUp) }
-            if let moveDown { Button(inGrid ? "Move Right" : "Move Down", action: moveDown) }
-        }
-        .overlay(alignment: .top) {
-            window(height: height)
-                // Empty while its page glides out of it or into it; the
-                // picture gliding stands in for it.
-                .opacity(windowShown ? 1 : 0)
-        }
-        .overlay(alignment: .top) { TabLine(tab: tab, close: close) }
-        .overlay {
-            if isOnScreen {
-                // Just outside the card's edge, so the line inside sits the same
-                // as every other row's (David, 2026-11-16: inside, the title
-                // looked off center).
-                CardRing(color: ring, radius: mix(Self.cornerRadius, Self.cardCornerRadius, t))
-                    .allowsHitTesting(false)
-            }
-        }
-        // An older card's picture is read from disk once it's in view,
-        // then fades in over the site's icon.
-        // Read as soon as it starts to grow, so it can fade in mid-pinch.
-        .task(id: t > 0 && picture == nil) { if t > 0 && picture == nil { await loadPicture() } }
-        .animation(.easeOut(duration: 0.15), value: picture != nil)
-    }
-
-    /// The window's distance from the card's sides and bottom, and its
-    /// corners (the card's 18pt less the inset, so they run evenly). 5pt,
-    /// a thin frame of paper, now that the ring sits outside the card
-    /// (David, 2026-11-16: 8pt read as too much paper).
-    static let windowInset: CGFloat = 5
-    static let windowCornerRadius: CGFloat = cardCornerRadius - windowInset
-    private var windowHeight: CGFloat { cardHeight - Self.rowHeight - Self.windowInset }
-
-    /// Where a card's picture sits, in a card's frame: what a page glides
-    /// out of and into.
-    static func window(in card: CGRect) -> CGRect {
-        CGRect(x: card.minX + windowInset, y: card.minY + rowHeight,
-               width: max(card.width - windowInset * 2, 1),
-               height: max(card.height - rowHeight - windowInset, 1))
-    }
-
-    /// The page's picture under the line, at the window's width, from just
-    /// below the page's header. As the card folds, the window's bottom edge
-    /// rises with the card's, so the picture folds away under the line.
-    private func window(height: CGFloat) -> some View {
-        pictureView
-            .frame(maxWidth: .infinity)
-            .frame(height: windowHeight, alignment: .top)
-            .frame(height: max(height - Self.rowHeight - Self.windowInset, 0), alignment: .top)
-            .background(Theme.page)
-            .clipShape(RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous))
-            // Light: a hairline inside the window's edge, so a white page
-            // doesn't melt into the paper around it.
-            .overlay {
-                RoundedRectangle(cornerRadius: Self.windowCornerRadius, style: .continuous)
-                    .strokeBorder(Theme.windowHairline, lineWidth: 1)
-            }
-            .padding(.horizontal, Self.windowInset)
-            .padding(.top, Self.rowHeight)
-            .opacity(Double(min(t * 2, 1)))
-            .allowsHitTesting(false)
-    }
-
-    /// A slim row's height.
+    /// A folded group's height (`GroupCard.foldedHeight`).
     static let rowHeight: CGFloat = 44
 
-    // MARK: The grid's card (TestFlight)
+    // MARK: The grid's card
 
     /// The grid's card, as Safari's (David, 2026-11-16): the page's picture
     /// is the card, with a round X on its corner, and the site's icon and
@@ -366,10 +247,6 @@ struct OverviewRow: View {
     /// The row stays under the finger going left; going right it barely
     /// gives, so it's clear that way does nothing.
     private func follow(_ dx: CGFloat) {
-        guard inGrid else {
-            pull = dx < 0 ? dx : dx * 0.15
-            return
-        }
         // Once iOS has begun lifting the card (`carried`), a move sideways is
         // its drag's, never a swipe, as Safari's. Both used to run: the swipe
         // slid the card while iOS faded it for the lift, so it went half
@@ -390,7 +267,7 @@ struct OverviewRow: View {
         let far = width > 0 && -dx > width / 3
         let flick = speed < -700 && dx < -20
         // A card iOS lifted is never closed by the swipe it took over.
-        guard (far || flick) && !(inGrid && carried) else {
+        guard (far || flick) && !carried else {
             easeHome()
             return
         }
@@ -406,65 +283,20 @@ struct OverviewRow: View {
         withAnimation(.easeOut(duration: duration)) { pull = gone } completion: { close() }
     }
 
-    /// The grid's card eases home and shrinks together, unhurried; the
-    /// list's row glides back as before.
+    /// The card eases home and shrinks together, unhurried.
     private func easeHome() {
-        withAnimation(.smooth(duration: inGrid ? Self.swipeHome : 0.25)) {
+        withAnimation(.smooth(duration: Self.swipeHome)) {
             pull = 0
             swiped = false
         }
     }
 }
 
-/// A tab's line: the site's icon, the page's title (13pt semibold, one
-/// line), and a plain X, the same in a slim row and at the top of a tall
-/// card (David, 2026-11-16), so nothing on it moves as a row opens into a
-/// card. Taps on the icon and title fall through to the tile; only the X
-/// is its own, 44pt to tap.
-struct TabLine: View {
-    let tab: FirnCore.Tab
-    let close: () -> Void
-
-    static let titleFont = Font.footnote.weight(.semibold)
-    private static let icon: CGFloat = 20
-    private var site: String { WebAddress.site(of: tab.url) }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            SiteIconView(icon: tab.icon, size: Self.icon) { LetterMark(site: site, size: Self.icon) }
-                .frame(width: Self.icon, height: Self.icon)
-                .padding(.leading, 14)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            Text(tab.title)
-                .font(Self.titleFont)
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.leading, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 2)
-            .accessibilityLabel("Close \(tab.title)")
-        }
-        .frame(height: OverviewRow.rowHeight)
-        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-    }
-}
-
 /// Under a grid card: the site's icon and the page's title, one line, on
-/// the overview's wash (TestFlight's grid, after Safari's).
+/// the overview's wash (after Safari's).
 struct GridTitle: View {
     let tab: FirnCore.Tab
+    static let titleFont = Font.footnote.weight(.semibold)
     private static let icon: CGFloat = 16
     private var site: String { WebAddress.site(of: tab.url) }
 
@@ -473,7 +305,7 @@ struct GridTitle: View {
             SiteIconView(icon: tab.icon, size: Self.icon) { LetterMark(site: site, size: Self.icon) }
                 .frame(width: Self.icon, height: Self.icon)
             Text(tab.title)
-                .font(TabLine.titleFont)
+                .font(Self.titleFont)
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -524,28 +356,13 @@ struct UnevenInsetShape<S: Shape>: Shape {
     }
 }
 
-private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
-
 extension Theme {
-    /// A tall card's paper: the page's warm white in light; in dark, a
-    /// clear step above the overview's wash so cards stand off it as they
-    /// do in light (#34302D was too close; David, 2026-11-16). The iPhone's only.
-    /// (`Theme`'s own light-and-dark maker is private to the shared file.)
-    static let cardPaper = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x42 / 255, green: 0x3D / 255, blue: 0x39 / 255, alpha: 1)
-            : UIColor(red: 0xFB / 255, green: 0xFA / 255, blue: 0xF8 / 255, alpha: 1)
-    })
     /// A grid card's X: a disc of neutral dark grey at 80% (menus and cards
     /// stay neutral, David, 2026-11-15), the X in near-white, light and dark;
     /// stronger than Safari's so it reads over bright pages (David, 2026-11-16).
     static let closeDisc = Color(white: 0.13).opacity(0.8)
     static let closeDiscMark = Color(white: 0.97)
-    /// Dark cards' top edge: white at 6%; nothing in light.
-    static let cardTopLight = Color(uiColor: UIColor { traits in
-        UIColor(white: 1, alpha: traits.userInterfaceStyle == .dark ? 0.06 : 0)
-    })
-    /// The page window's inside edge in light: ink at 8%; nothing in dark.
+    /// A card's picture edge in light: ink at 8%; nothing in dark.
     static let windowHairline = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? .clear
@@ -595,36 +412,6 @@ struct SidewaysPan: UIGestureRecognizerRepresentable {
     }
 }
 
-/// The ring around the tab on screen's card: Basecamp's ring on the tile on
-/// screen (`BasecampTiles`), just outside the card's edge with light on its top
-/// and a faint glow, but always the space's color, never the page's (David,
-/// 2026-11-08). Drawn on the card and on the page's picture gliding into it.
-struct CardRing: View {
-    let color: Color
-    let radius: CGFloat
-    /// Basecamp's ring width, drawn just outside the card's edge.
-    static let width = BasecampTiles.ringWidth
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    var body: some View {
-        // Grown by its width, so it hugs the card's outside edge.
-        let shape = RoundedRectangle(cornerRadius: radius + Self.width, style: .continuous)
-        let dark = colorScheme == .dark
-        shape.strokeBorder(color, lineWidth: Self.width)
-            .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
-            .overlay {
-                // Light catching the ring's outer edge along the top, gone by the middle.
-                shape.gradientBorder(
-                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
-                                   startPoint: .top, endPoint: .center),
-                    lineWidth: 1)
-            }
-            .shadow(color: color.opacity(dark ? 0.14 : 0.2), radius: 5)
-            .padding(-Self.width)
-    }
-}
-
 /// A site with no icon yet: its first letter on a calm color of its own.
 struct LetterMark: View {
     let site: String
@@ -650,11 +437,11 @@ struct LetterMark: View {
 /// the tab itself, so it hears of their changes on its own.
 extension OverviewRow: @MainActor Equatable {
     static func == (a: Self, b: Self) -> Bool {
-        a.tab === b.tab && a.isOnScreen == b.isOnScreen && a.tallness == b.tallness
-            && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.ring == b.ring && a.space == b.space
+        a.tab === b.tab && a.isOnScreen == b.isOnScreen
+            && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.space == b.space
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
-            && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight && a.inGrid == b.inGrid
+            && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight
             && a.carried == b.carried && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
     }
 }

@@ -59,21 +59,6 @@ struct TabOverview: View {
 
     /// Counts closes, so the shake listener takes focus again after each.
     @State private var closes = 0
-    /// Counts pinches between cards and rows, for their tap.
-    @State private var tidyChanges = 0
-    /// How tall every tab but the one on screen is: 0 slim rows (as the
-    /// overview always opens), 1 cards (pinched apart, for this visit
-    /// only), and anything between while a pinch glides (David, 2026-11-16).
-    @State private var cards: CGFloat = 0
-    /// Set once a pinch has switched the list, so the rest of that pinch
-    /// does nothing more.
-    @State private var pinchDone = false
-    /// The list fades out and back in around a switch with Reduce Motion.
-    @State private var listFade: Double = 1
-    /// When a pinch last moved: a finger lifting off a card at the end of a
-    /// pinch would otherwise count as a tap and open it.
-    @State private var lastPinch = Date.distantPast
-    private var pinchedRecently: Bool { Date.now.timeIntervalSince(lastPinch) < 0.35 }
 
     /// A tab held and being dragged to a new place (phase 2, step 5).
     @State private var drag: Drag?
@@ -126,10 +111,10 @@ struct TabOverview: View {
     /// at the top or behind the bar slides just into view instead.
     /// Scrolls the list while a held tab rests near its top or bottom.
     @State private var edgeScroll: Task<Void, Never>?
-    /// A pinch, a drag, or the moment after either: a finger lifting then
-    /// would otherwise count as a tap.
+    /// A drag, or the moment after one: a finger lifting then would
+    /// otherwise count as a tap.
     private var busy: Bool {
-        pinchedRecently || drag != nil || finishing || Date.now.timeIntervalSince(lastDrop) < 0.35
+        drag != nil || finishing || Date.now.timeIntervalSince(lastDrop) < 0.35
     }
     /// Done was tapped and the tab on screen's group is opening first.
     @State private var finishing = false
@@ -139,14 +124,9 @@ struct TabOverview: View {
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
-    /// The grid of cards, the only overview (David, 2026-11-17: "all in on
-    /// the grid"). The list's code stays until it's taken out (step 3 of
-    /// "Plan: iOS's own menus and drag").
-    private let grid = true
-    /// The grid on iOS 27: iOS's own hold menu and drag to reorder
+    /// On iOS 27, iOS's own hold menu and drag to reorder
     /// (`OverviewGridReorder.swift`) instead of Firn's.
     private var systemDrag: Bool {
-        guard grid else { return false }
         if #available(iOS 27, *) { return true }
         return false
     }
@@ -158,8 +138,8 @@ struct TabOverview: View {
     private var gridMetrics: OverviewGridMetrics {
         OverviewGridMetrics(width: size.width, height: size.height)
     }
-    /// A card's height: the list's, or the grid's.
-    private var cardHeight: CGFloat { grid ? gridMetrics.cardHeight : OverviewRow.cardHeight }
+    /// A card's height in the grid.
+    private var cardHeight: CGFloat { gridMetrics.cardHeight }
 
     /// Groups and loose tabs in the order shown: the store's, or the drag's
     /// while one moves.
@@ -195,14 +175,6 @@ struct TabOverview: View {
     private var space: String { store.activeSpace.color }
     /// The room above the list's first item.
     private static let topMargin: CGFloat = 8
-    /// How tall a tab's tile is, 0 (slim row) to 1 (card): only the tab on
-    /// screen is a card each time the overview opens; a pinch apart opens
-    /// every other tab into one for that visit (David, 2026-11-16). A
-    /// Basecamp tile carried into the list takes the list's shape.
-    private func tallness(_ tab: FirnCore.Tab, onScreen: Bool) -> CGFloat {
-        grid || onScreen ? 1 : cards
-    }
-
     var body: some View {
         ScrollViewReader { scroller in
             // A plain stack, not a List: List's own swipe can't follow the
@@ -228,17 +200,7 @@ struct TabOverview: View {
                                           store.move(tab, to: to)
                                       }
                                   })
-                    let items = shownItems
-                    if grid {
-                        gridTiles(items)
-                    } else {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            switch item {
-                            case let .tab(tab): listTile(tab, at: index, of: items.count, loose: true)
-                            case let .group(group): groupTiles(group, at: index, of: items.count)
-                            }
-                        }
-                    }
+                    gridTiles(shownItems)
                 }
                 .padding(.horizontal, 16)
                 // Where the top of the list's view is on screen, below the
@@ -276,7 +238,6 @@ struct TabOverview: View {
                                     menu: openMenu(at:),
                                     menuEnded: { cancelled in if cancelled { closeMenu() } },
                                     leaveMenu: leaveMenu(to:from:)))
-                .opacity(listFade)
                 // The list's fade, growth, and blur all on its contents, never
                 // on the scroll view: the scroll view's frame ends at the bar's
                 // top, and anything wrapped around it was cut there on David's
@@ -314,33 +275,6 @@ struct TabOverview: View {
             .sensoryFeedback(.impact(weight: .light), trigger: forms)
             .sensoryFeedback(.impact(weight: .light), trigger: picks)
             .sensoryFeedback(.impact(weight: .light), trigger: pulls)
-            // Pinch together for slim rows, apart for cards, as a photo
-            // grid zooms. Once the pinch clearly goes one way, the whole
-            // change runs as one glide, the tab under the fingers held in
-            // place. (Following the fingers was tried, 2026-11-05: a slow
-            // pinch reports in steps and every step re-lays out the list,
-            // 15 to 20 frames a second on David's iPhone.)
-            .simultaneousGesture(
-                MagnifyGesture(minimumScaleDelta: 0.02)
-                    .onChanged { m in
-                        lastPinch = .now
-                        pinchMoved(m, scroller)
-                    }
-                    .onEnded { _ in
-                        lastPinch = .now
-                        pinchEnded()
-                    }
-            )
-            // Only a pinch (or its VoiceOver action) taps, never an opening
-            // (David, 2026-11-09: no haptic on the swipe up).
-            .sensoryFeedback(.selection, trigger: tidyChanges)
-            // Pinching can't be found by VoiceOver: the same choice as an action.
-            // The grid is all cards already.
-            .accessibilityActions {
-                if !grid {
-                    Button(cards < 0.5 ? "Show Cards" : "Show Rows") { setCards(cards < 0.5 ? 1 : 0, scroller) }
-                }
-            }
             .contentMargins(.top, Self.topMargin, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             // The other cards wait behind a dim that lifts as the page
@@ -458,8 +392,6 @@ struct TabOverview: View {
             groups: Dictionary(store.tabGroups.map { ($0.id, $0.folded) }) { a, _ in a },
             grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
             tiles: store.basecampTabs.map(\.id),
-            rows: cards < 0.5,
-            grid: grid,
             scroll: scroll ?? Int(((spots.scroll?.contentOffset.y ?? 0) / 16).rounded()),
             dark: colorScheme == .dark)
     }
@@ -479,13 +411,9 @@ struct TabOverview: View {
         }
     }
 
-    /// What an opening takes as it starts: slim rows again (a pinch apart
-    /// lasts one visit), and the list scrolled to the tab on screen.
-    /// Only what has changed is set: every card reads it, so setting it as
-    /// a swipe up began rebuilt the whole list in the frame the finger
-    /// grabbed (a 35–55ms frame on David's iPhone, 2026-11-13).
+    /// What an opening takes as it starts: the list scrolled to the tab on
+    /// screen.
     private func getReady(_ scroller: ScrollViewProxy) {
-        if cards != 0 { cards = 0 }
         guard let id = store.activeTab?.id else { return }
         scroll(to: id, scroller)
     }
@@ -554,7 +482,7 @@ struct TabOverview: View {
 
     /// Hidden: everything a visit leaves behind goes, as when the
     /// overview was built afresh for each one (a hold, a menu, a drag and
-    /// its moved order, a forming group, a rename, a pinch under way).
+    /// its moved order, a forming group, a rename).
     private func forgetOpening() {
         hoverWait?.cancel()
         edgeScroll?.cancel()
@@ -574,8 +502,6 @@ struct TabOverview: View {
         members = nil
         tileOrder = nil
         finishing = false
-        pinchDone = false
-        listFade = 1
         naming = nil
         basecampFull = false
     }
@@ -612,8 +538,7 @@ struct TabOverview: View {
                     // fades as the tile comes through, and the shape glides.
                     let shaped = drag.basecamp
                     LiftedTile(finger: finger, height: shaped ? drag.tileSize.height : drag.start.height,
-                               lifted: drag.lifted,
-                               steady: tallness(tab, onScreen: isOnScreen(tab)) < 0.5) {
+                               lifted: drag.lifted) {
                         // The tile sets the size and the row lies over it:
                         // a card keeps its own height, and side by side in
                         // a stack it held the tile at a card's height, a
@@ -647,67 +572,6 @@ struct TabOverview: View {
         }
     }
 
-    /// How far the fingers move (8% apart or together) before the pinch
-    /// counts: enough to ignore a wobble, soon enough to feel immediate.
-    private static let pinchStart: CGFloat = 1.08
-
-    private func pinchMoved(_ m: MagnifyGesture.Value, _ scroller: ScrollViewProxy) {
-        guard !pinchDone, drag == nil, !grid else { return }
-        let target: CGFloat
-        if cards < 0.5, m.magnification > Self.pinchStart { target = 1 }
-        else if cards > 0.5, m.magnification < 1 / Self.pinchStart { target = 0 }
-        else { return }
-        pinchDone = true
-        setCards(target, scroller, hold: anchor(at: m.startLocation))
-    }
-
-    private func pinchEnded() { pinchDone = false }
-
-    /// The tab under a point in the list (the nearest if it's between
-    /// tabs), and the anchor that keeps it where it is: the point at the
-    /// same fraction of its tile and of the list's height, so scrolling to
-    /// it leaves it in place now and holds it there as tiles resize.
-    private func anchor(at point: CGPoint) -> (id: UUID, anchor: UnitPoint)? {
-        let view = spots.viewport
-        guard view.height > 0 else { return nil }
-        let y = view.minY + point.y
-        let shown = visibleTabs.compactMap { tab in spots.frames[tab.id].map { (tab.id, $0) } }
-            .filter { $0.1.maxY > view.minY && $0.1.minY < view.maxY }
-        guard let (id, frame) = shown.min(by: { distance(y, $0.1) < distance(y, $1.1) }) else { return nil }
-        let top = frame.minY - view.minY
-        let room = view.height - frame.height
-        let fraction = room > 0 ? min(max(top / room, 0), 1) : 0.5
-        return (id, UnitPoint(x: 0.5, y: fraction))
-    }
-
-    private func distance(_ y: CGFloat, _ frame: CGRect) -> CGFloat {
-        y < frame.minY ? frame.minY - y : (y > frame.maxY ? y - frame.maxY : 0)
-    }
-
-    /// Pinched together (0): every tab but the one on screen is a slim row,
-    /// as the overview opens. Pinched apart (1): every tab is a card, until
-    /// the overview closes. Every card's window folds
-    /// away under its line or opens below it (0.2s, ease-out, no bounce), the held tab staying in
-    /// place, or the tab on screen held in the middle (VoiceOver's action).
-    /// With Reduce Motion, the list fades out, changes, and fades back in.
-    private func setCards(_ target: CGFloat, _ scroller: ScrollViewProxy,
-                          hold: (id: UUID, anchor: UnitPoint)? = nil) {
-        let held = hold ?? store.activeTab.map { ($0.id, UnitPoint.center) }
-        if (target > 0.5) != (cards > 0.5) { tidyChanges += 1 }
-        if reduceMotion {
-            withAnimation(.easeOut(duration: 0.15)) { listFade = 0 } completion: {
-                cards = target
-                if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
-                withAnimation(.easeOut(duration: 0.15)) { listFade = 1 }
-            }
-            return
-        }
-        withAnimation(.easeOut(duration: 0.2)) {
-            cards = target
-            if let held { scroller.scrollTo(held.id, anchor: held.anchor) }
-        }
-    }
-
     private func isOnScreen(_ tab: FirnCore.Tab) -> Bool {
         tab.id == (heldCard ?? store.activeTab?.id)
     }
@@ -720,11 +584,9 @@ struct TabOverview: View {
         return OverviewRow(
             tab: tab,
             isOnScreen: onScreen,
-            tallness: tallness(tab, onScreen: onScreen),
             pictures: pictures,
             readsDisk: onScreen && shown,
             loadPicture: { await pictures.loadImage(for: tab.id) },
-            ring: Theme.spaceRing(space),
             space: space,
             windowShown: gliding != tab.id && (!onScreen || landing.lineShown),
             open: { openCard(tab) },
@@ -737,7 +599,6 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: cardHeight,
-            inGrid: grid,
             holdMenu: holdMenu,
             carried: systemDragged.contains(tab.id),
             swipesItself: !inCollection,
@@ -747,7 +608,7 @@ struct TabOverview: View {
         .equatable()
     }
 
-    /// TestFlight's grid: loose tabs as cards in columns, each run between
+    /// The grid: loose tabs as cards in columns, each run between
     /// groups one grid; a group a full-width folder card, its tabs a grid
     /// inside it once opened.
     @ViewBuilder private func gridTiles(_ items: [TabListItem]) -> some View {
@@ -860,7 +721,7 @@ struct TabOverview: View {
         return VStack(spacing: 0) {
             let line = GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
                                  naming: store.isNaming(group), toggle: { fold(group) },
-                                 icons: grid && closed ? store.tabs(in: group) : [])
+                                 icons: closed ? store.tabs(in: group) : [])
                 // Hold the name line, then move, to drag the whole group
                 // to a new place, as a tab drags (the list's HoldToDrag);
                 // holding still opens its menu.
@@ -890,21 +751,17 @@ struct TabOverview: View {
                     }
                 }
             }
-            if grid {
-                // Opened, a folder shows its tabs as a grid inside it,
-                // the same columns as outside, 8pt apart as in the list.
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.inset,
-                                                             alignment: .top),
-                                         count: gridMetrics.columns),
-                          spacing: GroupCard.inset) {
-                    if system, #available(iOS 27, *) {
-                        groupTabs.reorderable(collectionID: GridCollection.tabs(group.id))
-                    } else {
-                        groupTabs
-                    }
+            // Opened, a folder shows its tabs as a grid inside it, the same
+            // columns as outside, 8pt apart.
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.inset,
+                                                         alignment: .top),
+                                     count: gridMetrics.columns),
+                      spacing: GroupCard.inset) {
+                if system, #available(iOS 27, *) {
+                    groupTabs.reorderable(collectionID: GridCollection.tabs(group.id))
+                } else {
+                    groupTabs
                 }
-            } else {
-                VStack(spacing: GroupCard.inset) { groupTabs }
             }
         }
         .padding(.horizontal, GroupCard.inset)
@@ -984,11 +841,7 @@ struct TabOverview: View {
     private func listTile(_ tab: FirnCore.Tab, at index: Int?, of count: Int, loose: Bool) -> some View {
         let spot: (CGRect) -> Void = { frame in
             spots.frames[tab.id] = frame
-            if tallness(tab, onScreen: isOnScreen(tab)) == 1 {
-                spots.cards.insert(tab.id)
-            } else {
-                spots.cards.remove(tab.id)
-            }
+            spots.cards.insert(tab.id)
         }
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
@@ -1000,9 +853,8 @@ struct TabOverview: View {
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
             // A card stays while its page glides (only its window empties,
-            // `windowShown`); a slim row has no window, so it empties whole.
-            .modifier(EmptyWhileHeld(finger: finger, id: tab.id,
-                                     gliding: gliding == tab.id && tallness(tab, onScreen: isOnScreen(tab)) < 1))
+            // `windowShown`).
+            .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: false))
             // Hold, then move, lifts it (the list's HoldToDrag). Holding
             // still opens Firn's own menu beside the tab (`openMenu`);
             // moving away from it drags the tab on.
@@ -1190,7 +1042,7 @@ struct TabOverview: View {
     /// What a still hold at a point (global) opens Firn's menu for: a tab,
     /// a group's name line, or a Basecamp tile.
     private func menuTarget(at point: CGPoint) -> Liftable? {
-        guard heldMenu == nil, drag == nil, gliding == nil, !pinchedRecently else { return nil }
+        guard heldMenu == nil, drag == nil, gliding == nil else { return nil }
         return firnHolds(liftable(at: point))
     }
 
@@ -1383,7 +1235,7 @@ struct TabOverview: View {
     }
 
     private func startDrag(_ new: Drag, at point: CGPoint) {
-        guard drag == nil, !pinchedRecently else { return }
+        guard drag == nil else { return }
         if new.tile {
             tileOrder = store.basecampTabs.map(\.id)
         } else {
@@ -1484,9 +1336,6 @@ struct TabOverview: View {
     private func makeRoom() {
         guard let drag, var ids = order, var groups = members else { return }
         if forming != nil, holdForming() { return }
-        let top = finger.top
-        let bottom = finger.top + drag.height
-        let middle = (top + bottom) / 2
         let view = spots.viewport
         func shownFrame(_ id: UUID) -> CGRect? {
             spots.frames[id].flatMap { $0.maxY > view.minY && $0.minY < view.maxY ? $0 : nil }
@@ -1497,48 +1346,6 @@ struct TabOverview: View {
         let now = groups.first { $0.value.contains(drag.id) }?.key
         let into: UUID? = drag.group ? nil : ids.first { id in
             open.contains(id) && (shownFrame(id).map { $0.minY <= finger.y && finger.y < $0.maxY } ?? false)
-        }
-
-        // Loose tabs a held tab could rest on to make a group with.
-        // Once per move, not once per tile: the finger moves every frame.
-        // (Not a Basecamp tile: it only moves into the list or a group.)
-        let looseIDs: Set<UUID> = drag.group || drag.tile ? [] : Set(store.looseTabs.map(\.id))
-        let loose: Set<UUID> = Set(ids.filter { $0 != drag.id && looseIDs.contains($0) })
-        // The held tile's edge that leads toward `index` among `others`
-        // (`was` is its own place there, nil if arriving: then its middle).
-        func edge(toward index: Int, was: Int?) -> CGFloat {
-            guard let was else { return middle }
-            return index < was ? top : bottom
-        }
-
-        // Where among its new neighbors: `was` is its place among them if
-        // it's already there, nil if it's just arriving (then its middle
-        // decides). Next to a held tab, an open group is above once the
-        // finger is past its middle (the finger is in it otherwise). Past
-        // a loose tab, its edge has to pass three quarters of it, not half,
-        // leaving its middle half to rest on and make a group (David,
-        // 2026-11-08).
-        func place(among others: [UUID], was: Int?) -> Int? {
-            let shown = others.indices.filter { shownFrame(others[$0]) != nil }
-            guard let first = shown.first else { return others.isEmpty ? 0 : nil }
-            let above = shown.filter { index in
-                guard let frame = shownFrame(others[index]) else { return false }
-                if !drag.group, open.contains(others[index]) { return frame.midY < finger.y }
-                guard let was else { return frame.midY < middle }
-                let rest = loose.contains(others[index]) ? frame.height / 4 : 0
-                return index < was ? frame.midY - rest < top : frame.midY + rest < bottom
-            }.count
-            return first + above
-        }
-
-        // Resting on a loose tab's middle half: the list holds still, and
-        // after a moment their group starts forming (`form`).
-        func restingOn(_ others: [UUID], was: Int?) -> UUID? {
-            others.indices.first { index in
-                guard loose.contains(others[index]), let frame = shownFrame(others[index]) else { return false }
-                let at = edge(toward: index, was: was)
-                return at > frame.minY + frame.height / 4 && at < frame.maxY - frame.height / 4
-            }.map { others[$0] }
         }
 
         // In the grid: before every card in a row above the finger, and
@@ -1558,30 +1365,16 @@ struct TabOverview: View {
             return first + before
         }
 
-        if grid {
-            // No hold to form in the grid (yet): its forming card is the
-            // list's shape.
-        } else if into == nil {
-            let others = ids.filter { $0 != drag.id }
-            let resting = restingOn(others, was: now == nil ? ids.firstIndex(of: drag.id) : nil)
-            waitToForm(over: resting)
-            if resting != nil { return }
-        } else {
-            waitToForm(over: nil)
-        }
-
         if let into, var others = groups[into] {
-            let was = now == into ? others.firstIndex(of: drag.id) : nil
             others.removeAll { $0 == drag.id }
-            guard let at = grid ? gridPlace(among: others) : place(among: others, was: was) else { return }
+            guard let at = gridPlace(among: others) else { return }
             others.insert(drag.id, at: at)
             if let now, now != into { groups[now]?.removeAll { $0 == drag.id } }
             ids.removeAll { $0 == drag.id }
             groups[into] = others
         } else {
-            let was = now == nil ? ids.firstIndex(of: drag.id) : nil
             var others = ids.filter { $0 != drag.id }
-            guard let at = grid ? gridPlace(among: others) : place(among: others, was: was) else { return }
+            guard let at = gridPlace(among: others) else { return }
             others.insert(drag.id, at: at)
             if let now { groups[now]?.removeAll { $0 == drag.id } }
             ids = others
@@ -1605,8 +1398,7 @@ struct TabOverview: View {
         } else {
             whole = (spots.viewport.minX + 16, spots.viewport.width - 32)
         }
-        guard grid else { return whole }
-        // In the grid, one column's width, under the finger.
+        // One column's width, under the finger.
         let columns = CGFloat(gridMetrics.columns)
         let gap = group == nil ? OverviewGridMetrics.spacing : GroupCard.inset
         let width = (whole.width - gap * (columns - 1)) / columns
@@ -1659,7 +1451,7 @@ struct TabOverview: View {
             return makeRoomForTile()
         }
         let left = drag.basecamp ? lane(in: nil).minX
-            : grid ? finger.x - grabAcross * finger.width : finger.left
+            : finger.x - grabAcross * finger.width
         if drag.basecamp { carryOutOfBasecamp(drag) }
         place(finger.y - drag.grab, left)
         if over {
@@ -1842,7 +1634,7 @@ struct TabOverview: View {
         var new = old
         new.tabs = true
         new.reshaping = .now + 0.3
-        new.rowHeight = cards > 0.5 || grid ? cardHeight : OverviewRow.rowHeight
+        new.rowHeight = cardHeight
         let lane = lane(in: nil)
         // Drawn at the card's own size and grown as one picture.
         new.rowSize = CGSize(width: lane.width, height: new.rowHeight)

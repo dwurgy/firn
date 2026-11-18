@@ -255,12 +255,9 @@ struct BrowserScreen: View {
     /// screen until something else did.
     @State private var sheets = SpaceSheets()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The grid's cards: their pictures sit above their titles, with
-    /// rounder corners, so a page glides into and out of them there.
-    private let gridCards = true
-    private var cardRadius: CGFloat {
-        gridCards ? OverviewRow.gridCornerRadius : OverviewRow.windowCornerRadius
-    }
+    /// The grid's cards: their pictures sit above their titles, so a page
+    /// glides into and out of them there.
+    private var cardRadius: CGFloat { OverviewRow.gridCornerRadius }
     /// VoiceOver always has the whole bar (phase 5): its buttons stay where
     /// a swipe through them finds them.
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
@@ -1289,12 +1286,11 @@ struct BrowserScreen: View {
         return nil
     }
 
-    /// Where a tab's picture sits in the overview: a tall card's window
-    /// under its line (`OverviewRow.window(in:)`), or the whole slim row
-    /// or Basecamp tile.
+    /// Where a tab's picture sits in the overview: a card's picture above
+    /// its title (`OverviewRow.gridWindow(in:)`), or a whole Basecamp tile.
     private func pictureSpot(_ frame: CGRect, of tab: FirnCore.Tab) -> CGRect {
         guard spots.cards.contains(tab.id), tab.place != .basecamp else { return frame }
-        return gridCards ? OverviewRow.gridWindow(in: frame) : OverviewRow.window(in: frame)
+        return OverviewRow.gridWindow(in: frame)
     }
 
     /// The spot, if it's on screen (a card scrolled away has no glide).

@@ -157,16 +157,19 @@ struct SpaceWash: View {
                            locations: stops.map(\.0), count: stops.count)!
             }
             let options: CGGradientDrawingOptions = [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-            // The sky: dim at the top, brightening toward the horizon.
+            // The sky: dim at the top, brightening all the way down to the
+            // horizon, so every gap between cards shows a different shade,
+            // as Safari's wallpaper does (David, 2026-11-18: held in the
+            // middle, the cards hid most of it).
             context.drawLinearGradient(
-                gradient([(0, 0.18, 1), (0.22, 0.34, 1), (0.42, 0.72, 1), (0.55, 0.86, 1)]),
-                start: CGPoint(x: 0, y: -200), end: CGPoint(x: 0, y: 1074), options: options)
-            // The glow where the sun peeks, 62% across.
+                gradient([(0, 0.22, 1), (0.35, 0.50, 1), (0.70, 0.80, 1), (1, 0.90, 1)]),
+                start: CGPoint(x: 0, y: -60), end: CGPoint(x: 0, y: 700), options: options)
+            // The glow where the sun peeks, 62% across, low.
             context.saveGState()
-            context.translateBy(x: 250, y: 450)
-            context.scaleBy(x: 1, y: 150.0 / 240)
+            context.translateBy(x: 250, y: 640)
+            context.scaleBy(x: 1, y: 170.0 / 260)
             context.drawRadialGradient(gradient([(0, 1, 1), (1, 1, 0)]),
-                                       startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 240,
+                                       startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 260,
                                        options: [])
             context.restoreGState()
             // The snow's ridges, each darker toward its shadowed foot.
@@ -185,21 +188,21 @@ struct SpaceWash: View {
                 context.restoreGState()
             }
             ridge({
-                $0.move(to: CGPoint(x: -200, y: 520))
-                $0.addCurve(to: CGPoint(x: 170, y: 505), control1: CGPoint(x: -60, y: 470), control2: CGPoint(x: 60, y: 540))
-                $0.addCurve(to: CGPoint(x: 420, y: 500), control1: CGPoint(x: 280, y: 470), control2: CGPoint(x: 330, y: 470))
-                $0.addCurve(to: CGPoint(x: 610, y: 495), control1: CGPoint(x: 510, y: 530), control2: CGPoint(x: 560, y: 480))
-            }, top: 485, from: 0.62, to: 0.40)
+                $0.move(to: CGPoint(x: -200, y: 700))
+                $0.addCurve(to: CGPoint(x: 170, y: 690), control1: CGPoint(x: -60, y: 660), control2: CGPoint(x: 60, y: 715))
+                $0.addCurve(to: CGPoint(x: 420, y: 685), control1: CGPoint(x: 280, y: 665), control2: CGPoint(x: 330, y: 662))
+                $0.addCurve(to: CGPoint(x: 610, y: 680), control1: CGPoint(x: 510, y: 708), control2: CGPoint(x: 560, y: 668))
+            }, top: 672, from: 0.70, to: 0.48)
             ridge({
-                $0.move(to: CGPoint(x: -200, y: 610))
-                $0.addCurve(to: CGPoint(x: 220, y: 610), control1: CGPoint(x: -40, y: 580), control2: CGPoint(x: 90, y: 650))
-                $0.addCurve(to: CGPoint(x: 610, y: 620), control1: CGPoint(x: 350, y: 570), control2: CGPoint(x: 420, y: 570))
-            }, top: 590, from: 0.80, to: 0.55)
+                $0.move(to: CGPoint(x: -200, y: 770))
+                $0.addCurve(to: CGPoint(x: 220, y: 770), control1: CGPoint(x: -40, y: 748), control2: CGPoint(x: 90, y: 800))
+                $0.addCurve(to: CGPoint(x: 610, y: 778), control1: CGPoint(x: 350, y: 740), control2: CGPoint(x: 420, y: 740))
+            }, top: 755, from: 0.84, to: 0.60)
             ridge({
-                $0.move(to: CGPoint(x: -200, y: 740))
-                $0.addCurve(to: CGPoint(x: 260, y: 730), control1: CGPoint(x: 0, y: 700), control2: CGPoint(x: 140, y: 770))
-                $0.addCurve(to: CGPoint(x: 610, y: 740), control1: CGPoint(x: 380, y: 690), control2: CGPoint(x: 470, y: 710))
-            }, top: 715, from: 0.92, to: 0.62)
+                $0.move(to: CGPoint(x: -200, y: 840))
+                $0.addCurve(to: CGPoint(x: 260, y: 832), control1: CGPoint(x: 0, y: 812), control2: CGPoint(x: 140, y: 862))
+                $0.addCurve(to: CGPoint(x: 610, y: 840), control1: CGPoint(x: 380, y: 802), control2: CGPoint(x: 470, y: 818))
+            }, top: 820, from: 0.92, to: 0.72)
         }
         // Three box blurs each way, close to a Gaussian of `Tuning.blur`
         // (each box about twice the blur's sigma wide), edges held.

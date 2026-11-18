@@ -300,8 +300,10 @@ struct GridTitle: View {
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // A short title sits centered under its card, as Safari's; a long
+        // one fills the width and truncates (David, 2026-11-18).
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 4)
         .padding(.top, 5)
         .accessibilityHidden(true)
@@ -348,11 +350,19 @@ struct UnevenInsetShape<S: Shape>: Shape {
 }
 
 extension Theme {
-    /// A grid card's X: a disc of neutral dark grey at 80% (menus and cards
-    /// stay neutral, David, 2026-11-15), the X in near-white, light and dark;
-    /// stronger than Safari's so it reads over bright pages (David, 2026-11-16).
-    static let closeDisc = Color(white: 0.13).opacity(0.8)
-    static let closeDiscMark = Color(white: 0.97)
+    /// A grid card's X, neutral (menus and cards stay neutral, David,
+    /// 2026-11-15). Dark: a dark grey disc at 80%, the X near-white. Light:
+    /// a pale disc with a dark grey X, as Safari's (David, 2026-11-18; the
+    /// dark disc read heavy on light pages); solid enough to read over any
+    /// page, with no blur to draw per card.
+    static let closeDisc = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.13, alpha: 0.8)
+            : UIColor(white: 0.90, alpha: 0.9)
+    })
+    static let closeDiscMark = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor(white: 0.97, alpha: 1) : UIColor(white: 0.25, alpha: 1)
+    })
     /// A card's picture edge in light: ink at 8%; nothing in dark.
     static let windowHairline = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark

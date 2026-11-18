@@ -664,6 +664,11 @@ struct TabOverview: View {
                               if !busy, let tab = byID[id]?.tab { close(tab) }
                           },
                           swipes: { id in byID[id]?.tab != nil },
+                          isFolder: { id in byID[id]?.group != nil },
+                          join: { id, groupID in
+                              guard let tab = byID[id]?.tab, let group = byID[groupID]?.group else { return }
+                              store.move(tab, toGroup: group, at: store.tabs(in: group).count)
+                          },
                           morph: foldMorph,
                           reduceMotion: reduceMotion)
             case let .tabs(after, entries):

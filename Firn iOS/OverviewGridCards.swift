@@ -206,6 +206,11 @@ struct GridCards: UIViewRepresentable {
     let close: (UUID) -> Void
     /// Whether a cell swipes to close: a folded group's doesn't.
     var swipes: (UUID) -> Bool = { _ in true }
+    /// Whether a cell is a folded group, which a carried tab can be put
+    /// into (step 4 of "a folded group is one tab's size").
+    var isFolder: (UUID) -> Bool = { _ in false }
+    /// A tab let go on a folded group: it goes into the group, at its end.
+    var join: (UUID, UUID) -> Void = { _, _ in }
     /// A group just folded: its cell shrinks into place from where the
     /// open group was (its frame on screen).
     var morph: GridMorph?
@@ -733,7 +738,10 @@ struct GridCards: UIViewRepresentable {
             if let id = carried {
                 let finger = session.location(in: view)
                 let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
-                if let spot = nearestSpot(to: middle, in: view) { makeRoom(for: id, at: spot, in: view) }
+                if !aimAtFolder(carrying: id, middle: middle, in: view),
+                   let spot = nearestSpot(to: middle, in: view) {
+                    makeRoom(for: id, at: spot, in: view)
+                }
             }
             let proposal = UICollectionViewDropProposal(operation: .move, intent: .unspecified)
             // The card stays its own size as it's carried, as Safari's: the
@@ -772,6 +780,68 @@ struct GridCards: UIViewRepresentable {
             }
         }
 
+        // MARK: Into a folded group
+
+        /// The folded group a carried tab would go into if let go now.
+        private var aimed: UUID?
+        /// How much a folded group swells while a tab is over it.
+        private static let folderSwell: CGFloat = 1.06
+
+        /// A carried tab over a folded group (never a group over one:
+        /// groups don't nest). Its middle half takes the tab, the folder
+        /// swelling a little; the quarter on the far side lets the tab pass
+        /// it (the two trade places); the near quarter holds still, so the
+        /// folder never slips out from under a tab on its way in. Returns
+        /// whether the folder decided, so no room is made.
+        private func aimAtFolder(carrying id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
+            guard let parent, !parent.isFolder(id), let from = shown.firstIndex(of: id) else {
+                aim(at: nil, in: view)
+                return false
+            }
+            let layout = view.collectionViewLayout
+            for (spot, other) in shown.enumerated() where other != id && parent.isFolder(other) {
+                guard let frame = layout.layoutAttributesForItem(at: IndexPath(item: spot, section: 0))?.frame,
+                      frame.contains(middle) else { continue }
+                let inner = frame.insetBy(dx: frame.width / 4, dy: frame.height / 4)
+                if inner.contains(middle) {
+                    aim(at: other, in: view)
+                    return true
+                }
+                aim(at: nil, in: view)
+                let past = from < spot ? middle.x > inner.maxX : middle.x < inner.minX
+                if past { makeRoom(for: id, at: spot, in: view) }
+                return true
+            }
+            aim(at: nil, in: view)
+            return false
+        }
+
+        /// The folder a tab is over swells; the one it left settles back.
+        private func aim(at folder: UUID?, in view: UICollectionView) {
+            guard folder != aimed else { return }
+            let reduce = parent?.reduceMotion ?? false
+            if let old = aimed, let cell = cell(for: old, in: view) {
+                cell.grow(to: 1, stiffness: 300)
+            }
+            aimed = folder
+            if let folder, let cell = cell(for: folder, in: view) {
+                cell.grow(to: reduce ? 1 : Self.folderSwell, stiffness: 300)
+            }
+        }
+
+        private func cell(for id: UUID, in view: UICollectionView) -> GridCardCell? {
+            guard let path = dataSource?.indexPath(for: id) else { return nil }
+            return view.cellForItem(at: path) as? GridCardCell
+        }
+
+        func collectionView(_ view: UICollectionView, dropSessionDidExit session: any UIDropSession) {
+            aim(at: nil, in: view)
+        }
+
+        func collectionView(_ view: UICollectionView, dropSessionDidEnd session: any UIDropSession) {
+            aim(at: nil, in: view)
+        }
+
         /// Saves where the carried card now sits, once.
         private func settle(_ id: UUID) {
             guard let at = shown.firstIndex(of: id), shown != parent?.ids else { return }
@@ -781,6 +851,20 @@ struct GridCards: UIViewRepresentable {
         func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {
             guard let item = coordinator.items.first, let id = item.dragItem.localObject as? UUID,
                   let at = shown.firstIndex(of: id) else { return }
+            if let folder = aimed, let path = dataSource?.indexPath(for: folder),
+               let cell = view.cellForItem(at: path) {
+                // The carried picture shrinks into the folder's middle, about
+                // one of its small pictures' size, as the tab joins.
+                let b = cell.bounds
+                let rect = CGRect(x: b.midX - b.width * 0.2, y: b.midY - b.height * 0.15,
+                                  width: b.width * 0.4, height: b.height * 0.3)
+                coordinator.drop(item.dragItem, intoItemAt: path, rect: rect)
+                aim(at: nil, in: view)
+                carried = nil
+                parent?.held(id, false)
+                parent?.join(id, folder)
+                return
+            }
             coordinator.drop(item.dragItem, toItemAt: IndexPath(item: at, section: 0))
             settle(id)
         }

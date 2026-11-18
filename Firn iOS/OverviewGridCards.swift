@@ -39,21 +39,44 @@ final class GridCardCell: UICollectionViewCell {
     /// its own curve: the growth a quick spring of its own as the swipe
     /// starts, the slide following the finger. On the cell's sublayer
     /// transform, which UIKit's layout never touches.
+    ///
+    /// A growth always finishes before the shrink starts, as Safari's: let
+    /// go of a quick flick and its card still reaches its full size, then
+    /// shrinks on the way home. Firn's shrank as the finger lifted, so a
+    /// flick only grew 5 to 8% of its 9% (David's recording, 2026-11-18).
     func grow(to scale: CGFloat, stiffness: CGFloat) {
         let target = CATransform3DMakeScale(scale, scale, 1)
         let from = layer.presentation()?.sublayerTransform ?? layer.sublayerTransform
-        layer.removeAnimation(forKey: "grow")
+        let now = CACurrentMediaTime()
+        let grown = layer.sublayerTransform
+        // Still growing toward a larger size: the shrink waits its turn.
+        let wait = scale < grown.m11 ? max(0, grownAt + Self.fullGrowth - now) : 0
+        layer.removeAnimation(forKey: "shrink")
+        if wait == 0 { layer.removeAnimation(forKey: "grow") }
+        if scale > 1 { grownAt = now }
         layer.sublayerTransform = target
-        guard !CATransform3DEqualToTransform(from, target) else { return }
+        let start = wait > 0 ? grown : from
+        guard !CATransform3DEqualToTransform(start, target) else { return }
         let spring = CASpringAnimation(keyPath: "sublayerTransform")
-        spring.fromValue = NSValue(caTransform3D: from)
+        spring.fromValue = NSValue(caTransform3D: start)
         spring.toValue = NSValue(caTransform3D: target)
         spring.mass = 1
         spring.stiffness = stiffness
         spring.damping = 2 * sqrt(stiffness)
         spring.duration = spring.settlingDuration
-        layer.add(spring, forKey: "grow")
+        if wait > 0 {
+            // Added after the growth, so it takes over once it begins; until
+            // then the growth carries on (nothing fills in before it).
+            spring.beginTime = now + wait
+            layer.add(spring, forKey: "shrink")
+        } else {
+            layer.add(spring, forKey: "grow")
+        }
     }
+    /// When the last growth began, and how long one takes to be (nearly)
+    /// whole: the growth's spring is 97% there by 0.1s.
+    private var grownAt: CFTimeInterval = 0
+    private static let fullGrowth: CFTimeInterval = 0.1
 
     /// On top for a swipe, whether or not the finger's first touch raised it.
     func raise() {
@@ -69,6 +92,7 @@ final class GridCardCell: UICollectionViewCell {
         settle = nil
         swipe = .identity
         layer.removeAnimation(forKey: "grow")
+        layer.removeAnimation(forKey: "shrink")
         layer.sublayerTransform = CATransform3DIdentity
         contentView.alpha = 1
     }

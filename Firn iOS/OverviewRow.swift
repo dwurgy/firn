@@ -71,7 +71,8 @@ struct OverviewRow: View {
     /// The corners a group card and a lifted tab are built on.
     static let cornerRadius: CGFloat = 14
     /// The shortest a grid card is (`OverviewGridMetrics`).
-    static let cardHeight: CGFloat = 240
+    /// `nonisolated`: `OverviewGridMetrics` reads it off the main actor.
+    nonisolated static let cardHeight: CGFloat = 240
 
     var body: some View {
         gridCard

@@ -183,6 +183,9 @@ struct GridMorph: Equatable {
     /// Folding (the cell shrinks in); opening is the open group's own
     /// glide (`GrowFromCell`).
     let folding: Bool
+    /// Each fold is its own: folding the same group again from the same
+    /// spot still shrinks it in (the cells remember the last one they ran).
+    var token = UUID()
 }
 
 /// A run of loose cards in the grid, as one UIKit collection view.

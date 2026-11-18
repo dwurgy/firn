@@ -459,6 +459,9 @@ struct BrowserScreen: View {
     /// How far above its card the page arrives (1.5% larger, about 5pt on
     /// a card), and how long the settle runs on after the glide ends.
     static let settleLift: CGFloat = 1.015
+    /// The set-down, switched off (Safari's closing tab has none; David,
+    /// 2026-11-13). A property, not a local, so the build doesn't warn.
+    static let setsDown = false
     private static let settleTime = 0.09
     private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
     private static let closeStart = 0.25
@@ -773,7 +776,7 @@ struct BrowserScreen: View {
             // Safari's closing tab simply eases in, with no set-down
             // (David, 2026-11-13: "just copy it exactly"). The set-down's
             // code stays, switched off.
-            let setsDown = false
+            let setsDown = Self.setsDown
             // Into a tall card: from just below the header, as the card shows.
             let skip = !tile && spots.cards.contains(tab.id) ? pictures.headerDepth(for: tab.id) : 0
             withAnimation(curve) {

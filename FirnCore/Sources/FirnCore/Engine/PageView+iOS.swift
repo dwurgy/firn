@@ -33,7 +33,7 @@ public struct PageView: UIViewControllerRepresentable {
 
     public func makeUIViewController(context: Context) -> PageHolder {
         let holder = PageHolder(page: webKitPage)
-        (holder.view as? PageFrame)?.show(reader: reader, fade: 0)
+        (holder.view as? PageFrame)?.show(reader: reader, motion: .instant)
         return holder
     }
 
@@ -42,8 +42,10 @@ public struct PageView: UIViewControllerRepresentable {
         guard let frame = holder.view as? PageFrame else { return }
         frame.onScroll = onScroll
         frame.held = held
-        // A cross-fade either way; a little quicker with Reduce Motion.
-        frame.show(reader: reader, fade: context.environment.accessibilityReduceMotion ? 0.15 : 0.2)
+        // Into Reader, an edge sweeps it in from the top, as Safari's; out
+        // of it, a cross-fade for now (step 2 of "Plan: Reader comes down
+        // from the top", `docs/HISTORY.md`). Reduce Motion: cross-fades.
+        frame.show(reader: reader, motion: context.environment.accessibilityReduceMotion ? .fade : .sweep)
     }
 
     private var webKitPage: WebKitPageController {
@@ -221,18 +223,58 @@ private final class PageFrame: UIView {
     /// What's on screen and scrolled: Reader's view, or the page.
     private var front: WKWebView { reader ?? webView }
 
-    /// Cross-fades Reader's view in over the page, or out again. It sits in
-    /// the mover with the page, so a pull carries it as it carries the
-    /// page, and it gets the same room under the clock and above the bar,
-    /// and shrinks the bar the same way. Once covered, the page is hidden,
-    /// so neither touches nor VoiceOver reach it behind the reader. No pull
-    /// to refresh in the reader: there's nothing of its own to reload.
-    func show(reader newReader: WKWebView?, fade: TimeInterval) {
+    /// How Reader's view comes and goes.
+    enum ReaderMotion {
+        /// At once (a page shown again with Reader already on).
+        case instant
+        /// A 0.2s cross-fade (Reduce Motion).
+        case fade
+        /// Into Reader: an edge sweeps it in from the top, as Safari's.
+        /// Out of it: a cross-fade for now.
+        case sweep
+    }
+
+    /// Into Reader: how long the edge takes to cross the screen, and how
+    /// long it waits at most for the reader's first drawn frame.
+    private static let sweepDuration: CFTimeInterval = 0.2
+    /// Longer than the plan's 0.5s: in the Simulator's Debug build the
+    /// reader took 0.5 to 0.65s to lay out, and sweeping in an empty page
+    /// is the very cut this replaces.
+    private static let sweepWait: TimeInterval = 0.8
+    /// Fast at first, easing out, as Safari's edge.
+    private static let sweepCurve = CAMediaTimingFunction(controlPoints: 0.2, 0.75, 0.3, 1)
+    /// Uncovers Reader's view from the top while it sweeps in.
+    private let sweepMask: CALayer = {
+        let mask = CALayer()
+        mask.backgroundColor = UIColor.black.cgColor
+        mask.anchorPoint = .zero
+        return mask
+    }()
+    /// Waits for the reader's first drawn frame before the sweep.
+    private var sweepWatcher: NSKeyValueObservation?
+    private var sweepTimeout: DispatchWorkItem?
+
+    /// Shows Reader's view over the page, or takes it away. It sits in the
+    /// mover with the page, so a pull carries it as it carries the page,
+    /// and it gets the same room under the clock and above the bar, and
+    /// shrinks the bar the same way. Once covered, the page is hidden, so
+    /// neither touches nor VoiceOver reach it behind the reader. No pull to
+    /// refresh in the reader: there's nothing of its own to reload.
+    ///
+    /// Into Reader (`docs/HISTORY.md`, "Plan: Reader comes down from the
+    /// top", step 1): the reader goes in front at once, masked away and
+    /// untouchable, until its page has drawn (it's its own web view, empty
+    /// at first: shown straight away, the empty view and then its first
+    /// frame made a cut). Then a straight edge uncovers it from the top of
+    /// the screen to the bottom. Nothing moves or dims; only the mask does,
+    /// on Core Animation. If it hasn't drawn within 0.8s, it sweeps anyway.
+    func show(reader newReader: WKWebView?, motion: ReaderMotion) {
         guard newReader !== reader else { return }
         let old = reader
         reader = newReader
         lastOffset = nil
         travel = 0
+        cancelSweep(old)
         readerWatcher = newReader?.scrollView.observe(\.contentOffset) { [weak self] scroller, _ in
             MainActor.assumeIsolated { self?.scrolled(scroller) }
         }
@@ -251,18 +293,116 @@ private final class PageFrame: UIView {
             if self.reader != nil, self.reader === newReader { self.webView.isHidden = true }
             UIAccessibility.post(notification: .screenChanged, argument: nil)
         }
-        guard fade > 0, window != nil else {
+        guard motion != .instant, window != nil else {
             newReader?.alpha = 1
             old?.alpha = 0
             done()
             return
         }
-        UIView.animate(withDuration: fade, delay: 0, options: .curveEaseOut) {
+        if motion == .sweep, let newReader, old == nil {
+            sweep(in: newReader, then: done)
+            return
+        }
+        UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
             newReader?.alpha = 1
             old?.alpha = 0
         } completion: { _ in
             MainActor.assumeIsolated { done() }
         }
+    }
+
+    /// Masks the reader away, waits for its first drawn frame, then sweeps.
+    private func sweep(in reader: WKWebView, then done: @escaping () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sweepMask.frame = CGRect(x: 0, y: 0, width: reader.bounds.width, height: 0)
+        reader.layer.mask = sweepMask
+        CATransaction.commit()
+        reader.alpha = 1
+        reader.isUserInteractionEnabled = false
+        reader.accessibilityElementsHidden = true
+        sweepDone = done
+
+        // Drawn: the reader's first layout reaching the screen, which is
+        // when its content size first arrives (WebKit sends both with the
+        // same commit), then a frame. Not its load's end: that waits for
+        // every picture, often past the timeout, and swept in an empty
+        // page (Simulator, 2026-11-18).
+        sweepWatcher = reader.scrollView.observe(\.contentSize) { [weak self] scroller, _ in
+            MainActor.assumeIsolated {
+                guard scroller.contentSize.height > 0 else { return }
+                self?.startSweepSoon()
+            }
+        }
+        let timeout = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.startSweep() }
+        }
+        sweepTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.sweepWait, execute: timeout)
+    }
+
+    /// What the sweep does once it starts; set only while one is waiting.
+    private var sweepDone: (() -> Void)?
+
+    private func startSweepSoon() {
+        sweepWatcher = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) { [weak self] in
+            MainActor.assumeIsolated { self?.startSweep() }
+        }
+    }
+
+    /// Once only, and only for the reader still on screen.
+    private func startSweep() {
+        guard let done = sweepDone, let reader else { return }
+        sweepDone = nil
+        sweepWatcher = nil
+        sweepTimeout?.cancel()
+        sweepTimeout = nil
+        sweepRunning = done
+        runSweep(on: reader)
+    }
+
+    /// What the running sweep does when it ends.
+    private var sweepRunning: (() -> Void)?
+
+    private func runSweep(on reader: WKWebView) {
+        let full = reader.bounds
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self, weak reader] in
+            MainActor.assumeIsolated {
+                guard let self, let reader, self.reader === reader,
+                      let done = self.sweepRunning else { return }
+                self.sweepRunning = nil
+                self.finishSweep(reader)
+                done()
+            }
+        }
+        let grow = CABasicAnimation(keyPath: "bounds.size.height")
+        grow.fromValue = 0
+        grow.toValue = full.height
+        grow.duration = Self.sweepDuration
+        grow.timingFunction = Self.sweepCurve
+        sweepMask.bounds = CGRect(x: 0, y: 0, width: full.width, height: full.height)
+        sweepMask.add(grow, forKey: "sweep")
+        CATransaction.commit()
+    }
+
+    private func finishSweep(_ reader: WKWebView) {
+        if reader.layer.mask === sweepMask { reader.layer.mask = nil }
+        sweepMask.removeAllAnimations()
+        reader.isUserInteractionEnabled = true
+        reader.accessibilityElementsHidden = false
+    }
+
+    /// A sweep still waiting or running when Reader closes (or is swapped):
+    /// it stops, and the old reader is left as it was otherwise.
+    private func cancelSweep(_ old: WKWebView?) {
+        sweepDone = nil
+        sweepRunning = nil
+        sweepWatcher = nil
+        sweepTimeout?.cancel()
+        sweepTimeout = nil
+        if let old { finishSweep(old) }
     }
 
     /// iOS's own pull-to-refresh. The spinner tucks away as soon as the

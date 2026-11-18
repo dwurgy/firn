@@ -234,12 +234,19 @@ struct GridCards: UIViewRepresentable {
         // runs only as its phase changes.
 
         /// How much a swiped card grows: Safari's, about 9% (516 to 564px
-        /// wide in David's recording, 2026-11-17), all there within about
-        /// 0.12s of the swipe starting, then held; it shrinks slowly on the
-        /// ease home's soft spring. It followed the finger's first 24pt
-        /// before, and read as a stepped resize (David, 2026-11-17).
+        /// wide in David's recording, 2026-11-17), two thirds there in
+        /// 0.03s and all there by about 0.07s, then held (measured frame by
+        /// frame; stiffness 650 took 0.17s and read as stiff); it shrinks
+        /// slowly on the ease home's soft spring. It followed the finger's
+        /// first 24pt before, and read as a stepped resize.
         private static let growth: CGFloat = 1.09
-        private static let growStiffness: CGFloat = 650
+        private static let growStiffness: CGFloat = 3000
+        /// Going right (nothing to close that way), the card still follows
+        /// almost fully, with a little give further out: Safari's went 97pt
+        /// to the right against 112pt to the left (David's recording,
+        /// 2026-11-17), where Firn's 40% stopped at 45pt and felt stiff.
+        private static let rightGive: CGFloat = 700
+        private static func rightward(_ dx: CGFloat) -> CGFloat { dx * rightGive / (dx + rightGive) }
         /// The ease home, shrinking as it goes: a spring with no bounce and
         /// Safari's pace, measured from David's recordings (2026-11-17):
         /// halfway home in about 0.15s, nearly there by 0.4s, a 0.56s
@@ -285,7 +292,7 @@ struct GridCards: UIViewRepresentable {
         /// some give (Safari's). It grows as it starts and stays grown
         /// either way until let go.
         private func follow(_ cell: GridCardCell, dx: CGFloat) {
-            cell.swipe = CGAffineTransform(translationX: dx < 0 ? dx : dx * 0.4, y: 0)
+            cell.swipe = CGAffineTransform(translationX: dx < 0 ? dx : Self.rightward(dx), y: 0)
         }
 
         /// Past a third of the card, or a flick left, it slides off and its
@@ -296,8 +303,10 @@ struct GridCards: UIViewRepresentable {
             let far = -dx > cell.bounds.width / 3
             let flick = speed < -700 && dx < -20
             guard far || flick, carried == nil else {
-                // The card's own speed: the finger's going left, 40% going right.
-                easeHome(id, cell, speed: dx < 0 ? speed : speed * 0.4)
+                // The card's own speed: the finger's going left, the give's
+                // share of it going right.
+                let share = Self.rightGive / (max(dx, 0) + Self.rightGive)
+                easeHome(id, cell, speed: dx < 0 ? speed : speed * share * share)
                 return
             }
             let close = { [weak self] in

@@ -49,6 +49,10 @@ struct OverviewBar: View {
     /// pill took the old space's width again, then glided back (David's
     /// recording, 2026-11-13).
     @State private var landedWidth: CGFloat?
+    /// The space menu is open: + and the check slip toward the name, as
+    /// Back and Tabs do for the page menu, since iOS lays its menu over them
+    /// (David's recording, 2026-11-17).
+    @State private var menuShown = false
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -98,6 +102,7 @@ struct OverviewBar: View {
                 .buttonStyle(FrostPress(shape: Circle()))
                 .background { BarFrost(shape: Circle()) }
                 .accessibilityLabel("New Tab")
+                .modifier(HidesForMenu(hidden: menuShown, toward: .trailing))
                 Spacer()
                 Button(action: done) {
                     Image(systemName: "checkmark")
@@ -113,6 +118,7 @@ struct OverviewBar: View {
                     FirnFrost(shape: Circle(), fill: Theme.spaceVivid(space.color))
                 }
                 .accessibilityLabel("Done")
+                .modifier(HidesForMenu(hidden: menuShown, toward: .leading))
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -173,6 +179,7 @@ struct OverviewBar: View {
     private var spaceMenu: some View {
         Menu {
             Picker(selection: Binding(get: { space.id }, set: { id in
+                setMenuShown(false)
                 if let picked = spaces.first(where: { $0.id == id }) { select(picked) }
             })) {
                 ForEach(spaces) { each in
@@ -183,10 +190,17 @@ struct OverviewBar: View {
                 EmptyView()
             }
             .pickerStyle(.inline)
+            // The menu's rows exist only while it's open. A row picked
+            // doesn't always say the menu went away, so each row's action
+            // shows the buttons again too.
+            .onAppear { setMenuShown(true) }
+            .onDisappear { setMenuShown(false) }
             if newSpace != nil || spaceSettings != nil {
                 Section {
-                    if let newSpace { Button("New Space…", systemImage: "plus") { newSpace() } }
-                    if let spaceSettings { Button("Space Settings…", systemImage: "gearshape") { spaceSettings() } }
+                    if let newSpace { Button("New Space…", systemImage: "plus") { setMenuShown(false); newSpace() } }
+                    if let spaceSettings {
+                        Button("Space Settings…", systemImage: "gearshape") { setMenuShown(false); spaceSettings() }
+                    }
                 }
             }
         } label: {
@@ -194,6 +208,10 @@ struct OverviewBar: View {
         }
         .menuOrder(.fixed)
         .simultaneousGesture(spaceSwipe)
+    }
+
+    private func setMenuShown(_ shown: Bool) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { menuShown = shown }
     }
 
     /// A space's dot in the menu: its own color, which iOS's menus keep only
@@ -347,5 +365,21 @@ private struct SpaceDots: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: current)
         .accessibilityHidden(true)
+    }
+}
+
+/// + or the check while the space menu is open: shrinking toward the name
+/// as it fades (only fading with Reduce Motion), and out of reach.
+private struct HidesForMenu: ViewModifier {
+    let hidden: Bool
+    let toward: UnitPoint
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(hidden && !reduceMotion ? 0.01 : 1, anchor: toward)
+            .opacity(hidden ? 0 : 1)
+            .allowsHitTesting(!hidden)
+            .accessibilityHidden(hidden)
     }
 }

@@ -133,7 +133,10 @@ struct GroupFolder: View {
                     }
                 }
                 .padding(Self.inset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // `minHeight: 0`: two rows of pictures are taller than the
+                // cell, so without it the folder grew past its cell, up and
+                // down, instead of the second row running off the bottom.
+                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                 .background { FirnGlass(shape: shape) }
                 .clipShape(shape)
                 .contentShape(shape)

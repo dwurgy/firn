@@ -269,7 +269,16 @@ struct TabOverview: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
             .onGeometryChange(for: CGSize.self, of: \.size) { size = $0 }
             .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in spots.scroll = now }
+            .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in
+                spots.scroll = now
+                // The list only ever scrolls up and down, but SwiftUI runs a
+                // request by id again as the layout changes, and each run
+                // slid it sideways toward centering a grouped tab's card
+                // (`scroll(to:)`). Put straight back, where it stands.
+                if abs(now.contentOffset.x) > 0.5 {
+                    scrollPosition.scrollTo(point: CGPoint(x: 0, y: now.contentOffset.y))
+                }
+            }
             // A new picture for the landing once a scroll comes to rest.
             .onScrollPhaseChange { _, phase in
                 scrolling = phase != .idle
@@ -452,7 +461,12 @@ struct TabOverview: View {
         let lowest = -scroll.contentInsets.top
         let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
         let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
-        guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
+        guard abs(y - scroll.contentOffset.y) > 0.5 else {
+            // Already there up and down; only a sideways slip left over
+            // from an earlier request by id is put right (see below).
+            if abs(scroll.contentOffset.x) > 0.5 { scrollPosition.scrollTo(point: CGPoint(x: 0, y: y)) }
+            return
+        }
         // Asked by id, with the anchor that puts the card exactly there.
         // `scrollPosition.scrollTo(y:)` alone was taken but never carried
         // out while the overview was hidden, and asked again with the same
@@ -471,10 +485,18 @@ struct TabOverview: View {
         // (Simulator, logged). So once it's there, the reached offset is
         // set as the list's position too, which takes the request's place;
         // carried out, it put the list back at the top, still hidden.
+        // Set as a point with x at 0: a request by id also moves the list
+        // sideways, toward centering the card across, so a tab in an open
+        // group's column left the whole overview 16 to 23pt off to the
+        // side until the next scroll (Simulator, logged, 2026-11-18); no
+        // anchor across undid it.
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
-            guard let reached = spots.scroll?.contentOffset.y, abs(reached - y) < 1 else { return }
-            scrollPosition.scrollTo(y: reached)
+            guard let reached = spots.scroll?.contentOffset,
+                  abs(reached.y - y) < 1 || abs(reached.x) > 0.5 else { return }
+            // Slid sideways means the request was carried out, even when it
+            // stopped short of `y` at the list's top.
+            scrollPosition.scrollTo(point: CGPoint(x: 0, y: reached.y))
         }
     }
 

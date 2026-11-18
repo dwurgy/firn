@@ -60,6 +60,10 @@ struct BasecampGrid: View {
                     }
                 }
             }
+            // The tiles' native glass drawn together (cheaper), spacing 0 so
+            // neighbors never melt. Only the tiles: inside a container the
+            // glass covers anything that isn't its own content (the hint's words).
+            .basecampGlassContainer()
             // A tab held up over a full Basecamp: no room opens, and a small
             // frost pill over the tiles says why (clear of the row tugging below).
             .overlay { fullHint }
@@ -709,11 +713,14 @@ struct SiteMark: View {
     }
 }
 
-/// A tile of frosted ice: Liquid Glass with a cool snowy tint and a crisp
-/// edge on macOS 26 and later, a frosted fill and lit rim before it.
-/// Brighter on hover, a gentle press. The chosen tile keeps its glass and
-/// takes the colors of the site's icon: a soft wash, a ring of colored glass
-/// that follows where each color sits in the icon, and a faint glow.
+/// A tile: native Liquid Glass on macOS 26 and later (David, 2026-11-18,
+/// `docs/HISTORY.md`, "Plan: the Mac on native glass"), as the iPhone's,
+/// with the glass's own press; Firn's frosted ice before 26 and with Reduce
+/// Transparency, with a gentle press. Hover brings Firn's warm wash. The
+/// chosen tile takes the colors of the site's icon: a tint (a soft wash on
+/// the frost), a ring of colored glass that follows where each color sits
+/// in the icon, and a faint glow. No sheen on the ring: native glass
+/// catches the light itself, and both read as a doubled edge.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let lifted: Bool
@@ -730,20 +737,65 @@ private struct TileButtonStyle: ButtonStyle {
     private var dark: Bool { colorScheme == .dark }
 
     func makeBody(configuration: Configuration) -> some View {
+        Group {
+            if #available(macOS 26, *), !reduceTransparency {
+                native(configuration)
+            } else {
+                frosted(configuration)
+            }
+        }
+        .contentShape(shape)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
+        .onHover { hovering = $0 }
+    }
+
+    /// The ring and hover's wash are the glass's own content: in Basecamp's
+    /// glass container the glass covers anything outside it.
+    @available(macOS 26, *)
+    private func native(_ configuration: Configuration) -> some View {
+        configuration.label
+            .background { if hovering && !lifted { shape.fill(Theme.hover) } }
+            .overlay { if isActive { ring } }
+            .glassEffect(glass, in: shape)
+            .background {
+                if lifted {
+                    // Over the frame, so it stays frost over the page, with a
+                    // wider shadow beneath it.
+                    LiftBacking(shape: shape)
+                        .shadow(color: Theme.shadowPageFar, radius: 9, y: 4)
+                }
+            }
+    }
+
+    @available(macOS 26, *)
+    private var glass: Glass {
+        let base = Glass.regular.interactive()
+        return isActive ? base.tint(accent.main.opacity(dark ? 0.24 : 0.22)) : base
+    }
+
+    private func frosted(_ configuration: Configuration) -> some View {
         configuration.label
             .background {
                 if isActive { chosen } else { resting }
             }
-            .contentShape(shape)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
-            .onHover { hovering = $0 }
     }
 
-    /// The page on screen: the same glass, washed in the icon's main color
+    /// The icon's own colors around the inside edge, with a faint glow.
+    private var ring: some View {
+        // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
+        shape.strokeBorder(
+            AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
+            lineWidth: Theme.tileRingWidth)
+            .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
+            .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
+            .allowsHitTesting(false)
+    }
+
+    /// The page on screen, on the frost: washed in the icon's main color
     /// (stronger at the top, like light through ice), ringed in its colors.
     private var chosen: some View {
         resting
@@ -752,22 +804,7 @@ private struct TileButtonStyle: ButtonStyle {
                     colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
             }
-            .overlay {
-                // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
-                shape.strokeBorder(
-                    AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
-                    lineWidth: Theme.tileRingWidth)
-                    .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
-            }
-            .overlay {
-                // Light catching the ring's outer edge along the top, gone by
-                // the middle: a thin line, so the color underneath stays full.
-                shape.strokeBorder(
-                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
-                                   startPoint: .top, endPoint: .center),
-                    lineWidth: 1)
-            }
-            .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
+            .overlay { ring }
     }
 
     @ViewBuilder private var resting: some View {
@@ -783,8 +820,9 @@ private struct TileButtonStyle: ButtonStyle {
     }
 }
 
-/// A tile's frosted ice, with nothing on it: under every resting tile, and
-/// alone as the spot an empty Basecamp shows while a tab is held over it.
+/// A tile's glass, with nothing on it: under every frosted tile, and alone
+/// as the spot an empty Basecamp shows while a tab is held over it. Native
+/// glass on macOS 26 (as `FrostGlass`); Firn's frosted ice before it.
 private struct TileGlass: View {
     var hovering = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -797,9 +835,9 @@ private struct TileGlass: View {
         if reduceTransparency {
             shape.fill(Theme.tileSolid)
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear).glassEffect(.regular, in: shape)
         } else {
-            // Frosted fills, not Liquid Glass: the window is already glass, and
-            // glass on glass turns muddy. The tile reads as etched into the frame.
             shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)
                 .overlay {
                     shape.strokeBorder(
@@ -808,6 +846,17 @@ private struct TileGlass: View {
                 }
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5).padding(-0.5) }
                 .shadow(color: Theme.shadowSoft, radius: 1, y: 0.5)
+        }
+    }
+}
+
+private extension View {
+    /// One glass container for Basecamp's tiles on macOS 26 and later.
+    @ViewBuilder func basecampGlassContainer() -> some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: 0) { self }
+        } else {
+            self
         }
     }
 }

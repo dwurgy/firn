@@ -1,9 +1,10 @@
 import FirnCore
 import SwiftUI
 
-/// The same frosted glass as the Basecamp tiles. With a color, washed in it
-/// (the overflow button's "Tidied away" pill, drop spots); without one, exactly
-/// a tile's frost (group cards, David 2026-10-22, so the sidebar has one glass).
+/// The sidebar's one glass, the Basecamp tiles' too. With a color, tinted in
+/// it (the overflow button's "Tidied away" pill, drop spots); without one,
+/// plain (group cards, David 2026-10-22, so the sidebar has one glass).
+/// Native Liquid Glass on macOS 26 and later; Firn's frost before it.
 struct FrostGlass: View {
     let shape: RoundedRectangle
     var color: Color? = nil
@@ -13,7 +14,23 @@ struct FrostGlass: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        // Frosted fills, like the tiles: never glass on the window's glass.
+        if #available(macOS 26, *), !reduceTransparency {
+            // Native glass (David, 2026-11-18, `docs/HISTORY.md`, "Plan: the
+            // Mac on native glass"): the same material as the command bar,
+            // menus, and the iPhone. Lifted, over the frame, so it stays
+            // frost over the page.
+            shape.fill(.clear)
+                .glassEffect(color.map { .regular.tint($0.opacity(Theme.groupTint)) } ?? .regular, in: shape)
+                .background { if lifted { LiftBacking(shape: shape) } }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        } else {
+            frost
+        }
+    }
+
+    /// Firn's own frost: before macOS 26, and with Reduce Transparency.
+    private var frost: some View {
         FirnFrost(shape: shape,
                   fill: color == nil ? Theme.tileFill : Theme.groupFill,
                   tint: (color ?? .clear).opacity(Theme.groupTint),

@@ -27,13 +27,14 @@ struct SpaceWash: View {
         /// The picture's two ends: where Sunrise is lightest (`hi`) and
         /// darkest (`lo`), each a base mixed with this share of the space's
         /// color. The mockup's Color 0.5, Depth 1; dark made darker so it
-        /// feels like dark mode (David, 2026-11-18).
+        /// feels like dark mode, and a touch darker again once it had more
+        /// color (David, 2026-11-18).
         struct End {
             let base: UInt32
             let mix: CGFloat
         }
         static let light = (hi: End(base: 0xF7F3EE, mix: 0.15), lo: End(base: 0xB9AE9F, mix: 0.50))
-        static let dark = (hi: End(base: 0x302C28, mix: 0.25), lo: End(base: 0x0F0D0C, mix: 0.15))
+        static let dark = (hi: End(base: 0x2A2622, mix: 0.25), lo: End(base: 0x0C0B0A, mix: 0.15))
 
         /// The picture's size, a quarter of the design screen's points
         /// (402×874), stretched to fill: it's blurred, so the stretch and

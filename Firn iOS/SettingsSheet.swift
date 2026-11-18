@@ -30,7 +30,7 @@ struct SettingsSheet: View {
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
     #if TESTFLIGHT
     @AppStorage(OverviewLayout.key) private var overviewLayout = OverviewLayout.list
-    @AppStorage(BarGlass.key) private var barGlass = BarGlass.firn
+    @AppStorage(BarGlass.key) private var barGlass = BarGlass.soft
     #endif
 
     /// The space picked, or the one on screen when none is (or it's gone).

@@ -419,6 +419,7 @@ David: the address bar and its buttons back to native iOS, the glass as frosty a
   - **Frosty:** Medium over the system's thinnest blur (`.ultraThinMaterial`) in the same shape, so the page behind turns to soft color while the glass keeps its lit edge. Claude's guess for the winner.
   - **Soft** (added after David's look, 2026-11-17: Frosty too solid, little of the page coming through): plain glass, no tint, over a blur about half of the thinnest material's, with half its milk (`PartialBlur`: a paused animator, the public way to an in-between blur; set up again on coming back to the front).
   - **Frosty, no tint:** Frosty without Firn's tint.
+  - **Picked: Soft** (David, 2026-11-17, from Simulator screenshots in light and dark). Now the try-out's default; to be confirmed on David's iPhone over real pages (and the glide, fades, and coming back from another app) before step 2.
   - **iOS's own glass setting** (Settings › Display & Brightness, Clear or Tinted, and any newer slider): Apple gives apps no way to read it. The glass layer follows it by itself; the blur under it and Firn's tint don't, so in Soft and the Frostys the setting changes only the glass on top. Firn's own frost ignores it.
 - Never `.interactive()` (the bubbly press). Reduce Transparency keeps the solid look.
 - **Risks to watch:** the bar's glide stuttered in Liquid Glass before (2026-11-03), and fades left dark discs (2026-11-04).

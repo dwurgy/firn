@@ -107,7 +107,7 @@ struct BarFrost<S: InsettableShape>: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     #if os(iOS) && TESTFLIGHT
     /// The try-out of iOS's own glass (`BarGlass`, Settings › TestFlight).
-    @AppStorage(BarGlass.key) private var glass = BarGlass.firn
+    @AppStorage(BarGlass.key) private var glass = BarGlass.soft
     #endif
 
     var body: some View {

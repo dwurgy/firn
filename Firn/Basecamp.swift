@@ -759,6 +759,8 @@ private struct TileButtonStyle: ButtonStyle {
             .background { if hovering && !lifted { shape.fill(Theme.hover) } }
             .overlay { if isActive { ring } }
             .glassEffect(glass, in: shape)
+            // The thinnest blur under the glass, as `FrostGlass` and the iPhone.
+            .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
             .background {
                 if lifted {
                     // Over the frame, so it stays frost over the page, with a
@@ -837,6 +839,7 @@ private struct TileGlass: View {
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
         } else if #available(macOS 26, *) {
             shape.fill(.clear).glassEffect(.regular, in: shape)
+                .background { shape.fill(.ultraThinMaterial) }
         } else {
             shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)
                 .overlay {

@@ -100,26 +100,16 @@ struct FrostPress<S: Shape>: ButtonStyle {
 /// bars, and the Mac reader's Aa pill), neutral, never tinted by the space
 /// (David, 2026-11-15).
 ///
-/// On the iPhone, iOS's own glass made frosty: "Frosty, no tint" (David,
-/// 2026-11-17, `docs/IOS-PLAN.md`, "Try-out: the bar in iOS's own glass"):
-/// the system's thinnest blur in the bar's shape, so the page behind turns
-/// to soft color, under regular Liquid Glass (the milkier one, never
-/// `.clear`), which keeps its lit edge. Never `.interactive()`, the bubbly
-/// press. On the Mac, Firn's own frost. Reduce Transparency: solid, both.
+/// On the iPhone, the iPhone's one glass, `FirnGlass` (iOS's own Liquid
+/// Glass, made frosty). On the Mac, Firn's own frost. Reduce Transparency:
+/// solid, both.
 struct BarFrost<S: InsettableShape>: View {
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         #if os(iOS)
-        if reduceTransparency {
-            firnFrost
-        } else {
-            shape.fill(.ultraThinMaterial)
-                .overlay { Color.clear.glassEffect(.regular, in: shape) }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
+        FirnGlass(shape: shape)
         #else
         firnFrost
         #endif

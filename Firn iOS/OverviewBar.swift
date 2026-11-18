@@ -3,8 +3,9 @@ import SwiftUI
 
 /// The overview's bar, balanced like Safari's: + on the left, the space's
 /// name in a frosted pill in the middle, and a round check on the right in
-/// a vivid version of the space's color. All on Firn's frost (`BarFrost`),
-/// over the list's soft edge blur; pressed, the warm wash.
+/// a vivid version of the space's color. All iOS's own glass, made frosty
+/// (`FirnGlass`; David, 2026-11-17): + and the check are iOS glass buttons,
+/// with iOS's glass press; the pill takes the glass press too.
 ///
 /// The pill is the space switcher (phase 4, step 1): a dot per space under
 /// the name, as on the Mac; a tap opens the space menu (iOS's own, David,
@@ -94,26 +95,22 @@ struct OverviewBar: View {
                     Image(systemName: "plus")
                         .font(BarButton.symbolFont)
                         .foregroundStyle(Theme.ink)
-                        .frame(width: Self.height, height: Self.height)
+                        .frame(width: GlassButton.label(Self.height), height: GlassButton.label(Self.height))
                         .contentShape(.circle)
                 }
-                .buttonStyle(FrostPress(shape: Circle()))
-                .background { BarFrost(shape: Circle()) }
+                .firnGlassButton()
                 .accessibilityLabel("New Tab")
                 Spacer()
                 Button(action: done) {
                     Image(systemName: "checkmark")
                         .font(BarButton.symbolFont)
                         .foregroundStyle(.white)
-                        .frame(width: Self.height, height: Self.height)
+                        .frame(width: GlassButton.label(Self.height), height: GlassButton.label(Self.height))
                         .contentShape(.circle)
                 }
-                .buttonStyle(FrostPress(shape: Circle()))
-                // The one solid button, as Firn's buttons are ink: the
-                // space's vivid color under the frost's rim and hairline.
-                .background {
-                    FirnFrost(shape: Circle(), fill: Theme.spaceVivid(space.color))
-                }
+                // The one solid button, as Firn's buttons are ink: iOS's
+                // prominent glass in the space's vivid color.
+                .firnGlassButton(tint: Theme.spaceVivid(space.color))
                 .accessibilityLabel("Done")
             }
         }
@@ -221,6 +218,10 @@ struct OverviewBar: View {
     /// menu and the pill (Simulator, iOS 27).
     private static let menuGap: CGFloat = 26
 
+    /// How near the two sliding pills have to come before iOS melts them
+    /// together: just past their 6pt seam.
+    private static let meltDistance: CGFloat = 10
+
     /// A space's dot in the menu: its own color, which iOS's menus keep only
     /// for an image drawn in it (they tint symbols otherwise).
     private static func dot(_ color: String) -> UIImage {
@@ -260,21 +261,28 @@ struct OverviewBar: View {
                 }
             }
             .background {
+                // The two pills in one glass container, so they melt into
+                // each other across their seam as they slide. Only the pills:
+                // a container around the whole bar drew its glass over the
+                // name (iOS draws a container's glass above its other views).
                 GeometryReader { geo in
                     let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
-                    BarFrost(shape: Capsule())
+                    // At rest it's tapped for the menu, so it takes iOS's
+                    // glass press; sliding, it's only glass.
+                    FirnGlass(shape: Capsule(), interactive: slide == nil)
                         .frame(width: pills.held.width, height: pills.held.height)
                         .opacity(pills.heldOpacity)
                         .position(x: pills.held.midX, y: pills.held.midY)
                     // The coming space's own pill, growing out from the
                     // other button.
                     if let coming = pills.coming, neighbor(progress) != nil {
-                        BarFrost(shape: Capsule())
+                        FirnGlass(shape: Capsule())
                             .frame(width: coming.width, height: coming.height)
                             .opacity(pills.comingOpacity)
                             .position(x: coming.midX, y: coming.midY)
                     }
                 }
+                .glassContainer(spacing: Self.meltDistance)
             }
             .contentShape(Capsule())
             .accessibilityElement(children: .ignore)

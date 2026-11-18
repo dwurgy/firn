@@ -56,6 +56,8 @@ struct OverviewBar: View {
     /// again, which rebuilt the menu's rows and told them they'd appeared
     /// again, so the buttons stayed hidden after the menu closed.
     @State private var menu = SpaceMenuState()
+    /// Bumped by a tap on the pill: the menu opens.
+    @State private var opens = 0
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -176,41 +178,48 @@ struct OverviewBar: View {
 
     /// iOS's own menu on the pill (David, 2026-11-17: the grid's cards have
     /// iOS's menus, so this one matches): the spaces, the one on screen
-    /// checked, then New Space… and Space Settings…, in the Mac's order. The
-    /// sideways swipe runs alongside: a tap opens the menu, a swipe changes
-    /// space (iOS's menu opens on the finger lifting, so a swipe never does).
+    /// checked, then New Space… and Space Settings…, in the Mac's order. A
+    /// tap opens it and a sideways swipe changes space, as before.
+    ///
+    /// UIKit, not SwiftUI's `Menu`: + and the check hide while the menu is
+    /// open, and SwiftUI's `Menu` never says when it closes (going by its
+    /// rows' appearing left them hidden on David's iPhone). A UIKit menu
+    /// button reports both, and is opened by Firn's own tap.
     private var spaceMenu: some View {
-        Menu {
-            Picker(selection: Binding(get: { space.id }, set: { id in
-                setMenuShown(false)
-                if let picked = spaces.first(where: { $0.id == id }) { select(picked) }
-            })) {
-                ForEach(spaces) { each in
-                    Label { Text(verbatim: each.name) } icon: { Image(uiImage: Self.dot(each.color)) }
-                        .tag(each.id)
-                }
-            } label: {
-                EmptyView()
+        pill
+            .background {
+                SpaceMenuAnchor(menu: spaceUIMenu, opens: opens) { setMenuShown($0) }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .pickerStyle(.inline)
-            // The menu's rows exist only while it's open. A row picked
-            // doesn't always say the menu went away, so each row's action
-            // shows the buttons again too.
-            .onAppear { setMenuShown(true) }
-            .onDisappear { setMenuShown(false) }
-            if newSpace != nil || spaceSettings != nil {
-                Section {
-                    if let newSpace { Button("New Space…", systemImage: "plus") { setMenuShown(false); newSpace() } }
-                    if let spaceSettings {
-                        Button("Space Settings…", systemImage: "gearshape") { setMenuShown(false); spaceSettings() }
-                    }
-                }
+            .onTapGesture { if progress == 0 { opens += 1 } }
+            .gesture(spaceSwipe)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { opens += 1 }
+    }
+
+    /// The menu's rows, as UIKit's.
+    private var spaceUIMenu: UIMenu {
+        let pick = select
+        let spaceRows = spaces.map { each in
+            UIAction(title: each.name, image: Self.dot(each.color), state: each.id == space.id ? .on : .off) { _ in
+                MainActor.assumeIsolated { pick(each) }
             }
-        } label: {
-            pill
         }
-        .menuOrder(.fixed)
-        .simultaneousGesture(spaceSwipe)
+        var more: [UIMenuElement] = []
+        if let newSpace {
+            more.append(UIAction(title: "New Space…", image: UIImage(systemName: "plus")) { _ in
+                MainActor.assumeIsolated { newSpace() }
+            })
+        }
+        if let spaceSettings {
+            more.append(UIAction(title: "Space Settings…", image: UIImage(systemName: "gearshape")) { _ in
+                MainActor.assumeIsolated { spaceSettings() }
+            })
+        }
+        let sections = [spaceRows, more].filter { !$0.isEmpty }
+            .map { UIMenu(options: .displayInline, children: $0) }
+        return UIMenu(children: sections)
     }
 
     private func setMenuShown(_ shown: Bool) {
@@ -390,5 +399,49 @@ private struct HidesForMenu: ViewModifier {
             .opacity(hidden ? 0 : 1)
             .allowsHitTesting(!hidden)
             .accessibilityHidden(hidden)
+    }
+}
+
+/// The space menu's UIKit button, sized to the pill behind it: opened when
+/// `opens` changes, and telling Firn as its menu shows and goes.
+private struct SpaceMenuAnchor: UIViewRepresentable {
+    let menu: UIMenu
+    let opens: Int
+    let shown: (Bool) -> Void
+
+    func makeUIView(context: Context) -> SpaceMenuButton {
+        let button = SpaceMenuButton()
+        button.showsMenuAsPrimaryAction = true
+        button.preferredMenuElementOrder = .fixed
+        button.opens = opens
+        return button
+    }
+
+    func updateUIView(_ button: SpaceMenuButton, context: Context) {
+        button.menu = menu
+        button.shown = shown
+        if opens != button.opens {
+            button.opens = opens
+            button.performPrimaryAction()
+        }
+    }
+}
+
+final class SpaceMenuButton: UIButton {
+    var opens = 0
+    var shown: (Bool) -> Void = { _ in }
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         willDisplayMenuFor configuration: UIContextMenuConfiguration,
+                                         animator: (any UIContextMenuInteractionAnimating)?) {
+        super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
+        shown(true)
+    }
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         willEndFor configuration: UIContextMenuConfiguration,
+                                         animator: (any UIContextMenuInteractionAnimating)?) {
+        super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
+        shown(false)
     }
 }

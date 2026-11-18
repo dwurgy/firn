@@ -46,7 +46,7 @@
   .row { display: flex; flex-wrap: wrap; gap: 24px; }
   figure { margin: 0; }
   figcaption { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
-  .phone svg { display: block; width: 260px; height: auto; border-radius: 34px;
+  .phone svg { display: block; width: 220px; height: auto; border-radius: 34px;
     box-shadow: 0 0 0 1px var(--line), 0 12px 30px rgba(60,40,20,.15); }
   .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; }
   .pair { display: flex; gap: 6px; }
@@ -59,20 +59,22 @@
 <main>
   <h1>Overview backdrop</h1>
   <p>Safari's tab overview sits on your wallpaper, blurred hard, and that light and shadow are what make its cards float. Firn can't read the wallpaper, so this tries Sunrise's horizon band (no sky), blurred, and printed in one color: the space's own. The depth comes from Sunrise; the color is the space's alone, with no sky blue.</p>
-  <p>"Now" is today's space wash, drawn from <code>SpaceWash.Tuning</code>. "Try" is the one-color Sunrise. The cards wear the new deeper shadow in both.</p>
+  <p>Round two (2026-11-18): the one-color version, as built, feels bland, since one hue however shaded stays monochrome, while Safari's wallpaper blurs two or three hues into each other. Three ways to bring in more color while the space's color stays in charge: <b>Dawn glow</b> (the space's color in the shadows, Sunrise's warm apricot in the highlights), <b>Neighbor hues</b> (two soft patches of the space color's neighbors on the color wheel), and <b>Tab colors</b> (soft patches from the open pages' own colors, so the backdrop changes with what's open). <b>Vivid</b> sets how strongly the extra color comes through.</p>
 
   <div class="controls">
     <div class="chips" id="chips" role="group" aria-label="Space color"></div>
     <label class="slider">Color <input id="color" type="range" min="0" max="1" step="0.05" value="0.5"><output for="color"></output></label>
     <label class="slider">Depth <input id="depth" type="range" min="0" max="1" step="0.05" value="1"><output for="depth"></output></label>
     <label class="slider">Blur <input id="blur" type="range" min="10" max="80" step="5" value="40"><output for="blur"></output></label>
+    <label class="slider">Vivid <input id="vivid" type="range" min="0" max="1" step="0.05" value="0.75"><output for="vivid"></output></label>
     <label class="slider"><input id="cards" type="checkbox" checked> Cards</label>
+    <div class="chips" id="styles" role="group" aria-label="Style for every space"></div>
   </div>
 
   <div class="row" id="big"></div>
 
   <h2>Every space, side by side</h2>
-  <p>Does each space still feel like its own? Light on the left, dark on the right, with the same settings as above.</p>
+  <p>Does each space still feel like its own? Light on the left, dark on the right, in the style picked above.</p>
   <div class="thumbs" id="thumbs"></div>
 </main>
 
@@ -116,31 +118,53 @@ const g = v => { const c = Math.round(v * 255); return `rgb(${c},${c},${c})`; };
 function sunriseScene(id) {
   return `<g filter="url(#d${id})">
     <defs>
-      <linearGradient id="sky${id}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${g(.18)}"/><stop offset=".22" stop-color="${g(.34)}"/>
-        <stop offset=".42" stop-color="${g(.72)}"/><stop offset=".55" stop-color="${g(.86)}"/></linearGradient>
+      <linearGradient id="sky${id}" gradientUnits="userSpaceOnUse" x1="0" y1="-60" x2="0" y2="700">
+        <stop offset="0" stop-color="${g(.22)}"/><stop offset=".35" stop-color="${g(.50)}"/>
+        <stop offset=".70" stop-color="${g(.80)}"/><stop offset="1" stop-color="${g(.90)}"/></linearGradient>
       <radialGradient id="halo${id}"><stop offset="0" stop-color="${g(1)}"/><stop offset="1" stop-color="${g(1)}" stop-opacity="0"/></radialGradient>
-      <linearGradient id="r1${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${g(.62)}"/><stop offset="1" stop-color="${g(.40)}"/></linearGradient>
-      <linearGradient id="r2${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${g(.80)}"/><stop offset="1" stop-color="${g(.55)}"/></linearGradient>
-      <linearGradient id="r3${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${g(.92)}"/><stop offset="1" stop-color="${g(.62)}"/></linearGradient>
+      <linearGradient id="r1${id}" gradientUnits="userSpaceOnUse" x1="0" y1="672" x2="0" y2="1080"><stop offset="0" stop-color="${g(.70)}"/><stop offset="1" stop-color="${g(.48)}"/></linearGradient>
+      <linearGradient id="r2${id}" gradientUnits="userSpaceOnUse" x1="0" y1="755" x2="0" y2="1080"><stop offset="0" stop-color="${g(.84)}"/><stop offset="1" stop-color="${g(.60)}"/></linearGradient>
+      <linearGradient id="r3${id}" gradientUnits="userSpaceOnUse" x1="0" y1="820" x2="0" y2="1080"><stop offset="0" stop-color="${g(.92)}"/><stop offset="1" stop-color="${g(.72)}"/></linearGradient>
     </defs>
     <rect x="-200" y="-200" width="${W + 400}" height="${H + 400}" fill="url(#sky${id})"/>
-    <ellipse cx="250" cy="450" rx="240" ry="150" fill="url(#halo${id})"/>
-    <path d="M-200 520 C -60 470, 60 540, 170 505 S 330 470, 420 500 S 560 480, 610 495 L 610 1080 L -200 1080 Z" fill="url(#r1${id})"/>
-    <path d="M-200 610 C -40 580, 90 650, 220 610 S 420 570, 610 620 L 610 1080 L -200 1080 Z" fill="url(#r2${id})"/>
-    <path d="M-200 740 C 0 700, 140 770, 260 730 S 470 710, 610 740 L 610 1080 L -200 1080 Z" fill="url(#r3${id})"/>
+    <ellipse cx="250" cy="640" rx="260" ry="170" fill="url(#halo${id})"/>
+    <path d="M-200 700 C -60 660, 60 715, 170 690 C 280 665, 330 662, 420 685 C 510 708, 560 668, 610 680 L 610 1080 L -200 1080 Z" fill="url(#r1${id})"/>
+    <path d="M-200 770 C -40 748, 90 800, 220 770 C 350 740, 420 740, 610 778 L 610 1080 L -200 1080 Z" fill="url(#r2${id})"/>
+    <path d="M-200 840 C 0 812, 140 862, 260 832 C 380 802, 470 818, 610 840 L 610 1080 L -200 1080 Z" fill="url(#r3${id})"/>
   </g>`;
 }
 // Blur, then print the light and dark in two colors: deep where Sunrise is
 // dark, pale where it's light.
-function duotoneFilter(id, lo, hi, blur) {
-  const n = 9, t = [0, 1, 2].map(ch => Array.from({ length: n }, (_, i) => {
-    const k = i / (n - 1); return (lo[ch] + (hi[ch] - lo[ch]) * k).toFixed(4);
+function duotoneFilter(id, anchors, blur) {
+  const n = 17, t = [0, 1, 2].map(ch => Array.from({ length: n }, (_, i) => {
+    const x = i / (n - 1) * (anchors.length - 1), k = Math.min(Math.floor(x), anchors.length - 2), f = x - k;
+    return (anchors[k][ch] + (anchors[k + 1][ch] - anchors[k][ch]) * f).toFixed(4);
   }).join(" "));
   return `<filter id="d${id}" filterUnits="userSpaceOnUse" x="-200" y="-200" width="${W + 400}" height="${H + 400}" color-interpolation-filters="sRGB">
     <feGaussianBlur stdDeviation="${blur}"/>
     <feComponentTransfer><feFuncR type="table" tableValues="${t[0]}"/><feFuncG type="table" tableValues="${t[1]}"/><feFuncB type="table" tableValues="${t[2]}"/></feComponentTransfer>
   </filter>`;
+}
+// Hue and saturation, for the neighbor hues.
+function hsl(c) {
+  const [r, g2, b] = c, mx = Math.max(r, g2, b), mn = Math.min(r, g2, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s2 = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+  const h = mx === r ? (g2 - b) / d + (g2 < b ? 6 : 0) : mx === g2 ? (b - r) / d + 2 : (r - g2) / d + 4;
+  return [h * 60, s2, l];
+}
+function rgb([h, s2, l]) {
+  const k = n => (n + h / 30) % 12, a = s2 * Math.min(l, 1 - l);
+  return [0, 8, 4].map(n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
+}
+const turn = (c, deg, sat = 1.2) => { const [h, s2, l] = hsl(c); return rgb([(h + deg + 360) % 360, Math.min(1, s2 * sat), l]); };
+const APRICOT = hex("#F2C4A0");
+// Soft patches of color over the backdrop, under the cards: each a big
+// ellipse, blurred hard.
+function patches(id, list, blur) {
+  return `<filter id="b${id}" filterUnits="userSpaceOnUse" x="-200" y="-200" width="${W + 400}" height="${H + 400}"><feGaussianBlur stdDeviation="${blur}"/></filter>
+    <g filter="url(#b${id})">${list.map(([cx, cy, rx, ry, c, op]) =>
+      `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${css(c)}" opacity="${op.toFixed(3)}"/>`).join("")}</g>`;
 }
 function tryEnds(color, dark, c, depth) {
   const s = hex(color);
@@ -196,36 +220,56 @@ function overview(id, color, dark) {
   return g;
 }
 
+const STYLES = [["one", "One color"], ["dawn", "Dawn glow"], ["neighbors", "Neighbor hues"], ["tabs", "Tab colors"]];
+let style = "dawn";
 function phone(kind, color, dark, opts, withCards = true) {
   const id = ++uid;
   let defs = "", body = "";
   if (kind === "now") {
     const w = washDefs(id, color, dark); defs = w.defs; body = w.body;
   } else {
-    const { lo, hi } = tryEnds(color, dark, opts.c, opts.depth);
-    defs = duotoneFilter(id, lo, hi, opts.blur);
-    body = sunriseScene(id);
+    const { lo, hi } = tryEnds(color, dark, opts.c, opts.depth), s = hex(color), v = opts.vivid;
+    let anchors = [lo, hi], extra = "";
+    if (kind === "dawn") {
+      // Shadows stay the space's; the brightest parts warm toward Sunrise's
+      // apricot, as the sun's glow on snow.
+      const warm = dark ? mix(hi, APRICOT, .22 * v + .05) : mix(hi, APRICOT, .55 * v + .1);
+      anchors = [lo, mix(lo, hi, .55), warm];
+    } else if (kind === "neighbors") {
+      const op = (dark ? .45 : .55) * v;
+      const a1 = turn(mix(s, dark ? lo : hi, .25), 40), a2 = turn(mix(s, dark ? lo : hi, .25), -40);
+      extra = patches(id, [[60, 180, 230, 260, a1, op], [360, 560, 240, 280, a2, op], [120, 820, 220, 160, turn(s, 15), op * .6]], 70);
+    } else if (kind === "tabs") {
+      const op = (dark ? .40 : .50) * v;
+      const spots = [[100, 270], [300, 270], [100, 570], [300, 570], [100, 840], [300, 840]];
+      extra = patches(id, spots.map(([x, y], i) => [x, y, 120, 150, hex(PAGES[i][1]), op]), 60);
+    }
+    defs = duotoneFilter(id, anchors, opts.blur);
+    body = sunriseScene(id) + extra;
   }
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img"
-    aria-label="${kind === "now" ? "Today's space wash" : "One-color Sunrise"}, ${dark ? "dark" : "light"}">
+    aria-label="${kind === "now" ? "Today's backdrop" : kind}, ${dark ? "dark" : "light"}">
     <defs>${defs}</defs><clipPath id="p${id}"><rect width="${W}" height="${H}"/></clipPath>
     <g clip-path="url(#p${id})">${body}${withCards ? overview(id, color, dark) : ""}</g></svg>`;
 }
 
 const $ = s => document.querySelector(s);
-function opts() { return { c: +$("#color").value, depth: +$("#depth").value, blur: +$("#blur").value }; }
+function opts() { return { c: +$("#color").value, depth: +$("#depth").value, blur: +$("#blur").value, vivid: +$("#vivid").value }; }
 function render() {
   for (const o of document.querySelectorAll("output")) o.textContent = document.getElementById(o.htmlFor).value;
   const o = opts(), [name, color] = SPACES[space], cards = $("#cards").checked;
-  $("#big").innerHTML = [["now", false, "Now · light"], ["try", false, "Try · light"], ["now", true, "Now · dark"], ["try", true, "Try · dark"]]
-    .map(([k, d, cap]) => `<figure class="phone">${phone(k, color, d, o, cards)}<figcaption>${cap} · ${name}</figcaption></figure>`).join("");
+  $("#big").innerHTML = [false, true].map(d => STYLES.map(([k, label]) =>
+    `<figure class="phone">${phone(k, color, d, o, cards)}<figcaption>${label} · ${d ? "dark" : "light"} · ${name}</figcaption></figure>`).join("")).join("");
   $("#thumbs").innerHTML = SPACES.map(([n, c]) =>
-    `<figure><div class="pair">${phone("try", c, false, o, cards)}${phone("try", c, true, o, cards)}</div><figcaption>${n}</figcaption></figure>`).join("");
-  document.querySelectorAll(".chip").forEach((b, i) => b.setAttribute("aria-pressed", i === space));
+    `<figure><div class="pair">${phone(style, c, false, o, cards)}${phone(style, c, true, o, cards)}</div><figcaption>${n}</figcaption></figure>`).join("");
+  document.querySelectorAll("#styles .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === style));
+  document.querySelectorAll("#chips .chip").forEach((b, i) => b.setAttribute("aria-pressed", i === space));
 }
 $("#chips").innerHTML = SPACES.map(([n, c], i) => `<button class="chip" data-i="${i}"><i style="background:${c}"></i>${n}</button>`).join("");
 $("#chips").addEventListener("click", e => { const b = e.target.closest(".chip"); if (b) { space = +b.dataset.i; render(); } });
-for (const s of ["#color", "#depth", "#blur", "#cards"]) $(s).addEventListener("input", render);
+$("#styles").innerHTML = STYLES.map(([k, l]) => `<button class="chip" data-k="${k}">${l}</button>`).join("");
+$("#styles").addEventListener("click", e => { const b = e.target.closest(".chip"); if (b) { style = b.dataset.k; render(); } });
+for (const s of ["#color", "#depth", "#blur", "#vivid", "#cards"]) $(s).addEventListener("input", render);
 render();
 </script>
 </body>

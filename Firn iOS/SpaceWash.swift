@@ -7,7 +7,10 @@ import SwiftUI
 /// Sunrise's light and dark instead (a dim upper sky, the glow where the sun
 /// peeks, the snow's ridges), blurred, and printed in two tints of the
 /// space's color, so every space keeps its own look and no sky blue takes
-/// over. It replaced the space wash (2026-11-16), a plain gradient that read
+/// over. Then more color (David, 2026-11-18, the mockup's "Dawn glow" with
+/// "Neighbor hues"): the lightest parts warm toward Sunrise's apricot, and
+/// soft patches of the space color's neighbors on the color wheel drift
+/// across it, so it holds several hues as Safari's wallpaper does. It replaced the space wash (2026-11-16), a plain gradient that read
 /// as flat beside Safari's.
 ///
 /// Baked once per space and look as a small picture (a quarter of the
@@ -38,6 +41,30 @@ struct SpaceWash: View {
         static let pictureSize = (width: 101, height: 219)
         /// The blur, in the design screen's points (the mockup's 40).
         static let blur: CGFloat = 40
+
+        /// More color, as Safari's wallpaper blurs several hues together
+        /// (David, 2026-11-18: one hue read bland), while the space's color
+        /// stays in charge. The mockup's Vivid 0.75.
+        static let vivid: Float = 0.75
+        /// Dawn glow: the brightest parts warm toward Sunrise's apricot, the
+        /// sun's light on snow (Firn's own, the same in every space). This
+        /// much of it at full Vivid, plus a floor, light and dark.
+        static let apricot: UInt32 = 0xF2C4A0
+        static let dawn = (light: (perVivid: Float(0.55), floor: Float(0.10)),
+                           dark: (perVivid: Float(0.22), floor: Float(0.05)))
+        /// Neighbor hues: soft patches of the space color's neighbors on the
+        /// color wheel, in the design screen's points: middle, radii, hue
+        /// turn in degrees, and strength (a share of the patches' opacity).
+        struct Patch {
+            let x: Float, y: Float, rx: Float, ry: Float, turn: Float, strength: Float
+        }
+        static let patches = [
+            Patch(x: 60, y: 180, rx: 230, ry: 260, turn: 40, strength: 1),
+            Patch(x: 360, y: 560, rx: 240, ry: 280, turn: -40, strength: 1),
+            Patch(x: 120, y: 820, rx: 220, ry: 160, turn: 15, strength: 0.6),
+        ]
+        /// The patches' opacity at full Vivid, light and dark.
+        static let patchOpacity = (light: Float(0.55), dark: Float(0.45))
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6
@@ -114,15 +141,38 @@ struct SpaceWash: View {
         if let kept = backdrops[key] { return kept }
         let ends = dark ? Tuning.dark : Tuning.light
         let hi = mix(ends.hi.base, tint, ends.hi.mix), lo = mix(ends.lo.base, tint, ends.lo.mix)
-        func channel(_ hex: UInt32, _ shift: UInt32) -> Float { Float((hex >> shift) & 0xFF) }
-        let low = [channel(lo, 16), channel(lo, 8), channel(lo, 0)]
-        let span = [channel(hi, 16) - low[0], channel(hi, 8) - low[1], channel(hi, 0) - low[2]]
+        func rgb(_ hex: UInt32) -> SIMD3<Float> {
+            SIMD3(Float((hex >> 16) & 0xFF), Float((hex >> 8) & 0xFF), Float(hex & 0xFF))
+        }
+        let v = Tuning.vivid
+        // Three steps through Sunrise's light and dark: the space's deep
+        // shade, its middle, and its light warmed toward the dawn.
+        let dawn = dark ? Tuning.dawn.dark : Tuning.dawn.light
+        let deep = rgb(lo), top = rgb(hi)
+        let middle = deep + (top - deep) * 0.55
+        let warm = top + (rgb(Tuning.apricot) - top) * (dawn.perVivid * v + dawn.floor)
+        // The neighbor hues: the space's color, a quarter of the way to the
+        // light end (dark: the deep end), turned on the color wheel.
+        let base = rgb(tint) + (rgb(dark ? lo : hi) - rgb(tint)) * 0.25
+        let opacity = (dark ? Tuning.patchOpacity.dark : Tuning.patchOpacity.light) * v
+        let patches = Tuning.patches.map { ($0, turned(base, by: $0.turn, saturation: 1.2)) }
+        let (w, h) = Tuning.pictureSize
+        let toDesign = 402 / Float(w)
         let light = lightAndDark
         var pixels = [UInt8](repeating: 255, count: light.count * 4)
-        for (i, v) in light.enumerated() {
-            for c in 0..<3 { pixels[i * 4 + c] = UInt8(max(0, min(255, (low[c] + span[c] * v).rounded()))) }
+        for (i, t) in light.enumerated() {
+            var color = t < 0.5 ? deep + (middle - deep) * (t * 2) : middle + (warm - middle) * ((t - 0.5) * 2)
+            let x = (Float(i % w) + 0.5) * toDesign, y = (Float(i / w) + 0.5) * toDesign
+            for (patch, hue) in patches {
+                let dx = (x - patch.x) / patch.rx, dy = (y - patch.y) / patch.ry
+                // A soft edge, as a hard ellipse blurred hard would have.
+                let d = (dx * dx + dy * dy).squareRoot()
+                let edge = max(0, min(1, (d - 0.55) / 0.9))
+                let alpha = opacity * patch.strength * (1 - edge * edge * (3 - 2 * edge))
+                color += (hue - color) * alpha
+            }
+            for c in 0..<3 { pixels[i * 4 + c] = UInt8(max(0, min(255, color[c].rounded()))) }
         }
-        let (w, h) = Tuning.pictureSize
         let image = pixels.withUnsafeMutableBytes { bytes -> UIImage in
             guard let context = CGContext(
                 data: bytes.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -133,6 +183,19 @@ struct SpaceWash: View {
         }
         backdrops[key] = image
         return image
+    }
+
+    /// A color (0–255 channels) turned on the color wheel, its saturation
+    /// scaled, its brightness kept.
+    private static func turned(_ c: SIMD3<Float>, by degrees: Float, saturation: Float) -> SIMD3<Float> {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(red: CGFloat(c.x / 255), green: CGFloat(c.y / 255), blue: CGFloat(c.z / 255), alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let hue = (h + CGFloat(degrees) / 360).truncatingRemainder(dividingBy: 1)
+        var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0
+        UIColor(hue: hue < 0 ? hue + 1 : hue, saturation: min(1, s * CGFloat(saturation)), brightness: b, alpha: 1)
+            .getRed(&r, green: &g, blue: &bl, alpha: &a)
+        return SIMD3(Float(r), Float(g), Float(bl)) * 255
     }
 
     /// Sunrise's horizon band as light and dark only (0 darkest, 1

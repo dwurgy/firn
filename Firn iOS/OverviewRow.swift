@@ -51,8 +51,7 @@ struct OverviewRow: View {
     /// (`GridCards`), not here: one place decides between the swipe and
     /// iOS's press, menu, and drag. Elsewhere the row swipes itself.
     var swipesItself = true
-    /// Where such a card is in its swipe: its title and X go while it's
-    /// swiped, and its spot waits until it's home.
+    /// Where such a card is in its swipe: its spot waits until it's home.
     var gridSwipe: GridSwipe = .none
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -64,7 +63,7 @@ struct OverviewRow: View {
     @State private var leaving = false
     /// iOS's hold menu is open on the grid card.
     @State private var menuOpen = false
-    /// A grid card being swiped: grown, its title and X gone, from the
+    /// A grid card being swiped: grown, from the
     /// first move until it's eased home (or closed), as Safari's.
     @State private var swiped = false
 
@@ -152,22 +151,21 @@ struct OverviewRow: View {
                 // Hidden while its menu is open too: a drag pulled off the
                 // menu takes its picture then, and Safari's carries no X.
                 GridCloseButton(title: tab.title, close: close)
-                    .opacity(carried || menuOpen || swiped || gridSwipe == .swiping ? 0 : 1)
-                    .animation(Self.swipeFade(gridSwipe), value: gridSwipe)
+                    // A swiped card keeps it, riding and growing with the
+                    // card, as Safari's (David's recording, 2026-11-17).
+                    .opacity(carried || menuOpen ? 0 : 1)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
             // landing glide and opening scrolled to it already say which
             // it is (David, 2026-11-16); VoiceOver still hears "On screen."
             .frame(height: max(cardHeight - Self.gridTitleHeight, 1))
-            // Swiped to close, it grows a touch and its title goes, as
-            // Safari's (David's recording, 2026-11-17).
+            // Swiped to close, it grows a touch, its title and X staying,
+            // as Safari's (David's recording, 2026-11-17).
             // Animated where `swiped` changes (`follow`, `letGo`), so it
             // shrinks on the same ease as the slide home, as Safari's.
             .scaleEffect(swiped && !reduceMotion ? Self.swipeGrowth : 1)
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
-                .opacity(swiped || gridSwipe == .swiping ? 0 : 1)
-                .animation(Self.swipeFade(gridSwipe), value: gridSwipe)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -184,26 +182,13 @@ struct OverviewRow: View {
         .animation(.easeOut(duration: 0.15), value: picture != nil)
     }
 
-    /// The grid's UIKit cards fade their title and X here, on the card
-    /// itself: the overview's animation never reached them through the
-    /// collection view's cell, so they snapped out and back in a frame
-    /// (David's recording, 2026-11-17). Quickly out as the swipe starts;
-    /// back over the ease home.
-    private static func swipeFade(_ phase: GridSwipe) -> Animation? {
-        switch phase {
-        case .swiping: .easeOut(duration: 0.12)
-        case .easingHome: .easeInOut(duration: 0.35)
-        case .none: nil
-        }
-    }
-
     /// How long a grid card takes to ease home after a swipe, shrinking
     /// as it goes: Safari's, about half a second (David's recording,
     /// 2026-11-17).
     private static let swipeHome: Double = 0.45
-    /// How much a grid card grows while swiped: Safari's, about 6%,
+    /// How much a grid card grows while swiped: Safari's, about 9%,
     /// measured from David's recording (2026-11-17).
-    private static let swipeGrowth: CGFloat = 1.06
+    private static let swipeGrowth: CGFloat = 1.09
 
     /// The grid card's corners: Safari's 15pt, measured from David's
     /// screenshots (2026-11-16); the X's disc sits concentric in the corner.

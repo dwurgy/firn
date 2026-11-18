@@ -96,9 +96,8 @@ final class GridCardCell: UICollectionViewCell {
     }
 }
 
-/// Where a grid card is in a swipe to close (`GridCards`): while
-/// `swiping`, its title and X are gone; `easingHome`, they come back as it
-/// settles. Its spot isn't reported until it's home again (`none`).
+/// Where a grid card is in a swipe to close (`GridCards`): `swiping`, then
+/// `easingHome`. Its spot isn't reported until it's home again (`none`).
 enum GridSwipe: Equatable {
     case none, swiping, easingHome
 }
@@ -118,7 +117,7 @@ struct GridCards: UIViewRepresentable {
     let held: (UUID, Bool) -> Void
     /// A card let go before another (nil: at the run's end).
     let move: (UUID, UUID?) -> Void
-    /// A card's swipe to close moving on (its title and X follow it).
+    /// A card's swipe to close moving on.
     let swipe: (UUID, GridSwipe) -> Void
     /// A card swiped off: its tab closes.
     let close: (UUID) -> Void
@@ -231,15 +230,16 @@ struct GridCards: UIViewRepresentable {
         // starts calls iOS's press off, a card iOS has lifted or opened a
         // menu on takes no swipe, and a card being swiped gets no menu or
         // drag. The card moves by its layer alone (a transform on the
-        // cell's content), eased home by the render server, so SwiftUI
-        // runs only as the title and X go and come back.
+        // cell's content), eased home by the render server; SwiftUI
+        // runs only as its phase changes.
 
-        /// How much a swiped card grows: Safari's, about 6% (David's
-        /// recording, 2026-11-17), on a quick spring as the swipe starts
-        /// (halfway in about 0.08s). It followed the finger's first 24pt
+        /// How much a swiped card grows: Safari's, about 9% (516 to 564px
+        /// wide in David's recording, 2026-11-17), all there within about
+        /// 0.12s of the swipe starting, then held; it shrinks slowly on the
+        /// ease home's soft spring. It followed the finger's first 24pt
         /// before, and read as a stepped resize (David, 2026-11-17).
-        private static let growth: CGFloat = 1.06
-        private static let growStiffness: CGFloat = 400
+        private static let growth: CGFloat = 1.09
+        private static let growStiffness: CGFloat = 650
         /// The ease home, shrinking as it goes: a spring with no bounce and
         /// Safari's pace, measured from David's recordings (2026-11-17):
         /// halfway home in about 0.15s, nearly there by 0.4s, a 0.56s

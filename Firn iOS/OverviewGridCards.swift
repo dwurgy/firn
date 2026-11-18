@@ -430,14 +430,16 @@ struct GridCards: UIViewRepresentable {
         }
 
         /// Firn's choices as UIKit's: the same words and symbols. Close rows
-        /// stay plain, never `.destructive` (iOS's red breaks "never alarm red").
+        /// in iOS's destructive red, as every app's (David, 2026-11-17).
         private static func element(_ item: HoldMenuItem) -> UIMenuElement {
             let image = item.systemImage.flatMap { UIImage(systemName: $0) }
             if !item.children.isEmpty {
                 return UIMenu(title: item.title, image: image, children: item.children.map(element))
             }
             let action = item.action
-            return UIAction(title: item.title, image: image) { _ in MainActor.assumeIsolated { action() } }
+            return UIAction(title: item.title, image: image, attributes: item.closes ? .destructive : []) { _ in
+                MainActor.assumeIsolated { action() }
+            }
         }
 
         func collectionView(_ view: UICollectionView, contextMenuConfiguration configuration: UIContextMenuConfiguration,

@@ -390,11 +390,11 @@ Decided (David, 2026-11-16): the grid is likely to become the only overview, so 
 - The grid needs new drag code either way: the list's drag only moves up and down; a grid moves across rows and columns, which is what iOS's own drag and drop does (Safari's grid uses it). Holding gives the menu, moving away lifts the card, the others make room, all iOS's.
 - Consistency: a page's link previews (and other system previews) will always be iOS's menu; Firn's frost beside them was two looks. iOS's menus also bring VoiceOver, Dynamic Type, Reduce Motion, haptics, and future iOS polish for free. Firn's own menu never felt quite as polished as iOS's (David).
 
-**What we give up (accepted):** the solid base under a held item, and the sink as it's held; Close rows in terracotta. iOS's destructive style is system red, which breaks "never alarm red," so Close rows are plain (ink, not `.destructive`), with their symbol. About 460 lines of `FrostMenu.swift` (sunk cost).
+**What we give up (accepted):** the solid base under a held item, and the sink as it's held; Close rows in terracotta. Close rows take iOS's destructive red, as in every app (David, 2026-11-17; first planned plain, to keep "never alarm red"). About 460 lines of `FrostMenu.swift` (sunk cost).
 
 **Rules for the build:**
 - Use iOS's drag and drop fully, never mixed with Firn's own drag on the same item (mixing is what broke the list; phase 3 step 3b). If SwiftUI's `.contextMenu` with `.draggable`/`.dropDestination` can't do the grid exactly (reorder across columns, into and out of folders, a menu that hands off to a drag), drop to UIKit (`UICollectionView` with `UIContextMenuInteraction` and its drag and drop delegates, as Safari's grid), and say why in a comment.
-- Menu contents and words stay as they are now (the Mac's words, short menus). Close rows plain, not red.
+- Menu contents and words stay as they are now (the Mac's words, short menus). Close rows in iOS's destructive red (David, 2026-11-17).
 - Menus, the menu's preview, and cards stay neutral grey (2026-11-15 rule); the space's color stays on the ring, the check, and the wash.
 - The list keeps Firn's menu and drag until the grid replaces it (step 3); it isn't rebuilt.
 

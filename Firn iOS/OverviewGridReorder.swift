@@ -128,9 +128,8 @@ struct GridReorderContainer: ViewModifier {
 
 /// iOS's own hold menu, from the same choices as Firn's (`HoldMenuItem`):
 /// the same words and symbols, sections set apart by lines, Move to Group
-/// a submenu. Close rows stay plain, never `.destructive`: iOS's red would
-/// break "never alarm red" (docs/IOS-PLAN.md). The choices are made only
-/// as the menu opens.
+/// a submenu. Close rows in iOS's destructive red, as every app's (David,
+/// 2026-11-17). The choices are made only as the menu opens.
 struct SystemHoldMenu: View {
     let sections: () -> [[HoldMenuItem]]
     /// Told as the menu opens and closes.
@@ -157,9 +156,9 @@ struct SystemHoldMenu: View {
                 Menu(item.title) { children(item) }
             }
         } else if let symbol = item.systemImage {
-            Button(item.title, systemImage: symbol, action: item.action)
+            Button(item.title, systemImage: symbol, role: item.closes ? .destructive : nil, action: item.action)
         } else {
-            Button(item.title, action: item.action)
+            Button(item.title, role: item.closes ? .destructive : nil, action: item.action)
         }
     }
 

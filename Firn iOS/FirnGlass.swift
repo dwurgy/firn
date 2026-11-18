@@ -103,36 +103,62 @@ extension View {
     /// button inside reaches the glass too and it takes iOS's press. Beside
     /// it, as `FirnGlass` in a background, the buttons took the touch and
     /// the glass never felt it (the overview's name pill, 2026-11-17).
-    ///
-    /// `enabled` false draws nothing (iOS's `.identity` glass), keeping the
-    /// view the same, so a bar can hand its glass to a separate piece for a
-    /// glide (the address field growing into its menu, the space name's
-    /// pills sliding) and take it back at rest, with no state lost.
-    func firnGlassSurface<S: InsettableShape>(_ shape: S, interactive: Bool = false, enabled: Bool = true) -> some View {
-        modifier(FirnGlassSurface(shape: shape, interactive: interactive, enabled: enabled))
+    func firnGlassSurface<S: InsettableShape>(_ shape: S, interactive: Bool = false) -> some View {
+        modifier(FirnGlassSurface(shape: shape, interactive: interactive))
     }
 }
 
 private struct FirnGlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
     let interactive: Bool
-    let enabled: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         if reduceTransparency {
-            content.background {
-                FirnFrost(shape: shape, fill: Theme.barFrost, solid: true).opacity(enabled ? 1 : 0)
-            }
+            content.background { FirnFrost(shape: shape, fill: Theme.barFrost, solid: true) }
         } else {
             content
-                .glassEffect(enabled ? .regular.interactive(interactive) : .identity, in: shape)
+                .glassEffect(.regular.interactive(interactive), in: shape)
                 // Under the glass (a background added after it), as the
                 // glass buttons' blur is.
-                .background {
-                    shape.fill(.ultraThinMaterial).opacity(enabled ? 1 : 0).allowsHitTesting(false)
-                }
+                .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
         }
+    }
+}
+
+/// One glass that changes shape (David, 2026-11-18: one native glass per
+/// button, never a second glass taking over mid-move): a rounded rectangle
+/// at `frame`, in the view's own space, which may reach outside the view
+/// (the page menu grows above the field, the small pill hangs below it).
+/// Animatable, so iOS's glass glides from one frame to the next. An empty
+/// frame means the view's own bounds, a capsule.
+struct GlassFrame: InsettableShape {
+    var frame: CGRect
+    var radius: CGFloat
+    var inset: CGFloat = 0
+
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>> {
+        get {
+            AnimatablePair(AnimatablePair(frame.minX, frame.minY),
+                           AnimatablePair(AnimatablePair(frame.width, frame.height), radius))
+        }
+        set {
+            frame = CGRect(x: newValue.first.first, y: newValue.first.second,
+                           width: newValue.second.first.first, height: newValue.second.first.second)
+            radius = newValue.second.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let box = (frame.isEmpty ? rect : frame).insetBy(dx: inset, dy: inset)
+        let corner = min(frame.isEmpty ? box.height / 2 : radius, box.height / 2, box.width / 2)
+        return RoundedRectangle(cornerRadius: max(corner, 0), style: .continuous).path(in: box)
+    }
+
+    func inset(by amount: CGFloat) -> GlassFrame {
+        var copy = self
+        copy.inset += amount
+        return copy
     }
 }
 

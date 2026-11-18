@@ -27,7 +27,6 @@ struct OverviewBar: View {
     private static let height = BarButton.glassSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// How far the pill has slid toward the next space, as the address
     /// bar's: positive to the right (the space before coming in from +'s
     /// side). Only where there's a space to come in.
@@ -190,28 +189,15 @@ struct OverviewBar: View {
             .accessibilityAction { opens += 1 }
     }
 
-    /// The name's pill wears its glass itself, except while sliding.
-    /// Reduce Transparency keeps the separate frost.
-    private var glassOnPill: Bool { !glassAway && !reduceTransparency }
+    /// The pill's size, for the shape its glass takes.
+    @State private var pillSize: CGSize = .zero
 
-    /// The sliding pills have the name's glass, from a slide's start until
-    /// its glide has settled back (0.25s), so the two never show at once.
-    @State private var glassAway = false
-    @State private var glassBack: Task<Void, Never>?
-
-    private func handGlass(sliding: Bool) {
-        glassBack?.cancel()
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        if sliding {
-            withTransaction(instant) { glassAway = true }
-            return
-        }
-        glassBack = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.35))
-            guard !Task.isCancelled else { return }
-            withTransaction(instant) { glassAway = false }
-        }
+    /// The name's glass: the whole pill at rest, its share of the gap
+    /// mid-slide.
+    private var heldGlass: GlassFrame {
+        guard let slide, pillSize != .zero else { return GlassFrame(frame: .zero, radius: 0) }
+        let held = slide.pills(in: pillSize).held
+        return GlassFrame(frame: held, radius: held.height / 2)
     }
 
     /// The menu's rows, as UIKit's.
@@ -272,12 +258,7 @@ struct OverviewBar: View {
                 }
             } body: { $0.frame(width: pillWidth) }
             .frame(height: Self.height)
-            // At rest the pill wears iOS's glass itself, so a finger on the
-            // name reaches it and it takes iOS's press, as the bar's buttons
-            // do (beside the words, the glass never felt them). Sliding, the
-            // two pills behind take over (below).
-            .firnGlassSurface(Capsule(), interactive: true, enabled: glassOnPill)
-            .onChange(of: slide == nil) { _, resting in handGlass(sliding: !resting) }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
             .mask {
                 if let slide {
                     GeometryReader { geo in
@@ -291,19 +272,14 @@ struct OverviewBar: View {
                     Rectangle().padding(-400)
                 }
             }
+            // The name's one glass, iOS's own, on the pill itself (David,
+            // 2026-11-18: one native glass per button), so a finger on the
+            // name reaches it and it takes iOS's press. Sliding, this same
+            // glass narrows to its share of the gap (`GlassFrame`).
+            .firnGlassSurface(heldGlass, interactive: slide == nil)
             .background {
-                // The two pills in one glass container, so they melt into
-                // each other across their seam as they slide. Only the pills:
-                // a container around the whole bar drew its glass over the
-                // name (iOS draws a container's glass above its other views).
                 GeometryReader { geo in
                     let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
-                    // Only while sliding: at rest the pill wears the glass
-                    // itself (`glassOnPill`).
-                    FirnGlass(shape: Capsule())
-                        .frame(width: pills.held.width, height: pills.held.height)
-                        .opacity(glassOnPill ? 0 : pills.heldOpacity)
-                        .position(x: pills.held.midX, y: pills.held.midY)
                     // The coming space's own pill, growing out from the
                     // other button.
                     if let coming = pills.coming, neighbor(progress) != nil {
@@ -313,8 +289,10 @@ struct OverviewBar: View {
                             .position(x: coming.midX, y: coming.midY)
                     }
                 }
-                .glassContainer(spacing: Self.meltDistance)
             }
+            // The name's glass and the coming pill's in one container, so
+            // they melt into each other across their seam as they slide.
+            .glassContainer(spacing: Self.meltDistance)
             .contentShape(Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spaces.count > 1 ? "\(space.name), space \(index + 1) of \(spaces.count)" : space.name)

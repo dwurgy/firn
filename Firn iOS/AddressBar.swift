@@ -28,7 +28,6 @@ struct AddressBar: View {
     /// `ICloudSync.otherDeviceTabs`). None until sync's first sync.
     var otherDeviceTabs: () -> [DeviceTab] = { [] }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.barSlide) private var barSlide
     @Environment(\.barGive) private var barGive
     /// What's being typed, for the results above the field (empty at rest).
@@ -365,14 +364,16 @@ struct AddressBar: View {
                 // The glass and the menu are laid out with the field itself,
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
-                .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
-                // At rest the field wears iOS's glass itself, so a finger
-                // anywhere on it (the site, •••, Reload) reaches the glass
-                // and it takes iOS's press, as Back and Tabs do. Growing into
-                // the menu, shrinking to the small pill, or sliding sideways,
-                // the separate glass behind (`fieldGlass`) takes over.
-                .firnGlassSurface(Capsule(), interactive: !editing.wrappedValue, enabled: fieldGlassOnField)
-                .onChange(of: fieldAtRest) { _, rest in handGlass(atRest: rest) }
+                .background { GeometryReader { loadingTint(fieldSize: $0.size) } }
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { fieldSize = $0 }
+                // The field's one glass, iOS's own (David, 2026-11-18: one
+                // native glass per button, never a second taking over). On
+                // the field itself, so a finger anywhere on it (the site,
+                // •••, Reload) reaches it and it takes iOS's press. Growing
+                // into the page menu, shrinking to the small pill, and
+                // sliding sideways are this same glass changing shape
+                // (`GlassFrame`).
+                .firnGlassSurface(glassShape, interactive: fieldAtRest && !editing.wrappedValue)
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
                 // Holding anywhere on the field opens the page menu, as in
                 // Safari, with a held tab's feel: it sinks from 0.15s, then
@@ -430,35 +431,31 @@ struct AddressBar: View {
         .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
     }
 
-    /// The field's glass is on the field itself (`firnGlassSurface`), not
-    /// the separate piece in `fieldGlass`: whenever that piece would be the
-    /// field's own size. Reduce Transparency keeps the separate frost.
-    private var fieldGlassOnField: Bool { !glassAway && !reduceTransparency }
-
-    /// The field at its own size, nothing growing, shrinking, or sliding.
+    /// The field at its own size, nothing growing, shrinking, or sliding:
+    /// only then is its glass pressed by a finger.
     private var fieldAtRest: Bool { !menuOpen && !compact && activeSlide == nil }
 
-    /// The separate glass has the field's glass: from the moment the menu
-    /// opens, the bar shrinks, or a slide starts, until that glide has
-    /// ended back at the field's own size (`handGlass`). Handed back only
-    /// then, so the two are never seen at once.
-    @State private var glassAway = false
-    @State private var glassBack: Task<Void, Never>?
+    /// The field's size, for the shape its glass takes.
+    @State private var fieldSize: CGSize = .zero
 
-    private func handGlass(atRest: Bool) {
-        glassBack?.cancel()
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        if !atRest {
-            withTransaction(instant) { glassAway = true }
-            return
+    /// Where the field's one glass is, in the field's own space: the
+    /// field, the page menu above it, the small pill below it, or its share
+    /// of the gap mid-slide.
+    private func glassFrame(fieldSize: CGSize) -> (frame: CGRect, radius: CGFloat) {
+        guard fieldSize != .zero else { return (.zero, 0) }
+        if menuOpen { return (menuFrame(fieldSize: fieldSize), PageMenuPanel.cornerRadius) }
+        if compact {
+            let small = CGRect(x: 0, y: fieldSize.height - Self.compactHeight + Self.compactDrop,
+                               width: fieldSize.width, height: Self.compactHeight)
+            return (small, small.height / 2)
         }
-        glassBack = Task { @MainActor in
-            // The longest glide back: the menu and the shrink, 0.32s.
-            try? await Task.sleep(for: .seconds(0.4))
-            guard !Task.isCancelled else { return }
-            withTransaction(instant) { glassAway = false }
-        }
+        if let held = activeSlide?.pills(in: fieldSize).held { return (held, held.height / 2) }
+        return (CGRect(origin: .zero, size: fieldSize), fieldSize.height / 2)
+    }
+
+    private var glassShape: GlassFrame {
+        let glass = glassFrame(fieldSize: fieldSize)
+        return GlassFrame(frame: glass.frame, radius: glass.radius)
     }
 
     /// The field can be held for the page menu: at rest on a page, the full
@@ -553,37 +550,17 @@ struct AddressBar: View {
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
-    /// The field's frost, as one piece that becomes the menu: the same tint
-    /// and the same frost as the bar, because it is the bar.
-    @ViewBuilder private func fieldGlass(fieldSize: CGSize) -> some View {
-        let open = menuOpen && fieldSize != .zero
-        let small = CGRect(x: 0, y: fieldSize.height - Self.compactHeight + Self.compactDrop,
-                           width: fieldSize.width, height: Self.compactHeight)
-        let pills = (open ? nil : activeSlide)?.pills(in: fieldSize)
-        let frame = open ? menuFrame(fieldSize: fieldSize)
-            : compact ? small : pills?.held ?? CGRect(origin: .zero, size: fieldSize)
-        let radius = open ? PageMenuPanel.cornerRadius : frame.height / 2
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
-            .opacity(open ? 0 : 1)
+    /// The loading frost, over the field's glass in the glass's own shape;
+    /// gone while the menu is open.
+    private func loadingTint(fieldSize: CGSize) -> some View {
+        let glass = glassFrame(fieldSize: fieldSize)
+        let shape = RoundedRectangle(cornerRadius: glass.radius, style: .continuous)
+        return LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
+            .opacity(menuOpen ? 0 : 1)
             .clipShape(shape)
-            // Hidden while the field wears the glass itself, so it's never
-            // drawn twice.
-            .background { BarFrost(shape: shape).opacity(fieldGlassOnField ? 0 : 1) }
-            // Open, the menu sits lifted, with a held tab's warm shadow.
-            .shadow(color: Theme.shadowPeek.opacity(open ? 1 : 0), radius: 18, y: 8)
-            // The whole pill fades as it becomes a circle, its frost too,
-            // as the coming one does.
-            .opacity(pills?.heldOpacity ?? 1)
-            .frame(width: frame.width, height: frame.height)
-            .position(x: frame.midX, y: frame.midY)
-        if reduceMotion {
-            // Reduce Motion: no growing or shrinking; the bar's glass, the
-            // small pill's, and the menu's swap with a fade.
-            glass.id(open ? 2 : compact ? 1 : 0).transition(Self.shrinkFade)
-        } else {
-            glass
-        }
+            .frame(width: glass.frame.width, height: glass.frame.height)
+            .position(x: glass.frame.midX, y: glass.frame.midY)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder private func menuPanel(fieldSize: CGSize) -> some View {
@@ -839,7 +816,7 @@ private struct AddressField: View {
                     .accessibilityHint("Shows the address bar")
             }
         }
-        // The field's glass is the bar's (`AddressBar.fieldGlass`), so it
+        // The field's glass is the bar's (`AddressBar.glassShape`), so it
         // can grow into the page menu.
         .allowsHitTesting(!menuOpen)
         .accessibilityHidden(menuOpen)

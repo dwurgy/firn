@@ -1,52 +1,43 @@
 import SwiftUI
 
-/// The overview's backdrop: a space wash (David, 2026-11-16), the iPhone's
-/// match to the Mac's space-tinted frame. The frame color, deepening toward
-/// the bottom with the space's color, a soft glow of that color low on the
-/// screen, and the paper grain on top. It replaced a baked, blurred Sunrise:
-/// Sunrise is for moments (the welcome and the empty page), and the space's
-/// color barely showed through it.
+/// The overview's backdrop: Sunrise's horizon band in the space's own color
+/// (David, 2026-11-18, `docs/overview-backdrop-design.html`). Safari's
+/// overview sits on the wallpaper, blurred hard, and its light and shadow
+/// are what make the cards float; Firn can't read the wallpaper, so it uses
+/// Sunrise's light and dark instead (a dim upper sky, the glow where the sun
+/// peeks, the snow's ridges), blurred, and printed in two tints of the
+/// space's color, so every space keeps its own look and no sky blue takes
+/// over. It replaced the space wash (2026-11-16), a plain gradient that read
+/// as flat beside Safari's.
 ///
-/// Plain gradients drawn directly: nothing to bake or keep, and nothing
-/// redraws while the overview sits still or scrolls. A space change
-/// cross-fades over 600ms, easing out (at once with Reduce Motion). Opaque,
-/// so Reduce Transparency keeps it as it is.
+/// Baked once per space and look as a small picture (a quarter of the
+/// screen's points, blurred, so nothing is lost scaling it up) and kept in
+/// memory: nothing redraws while the overview sits still or scrolls. A space
+/// change cross-fades over 600ms, easing out (at once with Reduce Motion).
+/// Opaque, so Reduce Transparency keeps it as it is.
 struct SpaceWash: View {
     let space: String
 
     /// Every number worth tuning, in one place. A stop's `mix` is how much
     /// of the space's color goes into its base (0.12 = 12% space color).
     enum Tuning {
-        struct Stop {
-            let location: CGFloat
+        /// The picture's two ends: where Sunrise is lightest (`hi`) and
+        /// darkest (`lo`), each a base mixed with this share of the space's
+        /// color. The mockup's Color 0.5, Depth 1; dark made darker so it
+        /// feels like dark mode (David, 2026-11-18).
+        struct End {
             let base: UInt32
             let mix: CGFloat
         }
+        static let light = (hi: End(base: 0xF7F3EE, mix: 0.15), lo: End(base: 0xB9AE9F, mix: 0.50))
+        static let dark = (hi: End(base: 0x302C28, mix: 0.25), lo: End(base: 0x0F0D0C, mix: 0.15))
 
-        static let light: [Stop] = [
-            Stop(location: 0, base: 0xF2EDE6, mix: 0.12),
-            Stop(location: 0.35, base: 0xE9E3DA, mix: 0.16),
-            Stop(location: 0.70, base: 0xE9E3DA, mix: 0.26),
-            Stop(location: 1, base: 0xE9E3DA, mix: 0.34),
-        ]
-        static let dark: [Stop] = [
-            Stop(location: 0, base: 0x2A2724, mix: 0.10),
-            Stop(location: 0.40, base: 0x2A2724, mix: 0.14),
-            Stop(location: 0.75, base: 0x24211F, mix: 0.22),
-            Stop(location: 1, base: 0x24211F, mix: 0.18),
-        ]
-
-        /// The glow's middle, as a share of the screen (0.6 across, 0.82 down).
-        static let glowCenter = UnitPoint(x: 0.60, y: 0.82)
-        /// The glow's ellipse, as a share of the screen's width and height.
-        static let glowSize = CGSize(width: 0.75, height: 0.30)
-        /// Light: the space's color with this share of white in it…
-        static let lightGlowWhite: CGFloat = 0.45
-        /// …at this opacity in the glow's middle, fading to clear at its edge.
-        static let lightGlowOpacity: Double = 0.55
-        /// Dark: the space's color itself at this opacity. 0.20 read as a
-        /// spotlight; light's glow reads as haze (David, 2026-11-16).
-        static let darkGlowOpacity: Double = 0.065
+        /// The picture's size, a quarter of the design screen's points
+        /// (402×874), stretched to fill: it's blurred, so the stretch and
+        /// the scale-up don't show.
+        static let pictureSize = (width: 101, height: 219)
+        /// The blur, in the design screen's points (the mockup's 40).
+        static let blur: CGFloat = 40
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6
@@ -110,26 +101,130 @@ struct SpaceWash: View {
     }
 
     private func wash(for space: String) -> some View {
-        let tint = Theme.spaceHex(space)
-        let stops = (dark ? Tuning.dark : Tuning.light).map {
-            Gradient.Stop(color: Self.color(Self.mix($0.base, tint, $0.mix)), location: $0.location)
-        }
-        let glow = dark
-            ? Self.color(tint).opacity(Tuning.darkGlowOpacity)
-            : Self.color(Self.mix(tint, 0xFFFFFF, Tuning.lightGlowWhite)).opacity(Tuning.lightGlowOpacity)
-        return ZStack {
-            LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
-            GeometryReader { proxy in
-                let size = proxy.size
-                Rectangle()
-                    .fill(EllipticalGradient(colors: [glow, glow.opacity(0)],
-                                             center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
-                    .frame(width: size.width * Tuning.glowSize.width,
-                           height: size.height * Tuning.glowSize.height)
-                    .position(x: size.width * Tuning.glowCenter.x, y: size.height * Tuning.glowCenter.y)
-            }
-        }
+        Image(uiImage: Self.backdrop(tint: Theme.spaceHex(space), dark: dark))
+            .resizable()
+            .interpolation(.high)
     }
+
+    /// Each space's picture, by its color and look, made once.
+    @MainActor private static var backdrops: [String: UIImage] = [:]
+
+    @MainActor private static func backdrop(tint: UInt32, dark: Bool) -> UIImage {
+        let key = "\(tint)-\(dark)"
+        if let kept = backdrops[key] { return kept }
+        let ends = dark ? Tuning.dark : Tuning.light
+        let hi = mix(ends.hi.base, tint, ends.hi.mix), lo = mix(ends.lo.base, tint, ends.lo.mix)
+        func channel(_ hex: UInt32, _ shift: UInt32) -> Float { Float((hex >> shift) & 0xFF) }
+        let low = [channel(lo, 16), channel(lo, 8), channel(lo, 0)]
+        let span = [channel(hi, 16) - low[0], channel(hi, 8) - low[1], channel(hi, 0) - low[2]]
+        let light = lightAndDark
+        var pixels = [UInt8](repeating: 255, count: light.count * 4)
+        for (i, v) in light.enumerated() {
+            for c in 0..<3 { pixels[i * 4 + c] = UInt8(max(0, min(255, (low[c] + span[c] * v).rounded()))) }
+        }
+        let (w, h) = Tuning.pictureSize
+        let image = pixels.withUnsafeMutableBytes { bytes -> UIImage in
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            ), let cgImage = context.makeImage() else { return UIImage() }
+            return UIImage(cgImage: cgImage)
+        }
+        backdrops[key] = image
+        return image
+    }
+
+    /// Sunrise's horizon band as light and dark only (0 darkest, 1
+    /// lightest), blurred: one picture shared by every space and both looks
+    /// (one recipe, only the colors differ). Drawn in the design screen's
+    /// points (402×874), from the mockup.
+    @MainActor private static let lightAndDark: [Float] = {
+        let (w, h) = Tuning.pictureSize
+        let scale = CGFloat(w) / 402
+        var gray = [UInt8](repeating: 0, count: w * h)
+        gray.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ) else { return }
+            // Top-down, in the design screen's points.
+            context.translateBy(x: 0, y: CGFloat(h))
+            context.scaleBy(x: scale, y: -scale)
+            let space = CGColorSpaceCreateDeviceGray()
+            func gradient(_ stops: [(CGFloat, CGFloat, CGFloat)]) -> CGGradient {
+                CGGradient(colorSpace: space, colorComponents: stops.flatMap { [$0.1, $0.2] },
+                           locations: stops.map(\.0), count: stops.count)!
+            }
+            let options: CGGradientDrawingOptions = [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+            // The sky: dim at the top, brightening toward the horizon.
+            context.drawLinearGradient(
+                gradient([(0, 0.18, 1), (0.22, 0.34, 1), (0.42, 0.72, 1), (0.55, 0.86, 1)]),
+                start: CGPoint(x: 0, y: -200), end: CGPoint(x: 0, y: 1074), options: options)
+            // The glow where the sun peeks, 62% across.
+            context.saveGState()
+            context.translateBy(x: 250, y: 450)
+            context.scaleBy(x: 1, y: 150.0 / 240)
+            context.drawRadialGradient(gradient([(0, 1, 1), (1, 1, 0)]),
+                                       startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 240,
+                                       options: [])
+            context.restoreGState()
+            // The snow's ridges, each darker toward its shadowed foot.
+            func ridge(_ build: (CGMutablePath) -> Void, top: CGFloat, from: CGFloat, to: CGFloat) {
+                let path = CGMutablePath()
+                build(path)
+                path.addLine(to: CGPoint(x: 610, y: 1080))
+                path.addLine(to: CGPoint(x: -200, y: 1080))
+                path.closeSubpath()
+                context.saveGState()
+                context.addPath(path)
+                context.clip()
+                context.drawLinearGradient(gradient([(0, from, 1), (1, to, 1)]),
+                                           start: CGPoint(x: 0, y: top), end: CGPoint(x: 0, y: 1080),
+                                           options: options)
+                context.restoreGState()
+            }
+            ridge({
+                $0.move(to: CGPoint(x: -200, y: 520))
+                $0.addCurve(to: CGPoint(x: 170, y: 505), control1: CGPoint(x: -60, y: 470), control2: CGPoint(x: 60, y: 540))
+                $0.addCurve(to: CGPoint(x: 420, y: 500), control1: CGPoint(x: 280, y: 470), control2: CGPoint(x: 330, y: 470))
+                $0.addCurve(to: CGPoint(x: 610, y: 495), control1: CGPoint(x: 510, y: 530), control2: CGPoint(x: 560, y: 480))
+            }, top: 485, from: 0.62, to: 0.40)
+            ridge({
+                $0.move(to: CGPoint(x: -200, y: 610))
+                $0.addCurve(to: CGPoint(x: 220, y: 610), control1: CGPoint(x: -40, y: 580), control2: CGPoint(x: 90, y: 650))
+                $0.addCurve(to: CGPoint(x: 610, y: 620), control1: CGPoint(x: 350, y: 570), control2: CGPoint(x: 420, y: 570))
+            }, top: 590, from: 0.80, to: 0.55)
+            ridge({
+                $0.move(to: CGPoint(x: -200, y: 740))
+                $0.addCurve(to: CGPoint(x: 260, y: 730), control1: CGPoint(x: 0, y: 700), control2: CGPoint(x: 140, y: 770))
+                $0.addCurve(to: CGPoint(x: 610, y: 740), control1: CGPoint(x: 380, y: 690), control2: CGPoint(x: 470, y: 710))
+            }, top: 715, from: 0.92, to: 0.62)
+        }
+        // Three box blurs each way, close to a Gaussian of `Tuning.blur`
+        // (each box about twice the blur's sigma wide), edges held.
+        var values = gray.map { Float($0) / 255 }
+        let radius = max(1, Int((Tuning.blur * scale).rounded()))
+        func box(_ input: [Float], horizontal: Bool) -> [Float] {
+            var out = input
+            let (lines, length) = horizontal ? (h, w) : (w, h)
+            for line in 0..<lines {
+                func at(_ i: Int) -> Int {
+                    let i = max(0, min(length - 1, i))
+                    return horizontal ? line * w + i : i * w + line
+                }
+                var sum: Float = 0
+                for i in -radius...radius { sum += input[at(i)] }
+                for i in 0..<length {
+                    out[at(i)] = sum / Float(2 * radius + 1)
+                    sum += input[at(i + radius + 1)] - input[at(i - radius)]
+                }
+            }
+            return out
+        }
+        for _ in 0..<3 { values = box(box(values, horizontal: true), horizontal: false) }
+        return values
+    }()
 
     /// The dither's tile: 128 pixels of grey noise around middle grey
     /// (±8 of 255), made once per screen scale with a fixed seed, so it's

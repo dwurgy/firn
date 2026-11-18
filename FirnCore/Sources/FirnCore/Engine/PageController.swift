@@ -51,6 +51,14 @@ public protocol PageController: AnyObject, Observable {
     /// scrolls to the match. Returns how many matches the page has (counted
     /// up to `FindOnPage.countLimit`); 0 if none, or nothing is loaded.
     func find(_ text: String, _ direction: FindOnPage.Direction) async -> Int
+    /// Whether iOS's find bar is open on the page (iPhone and iPad). Always
+    /// false on the Mac, whose find bar is Firn's own (`FindOnPage`).
+    var isFinding: Bool { get }
+    /// Opens iOS's find bar on what's on screen (Reader's article while
+    /// it's on). Nothing on the Mac, or without a loaded page.
+    func showFind()
+    /// Closes iOS's find bar, if open.
+    func endFind()
     /// The text selected on the page, at most `FindOnPage.maxLength`
     /// characters; "" if none.
     func selectedText() async -> String
@@ -223,6 +231,9 @@ public extension PageController {
     var isArticle: Bool { false }
     func readArticle() async -> ReaderArticle? { nil }
     var isReading: Bool { false }
+    var isFinding: Bool { false }
+    func showFind() {}
+    func endFind() {}
     func openReader(look: ReaderLook, accent: UInt32) async -> Bool { false }
     func closeReader() {}
     func setReaderLook(_ look: ReaderLook) {}

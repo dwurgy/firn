@@ -244,6 +244,10 @@ struct BrowserScreen: View {
     @State private var newTabSwipe = false
     /// The page menu, grown out of the bar.
     @State private var menuOpen = false
+    /// The page whose find bar (iOS's own, Find on Page) is open, so it can
+    /// be ended when another tab comes on screen.
+    @State private var findingPage: (any PageController)?
+    private var finding: Bool { store.activeTab?.page?.isFinding ?? false }
     /// Where the bar's top edge and the page's bottom edge sit on screen, so
     /// the page knows how much of it the bar covers.
     @State private var barTop: CGFloat = 0
@@ -338,6 +342,19 @@ struct BrowserScreen: View {
             }
 
             BarHost(hold: hold, landing: landing, editing: editing) { bar }
+                // iOS's find bar (Find on Page) takes the bottom while it's
+                // open: Firn's bar fades aside, as Safari's does, so there's
+                // one bar at a time.
+                .opacity(finding ? 0 : 1)
+                .allowsHitTesting(!finding)
+                .accessibilityHidden(finding)
+                .animation(.easeOut(duration: 0.2), value: finding)
+        }
+        .onChange(of: finding) { _, now in findingPage = now ? store.activeTab?.page : nil }
+        // Another tab on screen: the find bar was the last one's.
+        .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) {
+            findingPage?.endFind()
+            findingPage = nil
         }
         .background(Theme.page.ignoresSafeArea())
         // New Space…, from the space menu or the command bar (phase 4, step 2),
@@ -542,6 +559,7 @@ struct BrowserScreen: View {
         let tab = store.activeTab
         editing = false
         menuOpen = false
+        tab?.page?.endFind()
         guard let tab, !reduceMotion else {
             // The page as it is, for its card.
             if let tab { pictures.capture(tab) }

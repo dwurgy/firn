@@ -138,6 +138,7 @@ private struct CommandResultRow: View {
         case "add-basecamp": "mountain.2"
         case "close": "xmark"
         case "blocking": "hand.raised"
+        case "find": "doc.text.magnifyingglass"
         case "summarize": "text.line.3.summary"
         case "reopen": "arrow.uturn.backward"
         case "downloads": "arrow.down.circle"

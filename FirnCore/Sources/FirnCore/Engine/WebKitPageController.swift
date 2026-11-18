@@ -28,6 +28,8 @@ final class WebKitPageController: NSObject, PageController {
     // Set by Reader too, when an article turns out too short (WebKitReader.swift).
     var isArticle = false
     private(set) var isReading = false
+    /// iOS's find bar is open on this page (set by `FindWatcher`).
+    var isFinding = false
     @ObservationIgnored var onRequest: (@MainActor (PageRequest) -> Void)?
     @ObservationIgnored var onVisit: (@MainActor (_ url: URL, _ title: String) -> Void)?
     @ObservationIgnored var sendsOtherSitesToLookout = false
@@ -74,7 +76,17 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored private var articleCheck: Task<Void, Never>?
     /// Reader's own view, while Reader is on (WebKitReader.swift).
     @ObservationIgnored var reader: ReaderPage? {
-        didSet { isReading = reader != nil }
+        didSet {
+            #if os(iOS)
+            // Find was on the view that's leaving (the page going under
+            // Reader, or Reader closing): end it there.
+            if isFinding {
+                (oldValue?.webView ?? webView).findInteraction?.dismissFindNavigator()
+                isFinding = false
+            }
+            #endif
+            isReading = reader != nil
+        }
     }
 
     convenience init(dataStoreID: UUID) {
@@ -790,6 +802,22 @@ final class FirnWebView: WKWebView {
     /// Reader's view: its menu has no Back, Forward, or Reload, which would
     /// act on the reader's own (empty) history.
     var isReader = false
+
+    #if os(iOS)
+    /// iOS's own find bar (Find on Page), as Safari's; its watcher tells
+    /// the page when it opens and closes.
+    private(set) var findWatcher: FindWatcher?
+
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        isFindInteractionEnabled = true
+        findWatcher = FindWatcher(view: self)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+    #endif
 
     #if os(macOS)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {

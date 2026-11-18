@@ -94,8 +94,51 @@ extension WebKitPageController {
 
     /// iOS prints from the share sheet, which comes in a later phase.
     func printPage() {}
+
+    /// Opens iOS's find bar on what's on screen: Reader's article while
+    /// it's on, else the page. Nothing without a loaded page.
+    func showFind() {
+        guard url != nil, loadError == nil else { return }
+        frontView.findInteraction?.presentFindNavigator(showingReplace: false)
+        (frontView as? FirnWebView)?.findWatcher?.check()
+    }
+
+    func endFind() {
+        guard isFinding else { return }
+        frontView.findInteraction?.dismissFindNavigator()
+        isFinding = false
+    }
 }
 
+/// Tells the page when iOS's find bar opens and closes, so Firn's address
+/// bar can step aside. iOS gives the bar's delegate to WebKit for good, so
+/// this asks the bar itself whether it's showing each time the keyboard
+/// (which carries it) comes, goes, or changes. What's typed in the bar
+/// stays between iOS and WebKit; the page never sees it (CLAUDE.md, Security).
+@MainActor
+final class FindWatcher: NSObject {
+    private weak var view: FirnWebView?
+
+    init(view: FirnWebView) {
+        self.view = view
+        super.init()
+        // Selector observers go away with the watcher on their own.
+        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardDidShowNotification,
+                     UIResponder.keyboardWillHideNotification, UIResponder.keyboardDidHideNotification,
+                     UIResponder.keyboardDidChangeFrameNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved), name: name, object: nil)
+        }
+    }
+
+    @objc private func keyboardMoved() { check() }
+
+    /// Whether the bar shows now, passed on to the page if it changed.
+    func check() {
+        guard let view, let page = view.page, page.frontView === view else { return }
+        let shown = view.findInteraction?.isFindNavigatorVisible ?? false
+        if page.isFinding != shown { page.isFinding = shown }
+    }
+}
 /// The Mac's pinch zoom, as iOS sees it: 1 until the page is pinched past
 /// where it started, so the password fill list's check reads the same.
 extension WKWebView {

@@ -89,6 +89,11 @@ struct AddressBar: View {
         return PageMenuPanel.Blocking(title: store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers",
                                       site: site)
     }
+    /// Find on Page, in the page menu: iOS's own find bar, on a page that loaded.
+    private var findRow: (() -> Void)? {
+        guard let page, page.url != nil, page.loadError == nil else { return nil }
+        return { page.showFind() }
+    }
     /// The page menu's last row while the space has downloads: Downloads,
     /// and under it how many are saving, or how many there are.
     private var downloadsRow: PageMenuPanel.DownloadsRow? {
@@ -274,6 +279,10 @@ struct AddressBar: View {
             if let url = page.url {
                 add("copy-link", "Copy Link", ["address", "url"]) { UIPasteboard.general.url = url }
                 add("share", "Share…", ["send", "link"]) { ShareSheet.present(url) }
+            }
+            add("find", "Find on Page…", ["search page", "look for", "find"],
+                when: page.url != nil && page.loadError == nil) {
+                page.showFind()
             }
             if let name = blockingName {
                 add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
@@ -544,7 +553,7 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        let height = PageMenuPanel.height(rows: 2 + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
+        let height = PageMenuPanel.height(rows: 2 + (findRow == nil ? 0 : 1) + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
                                           + (sendRow == nil ? 0 : 1)
                                           + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
@@ -568,7 +577,7 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }, reading: readingRow, send: sendRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
+            }, find: findRow, reading: readingRow, send: sendRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
                liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -1081,8 +1090,8 @@ private struct AddressField: View {
 
 /// The page's own short menu, grown out of the field's glass (Firn's own,
 /// not iOS's, so it carries the bar's tint and glass). Only what people
-/// reach for, and Stop Blocking for the site; Find, Zoom, and Request
-/// Desktop Site join it in phase 6.
+/// reach for, Find on Page, and Stop Blocking for the site; Zoom and
+/// Request Desktop Site join it in phase 6.
 private struct PageMenuPanel: View {
     let url: URL
     /// "Stop Blocking" (or "Block Ads and Trackers") and its site, or nil
@@ -1093,6 +1102,8 @@ private struct PageMenuPanel: View {
     }
     let blocking: Blocking?
     let toggleBlocking: () -> Void
+    /// Find on Page, just above Stop Blocking; nil when nothing loaded.
+    let find: (() -> Void)?
     /// Show Reader (or Hide Reader) first, on a page that reads as an
     /// article (David, 2026-11-13, as Safari); nil on other pages.
     struct Reading {
@@ -1171,6 +1182,12 @@ private struct PageMenuPanel: View {
             UIPasteboard.general.url = url
             close()
         })
+        if let find {
+            list.append(Entry(key: "find", title: "Find on Page", symbol: "doc.text.magnifyingglass") {
+                close()
+                find()
+            })
+        }
         if let blocking {
             list.append(Entry(key: "blocking", title: blocking.title, detail: blocking.site, symbol: "hand.raised") {
                 close()

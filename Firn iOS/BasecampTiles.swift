@@ -98,6 +98,9 @@ struct BasecampTiles: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: height(rows: max(layout.rows.count, 1)))
+            // iOS draws every tile's glass together (cheaper), spacing 0 so
+            // neighbors never melt.
+            .glassContainer(spacing: 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             // Where Basecamp is, so a tab carried over it can become a tile.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.basecamp = $0 }
@@ -139,7 +142,7 @@ struct BasecampTiles: View {
     /// where it is; in an empty Basecamp, a blank tile of frost.
     private var incomingSpot: some View {
         Group {
-            if store.basecampTabs.allSatisfy({ $0.id == away }) { TileGlass() } else { Color.clear }
+            if store.basecampTabs.allSatisfy({ $0.id == away }) { FirnGlass(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)) } else { Color.clear }
         }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.incoming = $0 }
             .accessibilityHidden(true)
@@ -253,11 +256,11 @@ struct BasecampTiles: View {
     }
 }
 
-/// One tile, exactly the Mac's (`Firn/Basecamp.swift`: `BasecampTile`,
-/// `TileButtonStyle`, `TileGlass`, `SiteMark`), at the iPhone's size: the
-/// Mac's frosted ice at rest, and the tile on screen washed in its icon's
+/// One tile, after the Mac's (`Firn/Basecamp.swift`: `BasecampTile`,
+/// `TileButtonStyle`, `SiteMark`), at the iPhone's size, on iOS's own glass
+/// instead of the Mac's frosted ice: the tile on screen tinted in its icon's
 /// main color, ringed in the icon's own colors (each where it sits in the
-/// icon), with light on the ring's top edge and a faint glow. No hover.
+/// icon), with a faint glow. No hover.
 private struct BasecampTile: View {
     let tab: FirnCore.Tab
     let space: String
@@ -305,11 +308,18 @@ private struct TileMark: View {
     }
 }
 
-/// The Mac's `TileButtonStyle`, without hover or lifting (those come with
-/// dragging, step 3), and without the press shrink: a hold opens iOS's
-/// menu, which copies the tile while it's shrunk, and the copy and the
-/// tile springing back drew the icon twice as the menu closed (David's
-/// recording, 2026-11-08). The overview's rows don't shrink either.
+/// A tile's button: iOS's own glass (David, 2026-11-18, `docs/IOS-PLAN.md`,
+/// "Plan: Basecamp tiles on iOS's own glass"), the iPhone's one recipe
+/// (`FirnGlass`: the thinnest blur under regular glass, no tint) with iOS's
+/// press, drawn on the tile itself so the finger reaches it. The tile on
+/// screen keeps Firn's look on top: the glass tinted in the icon's main
+/// color, ringed in its colors, with a faint glow. No sheen on the ring (the
+/// Mac's light along its top): iOS's glass catches the light itself, and
+/// both read as a doubled edge. No press shrink of Firn's: Firn's hold menu
+/// sinks a held tile itself.
+///
+/// Reduce Transparency: the Mac's solid tile (`TileGlass`), the wash a
+/// gradient over it, as before.
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let accent: Theme.TileAccent
@@ -325,44 +335,50 @@ private struct TileButtonStyle: ButtonStyle {
     private var dark: Bool { colorScheme == .dark }
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                if isActive { chosen } else { TileGlass(cornerRadius: cornerRadius) }
+        // The ring is part of the glass's content: in Basecamp's glass
+        // container iOS draws the glass above anything outside it.
+        let face = configuration.label.overlay { if isActive { ring } }
+        Group {
+            if reduceTransparency {
+                face
+                    .background {
+                        TileGlass(cornerRadius: cornerRadius)
+                            .overlay { if isActive { shape.fill(accent.main.opacity(dark ? 0.18 : 0.16)) } }
+                    }
+            } else {
+                face
+                    .glassEffect(glass, in: shape)
+                    // Under the glass, as every `FirnGlass`'s blur is.
+                    .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
             }
-            .contentShape(shape)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
+        }
+        .contentShape(shape)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isActive)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: accent)
     }
 
-    /// The page on screen: the same glass, washed in the icon's main color
-    /// (stronger at the top, like light through ice), ringed in its colors.
-    private var chosen: some View {
-        TileGlass(cornerRadius: cornerRadius)
-            .overlay {
-                shape.gradientFill(LinearGradient(
-                    colors: [accent.main.opacity(dark ? 0.18 : 0.2), accent.main.opacity(dark ? 0.12 : 0.07)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
-            }
-            .overlay {
-                // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
-                shape.gradientBorder(
-                    AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
-                    lineWidth: BasecampTiles.ringWidth)
-                    .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
-            }
-            .overlay {
-                // Light catching the ring's outer edge along the top, gone by
-                // the middle: a thin line, so the color underneath stays full.
-                shape.gradientBorder(
-                    LinearGradient(colors: [Theme.tileRingSheen, Theme.tileRingSheen.opacity(0)],
-                                   startPoint: .top, endPoint: .center),
-                    lineWidth: 1)
-            }
+    /// Regular glass, the tile on screen's tinted in its icon's main color.
+    private var glass: Glass {
+        let base = Glass.regular.interactive()
+        return isActive ? base.tint(accent.main.opacity(dark ? 0.24 : 0.22)) : base
+    }
+
+    /// The icon's own colors around the inside edge, each where it sits in
+    /// the icon, with a faint glow of its main color.
+    private var ring: some View {
+        // AngularGradient starts at 3 o'clock and runs clockwise, as the ring does.
+        shape.gradientBorder(
+            AngularGradient(colors: accent.ring + accent.ring.prefix(1), center: .center),
+            lineWidth: BasecampTiles.ringWidth)
+            .opacity(reduceTransparency ? 1 : (dark ? 0.95 : 0.9))
             .shadow(color: accent.main.opacity(dark ? 0.18 : 0.28), radius: 5)
+            .allowsHitTesting(false)
     }
 }
 
-/// The Mac's `TileGlass`: frosted ice with a lit rim and a hairline.
+/// The Mac's `TileGlass`: frosted ice with a lit rim and a hairline. On the
+/// iPhone only with Reduce Transparency (its solid form); otherwise tiles
+/// are iOS's glass.
 private struct TileGlass: View {
     var cornerRadius: CGFloat = BasecampTiles.cornerRadius
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency

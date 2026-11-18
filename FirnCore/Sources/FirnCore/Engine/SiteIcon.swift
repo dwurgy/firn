@@ -16,6 +16,15 @@ public enum SiteIcon {
     /// What a saved icon may weigh (a 96px PNG is a few KB, 36KB at worst).
     static let maxStoredBytes = 64 * 1024
     static let maxCandidates = 4
+    /// How many pixels across an icon must be to look sharp where it's
+    /// shown largest: on the iPhone, Basecamp's 30pt mark at 3x (90px).
+    /// Smaller ones are kept only if nothing sharper is found. The Mac
+    /// (nil) keeps the first icon that works, as it always has.
+    #if os(iOS)
+    static let sharpSide: Int? = 90
+    #else
+    static let sharpSide: Int? = nil
+    #endif
 
     /// One `<link rel=…>` as the page described it.
     struct Link: Equatable {
@@ -95,8 +104,10 @@ public enum SiteIcon {
     /// Where to look, best first: the page's icons, then the site's
     /// `/favicon.ico`, then Apple touch icons (often full-bleed squares, so last).
     /// SVG is skipped (ImageIO can't read it), as are icons for the other
-    /// light/dark mode.
-    static func candidates(from links: [Link], pageURL: URL) -> [URL] {
+    /// light/dark mode. When looking for a sharp icon (`sharpSide`), the last
+    /// of the four tries is always a touch icon, usually 180px: the one the
+    /// page lists, or the site's `/apple-touch-icon.png`, where iOS looks.
+    static func candidates(from links: [Link], pageURL: URL, sharp: Bool = sharpSide != nil) -> [URL] {
         let usable = links.filter { $0.matchesMedia && !$0.isSVG && mayFetch($0.url, for: pageURL) }
         let icons = usable.filter { $0.rel.contains("icon") }
         let touch = usable.filter { $0.rel.contains("apple-touch-icon") || $0.rel.contains("apple-touch-icon-precomposed") }
@@ -108,10 +119,18 @@ public enum SiteIcon {
         origin.port = pageURL.port
         origin.path = "/favicon.ico"
         if let favicon = origin.url { urls.append(favicon) }
-        urls += ranked(touch).map(\.url)
+        var touchURLs = ranked(touch).map(\.url)
 
         var seen = Set<URL>()
-        return Array(urls.filter { seen.insert($0).inserted }.prefix(maxCandidates))
+        guard sharp else {
+            urls += touchURLs
+            return Array(urls.filter { seen.insert($0).inserted }.prefix(maxCandidates))
+        }
+        origin.path = "/apple-touch-icon.png"
+        if touchURLs.isEmpty, let fallback = origin.url { touchURLs = [fallback] }
+        let front = Array(urls.filter { seen.insert($0).inserted }.prefix(maxCandidates - 1))
+        let last = touchURLs.first { !seen.contains($0) }
+        return front + (last.map { [$0] } ?? [])
     }
 
     /// Closest to `pixelSize` from above first, then sizes not given, then smaller ones.
@@ -160,15 +179,29 @@ public enum SiteIcon {
         return URLSession(configuration: configuration)
     }()
 
-    /// The first candidate that yields a usable image, as a small PNG.
-    static func fetch(_ candidates: [URL], userAgent: String?) async -> Data? {
+    /// The first candidate that yields a usable image, as a small PNG; when
+    /// `sharpSide` is set, the first that's at least that big, otherwise the
+    /// biggest found. Tries stop as soon as one is sharp.
+    static func fetch(_ candidates: [URL], userAgent: String?, sharpSide: Int? = sharpSide) async -> Data? {
+        var best: (png: Data, side: Int)?
         for url in candidates.prefix(maxCandidates) {
             if Task.isCancelled { return nil }
-            if let data = await download(url, userAgent: userAgent), let png = smallPNG(from: data) {
-                return png
-            }
+            guard let data = await download(url, userAgent: userAgent), let png = smallPNG(from: data) else { continue }
+            guard let sharpSide else { return png }
+            let side = pixelSide(of: png)
+            if side >= sharpSide { return png }
+            if side > (best?.side ?? 0) { best = (png, side) }
         }
-        return nil
+        return best?.png
+    }
+
+    /// The larger side of one of Firn's own small PNGs.
+    static func pixelSide(of png: Data) -> Int {
+        guard let source = CGImageSourceCreateWithData(png as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return 0 }
+        return max(width, height)
     }
 
     private static func download(_ url: URL, userAgent: String?) async -> Data? {

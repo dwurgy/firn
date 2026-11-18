@@ -13,9 +13,35 @@ struct SiteIconTests {
         [rel, href, sizes, type, matches]
     }
 
-    private func candidates(_ rows: [Any]) -> [String] {
+    private func candidates(_ rows: [Any], sharp: Bool = false) -> [String] {
         let found = SiteIcon.parse(scriptResult: ["links": rows, "userAgent": "Mozilla/5.0"])
-        return SiteIcon.candidates(from: found.links, pageURL: page).map(\.absoluteString)
+        return SiteIcon.candidates(from: found.links, pageURL: page, sharp: sharp).map(\.absoluteString)
+    }
+
+    @Test func lookingForSharpAlwaysSavesTheLastTryForATouchIcon() {
+        let urls = candidates([
+            row("icon", "https://news.example/16.png", sizes: "16x16"),
+            row("icon", "https://news.example/32.png", sizes: "32x32"),
+            row("icon", "https://news.example/48.png", sizes: "48x48"),
+            row("apple-touch-icon", "https://news.example/touch.png", sizes: "180x180"),
+        ], sharp: true)
+        #expect(urls == [
+            "https://news.example/48.png", "https://news.example/32.png",
+            "https://news.example/16.png", "https://news.example/touch.png",
+        ])
+    }
+
+    @Test func lookingForSharpTriesTheSitesTouchIconWhenNoneIsListed() {
+        let urls = candidates([row("icon", "https://news.example/32.png", sizes: "32x32")], sharp: true)
+        #expect(urls == [
+            "https://news.example/32.png", "https://news.example/favicon.ico",
+            "https://news.example/apple-touch-icon.png",
+        ])
+    }
+
+    @Test func smallIconsAreNotBlownUp() throws {
+        let small = try #require(SiteIcon.smallPNG(from: png(width: 32, height: 32)))
+        #expect(SiteIcon.pixelSide(of: small) == 32)
     }
 
     @Test func prefersTheIconClosestToSixtyFourPixels() {

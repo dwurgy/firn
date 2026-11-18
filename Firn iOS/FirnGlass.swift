@@ -98,6 +98,35 @@ private struct FirnGlassButton: ViewModifier {
 }
 
 extension View {
+    /// Glass that holds buttons of its own (Back and Forward's pill): iOS's
+    /// glass drawn on this view itself, not beside it, so a finger on any
+    /// button inside reaches the glass too and it takes iOS's press. Beside
+    /// it, as `FirnGlass` in a background, the buttons took the touch and
+    /// the glass never felt it (the overview's name pill, 2026-11-17).
+    func firnGlassSurface<S: InsettableShape>(_ shape: S, interactive: Bool = false) -> some View {
+        modifier(FirnGlassSurface(shape: shape, interactive: interactive))
+    }
+}
+
+private struct FirnGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let interactive: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background { FirnFrost(shape: shape, fill: Theme.barFrost, solid: true) }
+        } else {
+            content
+                .glassEffect(.regular.interactive(interactive), in: shape)
+                // Under the glass (a background added after it), as the
+                // glass buttons' blur is.
+                .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
+        }
+    }
+}
+
+extension View {
     /// Glass shapes inside are drawn together by iOS, and melt into one
     /// another when they come within `spacing`.
     func glassContainer(spacing: CGFloat) -> some View {

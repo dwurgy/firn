@@ -633,7 +633,9 @@ private struct NavigationPill: View {
         .frame(width: wide ? Self.wideWidth : Self.roundWidth,
                height: AddressField.height, alignment: .leading)
         .clipShape(.capsule)
-        .background { BarFrost(shape: Capsule()) }
+        // iOS's glass on the pill itself, so pressing Back or Forward
+        // swells it (step 3 of "iOS's own glass buttons").
+        .firnGlassSurface(Capsule(), interactive: true)
     }
 }
 
@@ -1283,17 +1285,25 @@ private struct BarAction {
     }
 }
 
-/// The overview's button, at the bar's right: round frost, the same size
-/// as Back's.
+/// The overview's button, at the bar's right: an iOS glass button, the
+/// same size as Back's and the overview's + (step 3 of "iOS's own glass
+/// buttons"), so it takes iOS's press.
 private struct TabsButton: View {
     let space: String
     let action: () -> Void
+    @Environment(\.barQuiet) private var barQuiet
 
     var body: some View {
-        BarButton(symbol: "square.on.square", label: "Tabs", action: action)
-            .padding(2)
-            .background { BarFrost(shape: Circle()) }
-            .accessibilityHint("Shows all your tabs")
+        Button { if !barQuiet { action() } } label: {
+            Image(systemName: "square.on.square")
+                .font(BarButton.symbolFont)
+                .foregroundStyle(Theme.ink)
+                .frame(width: GlassButton.label(BarButton.glassSize), height: GlassButton.label(BarButton.glassSize))
+                .contentShape(.circle)
+        }
+        .firnGlassButton()
+        .accessibilityLabel("Tabs")
+        .accessibilityHint("Shows all your tabs")
     }
 }
 

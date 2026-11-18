@@ -7,7 +7,8 @@ import SwiftUI
 /// over the list's soft edge blur; pressed, the warm wash.
 ///
 /// The pill is the space switcher (phase 4, step 1): a dot per space under
-/// the name, as on the Mac; a tap opens the space menu; a sideways swipe on
+/// the name, as on the Mac; a tap opens the space menu (iOS's own, David,
+/// 2026-11-17, as the grid's cards); a sideways swipe on
 /// it changes space with the address bar's sliding pills (`BarSlide`; David,
 /// 2026-11-13: the same movement as swiping between tabs).
 struct OverviewBar: View {
@@ -15,9 +16,10 @@ struct OverviewBar: View {
     let spaces: [Space]
     let newTab: () -> Void
     let done: () -> Void
-    /// A tap on the pill: the space menu, beside the pill (global frame).
-    let openMenu: (CGRect) -> Void
     let select: (Space) -> Void
+    /// The space menu's last rows, when the app offers them.
+    let newSpace: SheetAction?
+    let spaceSettings: SheetAction?
 
     /// Back's and the tabs button's size, so + and the check sit exactly
     /// where they were.
@@ -30,7 +32,6 @@ struct OverviewBar: View {
     @State private var progress: CGFloat = 0
     /// Let go past the middle: the pills finish the slide, then it changes.
     @State private var finishing = false
-    @State private var pillFrame: CGRect = .zero
     /// The arriving space's name, fading in once its pill is whole (as the
     /// next tab's words do on the address bar), rather than cross-fading
     /// out of the old one.
@@ -81,7 +82,7 @@ struct OverviewBar: View {
 
     var body: some View {
         ZStack {
-            pill
+            spaceMenu
                 .frame(maxWidth: .infinity)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { room = $0 }
                 .padding(.horizontal, Self.height + 16)
@@ -164,6 +165,44 @@ struct OverviewBar: View {
         .padding(.horizontal, 24)
     }
 
+    /// iOS's own menu on the pill (David, 2026-11-17: the grid's cards have
+    /// iOS's menus, so this one matches): the spaces, the one on screen
+    /// checked, then New Space… and Space Settings…, in the Mac's order. The
+    /// sideways swipe runs alongside: a tap opens the menu, a swipe changes
+    /// space (iOS's menu opens on the finger lifting, so a swipe never does).
+    private var spaceMenu: some View {
+        Menu {
+            Picker(selection: Binding(get: { space.id }, set: { id in
+                if let picked = spaces.first(where: { $0.id == id }) { select(picked) }
+            })) {
+                ForEach(spaces) { each in
+                    Label { Text(verbatim: each.name) } icon: { Image(uiImage: Self.dot(each.color)) }
+                        .tag(each.id)
+                }
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.inline)
+            if newSpace != nil || spaceSettings != nil {
+                Section {
+                    if let newSpace { Button("New Space…", systemImage: "plus") { newSpace() } }
+                    if let spaceSettings { Button("Space Settings…", systemImage: "gearshape") { spaceSettings() } }
+                }
+            }
+        } label: {
+            pill
+        }
+        .menuOrder(.fixed)
+        .simultaneousGesture(spaceSwipe)
+    }
+
+    /// A space's dot in the menu: its own color, which iOS's menus keep only
+    /// for an image drawn in it (they tint symbols otherwise).
+    private static func dot(_ color: String) -> UIImage {
+        let symbol = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(scale: .small))
+        return (symbol ?? UIImage()).withTintColor(UIColor(Theme.spaceColor(color)), renderingMode: .alwaysOriginal)
+    }
+
     private var pill: some View {
         label(space)
             // The name and dots change at once, never cross-fading (the old
@@ -213,14 +252,10 @@ struct OverviewBar: View {
                 }
             }
             .contentShape(Capsule())
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { pillFrame = $0 }
-            .onTapGesture { if progress == 0 { openMenu(pillFrame) } }
-            .gesture(spaceSwipe)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spaces.count > 1 ? "\(space.name), space \(index + 1) of \(spaces.count)" : space.name)
             .accessibilityHint("Shows your spaces.")
-            .accessibilityAddTraits([.isHeader, .isButton])
-            .accessibilityAction { openMenu(pillFrame) }
+            .accessibilityAddTraits(.isHeader)
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: if let next = neighbor(-1) { select(next) }
@@ -280,7 +315,7 @@ struct OverviewBar: View {
     private func swipeWithoutSliding(_ drag: DragGesture.Value) {
         let dx = drag.translation.width
         guard abs(dx) > abs(drag.translation.height) else { return }
-        let width = max(pillFrame.width, 1)
+        let width = max(pillWidth, 1)
         let direction: CGFloat = dx > 0 ? 1 : -1
         guard abs(dx) / width > 0.4 || drag.predictedEndTranslation.width / width * direction > 0.8,
               let next = neighbor(direction) else { return }

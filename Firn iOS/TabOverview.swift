@@ -365,7 +365,7 @@ struct TabOverview: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, spaces: store.spaces, newTab: newTab, done: finish,
-                            openMenu: openSpaceMenu(over:), select: showSpace(_:))
+                            select: showSpace(_:), newSpace: newSpace, spaceSettings: spaceSettings)
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
@@ -1252,30 +1252,6 @@ struct TabOverview: View {
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.2)) {
             heldMenu = OpenHoldMenu(id: target.id, tile: anchor, fingerX: point.x,
                                     sections: sections, backdrop: backdrop, prefersAbove: isGroup)
-        }
-    }
-
-    /// A tap on the space's name: the spaces (the one on screen checked),
-    /// over the name, centered. Firn's frost menu, as the hold menus, with
-    /// nothing lifted, then New Space… and Space Settings… (docs/IOS-PLAN.md,
-    /// phase 4).
-    private func openSpaceMenu(over pill: CGRect) {
-        guard heldMenu == nil, drag == nil, gliding == nil else { return }
-        let backdrop = ScreenPicture.take()
-        let spaces = store.spaces.map { space in
-            HoldMenuItem(space: space, checked: space.id == store.activeSpaceID) { showSpace(space) }
-        }
-        var more: [HoldMenuItem] = []
-        if let newSpace {
-            more.append(HoldMenuItem(title: "New Space…", systemImage: "plus") { newSpace() })
-        }
-        if let spaceSettings {
-            more.append(HoldMenuItem(title: "Space Settings…", systemImage: "gearshape") { spaceSettings() })
-        }
-        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.2)) {
-            heldMenu = OpenHoldMenu(id: store.activeSpaceID, tile: pill, fingerX: pill.midX,
-                                    sections: [spaces, more].filter { !$0.isEmpty }, backdrop: backdrop,
-                                    prefersAbove: true, centered: true)
         }
     }
 

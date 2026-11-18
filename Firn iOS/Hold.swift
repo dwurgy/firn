@@ -142,7 +142,10 @@ struct StandInLayer: View {
     private var tileFace: ((CGFloat) -> AnyView)? {
         guard hold.tileCrop != nil, let tab = hold.standInTab, tab.place == .basecamp else { return nil }
         let space = store.activeSpace.color
-        let onScreen = tab.id == store.activeTab?.id
+        // Opening, the tile tapped is already the tab on screen; the face
+        // shows the ring only if the tile had it (`heldCard`: the tab on
+        // screen before the tap), so the swap with the real tile matches.
+        let onScreen = tab.id == (landing.heldCard ?? store.activeTab?.id)
         return { radius in AnyView(BasecampTiles.face(tab, space: space, onScreen: onScreen, cornerRadius: radius)) }
     }
 

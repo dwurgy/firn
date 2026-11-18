@@ -33,6 +33,16 @@ struct FrozenOverview {
         /// which a blur this soft can't show.
         let scroll: Int
         let dark: Bool
+
+        /// Close enough to stand in: everything but which tab is on screen.
+        /// Opening a tab makes it the one on screen as the page starts to
+        /// grow (2k step 3), and only the card's ring moves, which a blur
+        /// this soft can't show. `==` still counts it, so a new picture is
+        /// taken once the overview rests again.
+        func matches(_ other: Look) -> Bool {
+            space == other.space && tabs == other.tabs && groups == other.groups && grouped == other.grouped
+                && tiles == other.tiles && scroll == other.scroll && dark == other.dark
+        }
     }
 
     /// How soft it starts (pt). Safari's starts so soft the cards can

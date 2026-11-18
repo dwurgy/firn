@@ -321,7 +321,7 @@ struct TabOverview: View {
         // sharp list, growing and brightening with it (`FrozenOverview`);
         // without an up-to-date picture, no blur at all.
         .overlay {
-            if let frozen, !reduceMotion, frozen.look == look() {
+            if let frozen, !reduceMotion, frozen.look.matches(look()) {
                 LandingFrozen(landing: landing, image: frozen.image, middle: screenMiddle)
             }
         }

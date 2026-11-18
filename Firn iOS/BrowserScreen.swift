@@ -380,7 +380,18 @@ struct BrowserScreen: View {
     /// shrinks evenly, while Firn's wide card mostly loses height, so its
     /// bottom edge travels about twice as far and the same clock felt
     /// faster (David, 2026-11-13).
-    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: 0.46)
+    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: glideDuration)
+    private static let glideDuration = 0.46
+    /// Out of a Basecamp tile, as iOS opens an app (2k step 3, David's
+    /// recording of the App Library, 2026-11-18): full screen in about
+    /// 0.2s, then a short settle, everything ending together. On the card's
+    /// curve the page popped to about 90% in a tenth of a second and crept
+    /// the last points for 0.35s more. This one starts gently (a 56pt tile
+    /// growing is seen in ratios, so its first points are the most visible),
+    /// is about 90% there at 0.2s, and done at 0.38s. A curve, not a spring,
+    /// for the reason above.
+    private static let tileOpenDuration = 0.38
+    private static let tileOpen = Animation.timingCurve(0.35, 0.1, 0.2, 1, duration: tileOpenDuration)
     private static let closeDuration = 0.32
     /// How far above its card the page arrives (1.5% larger, about 5pt on
     /// a card), and how long the settle runs on after the glide ends.
@@ -784,31 +795,48 @@ struct BrowserScreen: View {
             return
         }
         let tile = tab.place == .basecamp
-        // Out of a tile: the tile shows at first, and the picture comes up
-        // over it as it starts to grow.
-        tileReveal = tile ? 1 : 0
         putStandIn(image, of: tab, at: spot,
                    radius: tile ? BasecampTiles.cornerRadius
                        : fromCard ? cardRadius : OverviewRow.cornerRadius,
                    skip: fromCard && !tile ? pictures.headerDepth(for: tab.id) : 0)
+        // Out of a tile, as an app opens (2k step 3): the growing window
+        // starts as the tile itself, its glass and icon drawn in it
+        // (`CardGlide.face`, closing's forming run backward), and takes the
+        // page's shape as it grows. The face matches the real tile, so they
+        // swap at once: no cross-fade of two glass tiles.
+        if tile { tileCrop = (from: pageBox(for: image), to: spot.size) }
+        tileReveal = 0
         gliding = tab.id
         Task {
             await Task.yield()
-            // On the glide's own curve: the tile and picture swap as it
-            // starts to grow (`BasecampTiles.glideSwap`).
-            if tile { withAnimation(Self.glide) { tileReveal = 0 } }
-            land(onPage: tab, curve: Self.glide, switching: switching)
+            land(onPage: tab, curve: tile ? Self.tileOpen : Self.glide, switching: switching,
+                 stepsBack: tile ? Self.tileOpenDuration : Self.glideDuration)
         }
     }
 
     /// The picture glides from wherever it is to the page's own place, and
     /// the page takes over.
-    private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool) {
+    /// `stepsBack`: opening from the overview, over this many seconds. The
+    /// overview steps back behind the page (2k step 3, David's rule: one
+    /// treatment behind tiles and tabs, opening and closing): closing's
+    /// coming forward run backward, so it shrinks to 92%, dims, and its
+    /// softened picture fades in over it (`FrozenOverview`), all on the
+    /// glide's clock; the list goes once the page covers it. Without it
+    /// (a pull let go, a sideways swipe), the list just fades.
+    private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool,
+                      stepsBack: Double? = nil) {
         guard let standInSize else { return hideTabs() }
-        withAnimation(Self.listGoes) {
-            listIn = 0
-            forward = 0
-            focus = 0
+        if let stepsBack {
+            withAnimation(.easeOut(duration: stepsBack)) {
+                forward = 0
+                focus = 0
+            }
+        } else {
+            withAnimation(Self.listGoes) {
+                listIn = 0
+                forward = 0
+                focus = 0
+            }
         }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
@@ -819,6 +847,8 @@ struct BrowserScreen: View {
             neighborsPeek = false
             for i in neighbors.indices { neighbors[i].pinned = nil }
         } completion: {
+            // Stepped back: the list goes now, under the full-screen page.
+            withTransaction(Transaction(animation: nil)) { listIn = 0 }
             stripOpacity = 1
             pageHidden = false
             showingTabs = false
@@ -828,6 +858,7 @@ struct BrowserScreen: View {
             heldCard = nil
             lineShown = true
             standInTab = nil
+            tileCrop = nil
             guard switching, let waiting = self.standIn else {
                 self.standIn = nil
                 return

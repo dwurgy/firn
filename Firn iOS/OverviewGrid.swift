@@ -207,3 +207,24 @@ struct GroupIcons: View {
         .allowsHitTesting(false)
     }
 }
+
+/// An open group coming out of its folded cell: it starts the cell's
+/// width, at the cell's top left, and grows to its own place, its tabs and
+/// all, as Safari's (David, 2026-11-18). Its frame is read as it's laid
+/// out, so the glide ends exactly where it sits.
+struct GrowFromCell: Transition {
+    let from: CGRect
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        let start = !phase.isIdentity
+        content
+            .visualEffect { view, proxy in
+                let frame = proxy.frame(in: .global)
+                let scale = start && frame.width > 0 ? from.width / frame.width : 1
+                return view
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .offset(x: start ? from.minX - frame.minX : 0, y: start ? from.minY - frame.minY : 0)
+            }
+            .opacity(start ? 0.6 : 1)
+    }
+}

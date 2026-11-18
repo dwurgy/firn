@@ -102,6 +102,10 @@ struct TabOverview: View {
     /// The grid on iOS 27: what iOS's drag is carrying, so its X hides
     /// (the lift is only the picture, as the menu's).
     @State private var systemDragged: Set<UUID> = []
+    /// A group folding into its cell or opening out of it (the grid on
+    /// iOS 27): where it was on screen, for the glide (`GridMorph`,
+    /// `GrowFromCell`). Cleared once the glide is done.
+    @State private var foldMorph: GridMorph?
     /// The grid's UIKit cards being swiped to close (`GridCards`).
     @State private var gridSwipes: [UUID: GridSwipe] = [:]
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
@@ -660,6 +664,7 @@ struct TabOverview: View {
                               if !busy, let tab = byID[id]?.tab { close(tab) }
                           },
                           swipes: { id in byID[id]?.tab != nil },
+                          morph: foldMorph,
                           reduceMotion: reduceMotion)
             case let .tabs(after, entries):
                 let tabs = entries.compactMap { entry in entry.tab.map { (index: entry.index, tab: $0) } }
@@ -691,6 +696,8 @@ struct TabOverview: View {
         GroupFolder(group: group, tabs: store.tabs(in: group), pictures: pictures,
                     cardHeight: cardHeight, naming: store.isNaming(group), open: { fold(group) })
             .modifier(groupMenu(group).actions)
+            // Where it is, so opening it grows the group out of it.
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.folders[group.id] = $0 }
             .accessibilityActions {
                 if index > 0 { Button("Move Left") { move(group, to: index - 1) } }
                 if index < count - 1 { Button("Move Right") { move(group, to: index + 1) } }
@@ -735,7 +742,20 @@ struct TabOverview: View {
             // goes in it.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
             .id(group.id)
-            .transition(drag == nil ? .opacity : .identity)
+            .transition(groupTransition(group))
+    }
+
+    /// How an open group comes and goes. In the grid on iOS 27 it grows
+    /// out of its folded cell, and goes at once as it folds (its cell
+    /// grows down from where it was, `GridCards`); with Reduce Motion, a
+    /// cross-fade. Elsewhere it fades, and a dragged one just moves.
+    private func groupTransition(_ group: TabGroup) -> AnyTransition {
+        if drag != nil { return .identity }
+        guard systemDrag, !reduceMotion, let morph = foldMorph, morph.id == group.id else { return .opacity }
+        // Folding, it fades quickly under its cell growing down over it,
+        // so there's never a frame with neither.
+        return .asymmetric(insertion: AnyTransition(GrowFromCell(from: morph.from)),
+                           removal: .opacity.animation(.easeOut(duration: 0.15)))
     }
 
     /// A group's tint, name line, and tabs: in the list, or `lifted` under
@@ -834,6 +854,20 @@ struct TabOverview: View {
                 spots.frames[tab.id] = nil
                 spots.cards.remove(tab.id)
             }
+        }
+        // The grid on iOS 27: the group shrinks into its cell, or grows
+        // out of it, from where it is now (Safari's; David, 2026-11-18).
+        if systemDrag, let from = folding ? spots.frames[group.id] : spots.folders[group.id] {
+            let morph = GridMorph(id: group.id, from: from, folding: folding)
+            foldMorph = morph
+            withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
+                store.setFolded(group, folding)
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                if foldMorph == morph { foldMorph = nil }
+            }
+            return
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, folding) }
     }
@@ -2142,6 +2176,9 @@ struct ComesForward: ViewModifier, Animatable {
     var frames: [UUID: CGRect] = [:] {
         didSet { SwipeTiming.sawSpots(frames) }
     }
+    /// Folded groups' cells in the grid, apart from `frames`: a cell going
+    /// away still reports where it is, and would overwrite the open group's.
+    var folders: [UUID: CGRect] = [:]
     /// The list's own frame, to find the tab under a pinch.
     var viewport: CGRect = .zero
     /// The tabs shown as tall cards (the rest are slim rows): a card's
@@ -2189,3 +2226,4 @@ struct ShakeToUndo: UIViewRepresentable {
         }
     }
 }
+

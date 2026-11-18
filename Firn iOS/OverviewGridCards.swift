@@ -86,8 +86,57 @@ final class GridCardCell: UICollectionViewCell {
         raised = true
     }
 
+    /// A group folding: the cell starts as big as the open group was and
+    /// shrinks into its place, its folder (a small open group) scaled
+    /// with it, as Safari's. `from` is the open group's frame in the
+    /// cell's own space. The growth's sublayer transform, so the layout
+    /// never undoes it; the cell sits on top while it shrinks.
+    func morph(from: CGRect, reduceMotion: Bool) {
+        contentView.alpha = 1
+        if reduceMotion || bounds.width < 1 {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.duration = 0.3
+            layer.add(fade, forKey: "morph")
+            return
+        }
+        raise()
+        let scale = from.width / bounds.width
+        // About the layer's middle, where the sublayer transform works.
+        let middle = CGPoint(x: bounds.midX, y: bounds.midY)
+        var start = CATransform3DMakeTranslation(from.minX + (scale - 1) * middle.x,
+                                                 from.minY + (scale - 1) * middle.y, 0)
+        start = CATransform3DScale(start, scale, scale, 1)
+        let shrink = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
+        shrink.keyPath = "sublayerTransform"
+        shrink.fromValue = start
+        shrink.toValue = CATransform3DIdentity
+        shrink.duration = shrink.settlingDuration
+        layer.sublayerTransform = CATransform3DIdentity
+        layer.add(shrink, forKey: "morph")
+        // Cut to the open group's shape, closing to the folder's: the
+        // scaled folder is taller than the group was, and would reach
+        // over what's below it. Gone once it's in place.
+        let clip = CAShapeLayer()
+        clip.frame = bounds
+        let end = CGRect(x: 0, y: 0, width: bounds.width,
+                         height: max(bounds.height - OverviewRow.gridTitleHeight, 1))
+        clip.path = UIBezierPath(roundedRect: end, cornerRadius: OverviewRow.gridCornerRadius).cgPath
+        let close = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
+        close.keyPath = "path"
+        close.fromValue = UIBezierPath(roundedRect: from, cornerRadius: GroupCard.cornerRadius).cgPath
+        close.duration = close.settlingDuration
+        clip.add(close, forKey: "morph")
+        layer.mask = clip
+        DispatchQueue.main.asyncAfter(deadline: .now() + close.settlingDuration) { [weak self] in
+            if self?.layer.mask === clip { self?.layer.mask = nil }
+        }
+    }
+
     override func prepareForReuse() {
         super.prepareForReuse()
+        layer.removeAnimation(forKey: "morph")
+        layer.mask = nil
         settle?.stopAnimation(true)
         settle = nil
         swipe = .identity
@@ -126,6 +175,16 @@ enum GridSwipe: Equatable {
     case none, swiping, easingHome
 }
 
+/// A group folding into its cell: which, and where the open group was
+/// on screen.
+struct GridMorph: Equatable {
+    let id: UUID
+    let from: CGRect
+    /// Folding (the cell shrinks in); opening is the open group's own
+    /// glide (`GrowFromCell`).
+    let folding: Bool
+}
+
 /// A run of loose cards in the grid, as one UIKit collection view.
 struct GridCards: UIViewRepresentable {
     /// The run's tabs, in order.
@@ -147,6 +206,12 @@ struct GridCards: UIViewRepresentable {
     let close: (UUID) -> Void
     /// Whether a cell swipes to close: a folded group's doesn't.
     var swipes: (UUID) -> Bool = { _ in true }
+    /// A group just folded: its cell shrinks into place from where the
+    /// open group was (its frame on screen).
+    var morph: GridMorph?
+
+    /// A group's fold and unfold: Safari's, about 0.4s, no bounce.
+    static let morphDuration: TimeInterval = 0.38
     let reduceMotion: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -445,13 +510,62 @@ struct GridCards: UIViewRepresentable {
                     configure(cell, id)
                 }
             }
-            guard new.ids != shown else { return }
-            shown = new.ids
-            var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
-            snapshot.appendSections([0])
-            snapshot.appendItems(new.ids)
-            // A card closed: the next slides into its place (0.25s, as the list).
-            dataSource?.apply(snapshot, animatingDifferences: !new.reduceMotion && view.window != nil)
+            if new.ids != shown {
+                shown = new.ids
+                var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
+                snapshot.appendSections([0])
+                snapshot.appendItems(new.ids)
+                // A card closed: the next slides into its place (0.25s, as the list).
+                dataSource?.apply(snapshot, animatingDifferences: !new.reduceMotion && view.window != nil)
+            }
+            morphIfAsked(new, in: view)
+        }
+
+        /// The group last morphed, so each fold runs once.
+        private var morphed: GridMorph?
+        /// A fold whose cell isn't on screen yet: a group folded alone gets
+        /// a new collection view, laid out only after this update.
+        private var pendingMorph: GridMorph?
+
+        /// A folded group's cell shrinks from the open group, once laid
+        /// out: hidden until then, so it never shows in place first.
+        private func morphIfAsked(_ new: GridCards, in view: UICollectionView) {
+            guard let morph = new.morph, morph.folding, morph != morphed, shown.contains(morph.id) else { return }
+            morphed = morph
+            pendingMorph = morph
+            view.layoutIfNeeded()
+            if let path = dataSource?.indexPath(for: morph.id), let cell = view.cellForItem(at: path) as? GridCardCell {
+                startMorph(cell)
+            }
+        }
+
+        private func startMorph(_ cell: GridCardCell) {
+            guard let morph = pendingMorph else { return }
+            pendingMorph = nil
+            cell.contentView.alpha = 0
+            let reduceMotion = parent?.reduceMotion ?? false
+            Self.whenPlaced(cell, tries: 6) { cell in
+                cell.morph(from: cell.convert(morph.from, from: nil), reduceMotion: reduceMotion)
+            }
+        }
+
+        /// A turn later, once SwiftUI has placed the collection view in the
+        /// window (a new one isn't yet); a few turns at most, then as is.
+        private static func whenPlaced(_ cell: GridCardCell, tries: Int,
+                                       _ action: @escaping @MainActor (GridCardCell) -> Void) {
+            DispatchQueue.main.async { [weak cell] in
+                guard let cell else { return }
+                if cell.window == nil, tries > 0 { return whenPlaced(cell, tries: tries - 1, action) }
+                action(cell)
+            }
+        }
+
+        func collectionView(_ view: UICollectionView, willDisplay cell: UICollectionViewCell,
+                            forItemAt path: IndexPath) {
+            if let cell = cell as? GridCardCell, let morph = pendingMorph,
+               dataSource?.itemIdentifier(for: path) == morph.id {
+                startMorph(cell)
+            }
         }
 
         /// The card's picture, without its title: what iOS lifts, for its

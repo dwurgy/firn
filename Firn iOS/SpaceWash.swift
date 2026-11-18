@@ -28,12 +28,14 @@ struct SpaceWash: View {
         /// darkest (`lo`), each a base mixed with this share of the space's
         /// color. The mockup's Color 0.5, Depth 1; dark made darker so it
         /// feels like dark mode, and a touch darker again once it had more
-        /// color (David, 2026-11-18).
+        /// color (David, 2026-11-18). Light's dark end lifted and given less
+        /// of the color, so the wash sits lighter, as Safari's (David,
+        /// 2026-11-18: "color, but not tie dye").
         struct End {
             let base: UInt32
             let mix: CGFloat
         }
-        static let light = (hi: End(base: 0xF7F3EE, mix: 0.15), lo: End(base: 0xB9AE9F, mix: 0.50))
+        static let light = (hi: End(base: 0xF7F3EE, mix: 0.12), lo: End(base: 0xD2C9BE, mix: 0.38))
         static let dark = (hi: End(base: 0x2A2622, mix: 0.25), lo: End(base: 0x0C0B0A, mix: 0.15))
 
         /// The picture's size, a quarter of the design screen's points
@@ -51,7 +53,7 @@ struct SpaceWash: View {
         /// sun's light on snow (Firn's own, the same in every space). This
         /// much of it at full Vivid, plus a floor, light and dark.
         static let apricot: UInt32 = 0xF2C4A0
-        static let dawn = (light: (perVivid: Float(0.55), floor: Float(0.10)),
+        static let dawn = (light: (perVivid: Float(0.38), floor: Float(0.08)),
                            dark: (perVivid: Float(0.22), floor: Float(0.05)))
         /// Neighbor hues: soft patches of the space color's neighbors on the
         /// color wheel, in the design screen's points: middle, radii, hue
@@ -64,8 +66,13 @@ struct SpaceWash: View {
             Patch(x: 360, y: 560, rx: 240, ry: 280, turn: -40, strength: 1),
             Patch(x: 120, y: 820, rx: 220, ry: 160, turn: 15, strength: 0.6),
         ]
-        /// The patches' opacity at full Vivid, light and dark.
-        static let patchOpacity = (light: Float(0.55), dark: Float(0.45))
+        /// The patches' opacity at full Vivid, light and dark. Light's
+        /// halved so the hues blend into one wash instead of reading as
+        /// separate blotches (David, 2026-11-18).
+        static let patchOpacity = (light: Float(0.30), dark: Float(0.45))
+        /// How far the patches' color sits from the space's color toward
+        /// the light end (dark: the deep end): light's are paler.
+        static let patchLift = (light: Float(0.5), dark: Float(0.25))
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6
@@ -152,9 +159,10 @@ struct SpaceWash: View {
         let deep = rgb(lo), top = rgb(hi)
         let middle = deep + (top - deep) * 0.55
         let warm = top + (rgb(Tuning.apricot) - top) * (dawn.perVivid * v + dawn.floor)
-        // The neighbor hues: the space's color, a quarter of the way to the
+        // The neighbor hues: the space's color, part of the way to the
         // light end (dark: the deep end), turned on the color wheel.
-        let base = rgb(tint) + (rgb(dark ? lo : hi) - rgb(tint)) * 0.25
+        let lift = dark ? Tuning.patchLift.dark : Tuning.patchLift.light
+        let base = rgb(tint) + (rgb(dark ? lo : hi) - rgb(tint)) * lift
         let opacity = (dark ? Tuning.patchOpacity.dark : Tuning.patchOpacity.light) * v
         let patches = Tuning.patches.map { ($0, turned(base, by: $0.turn, saturation: 1.2)) }
         let (w, h) = Tuning.pictureSize

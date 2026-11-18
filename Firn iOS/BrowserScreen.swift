@@ -209,6 +209,9 @@ struct BrowserScreen: View {
         nonmutating set { if landing.heldCard != newValue { landing.heldCard = newValue } }
     }
     @State private var spots = OverviewSpots()
+    /// A tab was opened or tapped: the space's other open groups fold once
+    /// the overview is out of sight (`foldOtherGroups`).
+    @State private var foldWaiting = false
     /// The page's own frame on screen, to aim the glide from.
     private var pageFrame: CGRect {
         get { hold.pageFrame }
@@ -380,6 +383,49 @@ struct BrowserScreen: View {
         .onChange(of: gliding) {
             guard gliding == nil else { return }
             if barQuiet { barQuiet = false }
+            foldOtherGroups()
+        }
+        .onChange(of: store.activeTabID) { old, new in tabCameOnScreen(from: old, to: new) }
+        .onChange(of: showingTabs) { foldOtherGroups() }
+    }
+
+    // MARK: Groups fold themselves (step 3b)
+
+    /// A tab opened (+, a link, the command bar) or picked: open groups
+    /// lean toward staying out of the way, as Safari's (David, 2026-11-18).
+    /// Not when the tab on screen went because it closed (its neighbor
+    /// takes over, nothing was opened), or for a space switch.
+    private func tabCameOnScreen(from old: UUID?, to new: UUID?) {
+        guard let new, let tab = store.tabs.first(where: { $0.id == new }) else { return }
+        if let old {
+            guard let was = store.tabs.first(where: { $0.id == old }), was.spaceID == tab.spaceID
+            else { return }
+        }
+        foldWaiting = true
+        foldOtherGroups()
+    }
+
+    /// Folds every open group in the space but the tab on screen's, once
+    /// the overview is gone and nothing glides, so the grid never moves
+    /// under a page growing out of it. Out of sight, so at once; the next
+    /// overview shows them folded (the tab on screen's still opens with it).
+    private func foldOtherGroups() {
+        guard foldWaiting, !showingTabs, gliding == nil else { return }
+        foldWaiting = false
+        let keep = store.activeTab?.groupID
+        let folding = store.tabGroups.filter { !$0.folded && $0.id != keep }
+        guard !folding.isEmpty else { return }
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) {
+            for group in folding {
+                // As the overview's own fold: folded tabs forget their spots.
+                for tab in store.tabs(in: group) {
+                    spots.frames[tab.id] = nil
+                    spots.cards.remove(tab.id)
+                }
+                store.setFolded(group, true)
+            }
         }
     }
 
@@ -799,6 +845,8 @@ struct BrowserScreen: View {
     /// behind it; the overview leaves once the page has its room.
     private func openTab(_ tab: FirnCore.Tab) {
         guard showingTabs, gliding == nil else { return }
+        // Tapping the tab already on screen is a pick too (step 3b).
+        foldWaiting = true
         let spot = spots.frames[tab.id].flatMap { visible($0) }.map { pictureSpot($0, of: tab) }
         // The tab already on screen is still drawn, hidden, so it swaps in
         // at once; another tab's page is made (or woken) now and can be

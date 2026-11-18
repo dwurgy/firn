@@ -177,8 +177,14 @@ struct GridCards: UIViewRepresentable {
         /// What the collection view shows: the store's order, or a drop's
         /// before the store catches up.
         private var shown: [UUID] = []
-        /// The card iOS's drag carries, until it's down.
+        /// The card iOS's drag carries, until it's down: set only once the
+        /// drag has really begun (`dragSessionWillBegin`).
         private var carried: UUID?
+        /// The card iOS asked to lift, before its drag begins. iOS asks as
+        /// a hold starts; a hold that ends as a menu, or is let go, never
+        /// begins a drag and never says it ended. Taken as carried, it
+        /// refused every swipe from then on (David, 2026-11-17).
+        private var lifting: UUID?
         /// From the finger to the carried card's middle, as it was grabbed.
         private var grabOffset = CGVector.zero
         /// When the finger last came down, for telling a swipe from a hold.
@@ -361,7 +367,12 @@ struct GridCards: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            if gesture === sideways, touch.phase == .began { touchedAt = touch.timestamp }
+            if gesture === sideways, touch.phase == .began {
+                touchedAt = touch.timestamp
+                // A new finger with no drag under way: anything left from
+                // a hold that never became a drag is let go.
+                if let view = gesture.view as? UICollectionView, !view.hasActiveDrag { forgetHold() }
+            }
             return true
         }
 
@@ -464,9 +475,11 @@ struct GridCards: UIViewRepresentable {
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
             menuShown = false
-            let back = { [weak self] in
+            let back = { [weak self, weak view] in
                 // Carried on by the drag: its X stays hidden until it's down.
-                if self?.carried != id { self?.parent?.held(id, false) }
+                guard let self, carried != id, view?.hasActiveDrag != true else { return }
+                if lifting == id { lifting = nil }
+                parent?.held(id, false)
             }
             if let animator { animator.addCompletion(back) } else { back() }
         }
@@ -477,7 +490,7 @@ struct GridCards: UIViewRepresentable {
                             at path: IndexPath) -> [UIDragItem] {
             // A card being swiped isn't lifted.
             guard swiping == nil, let id = dataSource?.itemIdentifier(for: path) else { return [] }
-            carried = id
+            lifting = id
             if let cell = view.cellForItem(at: path) {
                 let finger = session.location(in: view)
                 grabOffset = CGVector(dx: cell.center.x - finger.x, dy: cell.center.y - finger.y)
@@ -490,6 +503,20 @@ struct GridCards: UIViewRepresentable {
             item.localObject = id
             session.localContext = ObjectIdentifier(self)
             return [item]
+        }
+
+        func collectionView(_ view: UICollectionView, dragSessionWillBegin session: any UIDragSession) {
+            carried = lifting
+            lifting = nil
+        }
+
+        /// A hold that never became a drag: its card shows its X again, and
+        /// swipes are taken again.
+        private func forgetHold() {
+            if let id = lifting, !menuShown { parent?.held(id, false) }
+            if !menuShown { lifting = nil }
+            if let id = carried { parent?.held(id, false) }
+            carried = nil
         }
 
         func collectionView(_ view: UICollectionView,
@@ -515,6 +542,7 @@ struct GridCards: UIViewRepresentable {
             // Let go outside the grid: it stays where it was last moved to.
             if let id = carried { settle(id); parent?.held(id, false) }
             carried = nil
+            lifting = nil
             // Every card shown again once the drop has landed: a card hidden
             // while carried stayed invisible once (David, 2026-11-17, not
             // caught on a recording), likely never told its drag had ended.

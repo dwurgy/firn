@@ -231,6 +231,11 @@ struct OverviewBar: View {
 
     private var pill: some View {
         label(space)
+            // The finger goes through the words to the glass under them, so
+            // iOS's glass press feels it (the words took the touch, and the
+            // pill stayed stiff; David, 2026-11-17). The tap and the swipe are
+            // the pill's, so they still see it.
+            .allowsHitTesting(false)
             // The name and dots change at once, never cross-fading (the old
             // name came back for a frame as a slide landed).
             .transaction { $0.animation = nil }

@@ -103,25 +103,35 @@ extension View {
     /// button inside reaches the glass too and it takes iOS's press. Beside
     /// it, as `FirnGlass` in a background, the buttons took the touch and
     /// the glass never felt it (the overview's name pill, 2026-11-17).
-    func firnGlassSurface<S: InsettableShape>(_ shape: S, interactive: Bool = false) -> some View {
-        modifier(FirnGlassSurface(shape: shape, interactive: interactive))
+    ///
+    /// `enabled` false draws nothing (iOS's `.identity` glass), keeping the
+    /// view the same, so a bar can hand its glass to a separate piece for a
+    /// glide (the address field growing into its menu, the space name's
+    /// pills sliding) and take it back at rest, with no state lost.
+    func firnGlassSurface<S: InsettableShape>(_ shape: S, interactive: Bool = false, enabled: Bool = true) -> some View {
+        modifier(FirnGlassSurface(shape: shape, interactive: interactive, enabled: enabled))
     }
 }
 
 private struct FirnGlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
     let interactive: Bool
+    let enabled: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         if reduceTransparency {
-            content.background { FirnFrost(shape: shape, fill: Theme.barFrost, solid: true) }
+            content.background {
+                FirnFrost(shape: shape, fill: Theme.barFrost, solid: true).opacity(enabled ? 1 : 0)
+            }
         } else {
             content
-                .glassEffect(.regular.interactive(interactive), in: shape)
+                .glassEffect(enabled ? .regular.interactive(interactive) : .identity, in: shape)
                 // Under the glass (a background added after it), as the
                 // glass buttons' blur is.
-                .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
+                .background {
+                    shape.fill(.ultraThinMaterial).opacity(enabled ? 1 : 0).allowsHitTesting(false)
+                }
         }
     }
 }

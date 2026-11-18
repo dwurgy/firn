@@ -27,6 +27,7 @@ struct OverviewBar: View {
     private static let height = BarButton.glassSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// How far the pill has slid toward the next space, as the address
     /// bar's: positive to the right (the space before coming in from +'s
     /// side). Only where there's a space to come in.
@@ -189,6 +190,30 @@ struct OverviewBar: View {
             .accessibilityAction { opens += 1 }
     }
 
+    /// The name's pill wears its glass itself, except while sliding.
+    /// Reduce Transparency keeps the separate frost.
+    private var glassOnPill: Bool { !glassAway && !reduceTransparency }
+
+    /// The sliding pills have the name's glass, from a slide's start until
+    /// its glide has settled back (0.25s), so the two never show at once.
+    @State private var glassAway = false
+    @State private var glassBack: Task<Void, Never>?
+
+    private func handGlass(sliding: Bool) {
+        glassBack?.cancel()
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        if sliding {
+            withTransaction(instant) { glassAway = true }
+            return
+        }
+        glassBack = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.35))
+            guard !Task.isCancelled else { return }
+            withTransaction(instant) { glassAway = false }
+        }
+    }
+
     /// The menu's rows, as UIKit's.
     private var spaceUIMenu: UIMenu {
         let pick = select
@@ -231,11 +256,6 @@ struct OverviewBar: View {
 
     private var pill: some View {
         label(space)
-            // The finger goes through the words to the glass under them, so
-            // iOS's glass press feels it (the words took the touch, and the
-            // pill stayed stiff; David, 2026-11-17). The tap and the swipe are
-            // the pill's, so they still see it.
-            .allowsHitTesting(false)
             // The name and dots change at once, never cross-fading (the old
             // name came back for a frame as a slide landed).
             .transaction { $0.animation = nil }
@@ -252,6 +272,12 @@ struct OverviewBar: View {
                 }
             } body: { $0.frame(width: pillWidth) }
             .frame(height: Self.height)
+            // At rest the pill wears iOS's glass itself, so a finger on the
+            // name reaches it and it takes iOS's press, as the bar's buttons
+            // do (beside the words, the glass never felt them). Sliding, the
+            // two pills behind take over (below).
+            .firnGlassSurface(Capsule(), interactive: true, enabled: glassOnPill)
+            .onChange(of: slide == nil) { _, resting in handGlass(sliding: !resting) }
             .mask {
                 if let slide {
                     GeometryReader { geo in
@@ -272,11 +298,11 @@ struct OverviewBar: View {
                 // name (iOS draws a container's glass above its other views).
                 GeometryReader { geo in
                     let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
-                    // At rest it's tapped for the menu, so it takes iOS's
-                    // glass press; sliding, it's only glass.
-                    FirnGlass(shape: Capsule(), interactive: slide == nil)
+                    // Only while sliding: at rest the pill wears the glass
+                    // itself (`glassOnPill`).
+                    FirnGlass(shape: Capsule())
                         .frame(width: pills.held.width, height: pills.held.height)
-                        .opacity(pills.heldOpacity)
+                        .opacity(glassOnPill ? 0 : pills.heldOpacity)
                         .position(x: pills.held.midX, y: pills.held.midY)
                     // The coming space's own pill, growing out from the
                     // other button.

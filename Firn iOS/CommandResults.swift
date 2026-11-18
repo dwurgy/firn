@@ -51,9 +51,9 @@ struct CommandResults: View {
         .scrollDisabled(!scrolls)
         .frame(maxHeight: CGFloat(rows.count) * Self.rowHeight + Self.padding * 2)
         .clipShape(shape)
-        // Neutral glass, as the field beneath it: one piece of the
-        // bar, not a panel of its own.
-        .glassEffect(.regular, in: shape)
+        // The bar's own glass, as the field beneath it (frosty, no
+        // tint): one piece of the bar, not a panel of its own.
+        .background { FirnGlass(shape: shape) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Results")
     }

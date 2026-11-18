@@ -28,6 +28,7 @@ struct AddressBar: View {
     /// `ICloudSync.otherDeviceTabs`). None until sync's first sync.
     var otherDeviceTabs: () -> [DeviceTab] = { [] }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.barSlide) private var barSlide
     @Environment(\.barGive) private var barGive
     /// What's being typed, for the results above the field (empty at rest).
@@ -365,6 +366,13 @@ struct AddressBar: View {
                 // in the same pass, so they glide with it as Back widens or
                 // narrows; measured afterwards, they trailed it (step 2c).
                 .background { GeometryReader { fieldGlass(fieldSize: $0.size) } }
+                // At rest the field wears iOS's glass itself, so a finger
+                // anywhere on it (the site, •••, Reload) reaches the glass
+                // and it takes iOS's press, as Back and Tabs do. Growing into
+                // the menu, shrinking to the small pill, or sliding sideways,
+                // the separate glass behind (`fieldGlass`) takes over.
+                .firnGlassSurface(Capsule(), interactive: !editing.wrappedValue, enabled: fieldGlassOnField)
+                .onChange(of: fieldAtRest) { _, rest in handGlass(atRest: rest) }
                 .overlay { GeometryReader { menuPanel(fieldSize: $0.size) } }
                 // Holding anywhere on the field opens the page menu, as in
                 // Safari, with a held tab's feel: it sinks from 0.15s, then
@@ -420,6 +428,37 @@ struct AddressBar: View {
         // 2026-11-09). Reduce Motion: nothing moves; the full bar and the
         // small pill cross-fade in place (`shrinkFade`, on each piece).
         .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
+    }
+
+    /// The field's glass is on the field itself (`firnGlassSurface`), not
+    /// the separate piece in `fieldGlass`: whenever that piece would be the
+    /// field's own size. Reduce Transparency keeps the separate frost.
+    private var fieldGlassOnField: Bool { !glassAway && !reduceTransparency }
+
+    /// The field at its own size, nothing growing, shrinking, or sliding.
+    private var fieldAtRest: Bool { !menuOpen && !compact && activeSlide == nil }
+
+    /// The separate glass has the field's glass: from the moment the menu
+    /// opens, the bar shrinks, or a slide starts, until that glide has
+    /// ended back at the field's own size (`handGlass`). Handed back only
+    /// then, so the two are never seen at once.
+    @State private var glassAway = false
+    @State private var glassBack: Task<Void, Never>?
+
+    private func handGlass(atRest: Bool) {
+        glassBack?.cancel()
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        if !atRest {
+            withTransaction(instant) { glassAway = true }
+            return
+        }
+        glassBack = Task { @MainActor in
+            // The longest glide back: the menu and the shrink, 0.32s.
+            try? await Task.sleep(for: .seconds(0.4))
+            guard !Task.isCancelled else { return }
+            withTransaction(instant) { glassAway = false }
+        }
     }
 
     /// The field can be held for the page menu: at rest on a page, the full
@@ -528,7 +567,9 @@ struct AddressBar: View {
         let glass = LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(open ? 0 : 1)
             .clipShape(shape)
-            .background { BarFrost(shape: shape) }
+            // Hidden while the field wears the glass itself, so it's never
+            // drawn twice.
+            .background { BarFrost(shape: shape).opacity(fieldGlassOnField ? 0 : 1) }
             // Open, the menu sits lifted, with a held tab's warm shadow.
             .shadow(color: Theme.shadowPeek.opacity(open ? 1 : 0), radius: 18, y: 8)
             // The whole pill fades as it becomes a circle, its frost too,

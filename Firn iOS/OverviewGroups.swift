@@ -138,16 +138,11 @@ struct UndimmedPress: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
-/// The card behind a group: the Mac's group frost (`FrostGlass` in
-/// `Firn/Sidebar.swift`), not Liquid Glass (David, 2026-11-08). A frosted
-/// fill with the space's color in it, a 1pt rim lighter at the top, a
-/// hairline, and a soft shadow: an outline that differs from the haze in
-/// lightness, which a space-colored edge couldn't over a haze of the same
-/// color. No blur: the haze behind is already a blur of the page. Reduce
-/// Transparency, the solid tile color. The tabs on it are flat.
+/// The card behind a group: the iPhone's one glass (`FirnGlass`), iOS's
+/// own, frosty with no tint (David, 2026-11-18; it was the Mac's group
+/// frost with the space's color in it). The tabs on it are flat.
 struct GroupCard: View {
     let space: String
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     /// The rows' and cards' 14pt corners plus the 8pt inside, so the
     /// corners run evenly around the tabs.
@@ -165,9 +160,9 @@ struct GroupCard: View {
     static let foldedHeight: CGFloat = OverviewRow.rowHeight
 
     var body: some View {
-        Frost(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous),
-              space: space, fill: Theme.groupCardFill, solid: reduceTransparency,
-              shadow: Theme.groupCardShadow, shadowRadius: Self.shadowRadius, shadowY: Self.shadowY)
+        // iOS's glass, frosty with no tint, as every glass on the iPhone
+        // (David, 2026-11-18); Reduce Transparency: Firn's solid frost.
+        FirnGlass(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
     }
 }
 

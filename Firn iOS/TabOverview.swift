@@ -2104,29 +2104,6 @@ struct ComesForward: ViewModifier, Animatable {
     }
 }
 
-/// Firn's frost, the Mac's `FrostGlass` recipe, for every frosted thing in
-/// the overview (group cards, and a card's title and X pills), so there's
-/// one kind of glass (David, 2026-11-08): a fill, the space's color at
-/// `groupTint`, a 1pt rim lit at the top, a hairline, and a soft shadow.
-/// Flat and fixed, never adapting to what's behind. No blur of its own:
-/// the group cards sit on the haze, which is already a blur, and a card's
-/// pills put their page's own picture, blurred, under it (`CardLine`).
-/// Reduce Transparency: the solid tile color, tinted, with its hairline.
-struct Frost<S: InsettableShape>: View {
-    let shape: S
-    let space: String
-    let fill: Color
-    let solid: Bool
-    var shadow = Theme.shadowSoft
-    var shadowRadius: CGFloat = 1
-    var shadowY: CGFloat = 0.5
-
-    var body: some View {
-        FirnFrost(shape: shape, fill: fill, tint: Theme.spaceColor(space).opacity(Theme.groupTint),
-                  solid: solid, shadow: shadow, shadowRadius: shadowRadius, shadowY: shadowY)
-    }
-}
-
 /// Where each tab's spot (a card's picture, or a slim row) sits on screen,
 /// in global points. Not observed: rows write it as they move, and only the
 /// glide reads it, so scrolling redraws nothing else.

@@ -34,6 +34,9 @@ struct GridMove {
     let sources: [UUID]
     let collection: GridCollection
     let before: UUID?
+    /// Folded groups that sit in a run as one cell, so a drop at a run's
+    /// end lands after them too (`OverviewGridRun.runs`).
+    var inRun: @MainActor (TabGroup) -> Bool = { _ in false }
 
     /// Carries the move out in the store: a tab among loose tabs, into or
     /// out of a folder, or a folder among the loose tabs and folders.
@@ -68,7 +71,13 @@ struct GridMove {
             let start = after.flatMap { top.firstIndex(of: $0).map { $0 + 1 } } ?? 0
             let items = store.tabListItems.filter { $0.id != id }
             var end = start
-            while end < items.count, case .tab = items[end] { end += 1 }
+            while end < items.count {
+                switch items[end] {
+                case .tab: end += 1
+                case let .group(group) where inRun(group): end += 1
+                case .group: return end
+                }
+            }
             return end
         case .tabs:
             return nil

@@ -19,7 +19,7 @@ struct OverviewGridMetrics: Equatable {
     private static let maxColumns = 5
     /// The picture's height for its width (portrait, as a phone's page).
     /// Safari's 1.41 (David, 2026-11-16: 1.25 looked stubby beside it).
-    private static let pictureShape: CGFloat = 1.41
+    static let pictureShape: CGFloat = 1.41
 
     /// `width` is the overview's; `height` its view's, so a card on a
     /// phone on its side still fits on screen with room around it.
@@ -40,11 +40,22 @@ struct OverviewGridMetrics: Equatable {
     }
 }
 
-/// Loose tabs between groups, laid out as one grid: keyed by the group just
-/// before them (nil at the top), so the run keeps its grid as tabs come and
-/// go and its cards glide to their new places.
+/// One cell in a run of the grid: a loose tab, or a folded group, which
+/// takes one tab's place (as Safari's; David, 2026-11-18).
+struct GridRunItem: Identifiable {
+    let id: UUID
+    /// Its place in the space's list.
+    let index: Int
+    let tab: FirnCore.Tab?
+    let group: TabGroup?
+}
+
+/// Loose tabs (and folded groups) between open groups, laid out as one
+/// grid: keyed by the open group just before them (nil at the top), so the
+/// run keeps its grid as tabs come and go and its cards glide to their new
+/// places.
 enum OverviewGridRun: Identifiable {
-    case tabs(after: UUID?, [(index: Int, tab: FirnCore.Tab)])
+    case tabs(after: UUID?, [GridRunItem])
     case group(index: Int, TabGroup)
 
     var id: String {
@@ -54,15 +65,18 @@ enum OverviewGridRun: Identifiable {
         }
     }
 
-    /// The list's items in runs: loose tabs together, each group alone.
-    static func runs(_ items: [TabListItem]) -> [OverviewGridRun] {
+    /// The list's items in runs: loose tabs together, each open group
+    /// alone. A group `inRun` says is a cell sits among the loose tabs.
+    @MainActor static func runs(_ items: [TabListItem], inRun: (TabGroup) -> Bool = { _ in false }) -> [OverviewGridRun] {
         var runs: [OverviewGridRun] = []
-        var loose: [(index: Int, tab: FirnCore.Tab)] = []
+        var loose: [GridRunItem] = []
         var after: UUID?
         for (index, item) in items.enumerated() {
             switch item {
             case let .tab(tab):
-                loose.append((index, tab))
+                loose.append(GridRunItem(id: tab.id, index: index, tab: tab, group: nil))
+            case let .group(group) where inRun(group):
+                loose.append(GridRunItem(id: group.id, index: index, tab: nil, group: group))
             case let .group(group):
                 if !loose.isEmpty { runs.append(.tabs(after: after, loose)) }
                 loose = []
@@ -72,6 +86,103 @@ enum OverviewGridRun: Identifiable {
         }
         if !loose.isEmpty { runs.append(.tabs(after: after, loose)) }
         return runs
+    }
+}
+
+/// A folded group in the grid: one tab's size (the picture's, nothing
+/// under it), on the group's glass, its name at the top and its first
+/// tabs as small pictures below, as a shrunken open group (Safari's;
+/// David, 2026-11-18). The second row runs off the bottom, cut by the
+/// cell's corners. A tap opens it; holding it is iOS's menu and drag,
+/// from the grid (`GridCards`).
+struct GroupFolder: View {
+    let group: TabGroup
+    let tabs: [FirnCore.Tab]
+    let pictures: PagePictures
+    let cardHeight: CGFloat
+    let naming: Bool
+    let open: () -> Void
+
+    private static let shown = 4
+    private static let inset: CGFloat = 10
+    private static let gap: CGFloat = 6
+    private static let thumbCorner: CGFloat = 7
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: OverviewRow.gridCornerRadius, style: .continuous)
+        VStack(spacing: 0) {
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Group {
+                        if naming {
+                            NamingDots(color: Theme.ink, size: 5).frame(height: 18)
+                        } else {
+                            Text(group.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Theme.ink)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: Self.gap, alignment: .top),
+                                        GridItem(.flexible(), spacing: Self.gap, alignment: .top)],
+                              spacing: Self.gap) {
+                        ForEach(tabs.prefix(Self.shown)) { tab in
+                            FolderThumb(tab: tab, pictures: pictures, corner: Self.thumbCorner)
+                        }
+                    }
+                }
+                .padding(Self.inset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background { FirnGlass(shape: shape) }
+                .clipShape(shape)
+                .contentShape(shape)
+            }
+            .buttonStyle(UndimmedPress())
+            .frame(height: max(cardHeight - OverviewRow.gridTitleHeight, 1))
+            Color.clear.frame(height: OverviewRow.gridTitleHeight)
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(naming ? "New group, naming" : group.name)
+        .accessibilityValue("Folded, \(tabs.count) \(tabs.count == 1 ? "tab" : "tabs")")
+        .accessibilityHint("Shows the group's tabs")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// One small page picture in a folded group, shaped as a grid card's.
+private struct FolderThumb: View {
+    let tab: FirnCore.Tab
+    let pictures: PagePictures
+    let corner: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        Color.clear
+            .aspectRatio(1 / OverviewGridMetrics.pictureShape, contentMode: .fit)
+            .overlay(alignment: .top) {
+                if let picture = pictures.cachedImage(for: tab.id), picture.size.width > 0 {
+                    GeometryReader { box in
+                        let scale = box.size.width / picture.size.width
+                        Image(uiImage: picture)
+                            .resizable()
+                            .frame(width: box.size.width, height: picture.size.height * scale)
+                            .offset(y: -pictures.headerDepth(for: tab.id) * scale)
+                    }
+                } else {
+                    SiteIconView(icon: tab.icon, size: 20) {
+                        LetterMark(site: WebAddress.site(of: tab.url), size: 20)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .background(Theme.page)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Theme.windowHairline, lineWidth: 1) }
+            .task(id: tab.id) {
+                if pictures.cachedImage(for: tab.id) == nil { await pictures.loadImage(for: tab.id) }
+            }
     }
 }
 

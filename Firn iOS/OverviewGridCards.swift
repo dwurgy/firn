@@ -145,6 +145,8 @@ struct GridCards: UIViewRepresentable {
     let swipe: (UUID, GridSwipe) -> Void
     /// A card swiped off: its tab closes.
     let close: (UUID) -> Void
+    /// Whether a cell swipes to close: a folded group's doesn't.
+    var swipes: (UUID) -> Bool = { _ in true }
     let reduceMotion: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -398,6 +400,9 @@ struct GridCards: UIViewRepresentable {
             // is a card held a moment before it moved.
             guard carried == nil, !menuShown,
                   ProcessInfo.processInfo.systemUptime - touchedAt < Self.swipeWindow else { return false }
+            if let view = sideways.view as? UICollectionView,
+               let path = view.indexPathForItem(at: sideways.location(in: view)),
+               let id = dataSource?.itemIdentifier(for: path), parent?.swipes(id) == false { return false }
             let speed = sideways.velocity(in: sideways.view)
             return abs(speed.x) > abs(speed.y)
         }

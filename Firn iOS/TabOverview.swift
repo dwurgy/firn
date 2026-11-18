@@ -608,30 +608,41 @@ struct TabOverview: View {
         .equatable()
     }
 
-    /// The grid: loose tabs as cards in columns, each run between
-    /// groups one grid; a group a full-width folder card, its tabs a grid
-    /// inside it once opened.
+    /// The grid: loose tabs as cards in columns, each run between open
+    /// groups one grid; a folded group one card's size among them (UIKit's
+    /// grid only), an open group a full-width folder card, its tabs a grid
+    /// inside it.
     @ViewBuilder private func gridTiles(_ items: [TabListItem]) -> some View {
         let metrics = gridMetrics
-        ForEach(OverviewGridRun.runs(items)) { run in
+        let inRun: @MainActor (TabGroup) -> Bool = { group in folderCell(group) }
+        ForEach(OverviewGridRun.runs(items, inRun: { systemDrag && folderCell($0) })) { run in
             switch run {
-            case let .tabs(after, tabs) where systemDrag:
+            case let .tabs(after, entries) where systemDrag:
                 // UIKit's collection view: iOS's menu and iOS's drag, the
                 // card full size as it's carried (`OverviewGridCards.swift`).
-                let byID = Dictionary(tabs.map { ($0.tab.id, $0) }) { a, _ in a }
-                GridCards(ids: tabs.map(\.tab.id), columns: metrics.columns, cardHeight: metrics.cardHeight,
+                let byID = Dictionary(entries.map { ($0.id, $0) }) { a, _ in a }
+                GridCards(ids: entries.map(\.id), columns: metrics.columns, cardHeight: metrics.cardHeight,
                           card: { id in
                               guard let entry = byID[id] else { return AnyView(EmptyView()) }
-                              return AnyView(gridCell(entry.tab, at: entry.index, of: items.count))
+                              if let group = entry.group {
+                                  return AnyView(folder(group, at: entry.index, of: items.count))
+                              }
+                              guard let tab = entry.tab else { return AnyView(EmptyView()) }
+                              return AnyView(gridCell(tab, at: entry.index, of: items.count))
                           },
-                          menu: { id in byID[id].map { menu(for: $0.tab) } ?? [] },
+                          menu: { id in
+                              guard let entry = byID[id] else { return [] }
+                              if let group = entry.group { return groupMenu(group).sections }
+                              return entry.tab.map { menu(for: $0) } ?? []
+                          },
                           held: { id, held in
                               withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
                                   if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
                               }
                           },
                           move: { id, before in
-                              GridMove(sources: [id], collection: .loose(after: after), before: before).apply(to: store)
+                              GridMove(sources: [id], collection: .loose(after: after), before: before,
+                                       inRun: inRun).apply(to: store)
                           },
                           swipe: { id, phase in
                               // The title and X go quickly as the swipe starts
@@ -646,10 +657,12 @@ struct TabOverview: View {
                               }
                           },
                           close: { id in
-                              if !busy, let entry = byID[id] { close(entry.tab) }
+                              if !busy, let tab = byID[id]?.tab { close(tab) }
                           },
+                          swipes: { id in byID[id]?.tab != nil },
                           reduceMotion: reduceMotion)
-            case let .tabs(after, tabs):
+            case let .tabs(after, entries):
+                let tabs = entries.compactMap { entry in entry.tab.map { (index: entry.index, tab: $0) } }
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
                     let cards = ForEach(tabs.map { GridEntry(id: $0.tab.id, index: $0.index, tab: $0.tab) }) { entry in
                         if let tab = entry.tab { listTile(tab, at: entry.index, of: items.count, loose: true) }
@@ -664,6 +677,24 @@ struct TabOverview: View {
                 groupTiles(group, at: index, of: items.count)
             }
         }
+    }
+
+    /// A folded group sits in the grid as one card's size (`GroupFolder`),
+    /// unless it shows a tab (the tab on screen's, or a drag's).
+    private func folderCell(_ group: TabGroup) -> Bool {
+        group.folded && shownTabs(in: group).isEmpty
+    }
+
+    /// A folded group's cell: a tap opens it; VoiceOver's moves and the
+    /// group's menu as actions.
+    private func folder(_ group: TabGroup, at index: Int, of count: Int) -> some View {
+        GroupFolder(group: group, tabs: store.tabs(in: group), pictures: pictures,
+                    cardHeight: cardHeight, naming: store.isNaming(group), open: { fold(group) })
+            .modifier(groupMenu(group).actions)
+            .accessibilityActions {
+                if index > 0 { Button("Move Left") { move(group, to: index - 1) } }
+                if index < count - 1 { Button("Move Right") { move(group, to: index + 1) } }
+            }
     }
 
     /// A loose card in UIKit's grid (`GridCards`): its menu and drag are

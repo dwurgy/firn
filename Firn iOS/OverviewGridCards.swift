@@ -251,8 +251,11 @@ struct GridCards: UIViewRepresentable {
         /// Safari's pace, measured from David's recordings (2026-11-17):
         /// halfway home in about 0.15s, nearly there by 0.4s, a 0.56s
         /// response (stiffness (2π / 0.56)² ≈ 125). Firn's 0.45s animator
-        /// got there in half that and read as stiff.
-        private static let homeStiffness: CGFloat = 125
+        /// got there in half that and read as stiff. A second recording,
+        /// tracked frame by frame (2026-11-17), put Safari's a touch
+        /// quicker: 66% of the way left at 0.1s, 28% at 0.2s, 9% at 0.3s,
+        /// a critically damped spring of about 170.
+        private static let homeStiffness: CGFloat = 170
 
         @objc private func swiped(_ pan: UIPanGestureRecognizer) {
             guard let view = pan.view as? UICollectionView else { return }

@@ -36,7 +36,9 @@ struct SpaceWash: View {
             let mix: CGFloat
         }
         static let light = (hi: End(base: 0xF7F3EE, mix: 0.12), lo: End(base: 0xD2C9BE, mix: 0.38))
-        static let dark = (hi: End(base: 0x2A2622, mix: 0.25), lo: End(base: 0x0C0B0A, mix: 0.15))
+        /// Dark's light end darker and with less color, toward Safari's
+        /// near-charcoal (David, 2026-11-18).
+        static let dark = (hi: End(base: 0x1F1C19, mix: 0.15), lo: End(base: 0x0B0A09, mix: 0.10))
 
         /// The picture's size, a quarter of the design screen's points
         /// (402×874), stretched to fill: it's blurred, so the stretch and
@@ -54,7 +56,7 @@ struct SpaceWash: View {
         /// much of it at full Vivid, plus a floor, light and dark.
         static let apricot: UInt32 = 0xF2C4A0
         static let dawn = (light: (perVivid: Float(0.38), floor: Float(0.08)),
-                           dark: (perVivid: Float(0.22), floor: Float(0.05)))
+                           dark: (perVivid: Float(0.16), floor: Float(0.04)))
         /// Neighbor hues: soft patches of the space color's neighbors on the
         /// color wheel, in the design screen's points: middle, radii, hue
         /// turn in degrees, and strength (a share of the patches' opacity).
@@ -69,10 +71,10 @@ struct SpaceWash: View {
         /// The patches' opacity at full Vivid, light and dark. Light's
         /// halved so the hues blend into one wash instead of reading as
         /// separate blotches (David, 2026-11-18).
-        static let patchOpacity = (light: Float(0.30), dark: Float(0.45))
+        static let patchOpacity = (light: Float(0.30), dark: Float(0.28))
         /// How far the patches' color sits from the space's color toward
-        /// the light end (dark: the deep end): light's are paler.
-        static let patchLift = (light: Float(0.5), dark: Float(0.25))
+        /// the light end (dark: the deep end): light's paler, dark's deeper.
+        static let patchLift = (light: Float(0.5), dark: Float(0.5))
 
         /// How long a space change cross-fades.
         static let fade: Double = 0.6

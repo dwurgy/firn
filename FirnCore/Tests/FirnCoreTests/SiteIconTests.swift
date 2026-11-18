@@ -95,9 +95,9 @@ struct SiteIconTests {
         return properties?[kCGImagePropertyPixelWidth] as? Int
     }
 
-    @Test func shrinksBigIconsToSixtyFourPixels() throws {
+    @Test func shrinksBigIconsToNinetySixPixels() throws {
         let small = try #require(SiteIcon.smallPNG(from: png(width: 256, height: 256)))
-        #expect(pixelWidth(small) == 64)
+        #expect(pixelWidth(small) == 96)
         #expect(SiteIcon.isValidStored(small))
     }
 

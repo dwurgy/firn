@@ -73,7 +73,7 @@ enum ReaderDocument {
     /// - Parameters:
     ///   - accent: the space's color (0xRRGGBB), for link underlines and a
     ///     quote's line.
-    ///   - icon: the site's icon as PNG (Firn's own, at most 64px), or nil.
+    ///   - icon: the site's icon as PNG (Firn's own, at most 96px), or nil.
     ///   - summarize: whether Summarize's pill sits under the byline
     ///     (`ArticleSummarizer.isOffered`).
     static func html(

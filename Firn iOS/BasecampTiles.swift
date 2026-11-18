@@ -280,12 +280,13 @@ private struct BasecampTile: View {
     }
 }
 
-/// The Mac's `SiteMark`, scaled from its 18pt to the iPhone tile's 24pt:
-/// the icon, or the site's first letter on a rounded square of its color.
+/// The Mac's `SiteMark`, scaled from its 18pt to the iPhone tile's 30pt
+/// (24pt until 2026-11-18; bigger, as the App Library's): the icon, or the
+/// site's first letter on a rounded square of its color.
 private struct TileMark: View {
     let site: String
     let icon: Data?
-    static let size: CGFloat = 24
+    static let size: CGFloat = 30
 
     var body: some View {
         SiteIconView(icon: icon, size: Self.size) { letterMark }

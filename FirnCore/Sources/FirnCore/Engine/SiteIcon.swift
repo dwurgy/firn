@@ -6,13 +6,14 @@ import UniformTypeIdentifiers
 /// small and safe. The page is hostile input throughout: what it lists, the
 /// file it points to, and the image inside.
 public enum SiteIcon {
-    /// Icons are kept this many pixels across at most (16–18pt at 2x, with room).
-    static let pixelSize = 64
+    /// Icons are kept this many pixels across at most: the iPhone's 30pt
+    /// Basecamp mark at 3x is 90 (the Mac's 18pt at 2x is 36).
+    static let pixelSize = 96
     static let maxDownloadBytes = 512 * 1024
     /// No icon needs more than about 1024 × 1024; bigger files aren't decoded,
     /// so a small file can't unpack into a huge image.
     static let maxSourcePixels = 1024 * 1024
-    /// What a saved icon may weigh (a 64px PNG is a few KB).
+    /// What a saved icon may weigh (a 96px PNG is a few KB, 36KB at worst).
     static let maxStoredBytes = 64 * 1024
     static let maxCandidates = 4
 
@@ -113,7 +114,7 @@ public enum SiteIcon {
         return Array(urls.filter { seen.insert($0).inserted }.prefix(maxCandidates))
     }
 
-    /// Closest to 64px from above first, then sizes not given, then smaller ones.
+    /// Closest to `pixelSize` from above first, then sizes not given, then smaller ones.
     private static func ranked(_ links: [Link]) -> [Link] {
         func key(_ link: Link) -> (Int, Int) {
             guard let size = link.size else { return (1, 0) }
@@ -204,7 +205,7 @@ public enum SiteIcon {
 
     /// Decodes with ImageIO only known bitmap formats, refuses images too big
     /// to be an icon (before decoding them), picks the best size in a
-    /// multi-size .ico, and re-draws it as a fresh PNG of at most 64px. Only
+    /// multi-size .ico, and re-draws it as a fresh PNG of at most 96px. Only
     /// that PNG is ever kept or shown.
     static func smallPNG(from data: Data) -> Data? {
         let noCache = [kCGImageSourceShouldCache: false] as CFDictionary
@@ -239,7 +240,7 @@ public enum SiteIcon {
         return isValidStored(png) ? png : nil
     }
 
-    /// The smallest size at or above 64px, otherwise the largest.
+    /// The smallest size at or above `pixelSize`, otherwise the largest.
     private static func isBetter(_ side: Int, than current: Int?) -> Bool {
         guard let current else { return true }
         switch (side >= pixelSize, current >= pixelSize) {

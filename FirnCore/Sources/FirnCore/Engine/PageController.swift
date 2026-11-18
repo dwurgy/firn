@@ -14,7 +14,7 @@ public protocol PageController: AnyObject, Observable {
     var isLoading: Bool { get }
     /// How far along the current load is, from 0 to 1 (WebKit's own guess).
     var progress: Double { get }
-    /// The site's own icon as a small PNG (at most 64px), once found; nil
+    /// The site's own icon as a small PNG (at most 96px), once found; nil
     /// until then, or if the site has none.
     var icon: Data? { get }
     /// Set when the last address couldn't load (a typo, offline, no answer,

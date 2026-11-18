@@ -96,28 +96,29 @@ struct FrostPress<S: Shape>: ButtonStyle {
     }
 }
 
-/// Firn's frost for a pill or button floating over a live page (the
-/// iPhone's bars, and the Mac reader's Aa pill), neutral, never tinted by
-/// the space (David, 2026-11-15), over the system's thinnest material blur, so the page's shapes
-/// don't show through. A trial (David, 2026-11-09): iOS's soft edge blur, as under
-/// Safari's bar, never appeared under a web page (`docs/IOS-PLAN.md`).
-/// Reduce Transparency: solid.
+/// The frost for a pill or button floating over a live page (the iPhone's
+/// bars, and the Mac reader's Aa pill), neutral, never tinted by the space
+/// (David, 2026-11-15).
+///
+/// On the iPhone, iOS's own glass made frosty: "Frosty, no tint" (David,
+/// 2026-11-17, `docs/IOS-PLAN.md`, "Try-out: the bar in iOS's own glass"):
+/// the system's thinnest blur in the bar's shape, so the page behind turns
+/// to soft color, under regular Liquid Glass (the milkier one, never
+/// `.clear`), which keeps its lit edge. Never `.interactive()`, the bubbly
+/// press. On the Mac, Firn's own frost. Reduce Transparency: solid, both.
 struct BarFrost<S: InsettableShape>: View {
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    #if os(iOS) && TESTFLIGHT
-    /// The try-out of iOS's own glass (`BarGlass`, Settings › TestFlight).
-    @AppStorage(BarGlass.key) private var glass = BarGlass.soft
-    #endif
 
     var body: some View {
-        #if os(iOS) && TESTFLIGHT
-        if glass != .firn, !reduceTransparency {
-            NativeBarGlass(shape: shape, glass: glass)
+        #if os(iOS)
+        if reduceTransparency {
+            firnFrost
+        } else {
+            shape.fill(.ultraThinMaterial)
+                .overlay { Color.clear.glassEffect(.regular, in: shape) }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-        } else {
-            firnFrost
         }
         #else
         firnFrost

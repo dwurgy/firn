@@ -105,6 +105,10 @@ struct BasecampTiles: View {
             // Where Basecamp is, so a tab carried over it can become a tile.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.basecamp = $0 }
             .onDisappear { spots.basecamp = nil }
+            // More room between the tiles and the first tab than the list's
+            // 12pt between items: 24pt in all (David, 2026-11-18). Outside
+            // the frame above, so only the tiles count as Basecamp's spot.
+            .padding(.bottom, 12)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Basecamp")
         }

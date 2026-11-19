@@ -188,7 +188,8 @@ struct TabOverview: View {
                 // which also gives the ring around the tab on screen room.
                 LazyVStack(spacing: 12) {
                     // Basecamp first, scrolling away with the list (hidden
-                    // while empty); 12pt below it, as between any items.
+                    // while empty); 24pt below it (its own 12pt plus this
+                    // stack's 12pt).
                     BasecampTiles(store: store, spots: spots, landing: landing,
                                   onScreen: heldCard ?? store.activeTab?.id,
                                   order: tileOrder,

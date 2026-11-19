@@ -712,3 +712,19 @@ Found 2026-11-10. David: finish the normal iPhone version first, then the Duo. N
 - For Firn: worth it, but low priority. The project file is small (484 lines), and new files never touch it (folder-synced groups), so it has changed only 17 times.
 - Both apps build and run the same; it only needs Xcode 27 or later to open the project. The folder stays `Firn.xcodeproj`, so `scripts/release.sh` and `scripts/demo-shots.sh` keep their paths; per Apple's docs `xcodebuild` reads either format (not tried with Firn's).
 - Apple's format is at 0.1.0, so waiting costs nothing. If done: its own step, one commit, both apps built and a `release.sh` dry run first.
+
+## 7. David's list from his iPhone (2026-11-18)
+
+From the build installed 2026-11-18 (TestFlight configuration). One at a time, dug into one by one, in David's order unless he picks another; mark each when done.
+
+1. **Room above the tabs:** a little more space between the bottom of the Basecamp tiles and the first tab.
+2. **Folded groups' previews:** square pictures, as in Safari, so they fit the folded group; today they're the tall card shape and the bottom ones get cut off.
+3. **Groups' animations:** not smooth, jumping all over.
+4. **The chevron on folded groups:** missing when folded; it only shows on an open group.
+5. **The space name pill after a swipe:** the name and dots stop lining up with the pill.
+6. **The space pill, tap and hold:** a tap shows only the spaces; holding shows the spaces plus Space Settings… and New Space….
+7. **Switching spaces:** a better whole-screen motion than today's crossfade, which isn't smooth.
+8. Find on Page works (David). Nothing to do.
+9. **Opening and closing tiles and tabs:** needs Safari's polish.
+10. **The address bar pill on Back and Forward:** it jumps a little instead of resizing smoothly.
+11. Native glass ("Frosty, no tint"): David is generally happy with it. Nothing to do.

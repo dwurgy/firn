@@ -277,6 +277,15 @@ final class WindowModel {
         store.openTab(url)
     }
 
+    /// Firn › Tip Jar…: David's Ko-fi page as a new tab. The Mac's Firn is
+    /// sold outside the Mac App Store, where in-app purchases don't work, so
+    /// its jar is Ko-fi (the family's rule); the iPhone's is the App Store's.
+    func openTipJar() {
+        closeCommandBar(focusingPage: false)
+        store.closeLookout()
+        store.openTab(URL(string: "https://ko-fi.com/dwurgy")!)
+    }
+
     /// Space Settings…: Settings › Spaces, with `space` picked. The caller
     /// opens the Settings window.
     func showSpaceSettings(for space: Space) {

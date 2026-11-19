@@ -16,6 +16,7 @@ struct BrowserCommands: Commands {
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { Updater.shared.checkNow() }
                 .disabled(!Updater.shared.canCheck)
+            Button("Tip Jar…") { window.openTipJar() }
         }
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { openWindow(id: "settings") }

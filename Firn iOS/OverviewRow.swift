@@ -296,44 +296,28 @@ struct OverviewRow: View {
     }
 }
 
-/// Under a grid card: the site's icon and the page's title, one line, on
-/// the overview's wash (after Safari's). Measured against Safari's pixel
-/// by pixel in David's recordings (2026-11-19): 12pt words beside a 16pt
-/// icon, 3pt between them (about 4 to the first letter), the icon 7pt
-/// under the card and 2pt in from its side (it was a 14pt icon, 7pt from
-/// the words, 5pt down, 4pt in).
+/// Under a grid card: the page's title alone, one line, on the overview's
+/// wash. No site icon (David, 2026-11-19): the card's picture already
+/// says which site it is, so the icon only repeated it; unlike Safari's.
+/// 12pt words, 7pt under the card, 2pt in from its side (Safari's
+/// measures, from David's recordings).
 struct GridTitle: View {
     let tab: FirnCore.Tab
     static let titleFont = Font.caption.weight(.semibold)
-    private static let icon: CGFloat = 16
-    private var site: String { WebAddress.site(of: tab.url) }
 
     var body: some View {
-        // A short title sits centered under its card, as Safari's; a long
-        // one starts at the card's side and truncates (David, 2026-11-18).
-        // Two layouts, not one centered: a truncated line doesn't quite
-        // fill its width, and centering split what was left, so the icon
-        // sat about 4pt in where Safari's sits 2pt in.
-        ViewThatFits(in: .horizontal) {
-            line.fixedSize().frame(maxWidth: .infinity)
-            line.frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 2)
-        .padding(.top, 7)
-        .accessibilityHidden(true)
-        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-    }
-
-    private var line: some View {
-        HStack(spacing: 3) {
-            SiteIconView(icon: tab.icon, size: Self.icon) { LetterMark(site: site, size: Self.icon) }
-                .frame(width: Self.icon, height: Self.icon)
-            Text(tab.title)
-                .font(Self.titleFont)
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
+        // A short title sits centered under its card; a long one fills the
+        // width and truncates.
+        Text(tab.title)
+            .font(Self.titleFont)
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 2)
+            .padding(.top, 7)
+            .accessibilityHidden(true)
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 }
 

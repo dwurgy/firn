@@ -28,10 +28,13 @@ struct FrozenOverview {
         let groups: [UUID: Bool]
         let grouped: [UUID: UUID]
         let tiles: [UUID]
-        /// The scroll, to the nearest 16pt: a tab lands a third down the list
-        /// (`TabOverview.scroll(to:)`), a point or two off from last time,
-        /// which a blur this soft can't show.
-        let scroll: Int
+        /// The scroll (pt). A tab lands a third down the list
+        /// (`TabOverview.scroll(to:)`), a point or two off from last time.
+        let scroll: CGFloat
+        /// How far off the scroll may be and the picture still stand in:
+        /// the hand-over's last blur hides it. (Whole 16pt steps before:
+        /// two scrolls a point apart could fall either side of a step.)
+        static let scrollGive: CGFloat = 8
         let dark: Bool
 
         /// Close enough to stand in: everything but which tab is on screen.
@@ -41,7 +44,7 @@ struct FrozenOverview {
         /// taken once the overview rests again.
         func matches(_ other: Look) -> Bool {
             space == other.space && tabs == other.tabs && groups == other.groups && grouped == other.grouped
-                && tiles == other.tiles && scroll == other.scroll && dark == other.dark
+                && tiles == other.tiles && abs(scroll - other.scroll) <= Self.scrollGive && dark == other.dark
         }
     }
 
@@ -88,15 +91,23 @@ struct FrozenOverview {
         // Premultiplied, so every channel fades.
         guard done else { return nil }
         let reach = max(feather, 1)
+        // Only the bands near an edge: the middle is left alone.
+        let band = min(Int(reach.rounded(.up)), width / 2)
+        func fade(_ x: Int, _ y: Int, _ fromY: CGFloat) {
+            let near = min(fromY, CGFloat(min(x, width - 1 - x)) + 0.5)
+            guard near < reach else { return }
+            let t = near / reach
+            let keep = t * t * (3 - 2 * t)
+            let i = y * rowBytes + x * 4
+            for c in 0..<4 { spare[i + c] = UInt8(CGFloat(spare[i + c]) * keep) }
+        }
         for y in 0..<height {
             let fromY = CGFloat(min(y, height - 1 - y)) + 0.5
-            for x in 0..<width {
-                let near = min(fromY, CGFloat(min(x, width - 1 - x)) + 0.5)
-                guard near < reach else { continue }
-                let t = near / reach
-                let keep = t * t * (3 - 2 * t)
-                let i = y * rowBytes + x * 4
-                for c in 0..<4 { spare[i + c] = UInt8(CGFloat(spare[i + c]) * keep) }
+            if fromY < reach {
+                for x in 0..<width { fade(x, y, fromY) }
+            } else {
+                for x in 0..<band { fade(x, y, fromY) }
+                for x in (width - band)..<width { fade(x, y, fromY) }
             }
         }
         guard let provider = CGDataProvider(data: Data(spare) as CFData) else { return nil }

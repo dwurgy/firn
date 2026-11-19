@@ -1,5 +1,6 @@
 import FirnCore
 import SwiftUI
+import os
 
 /// The page, edge to edge, with Firn's address bar floating over its bottom
 /// edge, and the tab overview behind it (the tabs button, or a swipe up on
@@ -17,6 +18,9 @@ struct BrowserScreen: View {
     /// What a swipe up or a tab opening moves, handed to the overview as
     /// one object (`Landing`, 2i step 3). The values keep their own names
     /// here (`arrival`, `gliding`, …), each passing through to it.
+    /// Why a close faded instead of gliding (David's recording, 2026-11-19:
+    /// one tile close did, and it didn't happen again). Step names only.
+    private static let landingLog = Logger(subsystem: "com.firnbrowser.Firn", category: "landing")
     @State private var landing = Landing()
     /// The overview's own view, drawn alone for its picture (`OverviewHost`).
     @State private var canvas = OverviewCanvas()
@@ -646,6 +650,7 @@ struct BrowserScreen: View {
             let image = await picture?.value
             SwipeTiming.mark(image == nil ? "no picture" : "picture arrived")
             guard let image, pullAwaitingPicture == glide else {
+                if image == nil { Self.landingLog.notice("close faded: no picture of the page") }
                 if pullAwaitingPicture == glide { pullAwaitingPicture = nil; fadeToTabs() }
                 return
             }
@@ -663,6 +668,7 @@ struct BrowserScreen: View {
             guard pullAwaitingPicture == glide else { return }
             pullAwaitingPicture = nil
             SwipeTiming.mark("gave up waiting, faded")
+            Self.landingLog.notice("close faded: gave up waiting for the page's picture")
             fadeToTabs()
         }
     }
@@ -721,7 +727,10 @@ struct BrowserScreen: View {
     /// card takes its place in one frame. A card off screen: a cross-fade.
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double) {
         Task {
-            guard let measured = await spot(of: tab) else { return fadeToTabs() }
+            guard let measured = await spot(of: tab) else {
+                Self.landingLog.notice("close faded: no spot on screen (known: \(spots.frames[tab.id] != nil, privacy: .public), tile: \(tab.place == .basecamp, privacy: .public))")
+                return fadeToTabs()
+            }
             let tile = tab.place == .basecamp
             // Aimed at its card's full-size place, and it stays there: the
             // closing tab is its own thing, never part of the overview

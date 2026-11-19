@@ -282,6 +282,12 @@ struct TabOverview: View {
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in
                 spots.scroll = now
+                // Behind the page, the list's turn to the tab on screen can
+                // come after its picture was taken (just after launch, on
+                // David's iPhone: the first close had no blur).
+                if !shown, frozen.map({ abs($0.look.scroll - now.contentOffset.y) > FrozenOverview.Look.scrollGive }) ?? false {
+                    freezeSoon()
+                }
                 // The list only ever scrolls up and down, but SwiftUI runs a
                 // request by id again as the layout changes, and each run
                 // slid it sideways toward centering a grouped tab's card
@@ -419,7 +425,7 @@ struct TabOverview: View {
     /// What the overview shows now, for `FrozenOverview` (its scroll from
     /// `spots`, which isn't observed; `scroll` stands in where only the
     /// rest matters).
-    private func look(scroll: Int? = nil) -> FrozenOverview.Look {
+    private func look(scroll: CGFloat? = nil) -> FrozenOverview.Look {
         let tabs = store.openTabs
         return FrozenOverview.Look(
             space: store.activeSpace.id,
@@ -428,7 +434,7 @@ struct TabOverview: View {
             groups: Dictionary(store.tabGroups.map { ($0.id, $0.folded) }) { a, _ in a },
             grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
             tiles: store.basecampTabs.map(\.id),
-            scroll: scroll ?? Int(((spots.scroll?.contentOffset.y ?? 0) / 16).rounded()),
+            scroll: scroll ?? (spots.scroll?.contentOffset.y ?? 0).rounded(),
             dark: colorScheme == .dark)
     }
 
@@ -443,7 +449,10 @@ struct TabOverview: View {
         guard !reduceMotion else { return }
         let shown = shown
         freezing = Task {
-            try? await Task.sleep(for: .milliseconds(350))
+            // Behind the page there's less to wait out, and a tab is often
+            // closed within a second of opening (David's recording,
+            // 2026-11-19: no picture yet, so no blur).
+            try? await Task.sleep(for: .milliseconds(shown ? 350 : 120))
             guard !Task.isCancelled else { return }
             let now = look()
             if frozen?.look == now { return }

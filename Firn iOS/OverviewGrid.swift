@@ -8,6 +8,10 @@ import SwiftUI
 struct OverviewGridMetrics: Equatable {
     let columns: Int
     let cardHeight: CGFloat
+    /// A card's height inside an open group: its column is narrower there
+    /// and its picture keeps its shape, so it's a little shorter, as
+    /// Safari's (David's recording, 2026-11-18).
+    let groupCardHeight: CGFloat
 
     /// Between columns, and between a card's title and the card below it:
     /// Safari's grid, measured from David's screenshots (2026-11-16).
@@ -33,6 +37,8 @@ struct OverviewGridMetrics: Equatable {
         var card = picture + OverviewRow.gridTitleHeight
         if height > 0 { card = min(card, max(height * 0.62, OverviewRow.cardHeight)) }
         cardHeight = card.rounded()
+        let inner = (room - 2 * GroupCard.side - GroupCard.columnGap * CGFloat(columns - 1)) / CGFloat(columns)
+        groupCardHeight = min(max(inner, 1) * Self.pictureShape + OverviewRow.gridTitleHeight, card).rounded()
     }
 
     var gridItems: [GridItem] {

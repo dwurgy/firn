@@ -5,9 +5,10 @@ import SwiftUI
 // iOS 27, as Safari's (David's recordings side by side, 2026-11-18): one
 // continuous change. The group's glass grows from the folder's shape to
 // the open card's; each small picture in the folder is the tab's own card,
-// growing to its place; the folder's big name blurs away as the open
-// group's name line comes in; and the tabs after the group ride the same
-// curve to their new places.
+// growing to its place, its title beside it at full size from the first
+// frame; the folder's big name blurs away as the open group's name line
+// comes in; the tabs after the group ride the same curve to their new
+// places; and the cards before it in its row stay in front of the glass.
 //
 // It's drawn once, over the list (`GroupGlideView`), while the real folder,
 // the real open group, and the cards that change grids stay hidden under
@@ -28,9 +29,15 @@ import SwiftUI
     /// The group's tabs drawn: the folder's four, and any others in view.
     let tabs: [UUID]
     let columns: Int
+    /// A loose card's height (the folder's cell), and a card's in the group.
     let cardHeight: CGFloat
+    let tileHeight: CGFloat
     /// Cards (and folders) after the group, which change grids.
     let arrivals: [Arrival]
+    /// Cards before the folder in its row: they stay where they are, in
+    /// front of the growing glass, as Safari's (David's recording,
+    /// 2026-11-18); under the drawing the glass ran over them.
+    let stays: [Arrival]
     /// Everything the drawing stands in for, hidden in the list meanwhile.
     let hidden: Set<UUID>
 
@@ -54,10 +61,10 @@ import SwiftUI
     /// A tab's tile in the open group, title and all. In the card's space.
     func tile(_ index: Int) -> CGRect {
         let count = CGFloat(max(columns, 1))
-        let width = (card.width - 2 * GroupCard.inset - GroupCard.inset * (count - 1)) / count
-        return CGRect(x: GroupCard.inset + CGFloat(index % columns) * (width + GroupCard.inset),
-                      y: GroupCard.headerHeight + CGFloat(index / columns) * (cardHeight + GroupCard.inset),
-                      width: max(width, 1), height: cardHeight)
+        let width = (card.width - 2 * GroupCard.side - GroupCard.columnGap * (count - 1)) / count
+        return CGRect(x: GroupCard.side + CGFloat(index % columns) * (width + GroupCard.columnGap),
+                      y: GroupCard.headerHeight + CGFloat(index / columns) * (tileHeight + GroupCard.rowGap),
+                      width: max(width, 1), height: tileHeight)
     }
 
     /// The middle of the folder's name, down from the folder's top.
@@ -71,22 +78,26 @@ import SwiftUI
 /// The drawing. `share` runs from 0 (folded) to 1 (open); it's `Animatable`
 /// so every frame is laid out on the way, the fades each over their own
 /// stretch of it.
-struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
+struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Animatable {
     let glide: GroupGlide
     var share: CGFloat
     let name: String
     /// A tab's own card at a height, bare or whole.
     let tile: (UUID, CGFloat, Bool) -> Tile
+    /// A tab's title line, as under its card.
+    let title: (UUID) -> Title
     /// A card or folder that changes grids, as it is in the list.
     let cell: (UUID) -> Cell
 
     init(glide: GroupGlide, share: CGFloat, name: String,
          @ViewBuilder tile: @escaping (UUID, CGFloat, Bool) -> Tile,
+         @ViewBuilder title: @escaping (UUID) -> Title,
          @ViewBuilder cell: @escaping (UUID) -> Cell) {
         self.glide = glide
         self.share = share
         self.name = name
         self.tile = tile
+        self.title = title
         self.cell = cell
     }
 
@@ -111,9 +122,12 @@ struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
         let frame = Self.mix(glide.cell, glide.card, share)
         let corner = Self.mix(OverviewRow.gridCornerRadius, GroupCard.cornerRadius, t)
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        // The X, title, and shadow: early as it opens, gone at once as it
-        // folds, as Safari's.
-        let bare = glide.opening ? t < 0.3 : t < 0.94
+        // The X and shadow: early as it opens, gone at once as it folds,
+        // as Safari's.
+        let bare = glide.opening ? t < 0.2 : t < 0.97
+        // The titles: there from the first frame of an opening and gone in
+        // the first of a fold, as Safari's.
+        let titles = glide.opening ? Self.ramp(t, 0, 0.1) : Self.ramp(t, 0.9, 1)
         ZStack(alignment: .topLeading) {
             ForEach(glide.arrivals) { arrival in
                 let spot = Self.mix(arrival.folded, arrival.open, share)
@@ -127,8 +141,11 @@ struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
                 .frame(width: max(frame.width, 1), height: max(frame.height, 1))
                 .offset(x: frame.minX, y: frame.minY)
             ZStack(alignment: .topLeading) {
+                // A card, then its title: the next row's cards ride over
+                // the titles above them until there's room, as Safari's.
                 ForEach(Array(glide.tabs.enumerated()), id: \.element) { index, id in
                     card(id, at: index, in: frame, bare: bare)
+                    titleLine(id, at: index, in: frame).opacity(titles)
                 }
                 folderName(t).position(x: frame.width / 2, y: glide.nameMiddle)
                 nameLine(t)
@@ -136,6 +153,11 @@ struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
             .frame(width: max(frame.width, 1), height: max(frame.height, 1), alignment: .topLeading)
             .clipShape(shape)
             .offset(x: frame.minX, y: frame.minY)
+            ForEach(glide.stays) { stay in
+                cell(stay.id)
+                    .frame(width: stay.open.width, height: stay.open.height)
+                    .offset(x: stay.open.minX, y: stay.open.minY)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .allowsHitTesting(false)
@@ -159,6 +181,22 @@ struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
             .frame(width: whole.width * scale, height: height * scale, alignment: .topLeading)
             .offset(x: Self.mix(small.minX, whole.minX, share) - frame.minX,
                     y: Self.mix(small.minY, whole.minY, share) - frame.minY)
+    }
+
+    /// A tab's title under its card on the way: never scaled, laid out at
+    /// its full width and cut off at the card's, as Safari's (the card
+    /// alone grows; the words don't).
+    private func titleLine(_ id: UUID, at index: Int, in frame: CGRect) -> some View {
+        let small = glide.mini(index).offsetBy(dx: glide.cell.minX, dy: glide.cell.minY)
+        let whole = glide.tile(index).offsetBy(dx: glide.card.minX, dy: glide.card.minY)
+        let height = OverviewRow.gridTitleHeight
+        let width = Self.mix(small.width, whole.width, share)
+        let top = Self.mix(small.maxY, whole.maxY - height, share)
+        return title(id)
+            .frame(width: whole.width, height: height, alignment: .top)
+            .frame(width: max(width, 1), height: height, alignment: .topLeading)
+            .clipped()
+            .offset(x: Self.mix(small.minX, whole.minX, share) - frame.minX, y: top - frame.minY)
     }
 
     /// The folder's name, where the folder has it: it blurs away over the
@@ -193,7 +231,7 @@ struct GroupGlideView<Tile: View, Cell: View>: View, @MainActor Animatable {
         }
         .padding(.leading, 14)
         .frame(minHeight: GroupCard.headerHeight)
-        .padding(.horizontal, GroupCard.inset)
+        .padding(.horizontal, GroupCard.side)
         .frame(width: glide.card.width, alignment: .leading)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .opacity(there)

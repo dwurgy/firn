@@ -50,6 +50,9 @@ struct OverviewRow: View {
     /// Drawn as a group folds or opens (`GroupGlideView`): only the
     /// picture, as it is in the folder; the X, title, and shadow fade.
     var bare = false
+    /// No title under it: the glide draws the title itself, at full size
+    /// beside the growing card, as Safari's.
+    var titled = true
     /// The grid's UIKit cards are swiped by their collection view
     /// (`GridCards`), not here: one place decides between the swipe and
     /// iOS's press, menu, and drag. Elsewhere the row swipes itself.
@@ -173,7 +176,7 @@ struct OverviewRow: View {
             .scaleEffect(swiped && !reduceMotion ? Self.swipeGrowth : 1)
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
-                .opacity(bare ? 0 : 1)
+                .opacity(bare || !titled ? 0 : 1)
                 .animation(.easeOut(duration: Self.bareFade), value: bare)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
@@ -454,6 +457,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight
-            && a.carried == b.carried && a.bare == b.bare && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
+            && a.carried == b.carried && a.bare == b.bare && a.titled == b.titled && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
     }
 }

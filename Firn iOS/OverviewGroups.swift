@@ -144,11 +144,20 @@ struct UndimmedPress: ButtonStyle {
 struct GroupCard: View {
     let space: String
 
-    /// The rows' and cards' 14pt corners plus the 8pt inside, so the
-    /// corners run evenly around the tabs.
-    static let cornerRadius: CGFloat = OverviewRow.cornerRadius + inset
-    /// Inside on the left, right, and bottom, and between tabs.
-    static let inset: CGFloat = 8
+    /// The cards' 15pt corners plus the 12pt at the sides, so the corners
+    /// run evenly around the tabs: 27pt, which is Safari's too.
+    static let cornerRadius: CGFloat = OverviewRow.gridCornerRadius + side
+    /// Safari's open group, measured from David's recording (2026-11-18):
+    /// tabs 12pt in from the sides and 16pt apart across; down, a title and
+    /// the grid's own 9pt, as loose tabs; 5pt under the last titles.
+    static let side: CGFloat = 12
+    static let columnGap: CGFloat = 16
+    static let rowGap: CGFloat = OverviewGridMetrics.rowSpacing
+    static let bottom: CGFloat = 5
+    /// Around an open group in the grid, as Safari's: 24pt under the
+    /// titles above it, 16pt to the cards below.
+    static let gapAbove: CGFloat = 24
+    static let gapBelow: CGFloat = 16
 
     /// The shadow's spread: wider than the Mac's 1pt, to lift the card off the haze.
     static let shadowRadius: CGFloat = 8

@@ -90,12 +90,12 @@ struct FormingCard: ViewModifier {
                             .accessibilityHidden(true)
                     }
                 }
-            Color.clear.frame(height: on && above ? gap + GroupCard.inset : 0)
+            Color.clear.frame(height: on && above ? gap + GroupCard.rowGap : 0)
             content
-            Color.clear.frame(height: on && !above ? gap + GroupCard.inset : 0)
+            Color.clear.frame(height: on && !above ? gap + GroupCard.rowGap : 0)
         }
-        .padding(.horizontal, on ? GroupCard.inset : 0)
-        .padding(.bottom, on ? GroupCard.inset : 0)
+        .padding(.horizontal, on ? GroupCard.side : 0)
+        .padding(.bottom, on ? GroupCard.bottom : 0)
         // Shrinks with the tile as it fades (see the name line).
         .background {
             if on || shown != nil { GroupCard(space: space).opacity(on ? 1 : 0) }

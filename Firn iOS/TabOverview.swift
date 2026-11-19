@@ -178,6 +178,8 @@ struct TabOverview: View {
     }
 
     private var space: String { store.activeSpace.color }
+    /// Between the list's items: Basecamp, runs of loose tabs, and groups.
+    private static let listSpacing: CGFloat = 12
     /// The room above the list's first item.
     private static let topMargin: CGFloat = 8
     var body: some View {
@@ -187,7 +189,7 @@ struct TabOverview: View {
             ScrollView {
                 // 12pt apart (David, 2026-11-05: 8 felt a little tight),
                 // which also gives the ring around the tab on screen room.
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: Self.listSpacing) {
                     // Basecamp first, scrolling away with the list (hidden
                     // while empty); 24pt below it (its own 12pt plus this
                     // stack's 12pt).
@@ -612,7 +614,7 @@ struct TabOverview: View {
     private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
                       moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil,
                       holdMenu: (() -> [[HoldMenuItem]])? = nil, inCollection: Bool = false,
-                      height: CGFloat? = nil, bare: Bool = false) -> some View {
+                      height: CGFloat? = nil, bare: Bool = false, titled: Bool = true) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
             tab: tab,
@@ -635,6 +637,7 @@ struct TabOverview: View {
             holdMenu: holdMenu,
             carried: systemDragged.contains(tab.id),
             bare: bare,
+            titled: titled,
             swipesItself: !inCollection,
             gridSwipe: gridSwipes[tab.id] ?? .none
         )
@@ -717,8 +720,23 @@ struct TabOverview: View {
                     }
                 }
             case let .group(index, group):
+                // Safari's room around an open group (`GroupCard.gapAbove`),
+                // on top of the list's 12pt: more under a row of titles
+                // than under another group or at the top.
                 groupTiles(group, at: index, of: items.count)
+                    .padding(.top, systemDrag && underTabs(items, at: index) ? GroupCard.gapAbove - Self.listSpacing : 0)
+                    .padding(.bottom, systemDrag ? GroupCard.gapBelow - Self.listSpacing : 0)
             }
+        }
+    }
+
+    /// Whether the item before this one is a row of cards (loose tabs or a
+    /// folded group's cell), not an open group or the list's top.
+    private func underTabs(_ items: [TabListItem], at index: Int) -> Bool {
+        guard index > 0 else { return false }
+        switch items[index - 1] {
+        case .tab: return true
+        case let .group(other): return folderCell(other)
         }
     }
 
@@ -836,18 +854,18 @@ struct TabOverview: View {
                                                                       tab: $0.element) }) { entry in
                 if let tab = entry.tab {
                     if lifted {
-                        tile(tab, spot: { _ in })
+                        tile(tab, spot: { _ in }, height: gridMetrics.groupCardHeight)
                     } else {
                         listTile(tab, at: movable ? entry.index : nil, of: tabs.count, loose: false)
                     }
                 }
             }
             // Opened, a folder shows its tabs as a grid inside it, the same
-            // columns as outside, 8pt apart.
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.inset,
+            // columns as outside, at Safari's spacing (`GroupCard`).
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.columnGap,
                                                          alignment: .top),
                                      count: gridMetrics.columns),
-                      spacing: GroupCard.inset) {
+                      spacing: GroupCard.rowGap) {
                 if system, #available(iOS 27, *) {
                     groupTabs.reorderable(collectionID: GridCollection.tabs(group.id))
                 } else {
@@ -855,8 +873,8 @@ struct TabOverview: View {
                 }
             }
         }
-        .padding(.horizontal, GroupCard.inset)
-        .padding(.bottom, closed ? 0 : GroupCard.inset)
+        .padding(.horizontal, GroupCard.side)
+        .padding(.bottom, closed ? 0 : GroupCard.bottom)
         // Folding cards are cut off by the tint closing over them.
         .modifier(FoldMask(on: !system))
         .background {
@@ -995,8 +1013,9 @@ struct TabOverview: View {
             let groups = Dictionary(store.tabGroups.map { ($0.id, $0) }) { a, _ in a }
             GroupGlideView(glide: glide, share: glideShare, name: group.name,
                            tile: { id, height, bare in
-                               tabs[id].map { tile($0, spot: { _ in }, height: height, bare: bare) }
+                               tabs[id].map { tile($0, spot: { _ in }, height: height, bare: bare, titled: false) }
                            },
+                           title: { id in tabs[id].map { GridTitle(tab: $0) } },
                            cell: { id in
                                if let tab = tabs[id] {
                                    tile(tab, spot: { _ in }, inCollection: true)
@@ -1020,10 +1039,10 @@ struct TabOverview: View {
         let tabs = store.tabs(in: group)
         let metrics = gridMetrics
         let columns = max(metrics.columns, 1), height = metrics.cardHeight
+        let tileHeight = metrics.groupCardHeight
         let width = size.width - 2 * OverviewGridMetrics.margin
         guard !tabs.isEmpty, width > 0 else { return nil }
         let column = (width - OverviewGridMetrics.spacing * CGFloat(columns - 1)) / CGFloat(columns)
-        let gap: CGFloat = 12
         // A cell in a run of the grid whose first row starts at `top`.
         func cell(_ index: Int, top: CGFloat) -> CGRect {
             CGRect(x: CGFloat(index % columns) * (column + OverviewGridMetrics.spacing),
@@ -1036,6 +1055,7 @@ struct TabOverview: View {
         }
         let runs = OverviewGridRun.runs(shownItems, inRun: { folderCell($0) })
         var folder: CGRect, card: CGRect, after: [GridRunItem], first: Int, top: CGFloat
+        var row: [GridRunItem]
         if folding {
             guard let at = runs.firstIndex(where: { $0.id == group.id.uuidString }),
                   let open = spots.frames[group.id] else { return nil }
@@ -1045,8 +1065,9 @@ struct TabOverview: View {
             after = []
             if at + 1 < runs.count, case let .tabs(_, items) = runs[at + 1] { after = items }
             first = before.count
-            top = before.isEmpty ? card.minY : card.minY - gap - runHeight(before.count)
+            top = before.isEmpty ? card.minY : card.minY - GroupCard.gapAbove - runHeight(before.count)
             folder = cell(first, top: top)
+            row = Array(before[(first / columns * columns)...])
         } else {
             var found: (items: [GridRunItem], at: Int)?
             for run in runs {
@@ -1060,27 +1081,36 @@ struct TabOverview: View {
             let seenTop = seen.minY - origin.y
             top = seenTop - CGFloat(first / columns) * (height + OverviewGridMetrics.rowSpacing)
             folder = cell(first, top: top)
+            row = Array(found.items[(first / columns * columns)..<first])
             let rows = CGFloat((tabs.count + columns - 1) / columns)
-            card = CGRect(x: 0, y: first == 0 ? top : top + runHeight(first) + gap, width: width,
-                          height: GroupCard.headerHeight + rows * height + rows * GroupCard.inset)
+            card = CGRect(x: 0, y: first == 0 ? top : top + runHeight(first) + GroupCard.gapAbove, width: width,
+                          height: GroupCard.headerHeight + rows * tileHeight + max(rows - 1, 0) * GroupCard.rowGap
+                              + GroupCard.bottom)
         }
         folder.size.height = max(height - OverviewRow.gridTitleHeight, 1)
         // What's in view, with room for the list scrolling as it opens.
         let view = spots.viewport.offsetBy(dx: -origin.x, dy: -origin.y).insetBy(dx: 0, dy: -500)
         var plan = GroupGlide(id: group.id, opening: !folding, cell: folder, card: card, tabs: [],
-                              columns: columns, cardHeight: height, arrivals: [], hidden: [])
+                              columns: columns, cardHeight: height, tileHeight: tileHeight,
+                              arrivals: [], stays: [], hidden: [])
         let drawn = tabs.enumerated().filter { index, _ in
             index < 4 || plan.tile(index).offsetBy(dx: card.minX, dy: card.minY).intersects(view)
         }.prefix(16).map(\.element.id)
         let arrivals = after.enumerated().map { index, item in
             GroupGlide.Arrival(id: item.id, folded: cell(first + 1 + index, top: top),
-                               open: cell(index, top: card.maxY + gap))
+                               open: cell(index, top: card.maxY + GroupCard.gapBelow))
+        }
+        let rowStart = first / columns * columns
+        let stays = row.enumerated().map { index, item in
+            let spot = cell(rowStart + index, top: top)
+            return GroupGlide.Arrival(id: item.id, folded: spot, open: spot)
         }
         plan = GroupGlide(id: group.id, opening: !folding, cell: folder, card: card, tabs: drawn,
-                          columns: columns, cardHeight: height,
+                          columns: columns, cardHeight: height, tileHeight: tileHeight,
                           arrivals: arrivals.filter { $0.folded.intersects(view) || $0.open.intersects(view) }
                               .prefix(12).map { $0 },
-                          hidden: Set(after.map(\.id)).union([group.id]))
+                          stays: stays,
+                          hidden: Set(after.map(\.id)).union(stays.map(\.id)).union([group.id]))
         return plan
     }
 
@@ -1155,7 +1185,8 @@ struct TabOverview: View {
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
         return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down,
-                    holdMenu: systemDrag ? { menu(for: tab) } : nil)
+                    holdMenu: systemDrag ? { menu(for: tab) } : nil,
+                    height: loose ? nil : gridMetrics.groupCardHeight)
             // The grid on iOS 27: iOS's own menu sits on the card's picture
             // (`OverviewRow.holdMenu`); the drag lifts that same picture.
             .modifier(GridDragShape(on: systemDrag))
@@ -1567,10 +1598,10 @@ struct TabOverview: View {
     private func formingLanding(_ drag: Drag, _ forming: Forming) -> CGRect {
         guard let frame = spots.frames[forming.other] else { return drag.start }
         let lane = lane(in: nil)
-        let y = forming.above ? frame.minY - GroupCard.inset - drag.start.height
-                              : frame.maxY + GroupCard.inset
-        return CGRect(x: lane.minX + GroupCard.inset, y: y,
-                      width: lane.width - 2 * GroupCard.inset, height: drag.start.height)
+        let y = forming.above ? frame.minY - GroupCard.rowGap - drag.start.height
+                              : frame.maxY + GroupCard.rowGap
+        return CGRect(x: lane.minX + GroupCard.side, y: y,
+                      width: lane.width - 2 * GroupCard.side, height: drag.start.height)
     }
 
     /// The store makes the forming group, where its card already is.
@@ -1703,13 +1734,13 @@ struct TabOverview: View {
     private func lane(in group: UUID?) -> (minX: CGFloat, width: CGFloat) {
         let whole: (minX: CGFloat, width: CGFloat)
         if let group, let frame = spots.frames[group] {
-            whole = (frame.minX + GroupCard.inset, frame.width - 2 * GroupCard.inset)
+            whole = (frame.minX + GroupCard.side, frame.width - 2 * GroupCard.side)
         } else {
             whole = (spots.viewport.minX + 16, spots.viewport.width - 32)
         }
         // One column's width, under the finger.
         let columns = CGFloat(gridMetrics.columns)
-        let gap = group == nil ? OverviewGridMetrics.spacing : GroupCard.inset
+        let gap = group == nil ? OverviewGridMetrics.spacing : GroupCard.columnGap
         let width = (whole.width - gap * (columns - 1)) / columns
         let left = min(max(finger.x - grabAcross * width, whole.minX), whole.minX + whole.width - width)
         return (left, width)
@@ -2069,7 +2100,7 @@ struct TabOverview: View {
             order = ids
             forming = Forming(other: id, group: store.previewGroup(), above: held < other)
         }
-        resize(to: lane.minX + GroupCard.inset, lane.width - 2 * GroupCard.inset)
+        resize(to: lane.minX + GroupCard.side, lane.width - 2 * GroupCard.side)
         forms += 1
     }
 
@@ -2079,9 +2110,9 @@ struct TabOverview: View {
     /// thaws back. True while it holds.
     private func holdForming() -> Bool {
         guard let forming, let frame = spots.frames[forming.other], let drag else { return false }
-        let gap = drag.start.height + GroupCard.inset
+        let gap = drag.start.height + GroupCard.rowGap
         let cardTop = frame.minY - (forming.above ? gap : 0) - GroupCard.headerHeight
-        let cardBottom = frame.maxY + (forming.above ? 0 : gap) + GroupCard.inset
+        let cardBottom = frame.maxY + (forming.above ? 0 : gap) + GroupCard.bottom
         if finger.y > cardTop, finger.y < cardBottom {
             let above = finger.y < frame.midY
             if above != forming.above {

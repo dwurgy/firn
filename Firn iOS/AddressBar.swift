@@ -1025,7 +1025,7 @@ private struct AddressField: View {
             // way, as every other button does. Made only as typing started,
             // it was put straight at its spot ahead of the field and came in
             // from above (David's recordings, 2026-11-13).
-            BarButton(symbol: "xmark.circle.fill", label: "Clear", tint: Theme.faint) { text = "" }
+            BarButton(symbol: "xmark.circle.fill", label: "Clear", tint: Theme.muted) { text = "" }
                 // Only the fade on its own clock: an animation on the button
                 // moved it on that quicker clock too, ahead of the field. A
                 // hair above 0 when hidden: the rise is the keyboard's own

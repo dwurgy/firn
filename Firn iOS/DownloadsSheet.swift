@@ -143,7 +143,8 @@ struct DownloadPill: View {
                     Text(download.progress.map { "\(Int(($0 * 100).rounded()))%" }
                          ?? size(download.receivedBytes))
                         .monospacedDigit()
-                        .foregroundStyle(Theme.faint)
+                        // Muted, not faint: text needs 4.5:1 (faint is 2.9:1 on paper).
+                        .foregroundStyle(Theme.muted)
                 case .finished:
                     Image(systemName: "checkmark")
                         .font(.caption2.weight(.bold))

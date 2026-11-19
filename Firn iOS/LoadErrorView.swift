@@ -22,7 +22,8 @@ struct LoadErrorView: View {
         VStack(spacing: 0) {
             Image(systemName: symbol)
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Theme.faint)
+                // Muted, not faint: icons need 3:1 (faint is 2.9:1 on paper).
+                .foregroundStyle(Theme.muted)
                 .frame(height: 42)
                 .padding(.bottom, 20)
                 .accessibilityHidden(true)

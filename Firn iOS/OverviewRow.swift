@@ -285,11 +285,12 @@ struct OverviewRow: View {
 }
 
 /// Under a grid card: the site's icon and the page's title, one line, on
-/// the overview's wash (after Safari's).
+/// the overview's wash (after Safari's). 12pt and a 14pt icon, measured
+/// against Safari's at the same scale (David, 2026-11-18).
 struct GridTitle: View {
     let tab: FirnCore.Tab
-    static let titleFont = Font.footnote.weight(.semibold)
-    private static let icon: CGFloat = 16
+    static let titleFont = Font.caption.weight(.semibold)
+    private static let icon: CGFloat = 14
     private var site: String { WebAddress.site(of: tab.url) }
 
     var body: some View {

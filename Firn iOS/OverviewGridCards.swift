@@ -133,9 +133,27 @@ final class GridCardCell: UICollectionViewCell {
         }
     }
 
+    /// A card that changed grids as a group folded or opened: it glides
+    /// from where it was (`from`, its old frame in the cell's own space)
+    /// to its new place, on the fold's curve, so nothing pops (David's
+    /// recording, 2026-11-18). The sublayer transform, as the morph's.
+    func glide(from: CGRect, reduceMotion: Bool) {
+        contentView.alpha = 1
+        let dx = from.minX, dy = from.minY
+        guard !reduceMotion, bounds.width > 0, abs(dx) + abs(dy) > 0.5 else { return }
+        let move = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
+        move.keyPath = "sublayerTransform"
+        move.fromValue = CATransform3DMakeTranslation(dx, dy, 0)
+        move.toValue = CATransform3DIdentity
+        move.duration = move.settlingDuration
+        layer.sublayerTransform = CATransform3DIdentity
+        layer.add(move, forKey: "glide")
+    }
+
     override func prepareForReuse() {
         super.prepareForReuse()
         layer.removeAnimation(forKey: "morph")
+        layer.removeAnimation(forKey: "glide")
         layer.mask = nil
         settle?.stopAnimation(true)
         settle = nil
@@ -183,6 +201,9 @@ struct GridMorph: Equatable {
     /// Folding (the cell shrinks in); opening is the open group's own
     /// glide (`GrowFromCell`).
     let folding: Bool
+    /// Where every card was on screen just before (`GridCards.framesOnScreen`):
+    /// a card the fold moves into another run glides over from there.
+    var glides: [UUID: CGRect] = [:]
     /// Each fold is its own: folding the same group again from the same
     /// spot still shrinks it in (the cells remember the last one they ran).
     var token = UUID()
@@ -224,6 +245,23 @@ struct GridCards: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Every run's collection view, so a fold can note where each card is.
+    @MainActor private static var live = NSHashTable<UICollectionView>.weakObjects()
+
+    /// Each card on screen and its frame in the window, in every run: read
+    /// from the cells themselves, so a card scrolled away never counts.
+    @MainActor static func framesOnScreen() -> [UUID: CGRect] {
+        var frames: [UUID: CGRect] = [:]
+        for view in live.allObjects where view.window != nil {
+            guard let source = view.dataSource as? UICollectionViewDiffableDataSource<Int, UUID> else { continue }
+            for cell in view.visibleCells {
+                guard let path = view.indexPath(for: cell), let id = source.itemIdentifier(for: path) else { continue }
+                frames[id] = cell.convert(cell.bounds, to: nil)
+            }
+        }
+        return frames
+    }
+
     func makeUIView(context: Context) -> UICollectionView {
         let view = UICollectionView(frame: .zero, collectionViewLayout: Self.layout(columns: columns,
                                                                                    cardHeight: cardHeight))
@@ -233,6 +271,7 @@ struct GridCards: UIViewRepresentable {
         view.allowsSelection = false
         view.dragInteractionEnabled = true
         view.reorderingCadence = .fast
+        Self.live.add(view)
         context.coordinator.attach(to: view)
         context.coordinator.update(self, in: view)
         return view
@@ -518,15 +557,80 @@ struct GridCards: UIViewRepresentable {
                     configure(cell, id)
                 }
             }
+            // A fold or unfold moves cards between runs: they glide over
+            // themselves (`glideArrivals`), so the change lands at once
+            // here, with no fade where they were.
+            let folding = new.morph.map { $0.token != glided } ?? false
             if new.ids != shown {
+                let before = Set(shown)
                 shown = new.ids
                 var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
                 snapshot.appendSections([0])
                 snapshot.appendItems(new.ids)
                 // A card closed: the next slides into its place (0.25s, as the list).
-                dataSource?.apply(snapshot, animatingDifferences: !new.reduceMotion && view.window != nil)
+                dataSource?.apply(snapshot, animatingDifferences: !folding && !new.reduceMotion && view.window != nil)
+                // Marked done only once the cards have moved: the fold's
+                // note can come an update before the new order does.
+                if folding, let morph = new.morph {
+                    glided = morph.token
+                    glideArrivals(new.ids.filter { !before.contains($0) && $0 != morph.id }, morph, in: view)
+                }
             }
             morphIfAsked(new, in: view)
+        }
+
+        /// The fold last seen, so its cards glide once.
+        private var glided: UUID?
+        /// Cards come over from another run, not yet on screen here: each
+        /// glides as it's first shown, hidden until then.
+        private var pendingGlides: [UUID: GlideStart] = [:]
+
+        /// Where a card that changed runs glides from: its old frame on
+        /// screen, or a distance below where it lands.
+        private enum GlideStart {
+            case from(CGRect)
+            case below(CGFloat)
+        }
+
+        private func glideArrivals(_ ids: [UUID], _ morph: GridMorph, in view: UICollectionView) {
+            // A card that was off screen has no spot to come from: folding,
+            // it rises from below by as much as the group shrank, with the
+            // others (in the cell's own space, from where it lands).
+            let rise = max(morph.from.height - cardHeight, 0)
+            pendingGlides = ids.reduce(into: [:]) { glides, id in
+                if let from = morph.glides[id] {
+                    glides[id] = .from(from)
+                } else if morph.folding, rise > 0 {
+                    glides[id] = .below(rise)
+                }
+            }
+            guard !pendingGlides.isEmpty else { return }
+            // Only during the fold: a card pushed off screen mustn't glide
+            // in from its old spot when it's scrolled to later.
+            DispatchQueue.main.asyncAfter(deadline: .now() + GridCards.morphDuration + 0.1) { [weak self] in
+                self?.pendingGlides = [:]
+            }
+            view.layoutIfNeeded()
+            for (id, _) in pendingGlides {
+                if let path = dataSource?.indexPath(for: id), let cell = view.cellForItem(at: path) as? GridCardCell {
+                    startGlide(cell, id)
+                }
+            }
+        }
+
+        private func startGlide(_ cell: GridCardCell, _ id: UUID) {
+            guard let start = pendingGlides.removeValue(forKey: id) else { return }
+            cell.contentView.alpha = 0
+            let reduceMotion = parent?.reduceMotion ?? false
+            Self.whenPlaced(cell, tries: 6) { cell in
+                switch start {
+                case let .from(frame):
+                    cell.glide(from: cell.convert(frame, from: nil), reduceMotion: reduceMotion)
+                case let .below(rise):
+                    cell.glide(from: CGRect(origin: CGPoint(x: 0, y: rise), size: cell.bounds.size),
+                               reduceMotion: reduceMotion)
+                }
+            }
         }
 
         /// The group last morphed, so each fold runs once.
@@ -570,10 +674,9 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, willDisplay cell: UICollectionViewCell,
                             forItemAt path: IndexPath) {
-            if let cell = cell as? GridCardCell, let morph = pendingMorph,
-               dataSource?.itemIdentifier(for: path) == morph.id {
-                startMorph(cell)
-            }
+            guard let cell = cell as? GridCardCell, let id = dataSource?.itemIdentifier(for: path) else { return }
+            if let morph = pendingMorph, id == morph.id { startMorph(cell) }
+            if pendingGlides[id] != nil { startGlide(cell, id) }
         }
 
         /// The card's picture, without its title: what iOS lifts, for its

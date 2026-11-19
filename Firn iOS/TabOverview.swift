@@ -694,6 +694,9 @@ struct TabOverview: View {
                           },
                           morph: foldMorph,
                           reduceMotion: reduceMotion)
+                // A run that comes or goes with a fold: its cards glide on
+                // their own (`GridCards`), so the run itself doesn't fade.
+                .transition(.identity)
             case let .tabs(after, entries):
                 let tabs = entries.compactMap { entry in entry.tab.map { (index: entry.index, tab: $0) } }
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
@@ -769,6 +772,7 @@ struct TabOverview: View {
             // Where the group is, so a held tab makes room around it or
             // goes in it.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
+            .modifier(GrowFromCell(from: opening(group)))
             .id(group.id)
             .transition(groupTransition(group))
     }
@@ -780,10 +784,17 @@ struct TabOverview: View {
     private func groupTransition(_ group: TabGroup) -> AnyTransition {
         if drag != nil { return .identity }
         guard systemDrag, !reduceMotion, let morph = foldMorph, morph.id == group.id else { return .opacity }
-        // Folding, it fades quickly under its cell growing down over it,
-        // so there's never a frame with neither.
-        return .asymmetric(insertion: AnyTransition(GrowFromCell(from: morph.from)),
+        // Opening, it grows on its own (`GrowFromCell`). Folding, it fades
+        // quickly under its cell growing down over it, so there's never a
+        // frame with neither.
+        return .asymmetric(insertion: .identity,
                            removal: .opacity.animation(.easeOut(duration: 0.15)))
+    }
+
+    /// Where a group opening out of its folded cell starts, if it is.
+    private func opening(_ group: TabGroup) -> CGRect? {
+        guard systemDrag, !reduceMotion, let morph = foldMorph, morph.id == group.id, !morph.folding else { return nil }
+        return morph.from
     }
 
     /// A group's tint, name line, and tabs: in the list, or `lifted` under
@@ -877,6 +888,16 @@ struct TabOverview: View {
     private func fold(_ group: TabGroup) {
         guard !busy else { return }
         let folding = !group.folded
+        // The list stays where it is. SwiftUI keeps the last scroll to the
+        // tab on screen by id and does it again on any layout change, so a
+        // fold or unfold jumped the list toward that tab (David's
+        // recording, 2026-11-18; Simulator, frame by frame). Pinned to its
+        // offset now, that request is gone.
+        // The point is from the content's top, past the top inset; the
+        // offset alone moved the list 70pt (Simulator, logged).
+        if let scroll = spots.scroll {
+            scrollPosition.scrollTo(point: CGPoint(x: 0, y: scroll.contentOffset.y + scroll.contentInsets.top))
+        }
         if folding {
             for tab in store.tabs(in: group) {
                 spots.frames[tab.id] = nil
@@ -885,8 +906,15 @@ struct TabOverview: View {
         }
         // The grid on iOS 27: the group shrinks into its cell, or grows
         // out of it, from where it is now (Safari's; David, 2026-11-18).
-        if systemDrag, let from = folding ? spots.frames[group.id] : spots.folders[group.id] {
-            let morph = GridMorph(id: group.id, from: from, folding: folding)
+        // Where each card is now, read from the grid's own cells, so cards
+        // the fold moves into another run glide over instead of popping
+        // (David's recording). The folder's spot too: measured from inside
+        // the grid, `spots.folders` isn't told when the overview scrolls,
+        // so an open grew from where the folder was before the last scroll,
+        // often from below the screen (Simulator, frame by frame).
+        let onScreen = systemDrag ? GridCards.framesOnScreen() : [:]
+        if systemDrag, let from = folding ? spots.frames[group.id] : onScreen[group.id] ?? spots.folders[group.id] {
+            let morph = GridMorph(id: group.id, from: from, folding: folding, glides: onScreen)
             foldMorph = morph
             withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
                 store.setFolded(group, folding)

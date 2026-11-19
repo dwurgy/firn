@@ -647,8 +647,13 @@ struct BrowserScreen: View {
         let glide = UUID()
         pullAwaitingPicture = glide
         Task {
-            let image = await picture?.value
-            SwipeTiming.mark(image == nil ? "no picture" : "picture arrived")
+            // No new picture (a page still loading, as a tile just opened
+            // is): the one it had stands in, as on a swipe up. Without it
+            // the page vanished and the overview faded in, no glide
+            // (David's recordings, 2026-11-19).
+            let fresh = await picture?.value
+            SwipeTiming.mark(fresh == nil ? "no new picture" : "picture arrived")
+            let image = fresh ?? pictures.image(for: tab.id)
             guard let image, pullAwaitingPicture == glide else {
                 if image == nil { Self.landingLog.notice("close faded: no picture of the page") }
                 if pullAwaitingPicture == glide { pullAwaitingPicture = nil; fadeToTabs() }

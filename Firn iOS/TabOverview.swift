@@ -25,6 +25,8 @@ struct TabOverview: View {
     /// The tab whose card the page is gliding into or out of: hidden, so
     /// the page is the only one of it on screen.
     private var gliding: UUID? { landing.gliding }
+    /// The overview's own view, drawn alone for the landing's picture.
+    let canvas: OverviewCanvas
     /// Which tab has the tall card while a picked tab grows to the full
     /// screen: still the one that was on screen, so nothing behind the
     /// glide changes size.
@@ -332,7 +334,10 @@ struct TabOverview: View {
             // moment a swipe up starts. Again as it shows (as when it was
             // built on each opening), and while hidden whenever the tab or
             // space on screen changes.
-            .onAppear { getReady(scroller) }
+            .onAppear {
+                getReady(scroller)
+                freezeSoon()
+            }
             .onChange(of: shown) { _, now in
                 if !now { forgetOpening() }
                 getReady(scroller)
@@ -354,7 +359,8 @@ struct TabOverview: View {
                         rested: freezeSoon)
         }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
-        .onChange(of: shown) { _, now in if !now { freezing?.cancel() } }
+        // Hidden again: a picture from behind the page, once it's still.
+        .onChange(of: shown) { freezeSoon() }
         // Over everything, bar included: an open menu's dim (a tap on it
         // closes the menu), the held tab lifted over the list and following
         // the finger, and the menu beside it.
@@ -427,18 +433,43 @@ struct TabOverview: View {
     }
 
     /// Takes the landing's picture once the overview has been still a
-    /// moment (a picture of the whole screen, so only when it's all the
-    /// overview), unless the last one still matches.
+    /// moment, unless the last one still matches. On screen, as it is.
+    /// Behind the page (step 1b: it changed there, or Firn just launched),
+    /// it's first laid out in its settled look (`Landing.posed`), unseen,
+    /// for the few frames the picture needs; a swipe up or the tabs button
+    /// in that moment ends the pose and the picture is dropped.
     private func freezeSoon() {
         freezing?.cancel()
-        guard shown, !reduceMotion else { return }
+        guard !reduceMotion else { return }
+        let shown = shown
         freezing = Task {
             try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled, atRest else { return }
+            guard !Task.isCancelled else { return }
             let now = look()
             if frozen?.look == now { return }
-            if let made = await FrozenOverview.take(look: now), !Task.isCancelled { frozen = made }
+            if shown {
+                guard atRest else { return }
+            } else {
+                guard hiddenAtRest else { return }
+                landing.posed = true
+                try? await Task.sleep(for: .milliseconds(80))
+                guard !Task.isCancelled, landing.posed, hiddenAtRest, look() == now else {
+                    landing.unpose()
+                    return
+                }
+            }
+            let picture = canvas.take()
+            if !shown { landing.unpose() }
+            guard let picture else { return }
+            if let made = await FrozenOverview.make(from: picture, look: now), !Task.isCancelled { frozen = made }
         }
+    }
+
+    /// Behind the page with nothing moving: no landing, no pull, Firn in
+    /// front.
+    private var hiddenAtRest: Bool {
+        landing.gliding == nil && landing.heldCard == nil && landing.arrival <= 0 && landing.listIn <= 0
+            && !typing && UIApplication.shared.applicationState == .active
     }
 
     /// What an opening takes as it starts: the list scrolled to the tab on

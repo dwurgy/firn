@@ -7,8 +7,9 @@ import UIKit
 /// 2026-11-13). Blurring the live list every frame took about 200 of the
 /// GPU's offscreen passes a frame and dropped half the frames of each swipe
 /// up on David's iPhone (Instruments, `docs/IOS-PLAN.md`). Instead, one flat
-/// picture of the overview, its bar included, is taken whenever it settles
-/// on screen, and as a tab lands that one picture is blurred each frame,
+/// picture of the overview, its bar included, is taken whenever it settles,
+/// on screen or behind the page (its own view drawn alone, `OverviewCanvas`;
+/// step 1b), and as a tab lands that one picture is blurred each frame,
 /// less and less (`FocusPull`), until the live list takes over.
 ///
 /// The picture is only used while it still matches what the overview will
@@ -47,18 +48,19 @@ struct FrozenOverview {
     /// How soft it starts (pt). Safari's starts so soft the cards can
     /// hardly be read (David's recording beside Safari's, 2026-11-13).
     static let radius: CGFloat = 26
-    /// The screen as it is now, its edges faded off the main thread.
+    /// The overview as it is now, its edges faded off the main thread.
     /// They fade out over this much (pt): it grows from 92% with the
     /// list, and a hard edge showed against the haze behind it (Simulator,
     /// 2026-11-14); the 8% it starts short is about 16pt a side.
     static let feather: CGFloat = 28
 
-    @MainActor static func take(look: Look) async -> FrozenOverview? {
+    /// `picture`: the overview drawn alone (`OverviewCanvas.take`).
+    @MainActor static func make(from picture: UIImage, look: Look) async -> FrozenOverview? {
         // At the screen's own scale: it becomes sharp, then swaps with the
         // live list. At one pixel a point, iOS drew it snapped to whole
         // points, about half a point up and left of the real thing, and the
         // swap showed double (Simulator, 2026-11-19).
-        guard let picture = ScreenPicture.take(scale: nil), let source = picture.cgImage else { return nil }
+        guard let source = picture.cgImage else { return nil }
         let scale = picture.scale
         let feather = Self.feather * scale
         let feathered = await Task.detached(priority: .utility) {

@@ -34,6 +34,17 @@ final class Landing {
     var forward: CGFloat = 0
     /// How far it has come into focus (`ComesForward.focus`).
     var focus: CGFloat = 0
+    /// The overview, hidden behind the page, laid out in its settled look
+    /// for the moment its picture is taken (`TabOverview.freezeSoon`, step
+    /// 1b): behind the page it otherwise waits as a landing starts, its
+    /// list out, smaller, and its bar gone. Only the overview's own pieces
+    /// read it; the page and its bar don't.
+    var posed = false
+
+    /// A swipe up or the tabs button: the overview is about to show.
+    func unpose() {
+        if posed { posed = false }
+    }
 }
 
 /// What the overview can ask the screen to do. Always equal while Reduce
@@ -66,7 +77,7 @@ struct LandingBand: ViewModifier {
 
     func body(content: Content) -> some View {
         let floor = !off && landing.gliding != nil ? max(floor, glidingFloor) : floor
-        content.modifier(ArrivalBand(arrival: off ? 0 : landing[keyPath: value], range: range,
+        content.modifier(ArrivalBand(arrival: off ? 0 : landing.posed ? 1 : landing[keyPath: value], range: range,
                                      fadesIn: true, floor: floor))
     }
 }
@@ -82,8 +93,10 @@ struct LandingForward: ViewModifier {
     var inScroll = false
 
     func body(content: Content) -> some View {
-        let listing = landing.listIn > 0
-        content.modifier(ComesForward(through: landing.forward, focus: landing.focus, middle: middle, off: off,
+        let posed = landing.posed
+        let listing = posed || landing.listIn > 0
+        content.modifier(ComesForward(through: posed ? 1 : landing.forward, focus: posed ? 1 : landing.focus,
+                                      middle: middle, off: off,
                                       inScroll: inScroll, blurs: listing, scales: scalesWithList ? listing : true))
     }
 }
@@ -95,7 +108,7 @@ struct LandingDim: View {
     var body: some View {
         Theme.lookoutDim
             .ignoresSafeArea()
-            .opacity(1 - landing.arrival)
+            .opacity(landing.posed ? 0 : 1 - landing.arrival)
             .allowsHitTesting(false)
     }
 }

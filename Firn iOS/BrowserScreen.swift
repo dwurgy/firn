@@ -18,6 +18,8 @@ struct BrowserScreen: View {
     /// one object (`Landing`, 2i step 3). The values keep their own names
     /// here (`arrival`, `gliding`, …), each passing through to it.
     @State private var landing = Landing()
+    /// The overview's own view, drawn alone for its picture (`OverviewHost`).
+    @State private var canvas = OverviewCanvas()
     /// What a pull and the page's picture move, read only by the small
     /// pieces that draw them (`Hold`, 2i step 4). The values keep their own
     /// names here (`box`, `pull`, …), each passing through to it.
@@ -275,16 +277,21 @@ struct BrowserScreen: View {
             // up only reveals it: building it on each swipe held the screen
             // still for the first ~80ms, and 1.1s the first time after
             // launch (David's iPhone, 2026-11-10).
-            TabOverview(store: store, pictures: pictures, spots: spots, landing: landing,
-                        screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
-                        actions: OverviewActions(
-                            open: openTab,
-                            done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
-                            newTab: startNewTab, key: [reduceMotion, voiceOver]),
-                        typing: editing, shown: showingTabs)
-                // Typing from + leaves the overview where it is, under
-                // the dim; its own bar stays behind the keyboard.
-                .ignoresSafeArea(.keyboard)
+            // In a view of its own, so it can be drawn while the page covers it
+            // (`OverviewHost`); its surroundings handed on by hand.
+            OverviewHost(canvas: canvas) {
+                TabOverview(store: store, pictures: pictures, spots: spots, landing: landing, canvas: canvas,
+                            screenMiddle: pageFrame.width > 0 ? CGPoint(x: pageFrame.midX, y: pageFrame.midY) : nil,
+                            actions: OverviewActions(
+                                open: openTab,
+                                done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
+                                newTab: startNewTab, key: [reduceMotion, voiceOver]),
+                            typing: editing, shown: showingTabs)
+                    .environment(\.newSpace, SheetAction { [sheets] in sheets.newSpace = true })
+                    .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
+                    .environment(sending)
+            }
+                .ignoresSafeArea()
                 .opacity(showingTabs ? 1 : 0)
                 .allowsHitTesting(showingTabs && !editing && gliding == nil)
                 .accessibilityHidden(!showingTabs || editing)
@@ -626,6 +633,7 @@ struct BrowserScreen: View {
         // the card hidden and its line out until the picture lands; the
         // page's picture is taken meanwhile.
         SwipeTiming.begin("tabs button", tab: tab.id)
+        landing.unpose()
         let picture = pictures.capture(tab)
         beginGlide(of: tab)
         // WebKit may never answer (a busy page). Waited on with no limit,
@@ -1032,6 +1040,7 @@ struct BrowserScreen: View {
         let lingering = standIn
         let lingeringTop = standInTop
         SwipeTiming.begin(up ? "swipe up" : "sideways swipe", tab: tab.id)
+        landing.unpose()
         if lingering != nil { SwipeTiming.mark("used the picture already up") }
         let picture = lingering == nil ? pictures.capture(tab) : nil
         let started = Pull(tab: tab, start: drag.startLocation, picture: picture,

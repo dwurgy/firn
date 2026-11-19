@@ -1,5 +1,6 @@
 import CloudKit
 import FirnCore
+import StoreKit
 import SwiftUI
 
 /// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): Spaces, then
@@ -28,6 +29,8 @@ struct SettingsSheet: View {
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
     @State private var availability = ICloudSync.Availability.available
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
+    @Environment(TipJar.self) private var tipJar
+    @Environment(\.purchase) private var purchase
 
     /// The space picked, or the one on screen when none is (or it's gone).
     private var selected: Space {
@@ -93,6 +96,7 @@ struct SettingsSheet: View {
 
                 privacySection
                 syncSection
+                tipJarSection
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -271,6 +275,68 @@ struct SettingsSheet: View {
                 ForEach(ICloudSync.whatSyncs(on: device), id: \.self) { footnote($0) }
             }
         }
+    }
+
+    /// The tip jar (`TipJar.swift`): the family's line, then the three tips
+    /// with the App Store's own prices; after a tip, the thank-you in their
+    /// place. Last in Settings, and never shown anywhere unasked.
+    private var tipJarSection: some View {
+        Section {
+            if tipJar.thanked {
+                Text("Thank you. It really does help.")
+                    .font(.body)
+                    .foregroundStyle(Theme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .listRowBackground(Theme.hover)
+            } else {
+                switch tipJar.state {
+                case .loading:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .listRowBackground(Theme.hover)
+                        .accessibilityLabel("Loading tips")
+                case .unavailable:
+                    Text("Tips can’t be loaded right now.")
+                        .font(.body)
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .listRowBackground(Theme.hover)
+                case .ready:
+                    ForEach(tipJar.tips) { tip in
+                        Button {
+                            Task { await tipJar.buy(tip, with: purchase) }
+                        } label: {
+                            HStack {
+                                Text(tip.displayName)
+                                    .foregroundStyle(Theme.ink)
+                                Spacer()
+                                if tipJar.buying == tip.id {
+                                    ProgressView()
+                                } else {
+                                    Text(tip.displayPrice)
+                                        .foregroundStyle(Theme.muted)
+                                        .monospacedDigit()
+                                }
+                            }
+                            .font(.body)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(tipJar.buying != nil)
+                        .listRowBackground(Theme.hover)
+                        .accessibilityLabel("\(tip.displayName), \(tip.displayPrice)")
+                    }
+                }
+            }
+        } header: {
+            sectionTitle("Tip Jar")
+        } footer: {
+            if !tipJar.thanked {
+                footnote("Firn is made by one person. If it makes your day a little calmer, a tip helps keep it going.")
+            }
+        }
+        .task { await tipJar.load() }
     }
 
     private var nameField: some View {

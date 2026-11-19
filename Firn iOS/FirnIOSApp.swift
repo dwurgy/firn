@@ -18,6 +18,9 @@ struct FirnIOSApp: App {
     /// can arrive before the browser is made, and making it early crashes
     /// (above).
     @State private var incoming: URL?
+    /// Made at launch so tips that finish later (Ask to Buy) are finished
+    /// whenever Firn is open, not only while Settings is.
+    @State private var tipJar = TipJar()
 
     /// Gooper Deck, if the build copied it in (Typography.swift). Fonts are
     /// safe to register this early; only web views must wait (above).
@@ -44,6 +47,7 @@ struct FirnIOSApp: App {
                 if browser == nil { browser = Browser() }
             }
             .onOpenURL { incoming = $0 }
+            .environment(tipJar)
         }
         .onChange(of: scenePhase) {
             guard scenePhase != .active, let browser else { return }

@@ -154,9 +154,11 @@ struct GroupCard: View {
     static let columnGap: CGFloat = 16
     static let rowGap: CGFloat = OverviewGridMetrics.rowSpacing
     static let bottom: CGFloat = 5
-    /// Around an open group in the grid, as Safari's: 24pt under the
-    /// titles above it, 16pt to the cards below.
-    static let gapAbove: CGFloat = 24
+    /// Around an open group in the grid, as Safari's: 10pt under the
+    /// titles above it (a row's usual room; measured from David's
+    /// screenshots, 2026-11-19: the 24pt first read from a recording was
+    /// Safari's floating button, not the title), 16pt to the cards below.
+    static let gapAbove: CGFloat = 10
     static let gapBelow: CGFloat = 16
 
     /// The shadow's spread: wider than the Mac's 1pt, to lift the card off the haze.

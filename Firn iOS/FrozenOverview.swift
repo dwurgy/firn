@@ -1,16 +1,15 @@
-import Accelerate
 import SwiftUI
 import UIKit
 
-/// The overview, softened once (2026-11-14): as a tab lands, the overview
-/// starts heavily blurred and comes into focus, as Safari's does (David,
+/// The overview's picture for the focus pull (2026-11-19; softened once
+/// and cross-faded before, 2026-11-14): as a tab lands, the overview starts
+/// heavily blurred and comes into focus, as Safari's does (David,
 /// 2026-11-13). Blurring the live list every frame took about 200 of the
 /// GPU's offscreen passes a frame and dropped half the frames of each swipe
-/// up on David's iPhone (Instruments, `docs/IOS-PLAN.md`). Instead, a
-/// quarter-size picture of the overview is taken whenever it settles on
-/// screen, blurred once off the main thread, and as a tab lands it fades
-/// out over the sharp list: blurred to clear in one cross-fade, and nothing
-/// blurred per frame.
+/// up on David's iPhone (Instruments, `docs/IOS-PLAN.md`). Instead, one flat
+/// picture of the overview, its bar included, is taken whenever it settles
+/// on screen, and as a tab lands that one picture is blurred each frame,
+/// less and less (`FocusPull`), until the live list takes over.
 ///
 /// The picture is only used while it still matches what the overview will
 /// show (`Look`); otherwise the landing simply has no blur (the dim and the
@@ -48,56 +47,43 @@ struct FrozenOverview {
     /// How soft it starts (pt). Safari's starts so soft the cards can
     /// hardly be read (David's recording beside Safari's, 2026-11-13).
     static let radius: CGFloat = 26
-    /// The picture's scale: a quarter of the points, as the hold menu's
-    /// (`ScreenPicture`); it's blurred anyway.
-    static let scale: CGFloat = 0.25
-
-    /// The screen as it is now, small, blurred off the main thread.
-    /// Its edges fade out over this much (pt): it grows from 92% with the
+    /// The screen as it is now, its edges faded off the main thread.
+    /// They fade out over this much (pt): it grows from 92% with the
     /// list, and a hard edge showed against the haze behind it (Simulator,
     /// 2026-11-14); the 8% it starts short is about 16pt a side.
     static let feather: CGFloat = 28
 
     @MainActor static func take(look: Look) async -> FrozenOverview? {
-        guard let picture = ScreenPicture.take(), let source = picture.cgImage else { return nil }
-        let pixels = radius * scale
+        // At the screen's own scale: it becomes sharp, then swaps with the
+        // live list. At one pixel a point, iOS drew it snapped to whole
+        // points, about half a point up and left of the real thing, and the
+        // swap showed double (Simulator, 2026-11-19).
+        guard let picture = ScreenPicture.take(scale: nil), let source = picture.cgImage else { return nil }
+        let scale = picture.scale
         let feather = Self.feather * scale
-        let blurred = await Task.detached(priority: .utility) {
-            blur(source, radius: pixels, feather: feather)
+        let feathered = await Task.detached(priority: .utility) {
+            Self.feather(source, over: feather)
         }.value
-        guard let blurred else { return nil }
-        return FrozenOverview(image: UIImage(cgImage: blurred, scale: scale, orientation: .up), look: look)
+        guard let feathered else { return nil }
+        return FrozenOverview(image: UIImage(cgImage: feathered, scale: scale, orientation: .up), look: look)
     }
 
-    /// Three box blurs, together a Gaussian, edges held,
-    /// then the edges faded out over `feather` pixels.
-    private nonisolated static func blur(_ source: CGImage, radius: CGFloat, feather: CGFloat) -> CGImage? {
+    /// The picture with its edges faded out over `feather` pixels.
+    private nonisolated static func feather(_ source: CGImage, over feather: CGFloat) -> CGImage? {
         let width = source.width, height = source.height
         guard width > 0, height > 0 else { return nil }
         let rowBytes = width * 4
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let info = CGImageAlphaInfo.premultipliedLast.rawValue
-        var pixels = [UInt8](repeating: 0, count: rowBytes * height)
         var spare = [UInt8](repeating: 0, count: rowBytes * height)
-        // As `PillBackdrop`: boxes about twice the radius wide, odd.
-        let box = UInt32(max(Int(radius * 2), 1) | 1)
-        let done: Bool = pixels.withUnsafeMutableBytes { raw in
-            spare.withUnsafeMutableBytes { other in
-                guard let context = CGContext(data: raw.baseAddress, width: width, height: height,
-                                              bitsPerComponent: 8, bytesPerRow: rowBytes, space: space,
-                                              bitmapInfo: info) else { return false }
-                context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
-                var a = vImage_Buffer(data: raw.baseAddress, height: vImagePixelCount(height),
-                                      width: vImagePixelCount(width), rowBytes: rowBytes)
-                var b = vImage_Buffer(data: other.baseAddress, height: vImagePixelCount(height),
-                                      width: vImagePixelCount(width), rowBytes: rowBytes)
-                let flags = vImage_Flags(kvImageEdgeExtend)
-                return vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError
-                    && vImageBoxConvolve_ARGB8888(&b, &a, nil, 0, 0, box, box, nil, flags) == kvImageNoError
-                    && vImageBoxConvolve_ARGB8888(&a, &b, nil, 0, 0, box, box, nil, flags) == kvImageNoError
-            }
+        let done: Bool = spare.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(data: raw.baseAddress, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: rowBytes, space: space,
+                                          bitmapInfo: info) else { return false }
+            context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
         }
-        // The blur ended in `spare`. Premultiplied, so every channel fades.
+        // Premultiplied, so every channel fades.
         guard done else { return nil }
         let reach = max(feather, 1)
         for y in 0..<height {
@@ -119,8 +105,14 @@ struct FrozenOverview {
 }
 
 /// The frozen picture, placed where it was taken: it's of the whole window.
-struct FrozenOverviewView: View {
+/// `effects` (the focus pull and the growth) go on the picture itself,
+/// inside the placing: around it, the growth also scaled the place this
+/// reads for itself, and the picture slid up and left of the live list by a
+/// few points mid-glide, a double image as they swapped (Simulator,
+/// 2026-11-19).
+struct FrozenOverviewView<Effects: ViewModifier>: View {
     let image: UIImage
+    let effects: Effects
 
     var body: some View {
         GeometryReader { box in
@@ -128,6 +120,7 @@ struct FrozenOverviewView: View {
             Image(uiImage: image)
                 .resizable()
                 .frame(width: image.size.width, height: image.size.height)
+                .modifier(effects)
                 .offset(x: -frame.minX, y: -frame.minY)
         }
         .ignoresSafeArea()

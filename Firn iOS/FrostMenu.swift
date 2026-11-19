@@ -446,15 +446,17 @@ private struct MenuSeparator: View {
 /// A small picture of the whole screen, taken as a menu opens, for its
 /// frost. Kept in memory with the open menu only, never saved.
 @MainActor enum ScreenPicture {
-    static func take() -> UIImage? {
+    static func take(scale: CGFloat? = 0.25) -> UIImage? {
         guard let window = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)
         else { return nil }
         let format = UIGraphicsImageRendererFormat(for: window.traitCollection)
-        // It's blurred anyway: a quarter of the points is plenty, and quick.
-        format.scale = 0.25
+        // It's blurred anyway: a quarter of the points is plenty, and quick
+        // (the overview's focus pull asks for the screen's own, `nil`:
+        // `FrozenOverview`).
+        if let scale { format.scale = scale }
         format.opaque = true
         return UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)

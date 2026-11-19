@@ -267,6 +267,7 @@ struct TabOverview: View {
                 // 2026-11-13). A hair above 0, so the cards' blur isn't dropped
                 // and rebuilt mid-glide.
                 .modifier(LandingBand(landing: landing, value: \.listIn, range: 0...1, floor: 0.002))
+                .modifier(LandingUnderPicture(landing: landing, pictured: pictured))
                 // Smaller only once a page is let go (the list is unseen
                 // before): shrunk while hidden, the scroll view's turn to
                 // the tab on screen (`getReady`) also slid it sideways, about
@@ -323,6 +324,7 @@ struct TabOverview: View {
                     // a hair above 0 while gliding keeps its glass ready.
                     .modifier(LandingBand(landing: landing, value: \.arrival, range: 0.55...1,
                                           glidingFloor: 0.002, off: typing))
+                    .modifier(LandingUnderPicture(landing: landing, pictured: pictured))
                     .modifier(LandingForward(landing: landing, middle: screenMiddle, off: reduceMotion))
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
@@ -338,11 +340,12 @@ struct TabOverview: View {
             .onChange(of: store.activeTab?.id) { if !shown { getReady(scroller) } }
             .onChange(of: store.activeSpace.id) { if !shown { getReady(scroller) } }
         }
-        // As a tab lands, the overview softened once fades out over the
-        // sharp list, growing and brightening with it (`FrozenOverview`);
-        // without an up-to-date picture, no blur at all.
+        // As a tab lands, the overview's picture covers the list and bar,
+        // its blur shrinking to nothing, growing and brightening with them,
+        // then they take over (`FrozenOverview`); without an up-to-date
+        // picture, no blur at all.
         .overlay {
-            if let frozen, !reduceMotion, frozen.look.matches(look()) {
+            if let frozen, pictured {
                 LandingFrozen(landing: landing, image: frozen.image, middle: screenMiddle)
             }
         }
@@ -393,6 +396,12 @@ struct TabOverview: View {
                 if let naming { store.rename(naming, to: name) }
             }
         }
+    }
+
+    /// There's a picture of the overview as it is now, for the landing.
+    private var pictured: Bool {
+        guard let frozen, !reduceMotion else { return false }
+        return frozen.look.matches(look())
     }
 
     /// Settled on screen: nothing moving, held, or open over it.

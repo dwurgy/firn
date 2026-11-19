@@ -100,8 +100,12 @@ struct LandingDim: View {
     }
 }
 
-/// The overview softened once (`FrozenOverview`), fading out over the sharp
-/// list as a tab lands; only while one glides.
+/// The overview's picture (`FrozenOverview`) over the list and bar while a
+/// tab glides, pulled into focus: there at full strength from the let-go's
+/// first frame (never during a hold, when only the haze shows), its blur
+/// shrinking to nothing, then the live list takes over. Opening runs it
+/// backward. Put in as the glide begins and shown by a step, not by being
+/// added later: a view added mid-animation starts at the animation's end.
 struct LandingFrozen: View {
     let landing: Landing
     let image: UIImage
@@ -109,11 +113,91 @@ struct LandingFrozen: View {
 
     var body: some View {
         if landing.gliding != nil {
-            FrozenOverviewView(image: image)
-                .opacity(1 - Double(min(max(landing.focus, 0), 1)))
-                .modifier(LandingBand(landing: landing, value: \.listIn, range: 0...1))
-                .modifier(LandingForward(landing: landing, middle: middle, off: false))
+            FrozenOverviewView(image: image, effects: LandingFocusPull(landing: landing)
+                .concat(LandingStep(landing: landing, value: \.listIn, from: 0.0001))
+                .concat(LandingForward(landing: landing, middle: middle, off: false)))
+                .transition(.identity)
         }
+    }
+}
+
+/// `FocusPull` on the landing's focus, read here alone, so the blur runs on
+/// the focus's own curve whatever else moves in the same moment.
+struct LandingFocusPull: ViewModifier {
+    let landing: Landing
+
+    func body(content: Content) -> some View {
+        content.modifier(FocusPull(focus: landing.focus))
+    }
+}
+
+/// The picture's blur and its hand-over, from how far the overview has come
+/// into focus (0 to 1). The blur really shrinks, a focus pull, where the
+/// picture blurred once and cross-faded let the sharp list show through a
+/// pale haze midway (David's recordings beside Safari's, 2026-11-19).
+/// One picture blurred each frame; the live list was about 200 passes.
+struct FocusPull: ViewModifier, Animatable {
+    var focus: CGFloat
+    /// From here on the picture fades out over the live list. Not held to
+    /// the very end: the picture was taken the last time the overview
+    /// rested, and its scroll may be a few points off (`Look.scroll`), so
+    /// the two swap while the blur left (about 2.5pt) still hides that.
+    static let handOver: CGFloat = 0.9
+
+    nonisolated var animatableData: CGFloat {
+        get { focus }
+        set { focus = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let focus = min(max(focus, 0), 1)
+        content
+            .blur(radius: FrozenOverview.radius * (1 - focus))
+            .opacity(focus < Self.handOver ? 1 : Double((1 - focus) / (1 - Self.handOver)))
+    }
+}
+
+/// Shown from the moment one of the landing's values reaches `from`, in one
+/// step even while that value is animated; `below` until then.
+struct LandingStep: ViewModifier {
+    let landing: Landing
+    let value: KeyPath<Landing, CGFloat>
+    let from: CGFloat
+    var below: Double = 0
+    var off = false
+
+    func body(content: Content) -> some View {
+        content.modifier(Step(value: off ? 1 : landing[keyPath: value], from: from, below: below))
+    }
+
+    private struct Step: ViewModifier, Animatable {
+        var value: CGFloat
+        let from: CGFloat
+        let below: Double
+
+        nonisolated var animatableData: CGFloat {
+            get { value }
+            set { value = newValue }
+        }
+
+        func body(content: Content) -> some View {
+            content.opacity(value >= from ? 1 : below)
+        }
+    }
+}
+
+/// The live list and bar wait unseen under the overview's picture while it
+/// covers them, and are there, whole, the moment it starts to fade
+/// (`FocusPull.handOver`): the picture's soft edges would otherwise show
+/// them sharp around a blurred middle. A hair above nothing, so their glass
+/// stays alive. `pictured`: there is a picture for this landing.
+struct LandingUnderPicture: ViewModifier {
+    let landing: Landing
+    let pictured: Bool
+
+    func body(content: Content) -> some View {
+        content.modifier(LandingStep(landing: landing, value: \.focus, from: FocusPull.handOver,
+                                     below: 0.002, off: !pictured || landing.gliding == nil))
     }
 }
 

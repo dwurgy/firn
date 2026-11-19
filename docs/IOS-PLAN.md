@@ -569,6 +569,13 @@ Safari's fit a spring with no bounce: open about `response 0.33`, close about `0
 5. **The bars' timing.**
 6. **Tiles on the same treatment,** measured from a new recording first, then a look over: light, dark, Reduce Motion (stays a cross-fade), and Reduce Transparency.
 
+**Step 1 built (2026-11-19; Simulator, not yet on David's iPhone).** The picture (`FrozenOverview`) is now taken sharp, at the screen's own scale, and blurred live, 26pt down to nothing, on the focus's own curve (`FocusPull`); it covers the list and bar at full strength from the let-go's first frame (never during a hold), and the live list and bar wait unseen under it (`LandingUnderPicture`) until the last tenth of the focus, when the picture fades out over them under about 2.5pt of blur. Opening runs it backward. Recorded and checked frame by frame, opening and closing. Two things found on the way: at one pixel a point iOS drew the picture snapped to whole points, half a point off the real thing; and the picture placed itself by its place on screen, which the growth scaled, so it slid a few points up and left mid-glide (the old soft picture hid both).
+
+- **Not measured:** what blurring a full-size picture each frame costs on David's iPhone (Instruments, with the cable). If it drops frames, a smaller picture for the heavy blur is the next thing to try.
+- **Known gap, as before:** the picture can only be taken while the overview is on screen and at rest. If the overview changes while hidden (opening a tab folds the other open groups, a new tab from a link, a switch on the bar, the first swipe up after launch), there's no picture and the close has no blur at all. Now that the pull is right this shows more. To close it, the overview would need a way to be drawn while it's behind the page; its own step.
+- The page's own tabs button shows as a pale disc over the blurred bar for a few frames of a close: the bars' timing, step 5.
+- The picture shows the landing tab's own card (blurred) where the page is heading; the page always covers it by the time it's sharp. To judge on the iPhone after a held pull.
+
 Not verified: how far the overview grows as it comes forward (92% to full, measured 2026-11-13, not measured again here), and whether Safari's held page shrinks further than Firn's for the same finger travel (58% against 69% in these recordings, but the travel wasn't the same).
 
 ## 4. What goes into CLAUDE.md
@@ -761,7 +768,7 @@ From the build installed 2026-11-18 (TestFlight configuration). One at a time, d
 6. **The space pill, tap and hold:** a tap shows only the spaces; holding shows the spaces plus Space Settings… and New Space….
 7. **Switching spaces:** a better whole-screen motion than today's crossfade, which isn't smooth.
 8. Find on Page works (David). Nothing to do.
-9. **Opening and closing tiles and tabs:** needs Safari's polish. Planned (2026-11-19, six steps: "Plan: opening and closing tabs and tiles as Safari's"); next, step 1.
+9. **Opening and closing tiles and tabs:** needs Safari's polish. Planned (2026-11-19, six steps: "Plan: opening and closing tabs and tiles as Safari's"); step 1 built; next, step 2.
 10. **The address bar pill on Back and Forward:** it jumps a little instead of resizing smoothly.
 11. Native glass ("Frosty, no tint"): David is generally happy with it. Nothing to do.
 12. **The Basecamp tile's hold menu** (David, 2026-11-19; for later, not started): still not fixed. Two things. (a) It is still Firn's own menu (`FrostMenu`, `TabOverview.tileMenu`), where tabs and groups have iOS's own; taken to mean it should become iOS's own too ("Plan: iOS's own menus and drag"); ask David if he meant something else as well. (b) The words: the row that closes a tile says "Remove from Basecamp", which isn't intuitive and isn't the Mac's. It becomes **Close**, beside **Move to Tabs** (already there), as the Mac's tile menu; the shake's undo name and VoiceOver follow, and CLAUDE.md's line on iOS's red Close rows names "Remove from Basecamp" and needs the same change.

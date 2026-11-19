@@ -3,27 +3,23 @@ import FirnCore
 import StoreKit
 import SwiftUI
 
-/// Settings on the iPhone (docs/IOS-PLAN.md, phase 4, step 3): Spaces, then
-/// blocking's switch, and at the end, sync's switch (docs/SYNC-PLAN.md, step 3). Every space in its order (hold and
-/// drag to reorder), and below, the one picked: its name, color, sign-ins,
-/// and Delete, in the Mac's words (`Firn/SpacesSettings.swift`). Changes
-/// apply as they're made; only Stop Sharing and Delete ask first.
+/// Settings on the iPhone, as iOS's own settings screens (David, 2026-11-19:
+/// "native iOS, smooth and organized"): a navigation bar with Done, grouped
+/// sections on the system background, and each space its own page.
 ///
-/// One list rather than a page per space: the same shape as the Mac's, and
-/// no navigation bar of stock glass. On Firn's warm paper washed in the
-/// picked space's color, as New Space is.
+/// - Spaces: every space in its order (hold and drag to reorder); a tap opens
+///   its page (name, color, sign-ins, and Delete, in the Mac's words,
+///   `Firn/SpacesSettings.swift`).
+/// - Privacy: blocking's switch. iCloud: sync's switch (docs/SYNC-PLAN.md).
+/// - Tip Jar, last: the family's shared jar, its words unchanged.
+///
+/// Changes apply as they're made; only Stop Sharing and Delete ask first.
 struct SettingsSheet: View {
     let store: BrowserStore
     let sync: ICloudSync
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedID: UUID?
-    /// The name as typed; the store keeps the last name that wasn't blank.
-    @State private var name = ""
-    @State private var confirmingStopSharing = false
-    @State private var deleting: Space?
-    @FocusState private var nameFocused: Bool
+    @State private var path: [UUID] = []
     /// The saved switch, so it goes off by itself when the engine turns sync
     /// off (signed out of iCloud, another account, or Firn's data deleted).
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
@@ -32,197 +28,75 @@ struct SettingsSheet: View {
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
 
-    /// The space picked, or the one on screen when none is (or it's gone).
-    private var selected: Space {
-        store.spaces.first { $0.id == selectedID } ?? store.activeSpace
-    }
-
     var body: some View {
-        let space = selected
-        VStack(spacing: 0) {
-            header
+        NavigationStack(path: $path) {
             List {
-                Section {
-                    ForEach(store.spaces) { space in
-                        row(space)
-                    }
-                    .onMove { from, to in
-                        guard let index = from.first else { return }
-                        // `to` counts the row being moved; FirnCore's doesn't.
-                        store.moveSpace(store.spaces[index], to: to > index ? to - 1 : to)
-                    }
-                } header: {
-                    sectionTitle("Spaces")
-                } footer: {
-                    if store.spaces.count > 1 {
-                        footnote("Hold a space and drag to change the order.")
-                    }
-                }
-
-                Section {
-                    nameField
-                        .listRowBackground(Theme.hover)
-                    SpaceSwatches(selection: Binding(
-                        get: { selected.color },
-                        set: { store.updateSpace(selected, name: selected.name, color: $0) }
-                    ))
-                    .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-                    .listRowBackground(Theme.hover)
-                    signIns(of: space)
-                        .listRowBackground(Theme.hover)
-                } header: {
-                    sectionTitle(space.name)
-                }
-
-                if store.spaces.count > 1 {
-                    Section {
-                        Button { deleting = space } label: {
-                            Text("Delete Space…")
-                                .font(.body)
-                                .foregroundStyle(Theme.danger)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Theme.hover)
-                        .accessibilityLabel("Delete \(space.name)")
-                    } footer: {
-                        // A separate space's sign-ins go too; shared ones stay.
-                        footnote(store.spacesSharingData(with: space).isEmpty
-                                 ? "Its tabs, groups, Basecamp, and sign-ins go with it."
-                                 : "Its tabs, groups, and Basecamp go with it.")
-                    }
-                }
-
+                spacesSection
                 privacySection
                 syncSection
                 tipJarSection
             }
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .environment(\.defaultMinListRowHeight, 44)
-        }
-        .presentationDetents([.large])
-        .presentationBackground {
-            ZStack {
-                Theme.page
-                Theme.frameTint(space.color)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: space.color)
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark", role: .confirm) { dismiss() }
+                        .tint(Theme.ink)
+                }
+            }
+            .navigationDestination(for: UUID.self) { id in
+                SpaceSettingsPage(store: store, spaceID: id)
             }
         }
-        .tint(Theme.ink)
-        .onAppear {
-            selectedID = store.activeSpaceID
-            name = selected.name
-        }
-        // The space picked was deleted, or another was picked.
-        .onChange(of: selected.id) { name = selected.name }
+        .tint(Theme.accent)
+        .presentationDetents([.large])
         .task { availability = await ICloudSync.availability() }
         // Signed in or out of iCloud while Settings is open.
         .onReceive(NotificationCenter.default.publisher(for: .CKAccountChanged)) { _ in
             Task { availability = await ICloudSync.availability() }
         }
-        .confirmationDialog(
-            "Stop sharing sign-ins?",
-            isPresented: $confirmingStopSharing,
-            titleVisibility: .visible,
-            presenting: space
-        ) { space in
-            Button("Stop Sharing", role: .destructive) { store.stopSharing(space) }
-            Button("Cancel", role: .cancel) {}
-        } message: { space in
-            Text(stopSharingMessage(for: space))
-        }
-        .confirmationDialog(
-            deleting.map { ICloudSync.isOn ? "Delete “\($0.name)” from all your devices?" : "Delete “\($0.name)”?" } ?? "",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible,
-            presenting: deleting
-        ) { space in
-            Button("Delete Space", role: .destructive) { delete(space) }
-            Button("Cancel", role: .cancel) {}
-        } message: { space in
-            Text(deleteMessage(for: space))
-        }
     }
 
-    // MARK: Parts
+    // MARK: Sections
 
-    /// The title in the middle and Done on the right, as iOS's settings sheets.
-    private var header: some View {
-        ZStack {
-            Text("Settings")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-                .accessibilityAddTraits(.isHeader)
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(minHeight: 44)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-    }
-
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(Theme.muted)
-            .textCase(nil)
-            .lineLimit(1)
-    }
-
-    private func footnote(_ text: String) -> some View {
-        Text(text)
-            .font(.footnote)
-            .foregroundStyle(Theme.muted)
-    }
-
-    /// One space: its color, name, and whose sign-ins it uses. The picked
-    /// one sits on the paper-white of the tab on screen; the rest on a soft
-    /// wash, as on the Mac.
-    private func row(_ space: Space) -> some View {
-        let isSelected = space.id == selected.id
-        return Button { select(space) } label: {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(Theme.spaceColor(space.color))
-                    .frame(width: 12, height: 12)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(space.name)
-                        .font(.body.weight(isSelected ? .medium : .regular))
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                    Text(sharingLine(for: space))
-                        .font(.footnote)
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
+    private var spacesSection: some View {
+        Section {
+            ForEach(store.spaces) { space in
+                NavigationLink(value: space.id) {
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Theme.spaceColor(space.color))
+                            .frame(width: 12, height: 12)
+                            .accessibilityHidden(true)
+                        Text(space.name)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(sharingLine(for: space))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                Spacer(minLength: 0)
+                .accessibilityActions {
+                    let index = store.spaces.firstIndex { $0.id == space.id } ?? 0
+                    if index > 0 {
+                        Button("Move Up") { move(space, by: -1) }
+                    }
+                    if index < store.spaces.count - 1 {
+                        Button("Move Down") { move(space, by: 1) }
+                    }
+                }
             }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(isSelected ? Theme.activeTab : Theme.hover)
-        // No lines between spaces: the picked one's paper already sets it apart.
-        .listRowSeparator(.hidden)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityHint(isSelected ? "" : "Shows its settings below.")
-        // Only the moves that would do something.
-        .accessibilityActions {
-            let index = store.spaces.firstIndex { $0.id == space.id } ?? 0
-            if index > 0 {
-                Button("Move Up") { move(space, by: -1) }
+            .onMove { from, to in
+                guard let index = from.first else { return }
+                // `to` counts the row being moved; FirnCore's doesn't.
+                store.moveSpace(store.spaces[index], to: to > index ? to - 1 : to)
             }
-            if index < store.spaces.count - 1 {
-                Button("Move Down") { move(space, by: 1) }
+        } header: {
+            Text("Spaces")
+        } footer: {
+            if store.spaces.count > 1 {
+                Text("Hold a space and drag to change the order.")
             }
         }
     }
@@ -232,16 +106,11 @@ struct SettingsSheet: View {
     private var privacySection: some View {
         Section {
             Toggle("Block ads and trackers", isOn: $blocksContent)
-                .font(.body)
-                .foregroundStyle(Theme.ink)
-                .tint(Theme.accent)
-                .frame(minHeight: 44)
-                .listRowBackground(Theme.hover)
                 .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
         } header: {
-            sectionTitle("Privacy")
+            Text("Privacy")
         } footer: {
-            footnote("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the page menu; each space keeps its own choices.")
+            Text("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the page menu; each space keeps its own choices.")
         }
     }
 
@@ -254,28 +123,22 @@ struct SettingsSheet: View {
                 get: { syncIsOn && canSync },
                 set: { $0 ? sync.turnOn() : sync.turnOff() }
             ))
-            .font(.body)
-            .foregroundStyle(Theme.ink)
-            .tint(Theme.accent)
             .disabled(!canSync)
-            .frame(minHeight: 44)
-            .listRowBackground(Theme.hover)
+            // What syncs is one tap away even when the switch can't be used
+            // yet, so the choice is clear before signing in.
+            NavigationLink("What Syncs") { WhatSyncsPage() }
         } header: {
-            sectionTitle("iCloud")
+            Text("iCloud")
         } footer: {
-            // What syncs shows even when the switch can't be used yet, so
-            // the choice is clear before signing in.
-            let device = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-            VStack(alignment: .leading, spacing: 8) {
-                switch availability {
-                case .available: EmptyView()
-                case .signedOut: footnote("Sign in to iCloud in the Settings app to use sync.")
-                case .unavailable: footnote("iCloud isn’t available on this \(device).")
-                }
-                ForEach(ICloudSync.whatSyncs(on: device), id: \.self) { footnote($0) }
+            switch availability {
+            case .available: EmptyView()
+            case .signedOut: Text("Sign in to iCloud in the Settings app to use sync.")
+            case .unavailable: Text("iCloud isn’t available on this \(Self.device).")
             }
         }
     }
+
+    static var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
 
     /// The tip jar (`TipJar.swift`): the family's line, then the three tips
     /// with the App Store's own prices; after a tip, the thank-you in their
@@ -284,23 +147,15 @@ struct SettingsSheet: View {
         Section {
             if tipJar.thanked {
                 Text("Thank you. It really does help.")
-                    .font(.body)
-                    .foregroundStyle(Theme.ink)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .listRowBackground(Theme.hover)
             } else {
                 switch tipJar.state {
                 case .loading:
                     ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .listRowBackground(Theme.hover)
+                        .frame(maxWidth: .infinity)
                         .accessibilityLabel("Loading tips")
                 case .unavailable:
                     Text("Tips can’t be loaded right now.")
-                        .font(.body)
-                        .foregroundStyle(Theme.muted)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .listRowBackground(Theme.hover)
+                        .foregroundStyle(.secondary)
                 case .ready:
                     ForEach(tipJar.tips) { tip in
                         Button {
@@ -308,112 +163,181 @@ struct SettingsSheet: View {
                         } label: {
                             HStack {
                                 Text(tip.displayName)
-                                    .foregroundStyle(Theme.ink)
+                                    .foregroundStyle(Color.primary)
                                 Spacer()
                                 if tipJar.buying == tip.id {
                                     ProgressView()
                                 } else {
+                                    // The label's grey, not the button's tint.
                                     Text(tip.displayPrice)
-                                        .foregroundStyle(Theme.muted)
+                                        .foregroundStyle(Color(uiColor: .secondaryLabel))
                                         .monospacedDigit()
                                 }
                             }
-                            .font(.body)
-                            .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                         .disabled(tipJar.buying != nil)
-                        .listRowBackground(Theme.hover)
                         .accessibilityLabel("\(tip.displayName), \(tip.displayPrice)")
                     }
                 }
             }
         } header: {
-            sectionTitle("Tip Jar")
+            Text("Tip Jar")
         } footer: {
             if !tipJar.thanked {
-                footnote("Firn is made by one person. If it makes your day a little calmer, a tip helps keep it going.")
+                Text("Firn is made by one person. If it makes your day a little calmer, a tip helps keep it going.")
             }
         }
         .task { await tipJar.load() }
     }
 
-    private var nameField: some View {
-        HStack(spacing: 12) {
-            Text("Name")
-                .font(.body)
-                .foregroundStyle(Theme.muted)
-                .accessibilityHidden(true)
-            TextField(Space.defaultName, text: $name)
-                .font(.body)
-                .onChange(of: name) { if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) } }
-                .foregroundStyle(Theme.ink)
-                .multilineTextAlignment(.trailing)
-                .focused($nameFocused)
-                .submitLabel(.done)
-                .textInputAutocapitalization(.words)
-                .accessibilityLabel("Name")
-                .onChange(of: name) { store.updateSpace(selected, name: name, color: selected.color) }
-                // A blank name isn't kept: the field shows the saved one again.
-                .onSubmit { name = selected.name }
-                .onChange(of: nameFocused) { if !nameFocused { name = selected.name } }
-        }
-    }
-
-    private func signIns(of space: Space) -> some View {
-        let others = store.spacesSharingData(with: space)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(others.isEmpty
-                 ? "Separate: its own sign-ins, cookies, and history."
-                 : "Shared with \(names(others)).")
-                .font(.body)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            if !others.isEmpty {
-                Button("Stop Sharing…") { confirmingStopSharing = true }
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Theme.ink)
-                    .buttonStyle(.borderless)
-                    .frame(minHeight: 44)
-            }
-        }
-        .padding(.vertical, 6)
-    }
-
-    // MARK: Actions
-
-    private func select(_ space: Space) {
-        guard space.id != selected.id else { return }
-        nameFocused = false
-        selectedID = space.id
-    }
+    // MARK: Helpers
 
     private func move(_ space: Space, by step: Int) {
         guard let index = store.spaces.firstIndex(where: { $0.id == space.id }) else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+        withAnimation(.smooth(duration: 0.2)) {
             store.moveSpace(space, to: index + step)
         }
     }
 
-    private func delete(_ space: Space) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { store.deleteSpace(space) }
-        if selectedID == space.id { selectedID = store.activeSpaceID }
+    private func sharingLine(for space: Space) -> String {
+        store.spacesSharingData(with: space).isEmpty ? "Separate" : "Shared"
+    }
+}
+
+/// What sync carries and what stays on this device, in the Mac's words.
+private struct WhatSyncsPage: View {
+    var body: some View {
+        List {
+            ForEach(ICloudSync.whatSyncs(on: SettingsSheet.device), id: \.self) { line in
+                Section { Text(line) }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+        .navigationTitle("What Syncs")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// One space's page: its name, color, sign-ins, and Delete.
+private struct SpaceSettingsPage: View {
+    let store: BrowserStore
+    let spaceID: UUID
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The name as typed; the store keeps the last name that wasn't blank.
+    @State private var name = ""
+    @State private var confirmingStopSharing = false
+    @State private var confirmingDelete = false
+    @FocusState private var nameFocused: Bool
+
+    private var space: Space? { store.spaces.first { $0.id == spaceID } }
+
+    var body: some View {
+        Group {
+            if let space {
+                form(space)
+            } else {
+                // Deleted while open: nothing to show, and Back is still there.
+                Color.clear
+            }
+        }
+        .navigationTitle(space?.name ?? "")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { name = space?.name ?? "" }
     }
 
-    // MARK: Words (the Mac's)
+    private func form(_ space: Space) -> some View {
+        let others = store.spacesSharingData(with: space)
+        return List {
+            Section {
+                TextField(Space.defaultName, text: $name)
+                    .focused($nameFocused)
+                    .submitLabel(.done)
+                    .textInputAutocapitalization(.words)
+                    .accessibilityLabel("Name")
+                    .onChange(of: name) {
+                        if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) }
+                        store.updateSpace(space, name: name, color: space.color)
+                    }
+                    // A blank name isn't kept: the field shows the saved one again.
+                    .onSubmit { name = self.space?.name ?? name }
+                    .onChange(of: nameFocused) { if !nameFocused { name = self.space?.name ?? name } }
+            } header: {
+                Text("Name")
+            }
+
+            Section {
+                SpaceSwatches(selection: Binding(
+                    get: { self.space?.color ?? space.color },
+                    set: { color in
+                        guard let current = self.space else { return }
+                        store.updateSpace(current, name: current.name, color: color)
+                    }
+                ))
+                .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+            } header: {
+                Text("Color")
+            }
+
+            Section {
+                Text(others.isEmpty
+                     ? "Separate: its own sign-ins, cookies, and history."
+                     : "Shared with \(names(others)).")
+                    .fixedSize(horizontal: false, vertical: true)
+                if !others.isEmpty {
+                    Button("Stop Sharing…") { confirmingStopSharing = true }
+                        .foregroundStyle(Theme.ink)
+                }
+            } header: {
+                Text("Sign-ins")
+            }
+
+            if store.spaces.count > 1 {
+                Section {
+                    Button("Delete Space…", role: .destructive) { confirmingDelete = true }
+                        .accessibilityLabel("Delete \(space.name)")
+                } footer: {
+                    // A separate space's sign-ins go too; shared ones stay.
+                    Text(others.isEmpty
+                         ? "Its tabs, groups, Basecamp, and sign-ins go with it."
+                         : "Its tabs, groups, and Basecamp go with it.")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollDismissesKeyboard(.interactively)
+        .confirmationDialog(
+            "Stop sharing sign-ins?",
+            isPresented: $confirmingStopSharing,
+            titleVisibility: .visible
+        ) {
+            Button("Stop Sharing", role: .destructive) { store.stopSharing(space) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(space.name)” will start fresh, signed out of everything. \(names(others)) will stay signed in.")
+        }
+        .confirmationDialog(
+            ICloudSync.isOn ? "Delete “\(space.name)” from all your devices?" : "Delete “\(space.name)”?",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Space", role: .destructive) { delete(space) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deleteMessage(for: space))
+        }
+    }
+
+    private func delete(_ space: Space) {
+        dismiss()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { store.deleteSpace(space) }
+    }
 
     private func names(_ spaces: [Space]) -> String {
         spaces.map { "“\($0.name)”" }.formatted(.list(type: .and))
-    }
-
-    private func sharingLine(for space: Space) -> String {
-        let others = store.spacesSharingData(with: space)
-        return others.isEmpty ? "Separate" : "Shares sign-ins with \(names(others))"
-    }
-
-    private func stopSharingMessage(for space: Space) -> String {
-        "“\(space.name)” will start fresh, signed out of everything. \(names(store.spacesSharingData(with: space))) will stay signed in."
     }
 
     private func deleteMessage(for space: Space) -> String {

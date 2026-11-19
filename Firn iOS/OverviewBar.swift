@@ -215,7 +215,7 @@ struct OverviewBar: View {
             })
         }
         if let spaceSettings {
-            more.append(UIAction(title: "Space Settings…", image: UIImage(systemName: "gearshape")) { _ in
+            more.append(UIAction(title: "Settings…", image: UIImage(systemName: "gearshape")) { _ in
                 MainActor.assumeIsolated { spaceSettings() }
             })
         }

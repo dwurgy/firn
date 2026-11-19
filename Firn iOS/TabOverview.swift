@@ -103,9 +103,10 @@ struct TabOverview: View {
     /// (the lift is only the picture, as the menu's).
     @State private var systemDragged: Set<UUID> = []
     /// A group folding into its cell or opening out of it (the grid on
-    /// iOS 27): where it was on screen, for the glide (`GridMorph`,
-    /// `GrowFromCell`). Cleared once the glide is done.
-    @State private var foldMorph: GridMorph?
+    /// iOS 27), drawn over the list until it's done (`GroupGlideView`),
+    /// and how far open it's drawn (0 folded, 1 open).
+    @State private var glide: GroupGlide?
+    @State private var glideShare: CGFloat = 0
     /// The grid's UIKit cards being swiped to close (`GridCards`).
     @State private var gridSwipes: [UUID: GridSwipe] = [:]
     @State private var scrollPosition = ScrollPosition(idType: UUID.self)
@@ -207,6 +208,10 @@ struct TabOverview: View {
                                   })
                     gridTiles(shownItems)
                 }
+                // Where the list's contents start on screen, to place a
+                // group's fold over them (`glidePlan`).
+                .onGeometryChange(for: CGPoint.self, of: { $0.frame(in: .global).origin }) { spots.listOrigin = $0 }
+                .overlay(alignment: .topLeading) { glideDrawing }
                 .padding(.horizontal, 16)
                 // Where the top of the list's view is on screen, below the
                 // status bar and the top margin (the scroll view's own
@@ -606,7 +611,8 @@ struct TabOverview: View {
     /// A tab's tile: in the list, or lifted under the finger.
     private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
                       moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil,
-                      holdMenu: (() -> [[HoldMenuItem]])? = nil, inCollection: Bool = false) -> some View {
+                      holdMenu: (() -> [[HoldMenuItem]])? = nil, inCollection: Bool = false,
+                      height: CGFloat? = nil, bare: Bool = false) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
             tab: tab,
@@ -625,9 +631,10 @@ struct TabOverview: View {
             // list, and this runs for every tile on every redraw.
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
-            cardHeight: cardHeight,
+            cardHeight: height ?? cardHeight,
             holdMenu: holdMenu,
             carried: systemDragged.contains(tab.id),
+            bare: bare,
             swipesItself: !inCollection,
             gridSwipe: gridSwipes[tab.id] ?? .none
         )
@@ -692,7 +699,7 @@ struct TabOverview: View {
                               guard let tab = byID[id]?.tab, let group = byID[groupID]?.group else { return }
                               store.move(tab, toGroup: group, at: store.tabs(in: group).count)
                           },
-                          morph: foldMorph,
+                          fold: glide?.token,
                           reduceMotion: reduceMotion)
                 // A run that comes or goes with a fold: its cards glide on
                 // their own (`GridCards`), so the run itself doesn't fade.
@@ -727,8 +734,8 @@ struct TabOverview: View {
         GroupFolder(group: group, tabs: store.tabs(in: group), pictures: pictures,
                     cardHeight: cardHeight, naming: store.isNaming(group), open: { fold(group) })
             .modifier(groupMenu(group).actions)
-            // Where it is, so opening it grows the group out of it.
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.folders[group.id] = $0 }
+            // Drawn over the list while it folds or opens (`glideDrawing`).
+            .opacity(glide?.hidden.contains(group.id) == true ? 0 : 1)
             .accessibilityActions {
                 if index > 0 { Button("Move Left") { move(group, to: index - 1) } }
                 if index < count - 1 { Button("Move Right") { move(group, to: index + 1) } }
@@ -746,6 +753,9 @@ struct TabOverview: View {
                     moveUp: index > 0 ? { move(tab, to: index - 1) } : nil,
                     moveDown: index < count - 1 ? { move(tab, to: index + 1) } : nil,
                     inCollection: true)
+            // Changing grids as a group folds or opens: drawn over the list
+            // on its way (`glideDrawing`).
+            .opacity(glide?.hidden.contains(tab.id) == true ? 0 : 1)
     }
 
     /// A group: a flat tint in the space's color behind its name line and
@@ -772,32 +782,20 @@ struct TabOverview: View {
             // Where the group is, so a held tab makes room around it or
             // goes in it.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
-            .modifier(GrowFromCell(from: opening(group)))
-            // Where it's laid out, apart from its growth, to bring it to
-            // the middle as it opens (`center`).
+            // Where it's laid out, to bring it to the middle as it opens
+            // (`center`).
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.openGroups[group.id] = $0 }
+            // Folding or opening, it's drawn over the list (`glideDrawing`).
+            .opacity(glide?.id == group.id ? 0 : 1)
             .id(group.id)
             .transition(groupTransition(group))
     }
 
-    /// How an open group comes and goes. In the grid on iOS 27 it grows
-    /// out of its folded cell, and goes at once as it folds (its cell
-    /// grows down from where it was, `GridCards`); with Reduce Motion, a
-    /// cross-fade. Elsewhere it fades, and a dragged one just moves.
+    /// How an open group comes and goes: with a fade, but at once while
+    /// its fold or unfold is drawn over the list (`glideDrawing`), or while
+    /// it's dragged.
     private func groupTransition(_ group: TabGroup) -> AnyTransition {
-        if drag != nil { return .identity }
-        guard systemDrag, !reduceMotion, let morph = foldMorph, morph.id == group.id else { return .opacity }
-        // Opening, it grows on its own (`GrowFromCell`). Folding, it fades
-        // quickly under its cell growing down over it, so there's never a
-        // frame with neither.
-        return .asymmetric(insertion: .identity,
-                           removal: .opacity.animation(.easeOut(duration: 0.15)))
-    }
-
-    /// Where a group opening out of its folded cell starts, if it is.
-    private func opening(_ group: TabGroup) -> CGRect? {
-        guard systemDrag, !reduceMotion, let morph = foldMorph, morph.id == group.id, !morph.folding else { return nil }
-        return morph.from
+        drag != nil || glide?.id == group.id ? .identity : .opacity
     }
 
     /// A group's tint, name line, and tabs: in the list, or `lifted` under
@@ -890,6 +888,8 @@ struct TabOverview: View {
     /// opens it again before the page grows back.
     private func fold(_ group: TabGroup) {
         guard !busy else { return }
+        // One fold at a time: a tap during a glide waits for the next.
+        if systemDrag, glide != nil { return }
         let folding = !group.folded
         // The list stays where it is. SwiftUI keeps the last scroll to the
         // tab on screen by id and does it again on any layout change, so a
@@ -908,28 +908,180 @@ struct TabOverview: View {
             }
         }
         // The grid on iOS 27: the group shrinks into its cell, or grows
-        // out of it, from where it is now (Safari's; David, 2026-11-18).
-        // Where each card is now, read from the grid's own cells, so cards
-        // the fold moves into another run glide over instead of popping
-        // (David's recording). The folder's spot too: measured from inside
-        // the grid, `spots.folders` isn't told when the overview scrolls,
-        // so an open grew from where the folder was before the last scroll,
-        // often from below the screen (Simulator, frame by frame).
-        let onScreen = systemDrag ? GridCards.framesOnScreen() : [:]
-        if systemDrag, let from = folding ? spots.frames[group.id] : onScreen[group.id] ?? spots.folders[group.id] {
-            let morph = GridMorph(id: group.id, from: from, folding: folding, glides: onScreen)
-            foldMorph = morph
-            withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
-                store.setFolded(group, folding)
+        // out of it, as Safari's (David, 2026-11-18), drawn over the list
+        // (`glideDrawing`). The drawing shows first, as things are; then
+        // the list changes under it on the same curve (`startGlide`).
+        if systemDrag {
+            if !reduceMotion, let plan = glidePlan(group, folding: folding) {
+                var still = Transaction()
+                still.disablesAnimations = true
+                withTransaction(still) {
+                    glideShare = folding ? 1 : 0
+                    glide = plan
+                }
+                // If the drawing never shows (it always has), nothing is
+                // left hidden.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(1500))
+                    if glide == plan, let now = store.tabGroups.first(where: { $0.id == plan.id }),
+                       now.folded != folding {
+                        store.setFolded(now, folding)
+                    }
+                    endGlide(plan)
+                }
+                return
             }
+            // Reduce Motion, or nowhere to draw it from: a cross-fade.
+            withAnimation(.easeOut(duration: 0.2)) { store.setFolded(group, folding) }
             if !folding { center(group) }
-            Task {
-                try? await Task.sleep(for: .milliseconds(600))
-                if foldMorph == morph { foldMorph = nil }
-            }
             return
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, folding) }
+    }
+
+    /// The drawing of a fold is up: the list changes under it and the
+    /// drawing glides, in one animation, so nothing is a frame apart.
+    private func startGlide(_ plan: GroupGlide) {
+        guard glide == plan, let group = store.tabGroups.first(where: { $0.id == plan.id }),
+              group.folded == plan.opening else { return endGlide(plan) }
+        withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0), completionCriteria: .removed) {
+            store.setFolded(group, !plan.opening)
+            glideShare = plan.opening ? 1 : 0
+        } completion: {
+            endGlide(plan)
+        }
+        if plan.opening { center(group) } else { reveal(plan) }
+    }
+
+    /// A folded group's cell stays in view: folding one near the top or
+    /// bottom of the screen could leave its folder under the clock or the
+    /// bar, so the list scrolls just enough to show it, on the fold's own
+    /// curve, as Safari's.
+    private func reveal(_ plan: GroupGlide) {
+        guard let origin = spots.listOrigin, let scroll = spots.scroll, let scrollTop = spots.scrollTop else { return }
+        let view = scroll.containerSize.height - scroll.contentInsets.top - scroll.contentInsets.bottom
+        let top = plan.cell.minY + origin.y - scrollTop
+        let bottom = top + plan.cardHeight
+        var move: CGFloat = 0
+        if top < Self.centerMargin {
+            move = top - Self.centerMargin
+        } else if bottom > view - Self.centerMargin {
+            move = min(bottom - (view - Self.centerMargin), top - Self.centerMargin)
+        }
+        let y = max(scroll.contentOffset.y + move, -scroll.contentInsets.top)
+        guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
+        Task { @MainActor in
+            // A frame later, once the list has its new height, as `center`.
+            try? await Task.sleep(for: .milliseconds(16))
+            withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0)) {
+                scrollPosition.scrollTo(point: CGPoint(x: 0, y: y + scroll.contentInsets.top))
+            }
+        }
+    }
+
+    /// The glide is over: the real folder or group, already in place under
+    /// the drawing, shows again.
+    private func endGlide(_ plan: GroupGlide) {
+        guard glide == plan else { return }
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) { glide = nil }
+    }
+
+    /// A fold or unfold drawn over the list (`GroupGlideView`).
+    @ViewBuilder private var glideDrawing: some View {
+        if let glide, let group = store.tabGroups.first(where: { $0.id == glide.id }) {
+            let tabs = Dictionary(store.openTabs.map { ($0.id, $0) }) { a, _ in a }
+            let groups = Dictionary(store.tabGroups.map { ($0.id, $0) }) { a, _ in a }
+            GroupGlideView(glide: glide, share: glideShare, name: group.name,
+                           tile: { id, height, bare in
+                               tabs[id].map { tile($0, spot: { _ in }, height: height, bare: bare) }
+                           },
+                           cell: { id in
+                               if let tab = tabs[id] {
+                                   tile(tab, spot: { _ in }, inCollection: true)
+                               } else if let other = groups[id] {
+                                   GroupFolder(group: other, tabs: store.tabs(in: other), pictures: pictures,
+                                               cardHeight: cardHeight, naming: store.isNaming(other), open: {})
+                               }
+                           })
+                .onAppear { startGlide(glide) }
+                .id(glide.token)
+                .transition(.identity)
+        }
+    }
+
+    /// Where a fold or unfold starts and ends, worked out from the grid's
+    /// own measures before anything moves: the folder's cell, the open
+    /// card, and the cards after the group, which change grids. In the
+    /// list's own space. Nil when the group isn't on screen to start from.
+    private func glidePlan(_ group: TabGroup, folding: Bool) -> GroupGlide? {
+        guard let origin = spots.listOrigin else { return nil }
+        let tabs = store.tabs(in: group)
+        let metrics = gridMetrics
+        let columns = max(metrics.columns, 1), height = metrics.cardHeight
+        let width = size.width - 2 * OverviewGridMetrics.margin
+        guard !tabs.isEmpty, width > 0 else { return nil }
+        let column = (width - OverviewGridMetrics.spacing * CGFloat(columns - 1)) / CGFloat(columns)
+        let gap: CGFloat = 12
+        // A cell in a run of the grid whose first row starts at `top`.
+        func cell(_ index: Int, top: CGFloat) -> CGRect {
+            CGRect(x: CGFloat(index % columns) * (column + OverviewGridMetrics.spacing),
+                   y: top + CGFloat(index / columns) * (height + OverviewGridMetrics.rowSpacing),
+                   width: column, height: height)
+        }
+        func runHeight(_ count: Int) -> CGFloat {
+            let rows = CGFloat((count + columns - 1) / columns)
+            return rows * height + max(rows - 1, 0) * OverviewGridMetrics.rowSpacing
+        }
+        let runs = OverviewGridRun.runs(shownItems, inRun: { folderCell($0) })
+        var folder: CGRect, card: CGRect, after: [GridRunItem], first: Int, top: CGFloat
+        if folding {
+            guard let at = runs.firstIndex(where: { $0.id == group.id.uuidString }),
+                  let open = spots.frames[group.id] else { return nil }
+            card = open.offsetBy(dx: -origin.x, dy: -origin.y)
+            var before: [GridRunItem] = []
+            if at > 0, case let .tabs(_, items) = runs[at - 1] { before = items }
+            after = []
+            if at + 1 < runs.count, case let .tabs(_, items) = runs[at + 1] { after = items }
+            first = before.count
+            top = before.isEmpty ? card.minY : card.minY - gap - runHeight(before.count)
+            folder = cell(first, top: top)
+        } else {
+            var found: (items: [GridRunItem], at: Int)?
+            for run in runs {
+                if case let .tabs(_, items) = run, let at = items.firstIndex(where: { $0.id == group.id }) {
+                    found = (items, at)
+                }
+            }
+            guard let found, let seen = GridCards.framesOnScreen()[group.id] else { return nil }
+            first = found.at
+            after = Array(found.items[(first + 1)...])
+            let seenTop = seen.minY - origin.y
+            top = seenTop - CGFloat(first / columns) * (height + OverviewGridMetrics.rowSpacing)
+            folder = cell(first, top: top)
+            let rows = CGFloat((tabs.count + columns - 1) / columns)
+            card = CGRect(x: 0, y: first == 0 ? top : top + runHeight(first) + gap, width: width,
+                          height: GroupCard.headerHeight + rows * height + rows * GroupCard.inset)
+        }
+        folder.size.height = max(height - OverviewRow.gridTitleHeight, 1)
+        // What's in view, with room for the list scrolling as it opens.
+        let view = spots.viewport.offsetBy(dx: -origin.x, dy: -origin.y).insetBy(dx: 0, dy: -500)
+        var plan = GroupGlide(id: group.id, opening: !folding, cell: folder, card: card, tabs: [],
+                              columns: columns, cardHeight: height, arrivals: [], hidden: [])
+        let drawn = tabs.enumerated().filter { index, _ in
+            index < 4 || plan.tile(index).offsetBy(dx: card.minX, dy: card.minY).intersects(view)
+        }.prefix(16).map(\.element.id)
+        let arrivals = after.enumerated().map { index, item in
+            GroupGlide.Arrival(id: item.id, folded: cell(first + 1 + index, top: top),
+                               open: cell(index, top: card.maxY + gap))
+        }
+        plan = GroupGlide(id: group.id, opening: !folding, cell: folder, card: card, tabs: drawn,
+                          columns: columns, cardHeight: height,
+                          arrivals: arrivals.filter { $0.folded.intersects(view) || $0.open.intersects(view) }
+                              .prefix(12).map { $0 },
+                          hidden: Set(after.map(\.id)).union([group.id]))
+        return plan
     }
 
     /// A group opening comes to the middle of the screen as it grows, as
@@ -2268,12 +2420,11 @@ struct ComesForward: ViewModifier, Animatable {
     var frames: [UUID: CGRect] = [:] {
         didSet { SwipeTiming.sawSpots(frames) }
     }
-    /// Folded groups' cells in the grid, apart from `frames`: a cell going
-    /// away still reports where it is, and would overwrite the open group's.
-    var folders: [UUID: CGRect] = [:]
-    /// Open groups in the grid where they're laid out, apart from their
-    /// growth out of a folder (`frames` is read inside it, scaled).
+    /// Open groups in the grid where they're laid out, to bring one to
+    /// the middle as it opens.
     var openGroups: [UUID: CGRect] = [:]
+    /// Where the list's contents start on screen (they scroll).
+    var listOrigin: CGPoint?
     /// The list's own frame, to find the tab under a pinch.
     var viewport: CGRect = .zero
     /// The tabs shown as tall cards (the rest are slim rows): a card's

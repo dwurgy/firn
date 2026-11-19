@@ -47,6 +47,9 @@ struct OverviewRow: View {
     /// Carried by iOS's drag (the grid on iOS 27): its X hides, so the
     /// drag lifts only the picture, as the menu does.
     var carried = false
+    /// Drawn as a group folds or opens (`GroupGlideView`): only the
+    /// picture, as it is in the folder; the X, title, and shadow fade.
+    var bare = false
     /// The grid's UIKit cards are swiped by their collection view
     /// (`GridCards`), not here: one place decides between the swipe and
     /// iOS's press, menu, and drag. Elsewhere the row swipes itself.
@@ -147,7 +150,8 @@ struct OverviewRow: View {
                 shape.fill(Theme.page)
                     .shadow(color: reduceTransparency ? .clear : Theme.gridCardShadow,
                             radius: Self.gridShadowRadius, y: Self.gridShadowDrop)
-                    .opacity(windowShown && !menuOpen && !carried ? 1 : 0)
+                    .opacity(windowShown && !menuOpen && !carried && !bare ? 1 : 0)
+                    .animation(.easeOut(duration: Self.bareFade), value: bare)
             }
             .overlay(alignment: .topTrailing) {
                 // Hidden while its menu is open too: a drag pulled off the
@@ -155,7 +159,8 @@ struct OverviewRow: View {
                 GridCloseButton(title: tab.title, close: close)
                     // A swiped card keeps it, riding and growing with the
                     // card, as Safari's (David's recording, 2026-11-17).
-                    .opacity(carried || menuOpen ? 0 : 1)
+                    .opacity(carried || menuOpen || bare ? 0 : 1)
+                    .animation(.easeOut(duration: Self.bareFade), value: bare)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
             // landing glide and opening scrolled to it already say which
@@ -168,6 +173,8 @@ struct OverviewRow: View {
             .scaleEffect(swiped && !reduceMotion ? Self.swipeGrowth : 1)
             GridTitle(tab: tab)
                 .frame(height: Self.gridTitleHeight, alignment: .top)
+                .opacity(bare ? 0 : 1)
+                .animation(.easeOut(duration: Self.bareFade), value: bare)
                 .contentShape(.rect)
                 .onTapGesture(perform: open)
         }
@@ -195,6 +202,8 @@ struct OverviewRow: View {
     /// The grid card's corners: Safari's 15pt, measured from David's
     /// screenshots (2026-11-16); the X's disc sits concentric in the corner.
     static let gridCornerRadius: CGFloat = 15
+    /// The X, title, and shadow coming and going as a group folds or opens.
+    private static let bareFade: TimeInterval = 0.14
     /// The grid card's shadow at rest, as Safari's: about 14pt of blur
     /// (SwiftUI's radius is half that), 5pt down (`Theme.gridCardShadow`).
     /// A swiped card's shadow grows with it (the cell's growth scales it).
@@ -445,6 +454,6 @@ extension OverviewRow: @MainActor Equatable {
             && a.windowShown == b.windowShown && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight
-            && a.carried == b.carried && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
+            && a.carried == b.carried && a.bare == b.bare && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe
     }
 }

@@ -86,59 +86,8 @@ final class GridCardCell: UICollectionViewCell {
         raised = true
     }
 
-    /// A group folding into this cell, drawn by the folder itself
-    /// (`GroupFolder`, through the environment).
-    let folding = FolderMorph()
-
-    /// A group folding: the cell starts as big as the open group was and
-    /// shrinks into its place, as Safari's. `from` is the open group's
-    /// frame in the cell's own space. The folder draws it in SwiftUI, its
-    /// glass laid out at each size on the way: scaled and masked here in
-    /// Core Animation, iOS's glass drew nothing until the shrink was over,
-    /// then popped in (David's recording, 2026-11-18).
-    func morph(from: CGRect, reduceMotion: Bool) {
-        if reduceMotion || bounds.width < 1 {
-            contentView.alpha = 1
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 0
-            fade.duration = 0.3
-            layer.add(fade, forKey: "morph")
-            return
-        }
-        raise()
-        folding.from = from
-        folding.share = 1
-        // A turn later, so SwiftUI has drawn it big before the shrink.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.folding.from == from else { return }
-            self.contentView.alpha = 1
-            withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0)) { self.folding.share = 0 }
-        }
-    }
-
-    /// A card that changed grids as a group folded or opened: it glides
-    /// from where it was (`from`, its old frame in the cell's own space)
-    /// to its new place, on the fold's curve, so nothing pops (David's
-    /// recording, 2026-11-18). The sublayer transform, as the morph's.
-    func glide(from: CGRect, reduceMotion: Bool) {
-        contentView.alpha = 1
-        let dx = from.minX, dy = from.minY
-        guard !reduceMotion, bounds.width > 0, abs(dx) + abs(dy) > 0.5 else { return }
-        let move = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
-        move.keyPath = "sublayerTransform"
-        move.fromValue = CATransform3DMakeTranslation(dx, dy, 0)
-        move.toValue = CATransform3DIdentity
-        move.duration = move.settlingDuration
-        layer.sublayerTransform = CATransform3DIdentity
-        layer.add(move, forKey: "glide")
-    }
-
     override func prepareForReuse() {
         super.prepareForReuse()
-        layer.removeAnimation(forKey: "morph")
-        layer.removeAnimation(forKey: "glide")
-        folding.from = nil
-        folding.share = 0
         settle?.stopAnimation(true)
         settle = nil
         swipe = .identity
@@ -171,34 +120,10 @@ final class GridCardCell: UICollectionViewCell {
     }
 }
 
-/// A folded group's cell shrinking in from the open group (`GridCardCell.morph`):
-/// where the open group was in the cell's own space, and how much of the
-/// way back there it still is (1 at the start, 0 in place).
-@MainActor @Observable final class FolderMorph {
-    var from: CGRect?
-    var share: CGFloat = 0
-}
-
 /// Where a grid card is in a swipe to close (`GridCards`): `swiping`, then
 /// `easingHome`. Its spot isn't reported until it's home again (`none`).
 enum GridSwipe: Equatable {
     case none, swiping, easingHome
-}
-
-/// A group folding into its cell: which, and where the open group was
-/// on screen.
-struct GridMorph: Equatable {
-    let id: UUID
-    let from: CGRect
-    /// Folding (the cell shrinks in); opening is the open group's own
-    /// glide (`GrowFromCell`).
-    let folding: Bool
-    /// Where every card was on screen just before (`GridCards.framesOnScreen`):
-    /// a card the fold moves into another run glides over from there.
-    var glides: [UUID: CGRect] = [:]
-    /// Each fold is its own: folding the same group again from the same
-    /// spot still shrinks it in (the cells remember the last one they ran).
-    var token = UUID()
 }
 
 /// A run of loose cards in the grid, as one UIKit collection view.
@@ -227,12 +152,14 @@ struct GridCards: UIViewRepresentable {
     var isFolder: (UUID) -> Bool = { _ in false }
     /// A tab let go on a folded group: it goes into the group, at its end.
     var join: (UUID, UUID) -> Void = { _, _ in }
-    /// A group just folded: its cell shrinks into place from where the
-    /// open group was (its frame on screen).
-    var morph: GridMorph?
+    /// A group folding or opening (`GroupGlide`'s token): cards change
+    /// grids at once, with no fade or slide of the collection view's own,
+    /// since the glide is drawn over the list (`GroupGlideView`).
+    var fold: UUID?
 
-    /// A group's fold and unfold: Safari's, about 0.4s, no bounce.
-    static let morphDuration: TimeInterval = 0.38
+    /// A group's fold and unfold: Safari's, a little over 0.4s with a soft
+    /// end, no bounce (David's recording, 2026-11-18).
+    static let morphDuration: TimeInterval = 0.42
     let reduceMotion: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -536,9 +463,8 @@ struct GridCards: UIViewRepresentable {
             guard let parent else { return }
             cell.backgroundConfiguration = .clear()
             cell.clipsToBounds = false
-            let folding = (cell as? GridCardCell)?.folding
             cell.contentConfiguration = UIHostingConfiguration {
-                parent.card(id).environment(folding)
+                parent.card(id)
             }.margins(.all, 0)
         }
 
@@ -552,126 +478,17 @@ struct GridCards: UIViewRepresentable {
                     configure(cell, id)
                 }
             }
-            // A fold or unfold moves cards between runs: they glide over
-            // themselves (`glideArrivals`), so the change lands at once
-            // here, with no fade where they were.
-            let folding = new.morph.map { $0.token != glided } ?? false
             if new.ids != shown {
-                let before = Set(shown)
                 shown = new.ids
                 var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
                 snapshot.appendSections([0])
                 snapshot.appendItems(new.ids)
-                // A card closed: the next slides into its place (0.25s, as the list).
-                dataSource?.apply(snapshot, animatingDifferences: !folding && !new.reduceMotion && view.window != nil)
-                // Marked done only once the cards have moved: the fold's
-                // note can come an update before the new order does.
-                if folding, let morph = new.morph {
-                    glided = morph.token
-                    glideArrivals(new.ids.filter { !before.contains($0) && $0 != morph.id }, morph, in: view)
-                }
+                // A card closed: the next slides into its place (0.25s, as
+                // the list). A fold or unfold lands at once: its glide is
+                // drawn over the list.
+                dataSource?.apply(snapshot, animatingDifferences: new.fold == nil && !new.reduceMotion
+                                  && view.window != nil)
             }
-            morphIfAsked(new, in: view)
-        }
-
-        /// The fold last seen, so its cards glide once.
-        private var glided: UUID?
-        /// Cards come over from another run, not yet on screen here: each
-        /// glides as it's first shown, hidden until then.
-        private var pendingGlides: [UUID: GlideStart] = [:]
-
-        /// Where a card that changed runs glides from: its old frame on
-        /// screen, or a distance below where it lands.
-        private enum GlideStart {
-            case from(CGRect)
-            case below(CGFloat)
-        }
-
-        private func glideArrivals(_ ids: [UUID], _ morph: GridMorph, in view: UICollectionView) {
-            // A card that was off screen has no spot to come from: folding,
-            // it rises from below by as much as the group shrank, with the
-            // others (in the cell's own space, from where it lands).
-            let rise = max(morph.from.height - cardHeight, 0)
-            pendingGlides = ids.reduce(into: [:]) { glides, id in
-                if let from = morph.glides[id] {
-                    glides[id] = .from(from)
-                } else if morph.folding, rise > 0 {
-                    glides[id] = .below(rise)
-                }
-            }
-            guard !pendingGlides.isEmpty else { return }
-            // Only during the fold: a card pushed off screen mustn't glide
-            // in from its old spot when it's scrolled to later.
-            DispatchQueue.main.asyncAfter(deadline: .now() + GridCards.morphDuration + 0.1) { [weak self] in
-                self?.pendingGlides = [:]
-            }
-            view.layoutIfNeeded()
-            for (id, _) in pendingGlides {
-                if let path = dataSource?.indexPath(for: id), let cell = view.cellForItem(at: path) as? GridCardCell {
-                    startGlide(cell, id)
-                }
-            }
-        }
-
-        private func startGlide(_ cell: GridCardCell, _ id: UUID) {
-            guard let start = pendingGlides.removeValue(forKey: id) else { return }
-            cell.contentView.alpha = 0
-            let reduceMotion = parent?.reduceMotion ?? false
-            Self.whenPlaced(cell, tries: 6) { cell in
-                switch start {
-                case let .from(frame):
-                    cell.glide(from: cell.convert(frame, from: nil), reduceMotion: reduceMotion)
-                case let .below(rise):
-                    cell.glide(from: CGRect(origin: CGPoint(x: 0, y: rise), size: cell.bounds.size),
-                               reduceMotion: reduceMotion)
-                }
-            }
-        }
-
-        /// The group last morphed, so each fold runs once.
-        private var morphed: GridMorph?
-        /// A fold whose cell isn't on screen yet: a group folded alone gets
-        /// a new collection view, laid out only after this update.
-        private var pendingMorph: GridMorph?
-
-        /// A folded group's cell shrinks from the open group, once laid
-        /// out: hidden until then, so it never shows in place first.
-        private func morphIfAsked(_ new: GridCards, in view: UICollectionView) {
-            guard let morph = new.morph, morph.folding, morph != morphed, shown.contains(morph.id) else { return }
-            morphed = morph
-            pendingMorph = morph
-            view.layoutIfNeeded()
-            if let path = dataSource?.indexPath(for: morph.id), let cell = view.cellForItem(at: path) as? GridCardCell {
-                startMorph(cell)
-            }
-        }
-
-        private func startMorph(_ cell: GridCardCell) {
-            guard let morph = pendingMorph else { return }
-            pendingMorph = nil
-            cell.contentView.alpha = 0
-            let reduceMotion = parent?.reduceMotion ?? false
-            Self.whenPlaced(cell, tries: 6) { cell in
-                cell.morph(from: cell.convert(morph.from, from: nil), reduceMotion: reduceMotion)
-            }
-        }
-
-        /// A turn later, once SwiftUI has placed the collection view in the
-        /// window (a new one isn't yet); a few turns at most, then as is.
-        private static func whenPlaced(_ cell: GridCardCell, tries: Int,
-                                       _ action: @escaping @MainActor (GridCardCell) -> Void) {
-            DispatchQueue.main.async { [weak cell] in
-                guard let cell else { return }
-                if cell.window == nil, tries > 0 { return whenPlaced(cell, tries: tries - 1, action) }
-                action(cell)
-            }
-        }
-
-        func collectionView(_ view: UICollectionView, willDisplay cell: UICollectionViewCell,
-                            forItemAt path: IndexPath) {
-            guard let cell = cell as? GridCardCell, let id = dataSource?.itemIdentifier(for: path) else { return }
-            if let morph = pendingMorph, id == morph.id { startMorph(cell) }
-            if pendingGlides[id] != nil { startGlide(cell, id) }
         }
 
         /// The card's picture, without its title: what iOS lifts, for its

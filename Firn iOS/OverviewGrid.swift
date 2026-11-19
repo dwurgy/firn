@@ -104,12 +104,10 @@ struct GroupFolder: View {
     let open: () -> Void
 
     private static let shown = 4
-    private static let inset: CGFloat = 8
-    private static let gap: CGFloat = 6
+    static let inset: CGFloat = 8
+    static let gap: CGFloat = 6
     private static let thumbCorner: CGFloat = 7
 
-    /// Folding into this cell, from the open group (`GridCardCell.morph`).
-    @Environment(FolderMorph.self) private var morph: FolderMorph?
     @State private var width: CGFloat = 0
     private var folderSize: CGSize {
         CGSize(width: width, height: max(cardHeight - OverviewRow.gridTitleHeight, 1))
@@ -152,7 +150,7 @@ struct GroupFolder: View {
                 // can be taller than the cell; without it the folder grows
                 // past its cell instead of the top being squeezed.
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-                .modifier(FolderShrink(morph: morph, size: folderSize))
+                .background { FirnGlass(shape: shape) }
                 .contentShape(shape)
             }
             .buttonStyle(UndimmedPress())
@@ -166,39 +164,6 @@ struct GroupFolder: View {
         .accessibilityValue("Folded, \(tabs.count) \(tabs.count == 1 ? "tab" : "tabs")")
         .accessibilityHint("Shows the group's tabs")
         .accessibilityAddTraits(.isButton)
-    }
-}
-
-/// A folder shrinking in from the open group, as Safari's: its glass
-/// laid out at each size on the way, from the open group's frame to the
-/// folder's (never scaled or masked, or iOS draws no glass until it's
-/// over), its name and pictures scaled down from the open group's width
-/// inside it. At rest, the folder's glass and shape.
-private struct FolderShrink: ViewModifier {
-    let morph: FolderMorph?
-    let size: CGSize
-
-    func body(content: Content) -> some View {
-        let share = morph?.from == nil ? 0 : (morph?.share ?? 0)
-        let end = CGRect(origin: .zero, size: size)
-        let from = morph?.from ?? end
-        let frame = CGRect(x: from.minX * share, y: from.minY * share,
-                           width: size.width + (from.width - size.width) * share,
-                           height: size.height + (from.height - size.height) * share)
-        let corner = OverviewRow.gridCornerRadius + (GroupCard.cornerRadius - OverviewRow.gridCornerRadius) * share
-        let scale = size.width > 0 ? frame.width / size.width : 1
-        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        content
-            .scaleEffect(scale, anchor: .topLeading)
-            .offset(x: frame.minX, y: frame.minY)
-            .mask(alignment: .topLeading) {
-                shape.frame(width: frame.width, height: frame.height).offset(x: frame.minX, y: frame.minY)
-            }
-            .background(alignment: .topLeading) {
-                FirnGlass(shape: shape)
-                    .frame(width: frame.width, height: frame.height)
-                    .offset(x: frame.minX, y: frame.minY)
-            }
     }
 }
 
@@ -257,37 +222,5 @@ struct GroupIcons: View {
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
-    }
-}
-
-/// An open group coming out of its folded cell: it starts the cell's
-/// width at the cell's top left and grows to its own place, its tabs and
-/// all, as Safari's (David, 2026-11-18). Its own starting point, set off
-/// as it appears: an insertion transition never ran in the overview's
-/// lazy stack, and a value shared from the overview was caught in the
-/// tap's own animation (Simulator, logged, 2026-11-18). Its frame is read
-/// as it's laid out, so the glide ends exactly where it sits.
-struct GrowFromCell: ViewModifier {
-    /// The folded cell's frame on screen; nil when it isn't opening.
-    let from: CGRect?
-    @State private var share: CGFloat = 1
-
-    func body(content: Content) -> some View {
-        let share = from == nil ? 0 : share
-        let from = from ?? .zero
-        content
-            .visualEffect { view, proxy in
-                let frame = proxy.frame(in: .global)
-                let small = frame.width > 0 ? from.width / frame.width : 1
-                let scale = 1 + (small - 1) * share
-                return view
-                    .scaleEffect(scale, anchor: .topLeading)
-                    .offset(x: (from.minX - frame.minX) * share, y: (from.minY - frame.minY) * share)
-            }
-            .opacity(1 - 0.4 * share)
-            .onAppear {
-                guard self.from != nil else { return }
-                withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0)) { self.share = 0 }
-            }
     }
 }

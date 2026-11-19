@@ -538,6 +538,39 @@ Step 6, the fold and unfold as Safari's (David's recordings side by side, 2026-1
 
 Step 7, the last polish beside Safari's (David's recordings, 2026-11-18: "95% of the way there"), built (2026-11-19). Measured from the two recordings, pixel by pixel (3px a point). **Spacing in an open group**, Safari's and what Firn had: tabs in from the sides 12pt (8); between columns 16pt (8); a picture's bottom to the next row's top 39pt, a 30pt title and 9pt (38); under the last pictures 35pt, the title and 5pt (38); the card's bottom to the cards below 16pt (12); the titles above to the card's top 10pt (12; first misread as 24pt, where Safari's floating search button covered the title in the recording; corrected from David's two Safari screenshots, 2026-11-19, which also confirmed 35pt under the last pictures, 16pt below the card, and the 64pt header); corners 27pt, the cards' 15 plus the 12 at the sides (22). The narrower columns keep the picture's 1.41 shape, so a card in a group is about 16pt shorter than a loose one, which is why Safari's group read as closer together. All now Safari's (`GroupCard.side`, `columnGap`, `rowGap`, `bottom`, `gapAbove`, `gapBelow`; `OverviewGridMetrics.groupCardHeight`); the header stays Firn's one line, 44pt (Safari's two lines and buttons are 64pt). **Motion**, two things: Safari keeps the cards before the folder in its row in front of the growing glass, where Firn's glass ran over them, so the drawing now draws those cards on top (`GroupGlide.stays`); and Safari's titles are under the cards at full size from the first frame of an opening (cut off at the card's width, the next row riding over them) and gone in the first frame of a fold, where Firn's shrank with the card and faded in late, so the drawing now draws each title itself, unscaled (`titleLine`; `OverviewRow.titled`). The durations already matched (about 0.3s to nearly there, both ways). Simulator (iPhone 18 Pro, light), recorded and read frame by frame, both ways; one opening frame came twice in the Simulator's recording (Debug), to watch for on the phone. Not yet: dark, iPad, David's iPhone. Seen, not changed: Safari's titles sit about 3pt lower under their cards than Firn's, loose tabs too. Then (David, 2026-11-19, on his iPhone: "looks great", but the opening group no longer came to the middle): `center` waited for the list's report of the open card, and the list is lazy, so a card that starts below the screen's end (more likely now, with 24pt above it) was never laid out and never reported; an opening drawn over the list now centers from the plan's own measure of the card (`center(_ plan:)`). The cause is reasoned, not reproduced: the Simulator centered both before and after. Installed on David's iPhone (Release); David checked it (2026-11-19): spacing, the glide, and the centering ("group looks great now"). The chevron beside the open group's name stays, down, with none on the folded card (David). Still not run: dark, iPad. Then the titles under the cards matched to Safari's (David, 2026-11-19), loose tabs and grouped: measured pixel by pixel in the same recordings, Safari's icon is 16pt (Firn's was 14), 7pt under the card (5), 2pt in from the card's side on a long title (about 4), and about 4pt from the first letter (8); the words were already the same size. A long title now starts at the card's side and a short one stays centered, as two layouts (`GridTitle`, `ViewThatFits`): one centered line split a truncated title's leftover width, which pushed the icon in. Simulator, measured from a screenshot; installed on David's iPhone (Release), not yet checked. Then the icon dropped from the titles, in the grid only (David, 2026-11-19: the card's picture already says which site it is, so the icon only repeated it; a difference from Safari's on purpose): the title alone, centered, a long one truncating, still 7pt under the card and 2pt in; Basecamp, folders, and the Mac keep their icons. David checked it on his iPhone: "i love it".
 
+#### Plan: opening and closing tabs and tiles as Safari's (David, 2026-11-19)
+
+David: "We need to match Safari to a T. Safari's is so dang smooth and the blur effects." Agreed 2026-11-19, six steps, one at a time, each judged against Safari on David's iPhone, with a /clear between. From two recordings of the same three moves (the tabs button, a short swipe up, a slow swipe up), Safari's and Firn's, tracked frame by frame at 60 a second (the page's width and place measured from its own colors, not by eye). Firn's recording only opens and closes a tab's card; tiles aren't measured yet.
+
+**Measured.** How far the page is along its way, in seconds from its first moving frame:
+
+| | Safari | Firn |
+|---|---|---|
+| Open (tap): halfway / 90% / at rest | 0.09 / 0.22 / about 0.5 | 0.08 / 0.24 / 0.42 |
+| Close (button, short swipe): halfway / 90% / at rest | 0.10 / 0.20 / about 0.33 | about 0.32 in all |
+| Let go after a slow swipe: halfway / at rest | 0.12 / about 0.42 | 0.075 / about 0.28 |
+
+Safari's fit a spring with no bounce: open about `response 0.33`, close about `0.28` to `0.30` (it passes its card by about half a percent and comes back), the let-go after a hold softer, about `0.42` to `0.45`. All three of Safari's opens match each other to the frame, and its short swipe lands as its button does. Firn's are timed curves (`BrowserScreen.glide`, `closeGlide`, `tileOpen`, `tileCloseGlide`) that end sooner and harder.
+
+**Where Firn is off**, most visible first:
+
+1. **The backdrop.** Safari's grid is there from the first frame at full strength, heavily blurred, and the blur itself shrinks until it's sharp; its bar (+, Private, 12 Tabs, the check) is part of that picture. Firn cross-fades a picture blurred once (`FrozenOverview`) over the sharp list, so midway sharp edges show through a pale haze: a fade, not a focus pull. On opening, Firn's grid hardly blurs at all.
+2. **The page's shape.** Safari's page has about the screen's corners from the first frame of a close to the last of an open, shrinking with it to the card's. Firn's `boxRadius` runs from 0 to the card's, so it flies as a box and arrives square.
+3. **Stutters.** On the tabs button Firn's page jumps a quarter of the way in one frame, then holds two frames (about 50ms). Two of three opens repeat their third frame; the slow let-go repeats one too.
+4. **The bars.** Safari's page bar is gone within about three frames of a close, and on opening comes in only after the page has landed. Firn fades each bar on its own.
+5. **Firn's sliding header** (2j's (2): the card's picture starts below the site's header, which slides away in flight) shows as a dark band at the top of the flying page. Safari cross-fades the page into its thumbnail. David approved Firn's; left alone, judged again once the rest is right.
+
+**Steps.**
+
+1. **The backdrop's focus pull.** One flat picture of the overview, its bar included, under a blur that really shrinks to nothing, then the live list takes over; the same run backward on opening. One picture blurred each frame should be cheap, unlike the live list (about 200 passes a frame, 2h step 1), but measure it on David's iPhone, don't assume.
+2. **The page's shape.** Screen corners for the whole flight, both ways.
+3. **The curves.** Safari's springs from the table, the softer let-go after a hold, and the long tail.
+4. **The stutters.** With the cable (`SwipeTiming`): the jump and hold on the tabs button, the repeated frames.
+5. **The bars' timing.**
+6. **Tiles on the same treatment,** measured from a new recording first, then a look over: light, dark, Reduce Motion (stays a cross-fade), and Reduce Transparency.
+
+Not verified: how far the overview grows as it comes forward (92% to full, measured 2026-11-13, not measured again here), and whether Safari's held page shrinks further than Firn's for the same finger travel (58% against 69% in these recordings, but the travel wasn't the same).
+
 ## 4. What goes into CLAUDE.md
 
 A short section after "How spaces work" (draft):
@@ -728,6 +761,7 @@ From the build installed 2026-11-18 (TestFlight configuration). One at a time, d
 6. **The space pill, tap and hold:** a tap shows only the spaces; holding shows the spaces plus Space Settings… and New Space….
 7. **Switching spaces:** a better whole-screen motion than today's crossfade, which isn't smooth.
 8. Find on Page works (David). Nothing to do.
-9. **Opening and closing tiles and tabs:** needs Safari's polish.
+9. **Opening and closing tiles and tabs:** needs Safari's polish. Planned (2026-11-19, six steps: "Plan: opening and closing tabs and tiles as Safari's"); next, step 1.
 10. **The address bar pill on Back and Forward:** it jumps a little instead of resizing smoothly.
 11. Native glass ("Frosty, no tint"): David is generally happy with it. Nothing to do.
+12. **The Basecamp tile's hold menu** (David, 2026-11-19; for later, not started): still not fixed. Two things. (a) It is still Firn's own menu (`FrostMenu`, `TabOverview.tileMenu`), where tabs and groups have iOS's own; taken to mean it should become iOS's own too ("Plan: iOS's own menus and drag"); ask David if he meant something else as well. (b) The words: the row that closes a tile says "Remove from Basecamp", which isn't intuitive and isn't the Mac's. It becomes **Close**, beside **Move to Tabs** (already there), as the Mac's tile menu; the shake's undo name and VoiceOver follow, and CLAUDE.md's line on iOS's red Close rows names "Remove from Basecamp" and needs the same change.

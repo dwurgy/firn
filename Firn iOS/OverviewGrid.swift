@@ -93,7 +93,7 @@ enum OverviewGridRun: Identifiable {
 /// under it), on the group's glass, its name at the top and its first
 /// tabs as small square pictures, as Safari's (David, 2026-11-18): the
 /// squares fill the bottom, and the name sits centered in the room above
-/// them, as tab titles are centered. A tap opens it; holding it is iOS's
+/// them (17pt bold, as Safari's), as tab titles are centered. A tap opens it; holding it is iOS's
 /// menu and drag, from the grid (`GridCards`).
 struct GroupFolder: View {
     let group: TabGroup
@@ -118,7 +118,7 @@ struct GroupFolder: View {
                             NamingDots(color: Theme.ink, size: 5).frame(height: 18)
                         } else {
                             Text(group.name)
-                                .font(.headline)
+                                .font(.headline.weight(.bold))
                                 .foregroundStyle(Theme.ink)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)

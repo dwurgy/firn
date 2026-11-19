@@ -718,7 +718,7 @@ Found 2026-11-10. David: finish the normal iPhone version first, then the Duo. N
 From the build installed 2026-11-18 (TestFlight configuration). One at a time, dug into one by one, in David's order unless he picks another; mark each when done.
 
 1. **Room above the tabs:** a little more space between the bottom of the Basecamp tiles and the first tab. Done (2026-11-18): 24pt, was 12pt; David checked it on his iPhone.
-2. **Folded groups' previews:** square pictures, as in Safari, so they fit the folded group; today they're the tall card shape and the bottom ones get cut off.
+2. **Folded groups' previews:** square pictures, as in Safari, so they fit the folded group; today they're the tall card shape and the bottom ones get cut off. Built (2026-11-18): the pictures square, the 2×2 centered under the name, nothing cut (Simulator; not yet on David's iPhone).
 3. **Groups' animations:** not smooth, jumping all over.
 4. **The chevron on folded groups:** missing when folded; it only shows on an open group.
 5. **The space name pill after a swipe:** the name and dots stop lining up with the pill.

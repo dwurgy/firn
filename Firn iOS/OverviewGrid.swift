@@ -91,10 +91,10 @@ enum OverviewGridRun: Identifiable {
 
 /// A folded group in the grid: one tab's size (the picture's, nothing
 /// under it), on the group's glass, its name at the top and its first
-/// tabs as small pictures below, as a shrunken open group (Safari's;
-/// David, 2026-11-18). The second row runs off the bottom, cut by the
-/// cell's corners. A tap opens it; holding it is iOS's menu and drag,
-/// from the grid (`GridCards`).
+/// tabs as small square pictures below, as Safari's (David, 2026-11-18:
+/// the tall card shape cut the second row off). The 2×2 sits centered in
+/// the room under the name. A tap opens it; holding it is iOS's menu and
+/// drag, from the grid (`GridCards`).
 struct GroupFolder: View {
     let group: TabGroup
     let tabs: [FirnCore.Tab]
@@ -131,11 +131,12 @@ struct GroupFolder: View {
                             FolderThumb(tab: tab, pictures: pictures, corner: Self.thumbCorner)
                         }
                     }
+                    .frame(maxHeight: .infinity, alignment: .center)
                 }
                 .padding(Self.inset)
-                // `minHeight: 0`: two rows of pictures are taller than the
-                // cell, so without it the folder grew past its cell, up and
-                // down, instead of the second row running off the bottom.
+                // `minHeight: 0`: at large text sizes the name and two rows
+                // can still be taller than the cell; without it the folder
+                // grows past its cell instead of the bottom being cut.
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                 .background { FirnGlass(shape: shape) }
                 .clipShape(shape)
@@ -154,7 +155,8 @@ struct GroupFolder: View {
     }
 }
 
-/// One small page picture in a folded group, shaped as a grid card's.
+/// One small page picture in a folded group: square, as Safari's, the
+/// page's top below its header.
 private struct FolderThumb: View {
     let tab: FirnCore.Tab
     let pictures: PagePictures
@@ -163,7 +165,7 @@ private struct FolderThumb: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
         Color.clear
-            .aspectRatio(1 / OverviewGridMetrics.pictureShape, contentMode: .fit)
+            .aspectRatio(1, contentMode: .fit)
             .overlay(alignment: .top) {
                 if let picture = pictures.cachedImage(for: tab.id), picture.size.width > 0 {
                     GeometryReader { box in

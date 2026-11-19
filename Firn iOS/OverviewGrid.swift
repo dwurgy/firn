@@ -91,10 +91,10 @@ enum OverviewGridRun: Identifiable {
 
 /// A folded group in the grid: one tab's size (the picture's, nothing
 /// under it), on the group's glass, its name at the top and its first
-/// tabs as small square pictures below, as Safari's (David, 2026-11-18:
-/// the tall card shape cut the second row off). The 2×2 sits centered in
-/// the room under the name. A tap opens it; holding it is iOS's menu and
-/// drag, from the grid (`GridCards`).
+/// tabs as small square pictures, as Safari's (David, 2026-11-18): the
+/// squares fill the bottom, and the name sits centered in the room above
+/// them, as tab titles are centered. A tap opens it; holding it is iOS's
+/// menu and drag, from the grid (`GridCards`).
 struct GroupFolder: View {
     let group: TabGroup
     let tabs: [FirnCore.Tab]
@@ -104,7 +104,7 @@ struct GroupFolder: View {
     let open: () -> Void
 
     private static let shown = 4
-    private static let inset: CGFloat = 10
+    private static let inset: CGFloat = 8
     private static let gap: CGFloat = 6
     private static let thumbCorner: CGFloat = 7
 
@@ -112,31 +112,38 @@ struct GroupFolder: View {
         let shape = RoundedRectangle(cornerRadius: OverviewRow.gridCornerRadius, style: .continuous)
         VStack(spacing: 0) {
             Button(action: open) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(spacing: Self.gap) {
                     Group {
                         if naming {
                             NamingDots(color: Theme.ink, size: 5).frame(height: 18)
                         } else {
                             Text(group.name)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.headline)
                                 .foregroundStyle(Theme.ink)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.85)
                         }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: Self.gap, alignment: .top),
                                         GridItem(.flexible(), spacing: Self.gap, alignment: .top)],
                               spacing: Self.gap) {
                         ForEach(tabs.prefix(Self.shown)) { tab in
                             FolderThumb(tab: tab, pictures: pictures, corner: Self.thumbCorner)
                         }
+                        // Empty places keep two rows' room with fewer tabs,
+                        // so the name sits at the same height in every folder.
+                        ForEach(tabs.count..<max(Self.shown, tabs.count), id: \.self) { _ in
+                            Color.clear.aspectRatio(1, contentMode: .fit)
+                        }
                     }
-                    .frame(maxHeight: .infinity, alignment: .center)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(Self.inset)
                 // `minHeight: 0`: at large text sizes the name and two rows
-                // can still be taller than the cell; without it the folder
-                // grows past its cell instead of the bottom being cut.
+                // can be taller than the cell; without it the folder grows
+                // past its cell instead of the top being squeezed.
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                 .background { FirnGlass(shape: shape) }
                 .clipShape(shape)

@@ -968,7 +968,7 @@ struct TabOverview: View {
         } completion: {
             endGlide(plan)
         }
-        if plan.opening { center(group) } else { reveal(plan) }
+        if plan.opening { center(plan) } else { reveal(plan) }
     }
 
     /// A folded group's cell stays in view: folding one near the top or
@@ -1138,6 +1138,30 @@ struct TabOverview: View {
             guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
             // From the content's top, past the top inset (as `fold`'s pin).
             withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
+                scrollPosition.scrollTo(point: CGPoint(x: 0, y: y + scroll.contentInsets.top))
+            }
+        }
+    }
+
+    /// The same, for an opening drawn over the list: from the plan's own
+    /// measure of the open card, not the list's report of it. The list is
+    /// lazy, and a card that starts below the screen's end (a folder low on
+    /// screen, second in its row) was never laid out, so its report never
+    /// came and the group didn't come to the middle (David, 2026-11-19).
+    private func center(_ plan: GroupGlide) {
+        guard let origin = spots.listOrigin, let scrollTop = spots.scrollTop, spots.scroll != nil else { return }
+        let now = plan.card.minY + origin.y - scrollTop
+        Task { @MainActor in
+            // A frame later, once the list has its new height.
+            try? await Task.sleep(for: .milliseconds(16))
+            guard let scroll = spots.scroll else { return }
+            let view = scroll.containerSize.height
+            let wanted = max((view - plan.card.height) / 2, Self.centerMargin)
+            let lowest = -scroll.contentInsets.top
+            let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
+            let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
+            guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
+            withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0)) {
                 scrollPosition.scrollTo(point: CGPoint(x: 0, y: y + scroll.contentInsets.top))
             }
         }

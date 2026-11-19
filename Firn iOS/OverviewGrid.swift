@@ -108,6 +108,13 @@ struct GroupFolder: View {
     private static let gap: CGFloat = 6
     private static let thumbCorner: CGFloat = 7
 
+    /// Folding into this cell, from the open group (`GridCardCell.morph`).
+    @Environment(FolderMorph.self) private var morph: FolderMorph?
+    @State private var width: CGFloat = 0
+    private var folderSize: CGSize {
+        CGSize(width: width, height: max(cardHeight - OverviewRow.gridTitleHeight, 1))
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: OverviewRow.gridCornerRadius, style: .continuous)
         VStack(spacing: 0) {
@@ -145,12 +152,12 @@ struct GroupFolder: View {
                 // can be taller than the cell; without it the folder grows
                 // past its cell instead of the top being squeezed.
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-                .background { FirnGlass(shape: shape) }
-                .clipShape(shape)
+                .modifier(FolderShrink(morph: morph, size: folderSize))
                 .contentShape(shape)
             }
             .buttonStyle(UndimmedPress())
-            .frame(height: max(cardHeight - OverviewRow.gridTitleHeight, 1))
+            .frame(height: folderSize.height)
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             Color.clear.frame(height: OverviewRow.gridTitleHeight)
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
@@ -159,6 +166,39 @@ struct GroupFolder: View {
         .accessibilityValue("Folded, \(tabs.count) \(tabs.count == 1 ? "tab" : "tabs")")
         .accessibilityHint("Shows the group's tabs")
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A folder shrinking in from the open group, as Safari's: its glass
+/// laid out at each size on the way, from the open group's frame to the
+/// folder's (never scaled or masked, or iOS draws no glass until it's
+/// over), its name and pictures scaled down from the open group's width
+/// inside it. At rest, the folder's glass and shape.
+private struct FolderShrink: ViewModifier {
+    let morph: FolderMorph?
+    let size: CGSize
+
+    func body(content: Content) -> some View {
+        let share = morph?.from == nil ? 0 : (morph?.share ?? 0)
+        let end = CGRect(origin: .zero, size: size)
+        let from = morph?.from ?? end
+        let frame = CGRect(x: from.minX * share, y: from.minY * share,
+                           width: size.width + (from.width - size.width) * share,
+                           height: size.height + (from.height - size.height) * share)
+        let corner = OverviewRow.gridCornerRadius + (GroupCard.cornerRadius - OverviewRow.gridCornerRadius) * share
+        let scale = size.width > 0 ? frame.width / size.width : 1
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        content
+            .scaleEffect(scale, anchor: .topLeading)
+            .offset(x: frame.minX, y: frame.minY)
+            .mask(alignment: .topLeading) {
+                shape.frame(width: frame.width, height: frame.height).offset(x: frame.minX, y: frame.minY)
+            }
+            .background(alignment: .topLeading) {
+                FirnGlass(shape: shape)
+                    .frame(width: frame.width, height: frame.height)
+                    .offset(x: frame.minX, y: frame.minY)
+            }
     }
 }
 

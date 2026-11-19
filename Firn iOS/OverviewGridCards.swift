@@ -86,14 +86,19 @@ final class GridCardCell: UICollectionViewCell {
         raised = true
     }
 
+    /// A group folding into this cell, drawn by the folder itself
+    /// (`GroupFolder`, through the environment).
+    let folding = FolderMorph()
+
     /// A group folding: the cell starts as big as the open group was and
-    /// shrinks into its place, its folder (a small open group) scaled
-    /// with it, as Safari's. `from` is the open group's frame in the
-    /// cell's own space. The growth's sublayer transform, so the layout
-    /// never undoes it; the cell sits on top while it shrinks.
+    /// shrinks into its place, as Safari's. `from` is the open group's
+    /// frame in the cell's own space. The folder draws it in SwiftUI, its
+    /// glass laid out at each size on the way: scaled and masked here in
+    /// Core Animation, iOS's glass drew nothing until the shrink was over,
+    /// then popped in (David's recording, 2026-11-18).
     func morph(from: CGRect, reduceMotion: Bool) {
-        contentView.alpha = 1
         if reduceMotion || bounds.width < 1 {
+            contentView.alpha = 1
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 0
             fade.duration = 0.3
@@ -101,35 +106,13 @@ final class GridCardCell: UICollectionViewCell {
             return
         }
         raise()
-        let scale = from.width / bounds.width
-        // About the layer's middle, where the sublayer transform works.
-        let middle = CGPoint(x: bounds.midX, y: bounds.midY)
-        var start = CATransform3DMakeTranslation(from.minX + (scale - 1) * middle.x,
-                                                 from.minY + (scale - 1) * middle.y, 0)
-        start = CATransform3DScale(start, scale, scale, 1)
-        let shrink = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
-        shrink.keyPath = "sublayerTransform"
-        shrink.fromValue = start
-        shrink.toValue = CATransform3DIdentity
-        shrink.duration = shrink.settlingDuration
-        layer.sublayerTransform = CATransform3DIdentity
-        layer.add(shrink, forKey: "morph")
-        // Cut to the open group's shape, closing to the folder's: the
-        // scaled folder is taller than the group was, and would reach
-        // over what's below it. Gone once it's in place.
-        let clip = CAShapeLayer()
-        clip.frame = bounds
-        let end = CGRect(x: 0, y: 0, width: bounds.width,
-                         height: max(bounds.height - OverviewRow.gridTitleHeight, 1))
-        clip.path = UIBezierPath(roundedRect: end, cornerRadius: OverviewRow.gridCornerRadius).cgPath
-        let close = CASpringAnimation(perceptualDuration: GridCards.morphDuration, bounce: 0)
-        close.keyPath = "path"
-        close.fromValue = UIBezierPath(roundedRect: from, cornerRadius: GroupCard.cornerRadius).cgPath
-        close.duration = close.settlingDuration
-        clip.add(close, forKey: "morph")
-        layer.mask = clip
-        DispatchQueue.main.asyncAfter(deadline: .now() + close.settlingDuration) { [weak self] in
-            if self?.layer.mask === clip { self?.layer.mask = nil }
+        folding.from = from
+        folding.share = 1
+        // A turn later, so SwiftUI has drawn it big before the shrink.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.folding.from == from else { return }
+            self.contentView.alpha = 1
+            withAnimation(.spring(duration: GridCards.morphDuration, bounce: 0)) { self.folding.share = 0 }
         }
     }
 
@@ -154,7 +137,8 @@ final class GridCardCell: UICollectionViewCell {
         super.prepareForReuse()
         layer.removeAnimation(forKey: "morph")
         layer.removeAnimation(forKey: "glide")
-        layer.mask = nil
+        folding.from = nil
+        folding.share = 0
         settle?.stopAnimation(true)
         settle = nil
         swipe = .identity
@@ -185,6 +169,14 @@ final class GridCardCell: UICollectionViewCell {
         // recording, 2026-11-17).
         contentView.alpha = state == .none ? 1 : 0
     }
+}
+
+/// A folded group's cell shrinking in from the open group (`GridCardCell.morph`):
+/// where the open group was in the cell's own space, and how much of the
+/// way back there it still is (1 at the start, 0 in place).
+@MainActor @Observable final class FolderMorph {
+    var from: CGRect?
+    var share: CGFloat = 0
 }
 
 /// Where a grid card is in a swipe to close (`GridCards`): `swiping`, then
@@ -544,7 +536,10 @@ struct GridCards: UIViewRepresentable {
             guard let parent else { return }
             cell.backgroundConfiguration = .clear()
             cell.clipsToBounds = false
-            cell.contentConfiguration = UIHostingConfiguration { parent.card(id) }.margins(.all, 0)
+            let folding = (cell as? GridCardCell)?.folding
+            cell.contentConfiguration = UIHostingConfiguration {
+                parent.card(id).environment(folding)
+            }.margins(.all, 0)
         }
 
         func update(_ new: GridCards, in view: UICollectionView) {

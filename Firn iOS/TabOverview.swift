@@ -773,6 +773,9 @@ struct TabOverview: View {
             // goes in it.
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.frames[group.id] = $0 }
             .modifier(GrowFromCell(from: opening(group)))
+            // Where it's laid out, apart from its growth, to bring it to
+            // the middle as it opens (`center`).
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.openGroups[group.id] = $0 }
             .id(group.id)
             .transition(groupTransition(group))
     }
@@ -919,6 +922,7 @@ struct TabOverview: View {
             withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
                 store.setFolded(group, folding)
             }
+            if !folding { center(group) }
             Task {
                 try? await Task.sleep(for: .milliseconds(600))
                 if foldMorph == morph { foldMorph = nil }
@@ -927,6 +931,38 @@ struct TabOverview: View {
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setFolded(group, folding) }
     }
+
+    /// A group opening comes to the middle of the screen as it grows, as
+    /// Safari's (David's recording, 2026-11-18); one taller than the
+    /// screen comes to its top instead. Once it's laid out (a frame
+    /// later), from where it then is, on the opening's own curve.
+    private func center(_ group: TabGroup) {
+        spots.openGroups[group.id] = nil
+        Task { @MainActor in
+            // Once it's laid out: a few frames at most.
+            var tries = 0
+            repeat {
+                try? await Task.sleep(for: .milliseconds(16))
+                tries += 1
+            } while tries < 8 && spots.openGroups[group.id] == nil
+            guard let frame = spots.openGroups[group.id],
+                  let scroll = spots.scroll, let scrollTop = spots.scrollTop else { return }
+            let view = scroll.containerSize.height
+            let now = frame.minY - scrollTop
+            let wanted = max((view - frame.height) / 2, Self.centerMargin)
+            let lowest = -scroll.contentInsets.top
+            let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
+            let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
+            guard abs(y - scroll.contentOffset.y) > 0.5 else { return }
+            // From the content's top, past the top inset (as `fold`'s pin).
+            withAnimation(reduceMotion ? nil : .spring(duration: GridCards.morphDuration, bounce: 0)) {
+                scrollPosition.scrollTo(point: CGPoint(x: 0, y: y + scroll.contentInsets.top))
+            }
+        }
+    }
+
+    /// Room kept above a group too tall to center.
+    private static let centerMargin: CGFloat = 12
 
     /// Done: back to the tab on screen. If its group was folded here, it
     /// opens again first (the same glide as tapping it), and the page grows
@@ -2235,6 +2271,9 @@ struct ComesForward: ViewModifier, Animatable {
     /// Folded groups' cells in the grid, apart from `frames`: a cell going
     /// away still reports where it is, and would overwrite the open group's.
     var folders: [UUID: CGRect] = [:]
+    /// Open groups in the grid where they're laid out, apart from their
+    /// growth out of a folder (`frames` is read inside it, scaled).
+    var openGroups: [UUID: CGRect] = [:]
     /// The list's own frame, to find the tab under a pinch.
     var viewport: CGRect = .zero
     /// The tabs shown as tall cards (the rest are slim rows): a card's

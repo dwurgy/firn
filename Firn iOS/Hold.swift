@@ -77,6 +77,8 @@ final class Hold {
     var newTabGive: CGFloat = 0
     /// The page's own frame on screen, to aim the glide from.
     var pageFrame: CGRect = .zero
+    /// Moves a page pulled up toward the finger's place (`Follower`).
+    @ObservationIgnored let follower = Follower()
 
     /// The screen's own corners, for the flying page. iOS has no public
     /// way to ask, so: iPhones with a home bar about 55pt (47 to 62 across
@@ -145,6 +147,95 @@ final class Hold {
         let coming = t > 0 ? -1 : 1
         guard t != 0, neighbors.contains(where: { $0.place == coming }) else { return BarSlide(progress: 0) }
         return BarSlide(progress: t)
+    }
+}
+
+/// A page pulled up follows the finger on a short spring, not rigidly, as
+/// Safari's (David's recordings, 2026-11-20: Firn's page was at 81% in its
+/// first frame, Safari's eases in). The page can't move until the grab's
+/// own work is done, and the finger travels on meanwhile; tied to the
+/// finger, the first frame drew the page where the finger already was. Now
+/// it starts where the page rests and closes on the finger's place, which
+/// `aim` keeps up to date, a step every frame of the screen.
+///
+/// The spring is worked out exactly for each step, and a step never counts
+/// for more than a thirtieth of a second: after a frame that came late the
+/// page carries on from where it was, without a jump. The link rests once
+/// the page has caught up with a finger held still.
+@MainActor
+final class Follower: NSObject {
+    /// How quickly the page closes on the finger (s): it trails a moving
+    /// finger by about a third of this. Short, so only the grab changes;
+    /// how far Safari's trails is still to be matched.
+    static let response = 0.12
+
+    private(set) var running = false
+    private var place: [CGFloat] = [0, 0, 0, 0]
+    private var speed: [CGFloat] = [0, 0, 0, 0]
+    private var target: [CGFloat] = [0, 0, 0, 0]
+    private var step: ((CGRect) -> Void)?
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval?
+
+    /// The page is at `box`, still; `step` places it from now on.
+    func start(at box: CGRect, step: @escaping (CGRect) -> Void) {
+        stop()
+        place = Self.parts(box)
+        target = place
+        speed = [0, 0, 0, 0]
+        self.step = step
+        running = true
+    }
+
+    /// Where the finger would have the page now.
+    func aim(_ box: CGRect) {
+        guard running else { return }
+        target = Self.parts(box)
+        guard link == nil, target != place else { return }
+        let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+        last = nil
+    }
+
+    /// Someone else places the page from here on.
+    func stop() {
+        rest()
+        running = false
+        step = nil
+    }
+
+    private func rest() {
+        link?.invalidate()
+        link = nil
+        last = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let dt = CGFloat(min(last.map { link.timestamp - $0 } ?? link.duration, 1.0 / 30))
+        last = link.timestamp
+        let omega = 2 * CGFloat.pi / CGFloat(Self.response)
+        let fall = exp(-omega * dt)
+        var caught = true
+        for i in 0..<4 {
+            // A fully damped spring, from where it is at its own speed.
+            let apart = place[i] - target[i]
+            let pace = speed[i] + omega * apart
+            place[i] = target[i] + (apart + pace * dt) * fall
+            speed[i] = (pace - omega * (apart + pace * dt)) * fall
+            if abs(place[i] - target[i]) > 0.2 || abs(speed[i]) > 8 { caught = false }
+        }
+        if caught {
+            place = target
+            speed = [0, 0, 0, 0]
+            rest()
+        }
+        step?(CGRect(x: place[0], y: place[1], width: place[2], height: place[3]))
+    }
+
+    private static func parts(_ box: CGRect) -> [CGFloat] {
+        [box.minX, box.minY, box.width, box.height]
     }
 }
 

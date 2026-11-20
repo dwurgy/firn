@@ -112,7 +112,12 @@ struct BrowserScreen: View {
     /// corners, and how much the card's line on it has faded in.
     private var box: CGRect {
         get { hold.box }
-        nonmutating set { if hold.box != newValue { hold.box = newValue } }
+        nonmutating set {
+            guard hold.box != newValue else { return }
+            // Placed from here, not by the pull's follower any more.
+            hold.follower.stop()
+            hold.box = newValue
+        }
     }
     private var boxRadius: CGFloat {
         get { hold.boxRadius }
@@ -842,6 +847,7 @@ struct BrowserScreen: View {
     /// starts at the finger's speed (`Flight`); `curve` then moves only its
     /// corners, strip, and what fades.
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double, finger: CGSize? = nil) {
+        hold.follower.stop()
         Task {
             guard let measured = await spot(of: tab) else {
                 Self.landingLog.notice("close faded: no spot on screen (known: \(spots.frames[tab.id] != nil, privacy: .public), tile: \(tab.place == .basecamp, privacy: .public))")
@@ -993,6 +999,7 @@ struct BrowserScreen: View {
 
     /// No picture or no card to aim at: the overview fades in.
     private func fadeToTabs() {
+        hold.follower.stop()
         endFlight()
         livePull = false
         tileReveal = 1
@@ -1066,6 +1073,7 @@ struct BrowserScreen: View {
     /// (a pull let go, a sideways swipe), the list just fades.
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool,
                       stepsBack: Double? = nil) {
+        hold.follower.stop()
         guard let standInSize else { return hideTabs() }
         // The bar comes back on its own clock (`BarReturn`), unless it's
         // still partly there (a pull let go early): the switch would cut it.
@@ -1169,6 +1177,7 @@ struct BrowserScreen: View {
     /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,
     /// or a card off screen).
     private func hideTabs() {
+        hold.follower.stop()
         livePull = false
         standIn = nil
         standInTab = nil
@@ -1199,7 +1208,10 @@ struct BrowserScreen: View {
         if var pull {
             pull.translation = drag.translation
             self.pull = pull
-            if pulledSize != nil { box = pulledBox(pull); followPull(pull) }
+            if pulledSize != nil {
+                if pull.sideways { box = pulledBox(pull) } else { hold.follower.aim(pulledBox(pull)) }
+                followPull(pull)
+            }
             return
         }
         if newTabSwipe { return followNewTabSwipe(drag.translation) }
@@ -1266,8 +1278,7 @@ struct BrowserScreen: View {
             putStandIn(lingering, of: tab, at: pageBox(for: lingering))
             if lingeringTop != nil { standInTop = lingeringTop }
             if !up { stripOpacity = 0 }
-            box = pulledBox(started)
-            followPull(started)
+            place(started)
             return
         }
         // The live page moves at once, from this very frame; its picture
@@ -1277,8 +1288,7 @@ struct BrowserScreen: View {
         // Sideways, the page carries its own strip (`topBand`).
         stripOpacity = up ? 1 : 0
         boxRadius = 0
-        box = pulledBox(started)
-        followPull(started)
+        place(started)
         SwipeTiming.mark("live page held")
         Task {
             let fresh = await picture?.value
@@ -1294,6 +1304,28 @@ struct BrowserScreen: View {
             livePull = false
             SwipeTiming.mark("picture set")
         }
+    }
+
+    /// A pull's first placing. Sideways, the page is under the finger at
+    /// once. Pulled up, it starts where it rests and closes on the finger's
+    /// place over the next frames (`Follower`): the finger has already
+    /// travelled by the time the grab's first frame is drawn, and tied to
+    /// it the page jumped there.
+    private func place(_ started: Pull) {
+        guard !started.sideways else {
+            box = pulledBox(started)
+            return followPull(started)
+        }
+        var resting = started
+        resting.translation = .zero
+        box = pulledBox(resting)
+        hold.follower.start(at: box) { [hold] placed in
+            if hold.box != placed { hold.box = placed }
+            // Its corners and the grid behind follow its size.
+            if let pull = hold.pull { followPull(pull) }
+        }
+        hold.follower.aim(pulledBox(started))
+        followPull(started)
     }
 
     /// How far up the page has been pulled, 0 at rest and 1 at half the
@@ -1419,6 +1451,8 @@ struct BrowserScreen: View {
         SwipeTiming.mark("finger lifted")
         pull.translation = translation
         heldShift = sidewaysShift(pull)
+        // The page keeps closing on where the finger left, until it flies.
+        if !pull.sideways, pulledSize != nil { hold.follower.aim(pulledBox(pull)) }
         self.pull = nil
         let up = -velocity.height
         let flickedUp = !pull.sideways && up > 500
@@ -1591,6 +1625,7 @@ struct BrowserScreen: View {
     /// that was held rides beside it now), then grows to the full screen,
     /// carrying the finger's speed.
     private func open(_ neighbor: Neighbor, carrying velocity: CGSize) {
+        hold.follower.stop()
         guard let held = standInTab, let heldImage = standIn else { return hideTabs() }
         let image = neighbor.image ?? plainPage(like: heldImage)
         // Each where it's drawn now: the glide carries them on from there.

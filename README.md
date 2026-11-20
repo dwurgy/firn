@@ -67,6 +67,17 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
   <img src="docs/screenshots/07-tidied-light.png" alt="The Tidied away popover in the sidebar's bottom row">
 </picture>
 
+## On iPhone
+
+Coming soon to iPhone: the same spaces, Basecamp, groups, and command bar, with the address bar at the bottom and a calm reader for articles.
+
+<p align="center">
+  <img src="docs/screenshots/iphone-01-page.png" alt="A web page in Firn on iPhone, with the address bar at the bottom" width="24%">
+  <img src="docs/screenshots/iphone-02-tabs.png" alt="The tab overview on iPhone: Basecamp tiles, a group, and open tabs" width="24%">
+  <img src="docs/screenshots/iphone-03-command.png" alt="The command bar on iPhone, with results above the keyboard" width="24%">
+  <img src="docs/screenshots/iphone-04-reader.png" alt="An article in Reader on iPhone" width="24%">
+</p>
+
 ## Privacy
 
 - **No telemetry.** Firn has no accounts, doesn't track you, and doesn't report how you use it. Your tabs and spaces stay on your Mac.
@@ -121,7 +132,7 @@ cd FirnCore && swift test --scratch-path ~/Library/Caches/FirnCore-build
 - `FirnCore/Tests/`: the tests.
 - `brand/`: Firn's logo, wordmark, and app icons.
 - `docs/`: design drafts and `HISTORY.md`, the story of how each part was built and why.
-- `docs/screenshots/`: the pictures in this README, taken in demo mode by `scripts/demo-shots.sh` (light and dark).
+- `docs/screenshots/`: the pictures in this README, taken in demo mode by `scripts/demo-shots.sh` (light and dark). The iPhone pictures (`iphone-*.png`) are taken in the Simulator, scaled to 600px with rounded corners.
 
 Your data lives in Firn's sandbox container, `~/Library/Containers/` on your Mac.
 

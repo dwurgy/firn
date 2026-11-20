@@ -26,6 +26,7 @@ struct SettingsSheet: View {
     @State private var availability = ICloudSync.Availability.available
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
     @AppStorage(SearchSuggestions.preferenceKey) private var searchSuggestions = false
+    @AppStorage(SearchEngine.preferenceKey) private var searchEngine = SearchEngine.default
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
 
@@ -103,16 +104,19 @@ struct SettingsSheet: View {
         }
     }
 
-    /// "Show suggestions as you type", the Mac's switch in the Mac's words
-    /// (Settings › General there). Off until someone says yes: it's the one
+    /// "Search with" and "Show suggestions as you type", the Mac's choices
+    /// in the Mac's words (Settings › General there), from the same list. Off until someone says yes: it's the one
     /// place typing goes over the network.
     private var searchSection: some View {
         Section {
+            Picker("Search with", selection: $searchEngine) {
+                ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
+            }
             Toggle("Show suggestions as you type", isOn: $searchSuggestions)
         } header: {
             Text("Search")
         } footer: {
-            Text("With suggestions on, \(SearchEngine.chosen.name) sees what you type.")
+            Text("With suggestions on, \(searchEngine.name) sees what you type.")
         }
     }
 

@@ -215,6 +215,7 @@ struct BrowserScreen: View {
             if newValue == nil, landing.behind {
                 landing.behind = false
                 landing.heldHigh = false
+                landing.heldSeen = false
                 var instant = Transaction()
                 instant.disablesAnimations = true
                 withTransaction(instant) { landing.heldIn = 0 }
@@ -1299,6 +1300,7 @@ struct BrowserScreen: View {
         let high = scale < (landing.heldHigh ? Self.heldGridScale + 0.015 : Self.heldGridScale)
         if high != landing.heldHigh {
             landing.heldHigh = high
+            if high, !landing.heldSeen { landing.heldSeen = true }
             withAnimation(.easeOut(duration: Self.heldGridFade)) { landing.heldIn = high ? 1 : 0 }
             // The tabs beside the page belong to a hold lower down: they
             // leave as the grid comes in, and stay out for the rest of

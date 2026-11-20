@@ -52,6 +52,9 @@ final class Landing {
     var heldIn: CGFloat = 0
     /// Whether the page is past that point (`BrowserScreen.followPull`).
     var heldHigh = false
+    /// The grid has come in behind the held page on this pull: its picture
+    /// is no darker from then to the glide's end (`ComesForward.heldDim`).
+    var heldSeen = false
     /// The overview, hidden behind the page, laid out in its settled look
     /// for the moment its picture is taken (`TabOverview.freezeSoon`, step
     /// 1b): behind the page it otherwise waits as a landing starts, its
@@ -117,7 +120,8 @@ struct LandingForward: ViewModifier {
         let listing = posed || landing.listIn > 0 || (behindToo && landing.behind)
         content.modifier(ComesForward(through: posed ? 1 : landing.forward, focus: posed ? 1 : landing.focus,
                                       middle: middle, off: off,
-                                      inScroll: inScroll, blurs: listing, scales: scalesWithList ? listing : true))
+                                      inScroll: inScroll, blurs: listing, scales: scalesWithList ? listing : true,
+                                      held: landing.heldSeen))
     }
 }
 

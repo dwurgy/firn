@@ -607,6 +607,8 @@ David, with a recording of Safari alone (five swipe ups: a short hold, a 4.5s ho
 3. **The let-go on a spring that carries the finger:** the page's place (across and up) and its size each on the same spring, started at the finger's own velocity on that axis, for a tab into its card first. The landing's other clocks (the overview's focus and growth, the bar, the card taking over) are tied to a fixed duration today and move to the spring's settling time. The largest step; its own session. Then the same for the let-go back to the page.
 4. **A look over:** tiles (their own glide today), a pull let go onto a side tab, Reduce Motion (stays a cross-fade), light and dark.
 
+*The grid behind a held page, no darker (2026-11-20, David's screenshots, Safari beside Firn, dark: "too dark", just where the haze turns into the grid).* The overview's picture was a fifth darker behind a held page (`ComesForward.dim`, there for a tab's landing), which took dark mode's charcoal wash to black; Safari's grid is as light as its wallpaper. Once the grid has come in on a pull (`Landing.heldSeen`), the picture is no darker to the glide's end (`ComesForward.heldDim`, 0), so the let-go has no step. A quick swipe up and the tabs button keep the fifth. Simulator, dark, a held page; not yet on David's iPhone.
+
 Then back to the list above: 3 (the blur's strength and dim), 4 (sideways travel while held, which step 1's recording says does follow the finger off the edge), and step 6, tiles.
 
 - **Not measurable from a recording:** how closely the page follows the finger (the touch isn't shown).

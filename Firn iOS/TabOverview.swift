@@ -2604,6 +2604,13 @@ struct ComesForward: ViewModifier, Animatable {
     /// is there at once, dimmed, and brightens as it comes forward, where
     /// Firn's read as a pale haze fading in (same recording).
     static let dim: Double = 0.2
+    /// Behind a page pulled up high and held, no darker at all: the
+    /// picture comes in over the haze there, and a fifth darker took dark
+    /// mode's charcoal wash to black, where Safari's grid is as light as
+    /// its wallpaper (David's screenshots side by side, 2026-11-20).
+    static let heldDim: Double = 0
+    /// The grid came in behind a held page on this pull (`Landing.heldSeen`).
+    var held = false
     /// How much smaller it starts (Safari's is about 4%; 4% on the list's
     /// quick fade couldn't be seen; 94% and 90% tried; 92%, measured from
     /// Safari's, David's recording, 2026-11-13).
@@ -2627,7 +2634,7 @@ struct ComesForward: ViewModifier, Animatable {
         // Its own curve holds it soft early (`BrowserScreen`), so a plain
         // share here.
         let left = 1 - min(max(focus, 0), 1)
-        let dim = off || !blurs ? 0 : -Self.dim * Double(left)
+        let dim = off || !blurs ? 0 : -(held ? Self.heldDim : Self.dim) * Double(left)
         let middle = middle
         let inScroll = inScroll
         content.visualEffect { view, proxy in

@@ -324,6 +324,10 @@ struct BarHost<Content: View>: View {
     let editing: Bool
     @ViewBuilder let content: Content
 
+    /// How much of the page's way is left as the bar starts back in on an
+    /// opening tab (`Landing.barLate`).
+    static var lateSpan: CGFloat { 0.04 }
+
     var body: some View {
         let shown = landing.arrival < 1 || editing
         content
@@ -339,7 +343,14 @@ struct BarHost<Content: View>: View {
             // opacity fades straight from start to end, so both bars
             // faded at once and their words smudged together (David's
             // recording, 2026-11-09).
-            .modifier(ArrivalBand(arrival: editing ? 0 : landing.arrival, range: 0...0.2, fadesIn: false,
+            // As a tab opens it comes in only over the page's last 4% of
+            // the way (from about 0.28s of the 0.50s glide, the long tail),
+            // as Safari's does: measured in the Simulator, Safari's bar
+            // starts at about 0.28s and is whole by about 0.55s (step 5,
+            // 2026-11-19). Over the last fifth, as it goes on a close, it
+            // was whole while the page was still growing.
+            .modifier(ArrivalBand(arrival: editing ? 0 : landing.arrival,
+                                  range: landing.barLate ? 0...Self.lateSpan : 0...0.2, fadesIn: false,
                                   floor: !editing && landing.gliding != nil ? 0.002 : 0))
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)

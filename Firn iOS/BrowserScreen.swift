@@ -774,6 +774,7 @@ struct BrowserScreen: View {
     private func beginGlide(of tab: FirnCore.Tab) {
         openActiveGroup()
         gliding = tab.id
+        if landing.barLate { landing.barLate = false }
         // A tile's spot stays empty until its page lands in it; shown, the
         // tile sat there during the pull, vanished as the finger lifted,
         // and came back (Simulator recording, 2026-11-09).
@@ -1020,6 +1021,9 @@ struct BrowserScreen: View {
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool,
                       stepsBack: Double? = nil) {
         guard let standInSize else { return hideTabs() }
+        // The bar comes back late (`BarHost`), unless it's still partly
+        // there (a pull let go early): the switch would cut it.
+        if arrival >= 0.2 { landing.barLate = true }
         if let stepsBack {
             withAnimation(.easeOut(duration: stepsBack)) {
                 forward = 0
@@ -1045,6 +1049,7 @@ struct BrowserScreen: View {
         } completion: {
             // Stepped back: the list goes now, under the full-screen page.
             withTransaction(Transaction(animation: nil)) { listIn = 0 }
+            landing.barLate = false
             stripOpacity = 1
             pageHidden = false
             showingTabs = false
@@ -1243,6 +1248,7 @@ struct BrowserScreen: View {
             return
         }
         let progress = min(lift(pull), 1)
+        if landing.barLate { landing.barLate = false }
         arrival = progress * 0.85
         // Gone at once, never faded, even inside the picture's catch-up glide.
         var instant = Transaction()

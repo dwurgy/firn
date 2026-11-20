@@ -34,6 +34,10 @@ struct AddressBar: View {
     @State private var typed = ""
     /// This space's history pages for what's typed, looked up as you type.
     @State private var history: [HistoryPage] = []
+    /// The engine's latest suggestions, kept until new ones come so the rows
+    /// don't flicker on every key. Only with the setting on.
+    @State private var suggestions: [String] = []
+    @AppStorage(SearchSuggestions.preferenceKey) private var asksForSuggestions = false
     /// Just after typing, while the keyboard slides away: the field's glass
     /// rides down with it, so the bar's resting parts (the site, its
     /// buttons, Back, and Tabs) wait until it has landed, then fade in.
@@ -139,7 +143,7 @@ struct AddressBar: View {
     /// with them, so it glides frame by frame with their words.
     var body: some View {
         let rows = editing.wrappedValue
-            ? store.commandRows(for: typed, searchEngine: engine, history: history,
+            ? store.commandRows(for: typed, searchEngine: engine, suggestions: suggestions, history: history,
                                 otherDevices: otherDeviceTabs(),
                                 actions: actions.map(\.action)) : []
         VStack(spacing: Self.spacing) {
@@ -176,6 +180,21 @@ struct AddressBar: View {
             let found = typed.isEmpty ? [] : await store.historyPages(for: typed)
             guard !Task.isCancelled else { return }
             history = found
+        }
+        // A short pause after typing, then the engine's suggestions, as the
+        // Mac's bar: each key cancels the last request, and nothing is sent
+        // for an address or with the setting off.
+        .task(id: typed) {
+            guard asksForSuggestions, SearchSuggestions.mayAsk(about: typed) else {
+                suggestions = []
+                return
+            }
+            let text = typed
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let found = await SearchSuggestions.fetch(text, from: engine)
+            guard !Task.isCancelled else { return }
+            suggestions = found
         }
         .onChange(of: editing.wrappedValue) {
             if editing.wrappedValue {

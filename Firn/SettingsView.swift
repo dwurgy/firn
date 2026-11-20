@@ -12,7 +12,7 @@ enum Preference {
     /// Whether typing in the command bar asks the search engine for
     /// suggestions. Off until someone says yes: it's the one place typing
     /// goes over the network.
-    static let searchSuggestions = "searchSuggestions"
+    static let searchSuggestions = SearchSuggestions.preferenceKey
     /// Saved now; the "At the top" look that reads it is a later step.
     static let addressBar = "addressBar"
     /// Set once the welcome has been finished or skipped.

@@ -25,6 +25,7 @@ struct SettingsSheet: View {
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
     @State private var availability = ICloudSync.Availability.available
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
+    @AppStorage(SearchSuggestions.preferenceKey) private var searchSuggestions = false
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
 
@@ -32,6 +33,7 @@ struct SettingsSheet: View {
         NavigationStack(path: $path) {
             List {
                 spacesSection
+                searchSection
                 privacySection
                 syncSection
                 tipJarSection
@@ -98,6 +100,19 @@ struct SettingsSheet: View {
             if store.spaces.count > 1 {
                 Text("Hold a space and drag to change the order.")
             }
+        }
+    }
+
+    /// "Show suggestions as you type", the Mac's switch in the Mac's words
+    /// (Settings › General there). Off until someone says yes: it's the one
+    /// place typing goes over the network.
+    private var searchSection: some View {
+        Section {
+            Toggle("Show suggestions as you type", isOn: $searchSuggestions)
+        } header: {
+            Text("Search")
+        } footer: {
+            Text("With suggestions on, \(SearchEngine.chosen.name) sees what you type.")
         }
     }
 

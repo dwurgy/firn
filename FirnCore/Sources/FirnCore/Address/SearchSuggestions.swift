@@ -6,6 +6,9 @@ import Foundation
 /// cookies, sign-in, or cache (so the engine can't tie it to an account),
 /// never for an address, and the reply is read as hostile input.
 public enum SearchSuggestions {
+    /// Where the "Show suggestions as you type" choice is saved. Off until
+    /// someone says yes, on the Mac and the iPhone alike.
+    public static let preferenceKey = "searchSuggestions"
     /// The most suggestions kept from one reply.
     public static let limit = 8
     /// Longer text isn't sent: it's more likely pasted than typed, and

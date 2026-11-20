@@ -212,7 +212,13 @@ struct BrowserScreen: View {
         nonmutating set {
             if landing.gliding != newValue { landing.gliding = newValue }
             // The glide is over: the picture behind a held page goes with it.
-            if newValue == nil, landing.behind { landing.behind = false }
+            if newValue == nil, landing.behind {
+                landing.behind = false
+                landing.heldHigh = false
+                var instant = Transaction()
+                instant.disablesAnimations = true
+                withTransaction(instant) { landing.heldIn = 0 }
+            }
         }
     }
     /// The tab on screen's title line, faded in after the landing.
@@ -1044,7 +1050,10 @@ struct BrowserScreen: View {
                 listIn = 0
                 forward = 0
                 focus = 0
+                // Let go back onto the page from a high hold.
+                if landing.heldIn != 0 { landing.heldIn = 0 }
             }
+            landing.heldHigh = false
         }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
@@ -1206,7 +1215,8 @@ struct BrowserScreen: View {
         }
         if up {
             beginGlide(of: tab)
-            // The overview's picture, blurred, behind the held page at once.
+            // The overview's picture, blurred and dimmed, ready behind the
+            // held page; it shows only from high up (`followPull`).
             if !landing.behind { landing.behind = true }
         } else {
             // The overview stays out of a sideways swipe.
@@ -1281,8 +1291,24 @@ struct BrowserScreen: View {
         // held page stays below the clock.
         let scale = pageFrame.width > 0 ? box.width / pageFrame.width : 1
         boxRadius = max(screenRadius * scale, min(progress * 4, 1) * 34)
+        // The blurred grid fades in behind a page pulled nearly all the way
+        // up, and out again below that, as Safari's (`Landing.heldIn`). A
+        // little give between the two, so a finger resting there doesn't
+        // flutter it.
+        let high = scale < (landing.heldHigh ? Self.heldGridScale + 0.015 : Self.heldGridScale)
+        if high != landing.heldHigh {
+            landing.heldHigh = high
+            withAnimation(.easeOut(duration: Self.heldGridFade)) { landing.heldIn = high ? 1 : 0 }
+        }
         band = max(0, 1 - progress * 4)
     }
+
+    /// The held page's width, as a share of the screen's, below which the
+    /// blurred grid comes in behind it, and how long its fade takes (s):
+    /// Safari's, measured from David's recording (2026-11-19). Here that's
+    /// a finger about three quarters of the screen's height up.
+    private static let heldGridScale: CGFloat = 0.54
+    private static let heldGridFade = 0.7
 
     /// Where the picture is while pulled: smaller as it rises (down to
     /// about 58% of the screen, then slower), and the point under the

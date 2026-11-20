@@ -39,11 +39,19 @@ final class Landing {
     var forward: CGFloat = 0
     /// How far it has come into focus (`ComesForward.focus`).
     var focus: CGFloat = 0
-    /// A page pulled up is held over the overview: the overview's picture
-    /// shows behind it from the grab, fully blurred and dimmed, as Safari's
-    /// grid does (David's recording beside Safari's, 2026-11-19). Until the
-    /// glide ends (`BrowserScreen.gliding`).
+    /// A page pulled up is held over the overview, until the glide ends
+    /// (`BrowserScreen.gliding`): the overview's picture is dimmed and
+    /// blurred, ready behind it, and shows as far as `heldIn`.
     var behind = false
+    /// How much of the overview's picture shows behind a held page, 0 to
+    /// 1. Safari's grid stays out of a hold, only its blurred wallpaper
+    /// behind the page, and fades in, very soft, once the page has been
+    /// pulled nearly all the way up (David's recording, 2026-11-19, measured:
+    /// from the page at 54% of the screen's width, over about 0.7s).
+    /// (2026-11-19, a day: there from the grab, a misreading of quick flicks.)
+    var heldIn: CGFloat = 0
+    /// Whether the page is past that point (`BrowserScreen.followPull`).
+    var heldHigh = false
     /// The overview, hidden behind the page, laid out in its settled look
     /// for the moment its picture is taken (`TabOverview.freezeSoon`, step
     /// 1b): behind the page it otherwise waits as a landing starts, its
@@ -126,13 +134,14 @@ struct LandingDim: View {
 }
 
 /// The overview's picture (`FrozenOverview`) over the list and bar while a
-/// tab glides, pulled into focus: there at full strength, fully blurred,
-/// behind a page from the moment it's pulled up (`Landing.behind`; only the
-/// wash showed during a hold until 2026-11-19, and the blurred grid popped
-/// in at the let-go), and from the first frame of a close by the tabs
-/// button; its blur shrinking to nothing once the page is let go, then the
-/// live list takes over. Opening runs it backward. Put in as the glide begins and shown by a step, not by being
-/// added later: a view added mid-animation starts at the animation's end.
+/// tab glides, pulled into focus. Behind a held page it stays out, as
+/// Safari's grid does, until the page is pulled nearly all the way up, where
+/// it fades in fully blurred (`Landing.heldIn`); otherwise it's there, in
+/// one step, from the let-go, and from the first frame of a close by the
+/// tabs button; its blur shrinking to nothing once the page is let go, then
+/// the live list takes over. Opening runs it backward. Put in as the glide
+/// begins and shown by a step, not by being added later: a view added
+/// mid-animation starts at the animation's end.
 struct LandingFrozen: View {
     let landing: Landing
     let image: UIImage
@@ -142,7 +151,7 @@ struct LandingFrozen: View {
     var body: some View {
         if landing.gliding != nil {
             FrozenOverviewView(image: image, pad: pad, effects: LandingFocusPull(landing: landing)
-                .concat(LandingStep(landing: landing, value: \.listIn, from: 0.0001, off: landing.behind))
+                .concat(LandingHeldStep(landing: landing))
                 .concat(LandingForward(landing: landing, middle: middle, off: false, behindToo: true)))
                 .transition(.identity)
         }
@@ -210,6 +219,31 @@ struct LandingStep: ViewModifier {
 
         func body(content: Content) -> some View {
             content.opacity(value >= from ? 1 : below)
+        }
+    }
+}
+
+/// The overview's picture: whole from the moment the list starts to come in
+/// (the let-go), and until then as much as a high hold has brought in
+/// (`Landing.heldIn`).
+struct LandingHeldStep: ViewModifier {
+    let landing: Landing
+
+    func body(content: Content) -> some View {
+        content.modifier(Step(listIn: landing.listIn, heldIn: landing.heldIn))
+    }
+
+    private struct Step: ViewModifier, Animatable {
+        var listIn: CGFloat
+        var heldIn: CGFloat
+
+        nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
+            get { AnimatablePair(listIn, heldIn) }
+            set { listIn = newValue.first; heldIn = newValue.second }
+        }
+
+        func body(content: Content) -> some View {
+            content.opacity(listIn >= 0.0001 ? 1 : Double(min(max(heldIn, 0), 1)))
         }
     }
 }

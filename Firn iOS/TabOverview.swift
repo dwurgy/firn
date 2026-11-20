@@ -130,6 +130,10 @@ struct TabOverview: View {
     @State private var frozen: FrozenOverview?
     /// Whether that picture was taken behind the page (`freezeSoon`).
     @State private var frozenBehind = false
+    /// The picture drawn as a tab opened, its place empty, and its making
+    /// (`pictureWithout`).
+    @State private var openedPicture: FrozenOverview?
+    @State private var opened: Task<Void, Never>?
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
@@ -373,7 +377,10 @@ struct TabOverview: View {
         }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
         // Hidden again: a picture from behind the page, once it's still.
-        .onChange(of: shown) { freezeSoon() }
+        .onChange(of: shown) { _, now in
+            if !now { handOverPicture() }
+            freezeSoon()
+        }
         // Over everything, bar included: an open menu's dim (a tap on it
         // closes the menu), the held tab lifted over the list and following
         // the finger, and the menu beside it.
@@ -432,11 +439,11 @@ struct TabOverview: View {
     /// What the overview shows now, for `FrozenOverview` (its scroll from
     /// `spots`, which isn't observed; `scroll` stands in where only the
     /// rest matters).
-    private func look(scroll: CGFloat? = nil) -> FrozenOverview.Look {
+    private func look(scroll: CGFloat? = nil, onScreen: UUID? = nil) -> FrozenOverview.Look {
         let tabs = store.openTabs
         return FrozenOverview.Look(
             space: store.activeSpace.id,
-            onScreen: store.activeTab?.id,
+            onScreen: onScreen ?? store.activeTab?.id,
             tabs: tabs.map(\.id),
             groups: Dictionary(store.tabGroups.map { ($0.id, $0.folded) }) { a, _ in a },
             grouped: Dictionary(tabs.compactMap { tab in tab.groupID.map { (tab.id, $0) } }) { a, _ in a },
@@ -632,7 +639,48 @@ struct TabOverview: View {
     /// Opens a tab.
     private func openCard(_ tab: FirnCore.Tab) {
         guard !busy else { return }
+        pictureWithout(tab)
         open(tab)
+    }
+
+    /// A tab is about to open from the grid: the overview's picture for
+    /// the next swipe up, drawn now with that tab's place empty, so it's
+    /// ready by the time the page has landed. Taken only afterward, behind
+    /// the page, it came a few tenths of a second after the landing, and a
+    /// page grabbed sooner had the on-screen picture behind it, its own
+    /// card included (David's iPhone, 2026-11-20; reproduced in the
+    /// Simulator by delaying the retake).
+    private func pictureWithout(_ tab: FirnCore.Tab) {
+        opened?.cancel()
+        openedPicture = nil
+        guard shown, !reduceMotion, atRest, let spot = spots.frames[tab.id],
+              let picture = canvas.take(without: CGPoint(x: spot.midX, y: spot.midY)) else { return }
+        let now = look(onScreen: tab.id)
+        opened = Task {
+            guard let made = await FrozenOverview.make(from: picture, look: now, quick: true), !Task.isCancelled
+            else { return }
+            if self.shown {
+                // Still opening: handed over as the overview hides.
+                openedPicture = made
+            } else if look().matches(now), store.activeTab?.id == tab.id {
+                frozen = made
+                frozenBehind = true
+            }
+        }
+    }
+
+    /// The overview has just gone behind the page: the picture taken on
+    /// screen has every card in it, the page's own too, so it never stands
+    /// behind a held page. The one drawn as the tab opened takes its
+    /// place; without one there's no picture until the next is taken.
+    private func handOverPicture() {
+        if let next = openedPicture, next.look.onScreen == store.activeTab?.id {
+            frozen = next
+            frozenBehind = true
+        } else if !frozenBehind {
+            frozen = nil
+        }
+        openedPicture = nil
     }
 
     /// Hidden: everything a visit leaves behind goes, as when the

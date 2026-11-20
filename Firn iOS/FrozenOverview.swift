@@ -72,7 +72,7 @@ struct FrozenOverview {
 
     /// `picture`: the overview drawn alone (`OverviewCanvas.take`). Padded
     /// off the main thread.
-    @MainActor static func make(from picture: UIImage, look: Look) async -> FrozenOverview? {
+    @MainActor static func make(from picture: UIImage, look: Look, quick: Bool = false) async -> FrozenOverview? {
         // At the screen's own scale: it becomes sharp, then swaps with the
         // live list. At one pixel a point, iOS drew it snapped to whole
         // points, about half a point up and left of the real thing, and the
@@ -82,7 +82,8 @@ struct FrozenOverview {
         let pad = Self.pad(for: picture.size)
         // Whole pixels, so the middle stays exactly where it was.
         let padX = Int((pad.width * scale).rounded()), padY = Int((pad.height * scale).rounded())
-        let padded = await Task.detached(priority: .utility) {
+        // `quick`: wanted within the half second a tab takes to open.
+        let padded = await Task.detached(priority: quick ? .userInitiated : .utility) {
             Self.mirrored(source, padX: padX, padY: padY)
         }.value
         guard let padded else { return nil }

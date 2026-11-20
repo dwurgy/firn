@@ -37,17 +37,51 @@ struct OverviewHost<Content: View>: UIViewControllerRepresentable {
 
     /// The overview as it's laid out now, at the screen's own scale. On the
     /// main thread; logs only how long it took.
-    func take() -> UIImage? {
+    ///
+    /// `without`: a point on screen inside one of the grid's cards, to draw
+    /// the overview with that card's place empty. The card is hidden only
+    /// for this drawing, within one turn of the run loop, so the screen
+    /// never shows it gone; nil if no card is found there.
+    func take(without point: CGPoint? = nil) -> UIImage? {
         guard let view, view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
+        var hidden: UIView?
+        if let point {
+            guard let cell = Self.cell(at: point, in: view) else { return nil }
+            hidden = cell
+        }
+        let alpha = hidden?.alpha ?? 1
+        hidden?.alpha = 0
+        defer { hidden?.alpha = alpha }
+        let pending = hidden != nil
         let format = UIGraphicsImageRendererFormat(for: view.traitCollection)
         format.opaque = true
         let start = CACurrentMediaTime()
         var drew = false
         let image = UIGraphicsImageRenderer(size: view.bounds.size, format: format).image { _ in
-            drew = view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
+            drew = view.drawHierarchy(in: view.bounds, afterScreenUpdates: pending)
         }
         let ms = (CACurrentMediaTime() - start) * 1000
         Self.log.notice("taken in \(ms, format: .fixed(precision: 1), privacy: .public)ms, drew \(drew, privacy: .public)")
         return drew ? image : nil
+    }
+
+    /// The smallest collection view cell under a point on screen.
+    private static func cell(at point: CGPoint, in root: UIView) -> UIView? {
+        var best: UIView?
+        var bestArea = CGFloat.infinity
+        func search(_ view: UIView) {
+            guard !view.isHidden else { return }
+            if view is UICollectionViewCell {
+                let frame = view.convert(view.bounds, to: nil)
+                let area = frame.width * frame.height
+                if frame.contains(point), area < bestArea {
+                    best = view
+                    bestArea = area
+                }
+            }
+            for child in view.subviews { search(child) }
+        }
+        search(root)
+        return best
     }
 }

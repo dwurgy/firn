@@ -25,11 +25,11 @@ public enum FeedbackEmail {
         return link.url ?? URL(string: "mailto:\(address)")!
     }
 
-    /// "Firn 1.0.0 (3), iOS 26.1, iPhone17,1".
+    /// "Firn 1.0.0 (3), iOS 26.1, iPhone 16 Pro".
     static func details(
         info: [String: Any]? = Bundle.main.infoDictionary,
         system: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
-        model: String = model
+        model: String = deviceName(for: model)
     ) -> String {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
@@ -48,9 +48,55 @@ public enum FeedbackEmail {
         #endif
     }
 
-    /// Apple's own code for the model ("iPhone17,1", "Mac16,10"). A table of
-    /// friendly names would go stale with every new device; David can look a
-    /// code up.
+    /// What the draft calls the device. Apple's codes run a number ahead of
+    /// the names (an iPhone 16 Pro is "iPhone17,1"), so a code in the draft
+    /// reads as the wrong phone (David, 2026-11-20). Known iPhones get their
+    /// real name; any other iPhone or iPad is just "iPhone" or "iPad", never
+    /// wrong, only less exact. A Mac keeps its code, which reads as no
+    /// product's name.
+    static func deviceName(for code: String) -> String {
+        if let name = iPhoneNames[code] { return name }
+        if code.hasPrefix("iPhone") { return "iPhone" }
+        if code.hasPrefix("iPad") { return "iPad" }
+        return code
+    }
+
+    /// Every iPhone that runs iOS 26. Add each autumn's new ones; until
+    /// then they're "iPhone".
+    private static let iPhoneNames: [String: String] = [
+        "iPhone12,1": "iPhone 11",
+        "iPhone12,3": "iPhone 11 Pro",
+        "iPhone12,5": "iPhone 11 Pro Max",
+        "iPhone12,8": "iPhone SE (2nd generation)",
+        "iPhone13,1": "iPhone 12 mini",
+        "iPhone13,2": "iPhone 12",
+        "iPhone13,3": "iPhone 12 Pro",
+        "iPhone13,4": "iPhone 12 Pro Max",
+        "iPhone14,2": "iPhone 13 Pro",
+        "iPhone14,3": "iPhone 13 Pro Max",
+        "iPhone14,4": "iPhone 13 mini",
+        "iPhone14,5": "iPhone 13",
+        "iPhone14,6": "iPhone SE (3rd generation)",
+        "iPhone14,7": "iPhone 14",
+        "iPhone14,8": "iPhone 14 Plus",
+        "iPhone15,2": "iPhone 14 Pro",
+        "iPhone15,3": "iPhone 14 Pro Max",
+        "iPhone15,4": "iPhone 15",
+        "iPhone15,5": "iPhone 15 Plus",
+        "iPhone16,1": "iPhone 15 Pro",
+        "iPhone16,2": "iPhone 15 Pro Max",
+        "iPhone17,1": "iPhone 16 Pro",
+        "iPhone17,2": "iPhone 16 Pro Max",
+        "iPhone17,3": "iPhone 16",
+        "iPhone17,4": "iPhone 16 Plus",
+        "iPhone17,5": "iPhone 16e",
+        "iPhone18,1": "iPhone 17 Pro",
+        "iPhone18,2": "iPhone 17 Pro Max",
+        "iPhone18,3": "iPhone 17",
+        "iPhone18,4": "iPhone Air",
+    ]
+
+    /// Apple's own code for the model ("iPhone17,1", "Mac16,10").
     static var model: String {
         if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
             return simulated

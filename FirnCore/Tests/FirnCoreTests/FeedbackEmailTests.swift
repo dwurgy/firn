@@ -37,6 +37,15 @@ struct FeedbackEmailTests {
         #expect(line.hasSuffix(" 15.6.1"))
     }
 
+    @Test func aKnownIPhoneGetsItsRealNameAndNoCodeEverShows() {
+        // The code runs a number ahead of the name.
+        #expect(FeedbackEmail.deviceName(for: "iPhone17,1") == "iPhone 16 Pro")
+        #expect(FeedbackEmail.deviceName(for: "iPhone16,1") == "iPhone 15 Pro")
+        #expect(FeedbackEmail.deviceName(for: "iPhone99,9") == "iPhone")
+        #expect(FeedbackEmail.deviceName(for: "iPad16,3") == "iPad")
+        #expect(FeedbackEmail.deviceName(for: "Mac16,10") == "Mac16,10")
+    }
+
     @Test func thisDeviceHasAModel() {
         #expect(!FeedbackEmail.model.isEmpty)
     }

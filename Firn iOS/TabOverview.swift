@@ -50,8 +50,9 @@ struct TabOverview: View {
     var typing = false
     /// On screen. The overview stays built behind the page while browsing
     /// (hidden), so a swipe up only reveals it; whatever it remembers
-    /// resets as it hides.
-    var shown = true
+    /// resets as it hides. Never read in the body: showing runs only the
+    /// small pieces that read the landing (`LandingWatch`, `CardWindow`).
+    private var shown: Bool { landing.shown }
 
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -248,12 +249,14 @@ struct TabOverview: View {
                 // the drag under a finger still down (David's recording,
                 // 2026-11-08).
                 // The grid on iOS 27 leaves holds and drags to iOS.
-                .modifier(GridReorderContainer(on: systemDrag, enabled: gliding == nil && !busy,
+                .modifier(GridReorderContainer(on: systemDrag, enabled: !busy, landing: landing,
                                                dragging: { systemDragged = $0 }) { move in
                     withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { move.apply(to: store) }
                 })
-                .gesture(HoldToDrag(enabled: gliding == nil,
-                                    canBegin: { firnHolds(liftable(at: $0)) != nil },
+                // Nothing lifts while a page glides (asked as a touch comes
+                // down, so a glide starting doesn't run this body).
+                .gesture(HoldToDrag(enabled: true,
+                                    canBegin: { landing.gliding == nil && firnHolds(liftable(at: $0)) != nil },
                                     began: lift(at:), moved: follow(to:),
                                     ended: { letGo(cancelled: $0) },
                                     wantsMenu: { menuTarget(at: $0) != nil },
@@ -355,9 +358,14 @@ struct TabOverview: View {
                 getReady(scroller)
                 freezeSoon()
             }
-            .onChange(of: shown) { _, now in
-                if !now { forgetOpening() }
-                getReady(scroller)
+            // Hidden again: a picture from behind the page, once it's still.
+            .background {
+                LandingWatch(landing: landing, shownChanged: { now in
+                    if !now { forgetOpening() }
+                    getReady(scroller)
+                    if !now { handOverPicture() }
+                    freezeSoon()
+                })
             }
             .onChange(of: store.activeTab?.id) { if !shown { getReady(scroller) } }
             .onChange(of: store.activeSpace.id) { if !shown { getReady(scroller) } }
@@ -372,15 +380,10 @@ struct TabOverview: View {
             }
         }
         .background {
-            LandingRest(landing: landing, still: shown && drag == nil && heldMenu == nil && !typing && !scrolling,
+            LandingRest(landing: landing, still: drag == nil && heldMenu == nil && !typing && !scrolling,
                         rested: freezeSoon)
         }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
-        // Hidden again: a picture from behind the page, once it's still.
-        .onChange(of: shown) { _, now in
-            if !now { handOverPicture() }
-            freezeSoon()
-        }
         // Over everything, bar included: an open menu's dim (a tap on it
         // closes the menu), the held tab lifted over the list and following
         // the finger, and the menu beside it.
@@ -401,8 +404,8 @@ struct TabOverview: View {
             // The space wash: the space's color, as the Mac's tinted frame.
             SpaceWash(space: space)
         }
-        // Only while shown: it takes the keyboard's focus to hear a shake.
-        .background { if shown { ShakeToUndo(undoManager: undoManager, closes: closes) } }
+        // It takes the keyboard's focus to hear a shake, only while shown.
+        .background { ShakeHost(landing: landing, undoManager: undoManager, closes: closes) }
         .basecampFullAlert(isPresented: $basecampFull)
         // Firn leaving the screen closes an open hold menu, as iOS's do;
         // its frost is a picture of the screen as it opened.
@@ -789,13 +792,9 @@ struct TabOverview: View {
             tab: tab,
             isOnScreen: onScreen,
             pictures: pictures,
-            readsDisk: onScreen && shown,
+            landing: landing,
             loadPicture: { await pictures.loadImage(for: tab.id) },
             space: space,
-            // Posed behind the page for its picture, the tab on screen's
-            // card is empty: that tab is the page, in the hand or about to
-            // fly, so it isn't also in the grid (Safari's; David, 2026-11-20).
-            windowShown: gliding != tab.id && (!onScreen || (landing.lineShown && !(landing.posed && !shown))),
             open: { openCard(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,
@@ -1390,7 +1389,7 @@ struct TabOverview: View {
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
             // A card stays while its page glides (only its window empties,
-            // `windowShown`).
+            // `CardWindow`).
             .modifier(EmptyWhileHeld(finger: finger, id: tab.id, gliding: false))
             // Hold, then move, lifts it (the list's HoldToDrag). Holding
             // still opens Firn's own menu beside the tab (`openMenu`);
@@ -2683,14 +2682,29 @@ struct ComesForward: ViewModifier, Animatable {
 /// keyboard focus, and the overview has no text field. This invisible view
 /// takes that focus (giving it back to any field that wants it) and hands
 /// UIKit SwiftUI's undo list. UIKit, because SwiftUI has no say in shakes.
+///
+/// Always installed, taking focus only while `on`: put in as the overview
+/// showed, it cost 2 to 3ms inside every grab's turn (the trace of
+/// 2026-11-20). It takes focus once the page has landed, not at the grab.
 struct ShakeToUndo: UIViewRepresentable {
     let undoManager: UndoManager?
     let closes: Int
+    let on: Bool
 
     func makeUIView(context: Context) -> Listener { Listener() }
 
     func updateUIView(_ view: Listener, context: Context) {
         view.undo = undoManager
+        if on != view.on {
+            view.on = on
+            if !on {
+                view.closes = closes
+                if view.isFirstResponder { view.resignFirstResponder() }
+                return
+            }
+            if view.window != nil { view.becomeFirstResponder() }
+        }
+        guard on else { return }
         // Only right after a close, never on other updates: typing from +
         // keeps its keyboard.
         if closes != view.closes {
@@ -2702,12 +2716,32 @@ struct ShakeToUndo: UIViewRepresentable {
     final class Listener: UIView {
         weak var undo: UndoManager?
         var closes = 0
-        override var canBecomeFirstResponder: Bool { true }
+        var on = false
+        override var canBecomeFirstResponder: Bool { on }
         override var undoManager: UndoManager? { undo }
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            if window != nil { becomeFirstResponder() }
+            if window != nil, on { becomeFirstResponder() }
         }
+    }
+}
+
+/// The shake listener, listening from the moment the overview has come to
+/// rest (a page still gliding in has nothing to undo yet) until it hides.
+/// Reads the landing here, so the overview's body doesn't.
+struct ShakeHost: View {
+    let landing: Landing
+    let undoManager: UndoManager?
+    let closes: Int
+    /// Listening on this visit: on at the first rest, off only on hiding.
+    @State private var listening = false
+
+    var body: some View {
+        ShakeToUndo(undoManager: undoManager, closes: closes, on: listening && landing.shown)
+            .onChange(of: landing.shown && landing.gliding == nil, initial: true) { _, rested in
+                if rested { listening = true }
+            }
+            .onChange(of: landing.shown) { _, shown in if !shown { listening = false } }
     }
 }
 

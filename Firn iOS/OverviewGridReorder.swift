@@ -108,11 +108,15 @@ struct GridMove {
 struct GridReorderContainer: ViewModifier {
     let on: Bool
     let enabled: Bool
+    /// Off while a page glides too; read here, so a glide starting runs
+    /// only this, not the overview's body.
+    let landing: Landing
     /// What iOS's drag is carrying, as it changes (empty once it lands).
     let dragging: (Set<UUID>) -> Void
     let move: (GridMove) -> Void
 
     func body(content: Content) -> some View {
+        let enabled = enabled && landing.gliding == nil
         if on, #available(iOS 27, *) {
             content.onDragSessionUpdated { session in
                 // Through the landing too: the X comes back once it's down.

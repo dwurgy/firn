@@ -504,12 +504,14 @@ struct HeldPage: View {
 struct ReaderPill: View {
     let store: BrowserStore
     let hold: Hold
-    /// The overview, a hidden page, or typing.
+    /// A hidden page, or typing.
     let away: Bool
+    /// The overview showing counts as away too (read here, not by the screen).
+    let landing: Landing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let shown = store.activeTab?.page?.isReading == true && !away && hold.pull == nil && !hold.swiping
+        let shown = store.activeTab?.page?.isReading == true && !away && !landing.shown && hold.pull == nil && !hold.swiping
         ZStack {
             if shown {
                 // Just under the clock, 16pt in, as in the approved design.
@@ -556,6 +558,43 @@ struct BarHost<Content: View>: View {
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)
     }
+}
+
+/// The bar's drag (a swipe up pulls the page into the overview, sideways
+/// slides between tabs), with its own finger-down state: kept here, a
+/// finger coming down ran the whole screen (and its bar) again, about 10ms
+/// just before every grab's turn (the trace of 2026-11-20).
+struct BarPull: ViewModifier {
+    /// Only the full bar swipes: the small pill is tap-only.
+    let including: GestureMask
+    let moved: (DragGesture.Value) -> Void
+    let ended: (DragGesture.Value) -> Void
+    /// The finger is off the bar, whether the drag ended or iOS took the
+    /// touch away (which `ended` never hears about).
+    let stopped: () -> Void
+    /// True while a finger is on the bar's drag; iOS resets it when the
+    /// drag is cancelled too.
+    @GestureState private var dragging = false
+
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6, coordinateSpace: .global)
+                    .updating($dragging) { _, state, _ in state = true }
+                    .onChanged(moved)
+                    .onEnded(ended),
+                including: including
+            )
+            .onChange(of: dragging) { _, now in if !now { stopped() } }
+    }
+}
+
+/// While the page is pulled up from the bar (and a moment after), the
+/// bar's buttons don't act: the finger lifting over one isn't a tap. Asked
+/// only as a button is tapped, so it's a plain box nothing watches: as a
+/// watched value it ran the whole bar again at every grab.
+@MainActor final class BarQuiet {
+    var on = false
 }
 
 /// The page's bar coming back as a tab opens, on its own clock, as Safari's

@@ -13,8 +13,13 @@ struct BrowserScreen: View {
     /// A link from another app, opened as a new tab once it arrives.
     @Binding var incoming: URL?
     @FocusState private var editing: Bool
-    /// Whether the overview is there behind (or instead of) the page.
-    @State private var showingTabs = false
+    /// Whether the overview is there behind (or instead of) the page. Kept
+    /// in the landing and never read in the body: a grab then runs only the
+    /// small pieces that read it (`OverviewVisible`, `PageBehindOverview`).
+    private var showingTabs: Bool {
+        get { landing.shown }
+        nonmutating set { if landing.shown != newValue { landing.shown = newValue } }
+    }
     /// What a swipe up or a tab opening moves, handed to the overview as
     /// one object (`Landing`, 2i step 3). The values keep their own names
     /// here (`arrival`, `gliding`, …), each passing through to it.
@@ -157,9 +162,6 @@ struct BrowserScreen: View {
         get { hold.pull }
         nonmutating set { hold.pull = newValue }
     }
-    /// True while a finger is on the bar's drag; iOS resets it when the
-    /// drag is cancelled too, which `onEnded` never hears about.
-    @GestureState private var dragging = false
     /// The pull (or tabs-button glide) whose page picture may still take
     /// the page's place: set when it starts, cleared once it gives up. A picture
     /// arriving later (WebKit can take a while on a heavy page) is dropped:
@@ -168,7 +170,12 @@ struct BrowserScreen: View {
     @State private var pullAwaitingPicture: UUID?
     /// The bar's buttons stay still from a pull's start until just after
     /// the finger lifts (the button would see the lift as a tap).
-    @State private var barQuiet = false
+    /// A plain box, asked as a button is tapped (`BarQuiet`).
+    @State private var quiet = BarQuiet()
+    private var barQuiet: Bool {
+        get { quiet.on }
+        nonmutating set { quiet.on = newValue }
+    }
     /// The tabs beside the one being pulled or swiped (step 3c, step 2),
     /// riding with it a gap apart, and how much they show (they fade as the
     /// page lands in its card).
@@ -313,15 +320,13 @@ struct BrowserScreen: View {
                                 open: openTab,
                                 done: { if let tab = store.activeTab { openTab(tab) } else { hideTabs() } },
                                 newTab: startNewTab, key: [reduceMotion, voiceOver]),
-                            typing: editing, shown: showingTabs)
+                            typing: editing)
                     .environment(\.newSpace, SheetAction { [sheets] in sheets.newSpace = true })
                     .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
                     .environment(sending)
             }
                 .ignoresSafeArea()
-                .opacity(showingTabs ? 1 : 0)
-                .allowsHitTesting(showingTabs && !editing && gliding == nil)
-                .accessibilityHidden(!showingTabs || editing)
+                .modifier(OverviewVisible(landing: landing, editing: editing))
             // Under the page, so it shows only once the page's picture has
             // taken its place (above, it covered the page for a frame).
             if swiping {
@@ -337,20 +342,19 @@ struct BrowserScreen: View {
                     pictures.pageHeight = $0.height
                 }
                 .opacity(pageHidden ? 0 : 1)
-                .allowsHitTesting(!showingTabs)
-                .accessibilityHidden(showingTabs)
-            ReaderPill(store: store, hold: hold, away: showingTabs || pageHidden || editing)
+                .modifier(PageBehindOverview(landing: landing))
+            ReaderPill(store: store, hold: hold, away: pageHidden || editing, landing: landing)
 
             // Just above the bar while a download saves, then "Saved to
             // Files" (phase 6); a tap opens Downloads.
-            DownloadPill(store: store, hold: hold, away: showingTabs || pageHidden || editing || menuOpen,
+            DownloadPill(store: store, hold: hold, away: pageHidden || editing || menuOpen, landing: landing,
                          barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) {
                 sheets.downloads = true
             }
 
             // Just above the bar as a sent tab arrives ("From Mac"), or as
             // one is sent ("Sent to Mac"; sync step 6).
-            SentPill(sending: sending, hold: hold, away: showingTabs || pageHidden || editing || menuOpen,
+            SentPill(sending: sending, hold: hold, away: pageHidden || editing || menuOpen, landing: landing,
                      barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop)
 
             StandInLayer(hold: hold, landing: landing, store: store, pictures: pictures)
@@ -413,15 +417,16 @@ struct BrowserScreen: View {
         // timer: waking them redraws the whole bar, and 150ms after the
         // finger lifted that fell mid-landing and froze a frame (David's
         // recordings, 2026-11-04). Every landing ends with gliding = nil,
-        // well past the finger's lift.
-        .onChange(of: gliding) {
-            guard gliding == nil else { return }
-            if barQuiet { barQuiet = false }
-            foldOtherGroups()
+        // well past the finger's lift. Watched from a small piece, so a
+        // glide starting or the overview showing doesn't run this body.
+        .background {
+            LandingWatch(landing: landing, shownChanged: { _ in foldOtherGroups() }, glideEnded: {
+                if barQuiet { barQuiet = false }
+                foldOtherGroups()
+            })
         }
         .onChange(of: store.activeTabID) { old, new in tabCameOnScreen(from: old, to: new) }
         .task(id: store.activeTabID) { await readyNeighborPictures() }
-        .onChange(of: showingTabs) { foldOtherGroups() }
     }
 
     // MARK: Groups fold themselves (step 3b)
@@ -565,7 +570,7 @@ struct BrowserScreen: View {
                    otherDeviceTabs: { [sync] in sync.otherDeviceTabs() })
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
-            .environment(\.barQuiet, barQuiet)
+            .environment(\.barQuiet, quiet)
             // A new page or another tab starts with the full bar.
             .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
             .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
@@ -582,22 +587,16 @@ struct BrowserScreen: View {
             // in Safari. Alongside the bar's own buttons, so a tap still taps.
             // Only the full bar: the small pill is tap-only, as Safari's
             // (David, 2026-11-11); a tap grows the bar, and then it swipes.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 6, coordinateSpace: .global)
-                    .updating($dragging) { _, state, _ in state = true }
-                    .onChanged(pullMoved)
-                    .onEnded { pullEnded(translation: $0.translation, velocity: $0.velocity) },
-                including: barShrunk ? .subviews : .all
-            )
-            .onChange(of: dragging) { _, now in
-                if !now, newTabSwipe {
+            .modifier(BarPull(including: barShrunk ? .subviews : .all, moved: pullMoved,
+                              ended: { pullEnded(translation: $0.translation, velocity: $0.velocity) }) {
+                if newTabSwipe {
                     Task {
                         try? await Task.sleep(for: .milliseconds(50))
                         if newTabSwipe { newTabSwipeEnded(translation: .zero, velocity: .zero) }
                     }
                     return
                 }
-                guard !now, pull != nil else { return }
+                guard pull != nil else { return }
                 // The drag stopped without ending: the system took the
                 // touch away (David's recording, 2026-11-04: the page's
                 // picture stayed parked over the screen, the bar gone,
@@ -608,7 +607,7 @@ struct BrowserScreen: View {
                     guard let pull else { return }
                     pullEnded(translation: pull.translation, velocity: .zero)
                 }
-            }
+            })
             // The bar rises with the keyboard only for typing an address; a
             // page's own fields leave it resting behind the keyboard, as in
             // Safari.

@@ -14,16 +14,16 @@ struct OverviewRow: View {
     /// read from disk on the spot (the tab on screen, while shown);
     /// otherwise only if it's in memory.
     let pictures: PagePictures
-    var readsDisk = false
+    /// Read by the card's own small pieces (`CardWindow`), and here only by
+    /// the tab on screen's card, for whether the overview is shown.
+    let landing: Landing
     private var picture: UIImage? {
-        readsDisk ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id)
+        isOnScreen && landing.shown ? pictures.image(for: tab.id) : pictures.cachedImage(for: tab.id)
     }
     /// Reads the picture from disk when a card comes into view without one.
     let loadPicture: () async -> Void
     /// The space's color name.
     let space: String
-    /// The page's picture under the line; empty while the page glides.
-    var windowShown = true
     let open: () -> Void
     let close: () -> Void
     /// Reports where the card is on screen.
@@ -135,7 +135,7 @@ struct OverviewRow: View {
                     .background(Theme.page)
                     .clipShape(shape)
                     .overlay { shape.strokeBorder(Theme.windowHairline, lineWidth: 1) }
-                    .opacity(windowShown ? 1 : 0)
+                    .modifier(CardWindow(landing: landing, tab: tab.id, onScreen: isOnScreen))
                     .contentShape(shape)
             }
             .buttonStyle(.plain)
@@ -153,7 +153,8 @@ struct OverviewRow: View {
                 shape.fill(Theme.page)
                     .shadow(color: reduceTransparency ? .clear : Theme.gridCardShadow,
                             radius: Self.gridShadowRadius, y: Self.gridShadowDrop)
-                    .opacity(windowShown && !menuOpen && !carried && !bare ? 1 : 0)
+                    .modifier(CardWindow(landing: landing, tab: tab.id, onScreen: isOnScreen,
+                                         hidden: menuOpen || carried || bare))
                     .animation(.easeOut(duration: Self.bareFade), value: bare)
             }
             .overlay(alignment: .topTrailing) {
@@ -449,8 +450,8 @@ struct LetterMark: View {
 extension OverviewRow: @MainActor Equatable {
     static func == (a: Self, b: Self) -> Bool {
         a.tab === b.tab && a.isOnScreen == b.isOnScreen
-            && a.pictures === b.pictures && a.readsDisk == b.readsDisk && a.space == b.space
-            && a.windowShown == b.windowShown && a.groupName == b.groupName
+            && a.pictures === b.pictures && a.landing === b.landing && a.space == b.space
+            && a.groupName == b.groupName
             && (a.moveUp == nil) == (b.moveUp == nil) && (a.moveDown == nil) == (b.moveDown == nil)
             && a.actionsKey == b.actionsKey && a.cardHeight == b.cardHeight
             && a.carried == b.carried && a.bare == b.bare && a.titled == b.titled && a.swipesItself == b.swipesItself && a.gridSwipe == b.gridSwipe

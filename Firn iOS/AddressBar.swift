@@ -486,7 +486,7 @@ struct AddressBar: View {
             .onChanged { value in
                 guard case let .second(true, drag) = value else { return }
                 if !holdTracking {
-                    guard canHoldForMenu, !barQuiet else { return }
+                    guard canHoldForMenu, barQuiet?.on != true else { return }
                     holdTracking = true
                     fieldPressed = false
                     holdOpenings += 1
@@ -769,7 +769,7 @@ private struct AddressField: View {
                 .overlay {
                     if !isEditing, !compact {
                         // Not after a hold opened the menu: the finger lifting isn't a tap.
-                        Button { if !barQuiet, !menuOpen { beginEditing() } } label: { Color.clear.contentShape(.rect) }
+                        Button { if barQuiet?.on != true, !menuOpen { beginEditing() } } label: { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Address")
                             .accessibilityValue(spokenAddress)
@@ -816,7 +816,7 @@ private struct AddressField: View {
             if compact {
                 // Reaching down past the field's spot: the pill hangs below
                 // it, as Safari's does (2026-11-11).
-                Button { if !barQuiet { grow() } } label: {
+                Button { if barQuiet?.on != true { grow() } } label: {
                     Color.clear.contentShape(.rect).padding(.bottom, -AddressBar.compactDrop)
                 }
                     .buttonStyle(.plain)
@@ -847,7 +847,7 @@ private struct AddressField: View {
         // Only opens: a hold already opened it, and the finger lifting
         // over the button mustn't close it again.
         return Button {
-            guard !barQuiet else { return }
+            guard barQuiet?.on != true else { return }
             if showsReaderNote, page.isArticle {
                 noteTask?.cancel()
                 readerNote = false
@@ -1329,7 +1329,7 @@ private struct TabsButton: View {
     @Environment(\.barQuiet) private var barQuiet
 
     var body: some View {
-        Button { if !barQuiet { action() } } label: {
+        Button { if barQuiet?.on != true { action() } } label: {
             Image(systemName: "square.on.square")
                 .font(BarButton.symbolFont)
                 .foregroundStyle(Theme.ink)
@@ -1359,7 +1359,7 @@ struct BarButton: View {
     @Environment(\.barQuiet) private var barQuiet
 
     var body: some View {
-        Button { if !barQuiet { action() } } label: {
+        Button { if barQuiet?.on != true { action() } } label: {
             Image(systemName: symbol)
                 .font(Self.symbolFont)
                 .foregroundStyle(tint.opacity(isEnabled ? 1 : 0.3))
@@ -1373,8 +1373,8 @@ struct BarButton: View {
 
 extension EnvironmentValues {
     /// While the page is pulled up from the bar (and a moment after), the
-    /// bar's buttons don't act: the finger lifting over one isn't a tap.
-    @Entry var barQuiet = false
+    /// bar's buttons don't act (`BarQuiet`).
+    @Entry var barQuiet: BarQuiet? = nil
     /// Typing just ended and the keyboard is still leaving: the field rides
     /// down with it, and its resting parts wait (see `AddressBar.settling`).
     @Entry var barSettling = false

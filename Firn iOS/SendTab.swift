@@ -93,6 +93,8 @@ struct SentPill: View {
     let sending: Sending
     let hold: Hold
     let away: Bool
+    /// The overview showing counts as away too (read here, not by the screen).
+    let landing: Landing
     /// The bar's top edge (global), as `DownloadPill`'s.
     let barTop: CGFloat
 
@@ -102,7 +104,7 @@ struct SentPill: View {
     private static let gap: CGFloat = 10
 
     var body: some View {
-        let on = sending.note != nil && !away && hold.pull == nil && !hold.swiping
+        let on = sending.note != nil && !away && !landing.shown && hold.pull == nil && !hold.swiping
         GeometryReader { geo in
             let top = barTop - geo.frame(in: .global).minY
             ZStack {

@@ -57,6 +57,8 @@ struct DownloadPill: View {
     let hold: Hold
     /// The overview, a hidden page, typing, or the page menu.
     let away: Bool
+    /// The overview showing counts as away too (read here, not by the screen).
+    let landing: Landing
     /// The bar's top edge (global), and the page's ZStack's top (global), so
     /// the pill sits just above the bar wherever it is.
     let barTop: CGFloat
@@ -72,7 +74,7 @@ struct DownloadPill: View {
 
     var body: some View {
         let space = store.activeSpace
-        let on = visible && !away && hold.pull == nil && !hold.swiping
+        let on = visible && !away && !landing.shown && hold.pull == nil && !hold.swiping
             && shown?.dataStoreID == space.dataStoreID
         GeometryReader { geo in
             let top = barTop - geo.frame(in: .global).minY

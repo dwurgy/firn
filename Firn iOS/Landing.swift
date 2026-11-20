@@ -61,6 +61,11 @@ final class Landing {
     /// list out, smaller, and its bar gone. Only the overview's own pieces
     /// read it; the page and its bar don't.
     var posed = false
+    /// Whether the overview is there behind (or instead of) the page
+    /// (`BrowserScreen.showingTabs`). Here, not the screen's own state, so
+    /// a grab runs only the small pieces that read it, not the screen and
+    /// the overview whole (the trace of 2026-11-20: one 21 to 36ms turn).
+    var shown = false
 
     /// A swipe up or the tabs button: the overview is about to show.
     func unpose() {
@@ -304,11 +309,71 @@ struct LandingRest: View {
     let rested: () -> Void
 
     private var atRest: Bool {
-        still && landing.gliding == nil && landing.arrival >= 1 && landing.focus >= 1 && landing.heldCard == nil
+        still && landing.shown && landing.gliding == nil && landing.arrival >= 1 && landing.focus >= 1 && landing.heldCard == nil
     }
 
     var body: some View {
         Color.clear
             .onChange(of: atRest) { _, now in if now { rested() } }
+    }
+}
+
+/// The overview's own layer: seen and touched only while it's shown, read
+/// here so showing it doesn't run the whole screen.
+struct OverviewVisible: ViewModifier {
+    let landing: Landing
+    let editing: Bool
+
+    func body(content: Content) -> some View {
+        let shown = landing.shown
+        content
+            .opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown && !editing && landing.gliding == nil)
+            .accessibilityHidden(!shown || editing)
+    }
+}
+
+/// The page's layer steps aside for the overview.
+struct PageBehindOverview: ViewModifier {
+    let landing: Landing
+
+    func body(content: Content) -> some View {
+        let shown = landing.shown
+        content
+            .allowsHitTesting(!shown)
+            .accessibilityHidden(shown)
+    }
+}
+
+/// Tells its owner when the overview shows or hides and when a glide ends,
+/// reading the landing here so the owner's body doesn't.
+struct LandingWatch: View {
+    let landing: Landing
+    var shownChanged: (Bool) -> Void = { _ in }
+    var glideEnded: () -> Void = {}
+
+    var body: some View {
+        Color.clear
+            .onChange(of: landing.shown) { _, now in shownChanged(now) }
+            .onChange(of: landing.gliding == nil) { _, ended in if ended { glideEnded() } }
+    }
+}
+
+/// A card's picture, empty while its page glides (the page is the only one
+/// of it on screen). Read here, so a glide starting runs only this on each
+/// card, not the overview and every card whole. Posed behind the page for
+/// its picture, the tab on screen's card is empty too: that tab is the
+/// page, in the hand or about to fly (Safari's; David, 2026-11-20).
+struct CardWindow: ViewModifier {
+    let landing: Landing
+    let tab: UUID
+    let onScreen: Bool
+    /// The card's own reasons to hide it (a menu open, carried, bare).
+    var hidden = false
+
+    func body(content: Content) -> some View {
+        let shown = landing.gliding != tab
+            && (!onScreen || (landing.lineShown && !(landing.posed && !landing.shown)))
+        content.opacity(shown && !hidden ? 1 : 0)
     }
 }

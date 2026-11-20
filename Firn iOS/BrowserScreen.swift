@@ -118,6 +118,13 @@ struct BrowserScreen: View {
         get { hold.boxRadius }
         nonmutating set { if hold.boxRadius != newValue { hold.boxRadius = newValue } }
     }
+    /// The strip under the clock riding on the flying page (`Hold.band`).
+    private var band: CGFloat {
+        get { hold.band }
+        nonmutating set { if hold.band != newValue { hold.band = newValue } }
+    }
+    /// The screen's corners: the flying page's at full size.
+    private var screenRadius: CGFloat { Hold.screenRadius(topInset: pictures.topInset) }
     /// How much of the page's top the picture leaves out (`CardGlide.skip`):
     /// the header's depth in a tall card, 0 on the page.
     private var boxSkip: CGFloat {
@@ -650,7 +657,10 @@ struct BrowserScreen: View {
         /// The picture takes the page's place and glides into the card.
         func close(with image: UIImage) {
             pullAwaitingPicture = nil
-            putStandIn(image, of: tab, at: pageBox(for: image))
+            // The whole screen, with the screen's corners, from the first
+            // frame (the plan's step 2).
+            putStandIn(image, of: tab, at: pageBox(for: image), radius: screenRadius)
+            band = 1
             SwipeTiming.mark("picture set")
             Task {
                 // The picture has to reach the screen, in the page's place,
@@ -764,6 +774,7 @@ struct BrowserScreen: View {
         box = frame
         boxRadius = radius
         boxSkip = skip
+        if hold.bandFade != 1 { hold.bandFade = 1 }
         stripOpacity = radius == 0 ? 1 : 0
         standInTop = image.topEdgeColor ?? tab.page?.topColor
         standInTab = tab
@@ -856,11 +867,15 @@ struct BrowserScreen: View {
             // (David, 2026-11-13: "just copy it exactly"). The set-down's
             // code stays, switched off.
             let setsDown = Self.setsDown
+            // A tile forms inside the shrinking page (`CardGlide.face`);
+            // the strip is gone before it does.
+            if tile { withAnimation(.easeOut(duration: duration * 0.3)) { hold.bandFade = 0 } }
             // Into a tall card: from just below the header, as the card shows.
             let skip = !tile && spots.cards.contains(tab.id) ? pictures.headerDepth(for: tab.id) : 0
             withAnimation(curve) {
                 box = spot
                 boxRadius = tile ? BasecampTiles.cornerRadius : cardRadius
+                band = 0
                 boxSkip = skip
                 arrival = 1
                 neighborsOpacity = 0
@@ -953,10 +968,14 @@ struct BrowserScreen: View {
         // page's shape as it grows. The face matches the real tile, so they
         // swap at once: no cross-fade of two glass tiles.
         if tile { tileCrop = (from: pageBox(for: image), to: spot.size) }
+        band = 0
+        // Out of a tile the strip comes late, once the tile's face has gone.
+        if tile { hold.bandFade = 0 }
         tileReveal = 0
         gliding = tab.id
         Task {
             await Task.yield()
+            if tile { withAnimation(.easeIn(duration: Self.tileOpenDuration * 0.6)) { hold.bandFade = 1 } }
             land(onPage: tab, curve: tile ? Self.tileOpen : Self.glide, switching: switching,
                  stepsBack: tile ? Self.tileOpenDuration : Self.glideDuration)
         }
@@ -988,7 +1007,9 @@ struct BrowserScreen: View {
         }
         withAnimation(curve) {
             box = pageBox(size: standInSize)
-            boxRadius = 0
+            // The screen's corners as it arrives, the strip grown back.
+            boxRadius = screenRadius
+            band = 1
             boxSkip = 0
             arrival = 0
             // The tabs beside it glide from where they are to beside it.
@@ -1200,7 +1221,12 @@ struct BrowserScreen: View {
         var instant = Transaction()
         instant.disablesAnimations = true
         withTransaction(instant) { stripOpacity = progress > 0 ? 0 : 1 }
-        boxRadius = min(progress * 4, 1) * 34
+        // The screen's corners at the grab, shrinking with the page; the
+        // strip rides on it and is gone a quarter of the way up, since a
+        // held page stays below the clock.
+        let scale = pageFrame.width > 0 ? box.width / pageFrame.width : 1
+        boxRadius = max(screenRadius * scale, min(progress * 4, 1) * 34)
+        band = max(0, 1 - progress * 4)
     }
 
     /// Where the picture is while pulled: smaller as it rises (down to

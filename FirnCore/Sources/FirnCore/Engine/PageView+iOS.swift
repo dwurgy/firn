@@ -118,11 +118,17 @@ public struct PageHold: Equatable, Sendable {
     /// The strip under the clock comes along, above `box` (a sideways
     /// swipe, where each page carries its own).
     public var includesTop: Bool
+    /// Otherwise, how much of that strip still rides above `box`, 1 to 0:
+    /// pulled up, the page starts as the whole screen and the strip goes
+    /// as it lifts (`docs/IOS-PLAN.md`, opening and closing as Safari's,
+    /// step 2).
+    public var topShown: CGFloat
 
-    public init(box: CGRect, radius: CGFloat, includesTop: Bool = false) {
+    public init(box: CGRect, radius: CGFloat, includesTop: Bool = false, topShown: CGFloat = 0) {
         self.box = box
         self.radius = radius
         self.includesTop = includesTop
+        self.topShown = topShown
     }
 }
 
@@ -604,7 +610,9 @@ private final class PageFrame: UIView {
                             y: held.box.minY - middle.y - scale * (sourceTop.y - middle.y))
         mover.layer.transform = CATransform3DMakeAffineTransform(
             CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: shift.x, ty: shift.y))
-        holdMask.frame = held.includesTop ? CGRect(origin: .zero, size: size) : source
+        let top = heldTop * min(max(held.topShown, 0), 1)
+        holdMask.frame = held.includesTop ? CGRect(origin: .zero, size: size)
+            : CGRect(x: 0, y: heldTop - top, width: size.width, height: source.height + top)
         holdMask.cornerRadius = held.radius / scale
         if mover.layer.mask !== holdMask { mover.layer.mask = holdMask }
     }

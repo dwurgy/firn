@@ -49,6 +49,12 @@ final class Hold {
     var standInTab: FirnCore.Tab?
     var box: CGRect = .zero
     var boxRadius: CGFloat = 0
+    /// How much of the strip under the clock rides on top of the flying
+    /// page, 1 on the page and 0 in its card: the page is the whole screen
+    /// from a close's first frame to an open's last, as Safari's.
+    var band: CGFloat = 0
+    /// Into a tile the strip fades early, before the tile forms.
+    var bandFade: Double = 1
     var boxSkip: CGFloat = 0
     var tileCrop: (from: CGRect, to: CGSize)?
     var pull: Pull?
@@ -63,6 +69,15 @@ final class Hold {
     var newTabGive: CGFloat = 0
     /// The page's own frame on screen, to aim the glide from.
     var pageFrame: CGRect = .zero
+
+    /// The screen's own corners, for the flying page. iOS has no public
+    /// way to ask, so: iPhones with a home bar about 55pt (47 to 62 across
+    /// models), iPads 18pt, a square screen none. Only the first and last
+    /// frames sit on the real corners, which hide a small mismatch.
+    static func screenRadius(topInset: CGFloat) -> CGFloat {
+        if UIDevice.current.userInterfaceIdiom == .pad { return 18 }
+        return topInset > 24 ? 55 : 0
+    }
 
     /// How much of a peeking tab shows at the screen's edge.
     static let peek: CGFloat = 20
@@ -218,6 +233,16 @@ struct StandInLayer: View {
                             .offset(x: box.minX, y: box.minY)
                             .opacity(Double((landing.settle - 1) / (BrowserScreen.settleLift - 1)))
                     }
+                    // The strip under the clock, on top of the page: its
+                    // rounded top is the page's while it flies (sideways,
+                    // `topBand` above).
+                    if !hold.swiping, hold.standIn != nil {
+                        Color.clear
+                            .modifier(BandGlide(box: box, radius: boxRadius, band: hold.band,
+                                                room: pictures.topInset,
+                                                color: hold.standInTop.map { Color(cgColor: $0) } ?? Theme.page))
+                            .opacity(hold.bandFade)
+                    }
                     Group {
                         if let standIn = hold.standIn { Image(uiImage: standIn).resizable() }
                     }
@@ -259,7 +284,8 @@ struct HeldPage: View {
     var body: some View {
         // `livePull` first, so the box is read (and followed) only while
         // the live page is the one held.
-        let held = hold.livePull ? PageHold(box: hold.box, radius: hold.boxRadius, includesTop: hold.swiping) : nil
+        let held = hold.livePull ? PageHold(box: hold.box, radius: hold.boxRadius, includesTop: hold.swiping,
+                                            topShown: hold.band) : nil
         PageView(page: page, barTop: barTop, held: held, onScroll: onScroll)
     }
 }
@@ -337,6 +363,33 @@ struct NewTabHintLayer: View {
             .ignoresSafeArea(.keyboard)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// The strip under the clock riding on the flying page: as wide as the
+/// box, `band` of the strip's room tall, reaching down behind the picture's
+/// rounded top corners. Worked out on every frame, as `CardGlide` is, so it
+/// stays on the box mid-glide; it fades over its last fifth, so no edge of
+/// it shows around a landed card's corners.
+private struct BandGlide: ViewModifier, Animatable {
+    var box: CGRect
+    var radius: CGFloat
+    var band: CGFloat
+    let room: CGFloat
+    let color: Color
+
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(box.animatableData, AnimatablePair(radius, band)) }
+        set { box.animatableData = newValue.first; radius = newValue.second.first; band = newValue.second.second }
+    }
+
+    func body(content: Content) -> some View {
+        let rise = room * min(max(band, 0), 1)
+        UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous)
+            .fill(color)
+            .frame(width: max(box.width, 0), height: rise + radius)
+            .offset(x: box.minX, y: box.minY - rise)
+            .opacity(Double(min(max(band * 5, 0), 1)))
     }
 }
 

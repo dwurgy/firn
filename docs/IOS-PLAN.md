@@ -591,6 +591,13 @@ Safari's fit a spring with no bounce: open about `response 0.33`, close about `0
 - The page's own tabs button shows as a pale disc over the blurred bar for a few frames of a close: the bars' timing, step 5.
 - The picture shows the landing tab's own card (blurred) where the page is heading; the page always covers it by the time it's sharp. To judge on the iPhone after a held pull.
 
+**Step 2 built (2026-11-19; Simulator, not yet judged on David's iPhone).** Checked first against a new Safari recording from David, frame by frame: Safari's page is the whole screen, strip under the clock included, with the screen's corners on the first frame of a close, and the strip shrinks with it.
+
+- **Corners.** The flying page starts a close at the screen's corners (`Hold.screenRadius`) and shrinks to its card's (a tile's 14pt); an open ends at the screen's. A held page's follow its size (the screen's at the grab, about 32pt at 58%), on the live page and its picture alike. iOS has no public way to ask for the screen's corners, so: 55pt on iPhones with a home bar, 18pt on iPad, none on a square screen (David's OK on a fixed size; the private value was the other route). Only the first and last frames sit on the real corners.
+- **The strip rides on the page** (`Hold.band`, drawn by `BandGlide`; the live page's through `PageHold.topShown`): the page's own strip color with the rounded top, 1 on the page and 0 in its card, shrinking on the glide's curve and fading over its last fifth so no edge shows around a landed card. On a pull it's gone a quarter of the way up, since a held page stays below the clock (Safari keeps a scaled strip on its held page: not copied). Sideways swipes keep their own strip (`topBand`), and now end at the screen's corners instead of square.
+- **Tiles** share the code: the strip fades early going into a tile, before the tile forms, and comes late out of one. Not recorded; step 6.
+- Recorded and checked frame by frame, light only: the tabs button, opening a card, and a slow pull let go into its card. *Not checked:* dark, iPad, a sideways swipe, a pull let go back to the page, tiles.
+
 Not verified: how far the overview grows as it comes forward (92% to full, measured 2026-11-13, not measured again here), and whether Safari's held page shrinks further than Firn's for the same finger travel (58% against 69% in these recordings, but the travel wasn't the same).
 
 ## 4. What goes into CLAUDE.md
@@ -783,7 +790,7 @@ From the build installed 2026-11-18 (TestFlight configuration). One at a time, d
 6. **The space pill, tap and hold:** a tap shows only the spaces; holding shows the spaces plus Space Settings… and New Space….
 7. **Switching spaces:** a better whole-screen motion than today's crossfade, which isn't smooth.
 8. Find on Page works (David). Nothing to do.
-9. **Opening and closing tiles and tabs:** needs Safari's polish. Planned (2026-11-19, six steps: "Plan: opening and closing tabs and tiles as Safari's"); step 1 built; next, step 2.
+9. **Opening and closing tiles and tabs:** needs Safari's polish. Planned (2026-11-19, six steps: "Plan: opening and closing tabs and tiles as Safari's"); steps 1 and 2 built; next, step 3.
 10. **The address bar pill on Back and Forward:** it jumps a little instead of resizing smoothly.
 11. Native glass ("Frosty, no tint"): David is generally happy with it. Nothing to do.
 12. **The Basecamp tile's hold menu** (David, 2026-11-19; for later, not started): still not fixed. Two things. (a) It is still Firn's own menu (`FrostMenu`, `TabOverview.tileMenu`), where tabs and groups have iOS's own; taken to mean it should become iOS's own too ("Plan: iOS's own menus and drag"); ask David if he meant something else as well. (b) The words: the row that closes a tile says "Remove from Basecamp", which isn't intuitive and isn't the Mac's. It becomes **Close**, beside **Move to Tabs** (already there), as the Mac's tile menu; the shake's undo name and VoiceOver follow, and CLAUDE.md's line on iOS's red Close rows names "Remove from Basecamp" and needs the same change.

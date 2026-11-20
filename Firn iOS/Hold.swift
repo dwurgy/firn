@@ -62,6 +62,9 @@ final class Hold {
     var neighborsOpacity: Double = 1
     var neighborsIn: CGFloat = 1
     var neighborsPeek = false
+    /// This pull has been past the point where the grid comes in behind
+    /// the page: the tabs beside it have left and don't come back.
+    @ObservationIgnored var neighborsLeft = false
     var heldShift: CGFloat = 0
     var swiping = false
     var newTabReach: CGFloat = 0

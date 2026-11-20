@@ -128,6 +128,8 @@ struct TabOverview: View {
     /// The overview softened once, for the landing (`FrozenOverview`), and
     /// the wait before the next picture is taken.
     @State private var frozen: FrozenOverview?
+    /// Whether that picture was taken behind the page (`freezeSoon`).
+    @State private var frozenBehind = false
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
@@ -455,7 +457,10 @@ struct TabOverview: View {
             try? await Task.sleep(for: .milliseconds(shown ? 350 : 120))
             guard !Task.isCancelled else { return }
             let now = look()
-            if frozen?.look == now { return }
+            // One taken behind the page has an empty place for the tab on
+            // screen, one taken on screen has every card: each only serves
+            // where it was taken.
+            if frozen?.look == now, frozenBehind == !shown { return }
             if shown {
                 guard atRest else { return }
             } else {
@@ -470,7 +475,10 @@ struct TabOverview: View {
             let picture = canvas.take()
             if !shown { landing.unpose() }
             guard let picture else { return }
-            if let made = await FrozenOverview.make(from: picture, look: now), !Task.isCancelled { frozen = made }
+            if let made = await FrozenOverview.make(from: picture, look: now), !Task.isCancelled {
+                frozen = made
+                frozenBehind = !shown
+            }
         }
     }
 
@@ -719,7 +727,10 @@ struct TabOverview: View {
             readsDisk: onScreen && shown,
             loadPicture: { await pictures.loadImage(for: tab.id) },
             space: space,
-            windowShown: gliding != tab.id && (!onScreen || landing.lineShown),
+            // Posed behind the page for its picture, the tab on screen's
+            // card is empty: that tab is the page, in the hand or about to
+            // fly, so it isn't also in the grid (Safari's; David, 2026-11-20).
+            windowShown: gliding != tab.id && (!onScreen || (landing.lineShown && !(landing.posed && !shown))),
             open: { openCard(tab) },
             close: { if !busy { close(tab) } },
             spot: spot,

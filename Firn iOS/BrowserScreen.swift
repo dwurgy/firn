@@ -1205,11 +1205,12 @@ struct BrowserScreen: View {
         neighborsOpacity = 1
         neighborsIn = up ? 0 : 1
         neighborsPeek = up
+        hold.neighborsLeft = false
         heldShift = 0
         if up, !beside.isEmpty {
             Task {
                 try? await Task.sleep(for: Self.neighborsWait)
-                guard pull?.id == started.id else { return }
+                guard pull?.id == started.id, !hold.neighborsLeft else { return }
                 withAnimation(.smooth(duration: 0.3)) { neighborsIn = 1 }
             }
         }
@@ -1299,6 +1300,13 @@ struct BrowserScreen: View {
         if high != landing.heldHigh {
             landing.heldHigh = high
             withAnimation(.easeOut(duration: Self.heldGridFade)) { landing.heldIn = high ? 1 : 0 }
+            // The tabs beside the page belong to a hold lower down: they
+            // leave as the grid comes in, and stay out for the rest of
+            // this pull, as Safari's (David's recording, 2026-11-20).
+            if high, !hold.neighborsLeft {
+                hold.neighborsLeft = true
+                if neighborsIn != 0 { withAnimation(.smooth(duration: 0.25)) { neighborsIn = 0 } }
+            }
         }
         band = max(0, 1 - progress * 4)
     }

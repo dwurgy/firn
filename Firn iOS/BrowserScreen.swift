@@ -774,7 +774,7 @@ struct BrowserScreen: View {
     private func beginGlide(of tab: FirnCore.Tab) {
         openActiveGroup()
         gliding = tab.id
-        if landing.barLate { landing.barLate = false }
+        endBarReturn()
         // A tile's spot stays empty until its page lands in it; shown, the
         // tile sat there during the pull, vanished as the finger lifted,
         // and came back (Simulator recording, 2026-11-09).
@@ -1021,9 +1021,15 @@ struct BrowserScreen: View {
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool,
                       stepsBack: Double? = nil) {
         guard let standInSize else { return hideTabs() }
-        // The bar comes back late (`BarHost`), unless it's still partly
-        // there (a pull let go early): the switch would cut it.
-        if arrival >= BarHost<EmptyView>.lateRange.upperBound { landing.barLate = true }
+        // The bar comes back on its own clock (`BarReturn`), unless it's
+        // still partly there (a pull let go early): the switch would cut it.
+        if arrival >= 0.2 {
+            let time = stepsBack ?? Self.glideDuration
+            landing.barLate = true
+            withAnimation(.linear(duration: time * BarReturn.fade).delay(time * BarReturn.wait)) {
+                landing.barIn = 1
+            }
+        }
         if let stepsBack {
             withAnimation(.easeOut(duration: stepsBack)) {
                 forward = 0
@@ -1049,7 +1055,7 @@ struct BrowserScreen: View {
         } completion: {
             // Stepped back: the list goes now, under the full-screen page.
             withTransaction(Transaction(animation: nil)) { listIn = 0 }
-            landing.barLate = false
+            endBarReturn()
             stripOpacity = 1
             pageHidden = false
             showingTabs = false
@@ -1099,6 +1105,16 @@ struct BrowserScreen: View {
         editing = false
         store.openTab(url)
         if showingTabs { hideTabs() }
+    }
+
+    /// The bar is the band's again (`BarHost`), and its return's clock is
+    /// back at the start for the next opening.
+    private func endBarReturn() {
+        guard landing.barLate || landing.barIn != 0 else { return }
+        withTransaction(Transaction(animation: nil)) {
+            landing.barLate = false
+            landing.barIn = 0
+        }
     }
 
     /// Back to the page with a cross-fade (a new tab from +, Reduce Motion,
@@ -1248,7 +1264,7 @@ struct BrowserScreen: View {
             return
         }
         let progress = min(lift(pull), 1)
-        if landing.barLate { landing.barLate = false }
+        endBarReturn()
         arrival = progress * 0.85
         // Gone at once, never faded, even inside the picture's catch-up glide.
         var instant = Transaction()

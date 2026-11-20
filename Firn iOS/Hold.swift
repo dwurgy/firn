@@ -324,10 +324,6 @@ struct BarHost<Content: View>: View {
     let editing: Bool
     @ViewBuilder let content: Content
 
-    /// The stretch of the overview's arrival, running down, over which the
-    /// bar comes back on an opening tab (`Landing.barLate`).
-    static var lateRange: ClosedRange<CGFloat> { 0.04...0.38 }
-
     var body: some View {
         let shown = landing.arrival < 1 || editing
         content
@@ -343,18 +339,53 @@ struct BarHost<Content: View>: View {
             // opacity fades straight from start to end, so both bars
             // faded at once and their words smudged together (David's
             // recording, 2026-11-09).
-            // As a tab opens it comes in while the page is between about
-            // 62% and 96% of its way (0.13s to 0.28s of the 0.50s glide),
-            // as Safari's does on David's iPhone (his recording,
-            // 2026-11-19: faint at about 0.13s, whole by about 0.27s).
-            // Over the last fifth, as it goes on a close, it started at
-            // about 0.19s; over the last 4%, at 0.30s (the Simulator's
-            // Safari, which is later than the iPhone's).
-            .modifier(ArrivalBand(arrival: editing ? 0 : landing.arrival,
-                                  range: landing.barLate ? Self.lateRange : 0...0.2, fadesIn: false,
+            // As a tab opens the bar comes back on a clock of its own
+            // (`BarReturn`), so this band stands aside.
+            .modifier(ArrivalBand(arrival: editing || landing.barLate ? 0 : landing.arrival,
+                                  range: 0...0.2, fadesIn: false,
                                   floor: !editing && landing.gliding != nil ? 0.002 : 0))
+            .modifier(BarReturn(landing: landing, off: editing))
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)
+    }
+}
+
+/// The page's bar coming back as a tab opens, on its own clock, as Safari's
+/// does on David's iPhone (his recordings, 2026-11-19, frame by frame):
+/// first seen about 0.10s after the page starts to grow, then an even fade
+/// of about 0.18s, whole at about 0.28s, once the page's bottom edge has
+/// passed under it. Tied to the page's travel instead, it rushed (the page
+/// covers most of its way early): nearly whole in three or four frames,
+/// and waiting, finished, over the blurred overview before the page reached
+/// it. Read here alone, so the fade keeps its own timing whatever else
+/// moves in the same moment. A hair above nothing keeps its glass alive.
+struct BarReturn: ViewModifier {
+    let landing: Landing
+    let off: Bool
+
+    /// The wait and the fade, as shares of the opening glide's time (0.50s
+    /// for a tab: 0.10s and 0.18s).
+    static var wait: Double { 0.2 }
+    static var fade: Double { 0.36 }
+
+    func body(content: Content) -> some View {
+        content.modifier(Fade(through: landing.barIn, on: landing.barLate && !off))
+    }
+
+    /// `through` rests at 0 between openings, so each fade starts from
+    /// nothing: a plain opacity would glide from the bar's last look, whole.
+    private struct Fade: ViewModifier, Animatable {
+        var through: CGFloat
+        let on: Bool
+
+        nonisolated var animatableData: CGFloat {
+            get { through }
+            set { through = newValue }
+        }
+
+        func body(content: Content) -> some View {
+            content.opacity(on ? max(0.002, Double(min(max(through, 0), 1))) : 1)
+        }
     }
 }
 

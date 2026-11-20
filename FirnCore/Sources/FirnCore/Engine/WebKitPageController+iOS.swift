@@ -25,6 +25,21 @@ extension WebKitPageController {
         return image?.cgImage
     }
 
+    /// The strip behind the status bar as the page shows it now, small: only
+    /// its color is wanted (`PagePictures`).
+    func topStripSnapshot() async -> CGImage? {
+        guard url != nil, loadError == nil else { return nil }
+        let webView = frontView
+        let bounds = webView.bounds
+        let top = min(webView.obscuredContentInsets.top, bounds.height)
+        guard top > 0, bounds.width > 0 else { return nil }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: 32)
+        configuration.rect = CGRect(x: 0, y: 0, width: bounds.width, height: top)
+        let image = try? await webView.takeSnapshot(configuration: configuration)
+        return image?.cgImage
+    }
+
     /// Where the header ends, measured in Firn's own world (the page never
     /// sees it): from the top of the screen down, each band that's pinned
     /// there (fixed or sticky) or is the site's banner (a header, a nav, or

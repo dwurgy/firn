@@ -40,6 +40,11 @@ public protocol PageController: AnyObject, Observable {
     /// The color behind the status bar, above the page on iPhone: the
     /// page's theme color, else its background. Nil on the Mac.
     var topColor: CGColor? { get }
+    /// A small picture of what the page shows behind the status bar right
+    /// now, on iPhone: the page's own color there can be neither its theme
+    /// color nor its header's (a dark header on a white page shows white).
+    /// Nil if there's nothing to show, and on the Mac. Never saved.
+    func topStripSnapshot() async -> CGImage?
     /// Opens the Mac's print sheet for the page, attached to its window.
     /// Does nothing without a loaded page or while another sheet is up.
     func printPage()
@@ -239,5 +244,6 @@ public extension PageController {
     func setReaderLook(_ look: ReaderLook) {}
     func summarizeArticle() {}
     var topColor: CGColor? { nil }
+    func topStripSnapshot() async -> CGImage? { nil }
     func headerDepth() async -> CGFloat { 0 }
 }

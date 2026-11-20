@@ -136,13 +136,26 @@ final class PagePictures {
             // Measured alongside the picture, not after it, so the picture
             // isn't kept waiting.
             let depth = Task { failed == nil ? await page.headerDepth() : 0 }
+            // What the page shows under the clock, pictured too: the strip
+            // that stands in for it must be that very color. Taken from the
+            // picture's top edge alone, a dark header on a white page gave a
+            // dark strip, and the clock's strip flashed dark to white as the
+            // picture left an opened tab (David's recording, 2026-11-19).
+            let strip = Task { failed == nil ? await page.topStripSnapshot() : nil }
             let taken: CGImage? = if let failed { failed } else { await page.snapshot(width: width) }
             let measured = await depth.value
+            let under = await strip.value
             guard let picture = taken else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
             // Its top color worked out off the main thread, before anything
             // asks: here it cost the frame the picture arrived in about 6ms.
-            await Task.detached(priority: .userInitiated) { _ = image.topEdgeColor }.value
+            await Task.detached(priority: .userInitiated) {
+                if let under, let color = UIImage.averageColor(of: under, rows: nil) {
+                    image.keepTopEdgeColor(color)
+                } else {
+                    _ = image.topEdgeColor
+                }
+            }.value
             slot(for: id).depth = measured
             keep(image, for: id)
             // Encoding and writing happen off the main thread.
@@ -205,9 +218,22 @@ extension UIImage {
 
     private nonisolated(unsafe) static var topEdgeKey: UInt8 = 0
 
+    /// The strip's color as it was measured under the clock itself when the
+    /// picture was taken (`PagePictures.capture`), in place of the picture's
+    /// top edge. A picture read back from disk has only its top edge.
+    func keepTopEdgeColor(_ color: CGColor) {
+        objc_setAssociatedObject(self, &Self.topEdgeKey, color, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
     private var measuredTopEdgeColor: CGColor? {
-        guard let image = cgImage, image.width > 0, image.height > 0,
-              let edge = image.cropping(to: CGRect(x: 0, y: 0, width: image.width, height: min(6, image.height))),
+        cgImage.flatMap { Self.averageColor(of: $0, rows: 6) }
+    }
+
+    /// A picture's color, averaged: its top `rows` rows of pixels, or all of it.
+    nonisolated static func averageColor(of image: CGImage, rows: Int?) -> CGColor? {
+        guard image.width > 0, image.height > 0,
+              let edge = image.cropping(to: CGRect(x: 0, y: 0, width: image.width,
+                                                   height: min(rows ?? image.height, image.height))),
               let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
         let count = 32
         var pixels = [UInt8](repeating: 0, count: count * 4)

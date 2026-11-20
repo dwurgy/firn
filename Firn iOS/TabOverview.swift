@@ -293,7 +293,7 @@ struct TabOverview: View {
                 // slid it sideways toward centering a grouped tab's card
                 // (`scroll(to:)`). Put straight back, where it stands.
                 if abs(now.contentOffset.x) > 0.5 {
-                    scrollPosition.scrollTo(point: CGPoint(x: 0, y: now.contentOffset.y))
+                    scrollPosition.scrollTo(point: Self.pin(now.contentOffset.y, in: now))
                 }
             }
             // A new picture for the landing once a scroll comes to rest.
@@ -497,16 +497,21 @@ struct TabOverview: View {
     /// carried the request out later, past it (the card's old spot aimed
     /// at, a snap as it landed; his recording, 2026-11-14).
     /// A spot out of view (not laid out, or its spot from an older scroll)
-    /// is first scrolled to by id, then set as an offset the next frame.
-    private func scroll(to id: UUID, _ scroller: ScrollViewProxy, again: Bool = true) {
+    /// is first scrolled to by id. Then, a frame at a time, the spot is
+    /// worked out again from what the list shows and set as the list's own
+    /// position, until the card is there (`tries`).
+    private func scroll(to id: UUID, _ scroller: ScrollViewProxy, asked: Bool = false, tries: Int = 4) {
+        func again(asked: Bool) {
+            guard tries > 0 else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(16))
+                scroll(to: id, scroller, asked: asked, tries: tries - 1)
+            }
+        }
         guard let frame = spots.frames[id], let scroll = spots.scroll, let scrollTop = spots.scrollTop,
               frame.maxY > scrollTop, frame.minY < scrollTop + scroll.containerSize.height else {
             scroller.scrollTo(id, anchor: .center)
-            guard again else { return }
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(16))
-                scroll(to: id, scroller, again: false)
-            }
+            again(asked: false)
             return
         }
         // The list's view runs from below the status bar and top margin
@@ -518,43 +523,49 @@ struct TabOverview: View {
         let lowest = -scroll.contentInsets.top
         let highest = max(lowest, scroll.contentSize.height - view - scroll.contentInsets.top)
         let y = min(max(scroll.contentOffset.y + now - wanted, lowest), highest)
+        // The list's position as a point counts from the top inset's start,
+        // the offset from its end (`Self.pin`).
+        let point = Self.pin(y, in: scroll)
         guard abs(y - scroll.contentOffset.y) > 0.5 else {
-            // Already there up and down; only a sideways slip left over
-            // from an earlier request by id is put right (see below).
-            if abs(scroll.contentOffset.x) > 0.5 { scrollPosition.scrollTo(point: CGPoint(x: 0, y: y)) }
+            // There. Set as the list's position too, which takes the place
+            // of a request by id: SwiftUI keeps one and does it again
+            // whenever the layout changes, up and down and sideways (toward
+            // centering the card across, so a tab in an open group's column
+            // left the whole overview 16 to 23pt off to the side; Simulator,
+            // logged, 2026-11-18). Left live, it ran again as a grouped tab
+            // landed and the list jumped (David's recording, 2026-11-19).
+            if asked || abs(scroll.contentOffset.x) > 0.5 { scrollPosition.scrollTo(point: point) }
             return
         }
-        // Asked by id, with the anchor that puts the card exactly there.
-        // `scrollPosition.scrollTo(y:)` alone was taken but never carried
-        // out while the overview was hidden, and asked again with the same
-        // offset as it showed, it was dropped as nothing new: the last tab
-        // came back half under the bar (David's recording, 2026-11-14).
-        // `scrollTo(id:)` lines the card's anchor up with the same point of
-        // the scroll view's whole height, the status bar and top margin
-        // included.
-        let region = view + scroll.contentInsets.top
-        let top = now - (y - scroll.contentOffset.y) + scroll.contentInsets.top
-        let unit = min(max(top / max(region - frame.height, 1), 0), 1)
-        scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: unit))
-        // But SwiftUI keeps an id request and does it again whenever the
-        // layout changes: the first tab, landed at the list's top, was set
-        // 62pt past it a moment later, as the top inset came back
-        // (Simulator, logged). So once it's there, the reached offset is
-        // set as the list's position too, which takes the request's place;
-        // carried out, it put the list back at the top, still hidden.
-        // Set as a point with x at 0: a request by id also moves the list
-        // sideways, toward centering the card across, so a tab in an open
-        // group's column left the whole overview 16 to 23pt off to the
-        // side until the next scroll (Simulator, logged, 2026-11-18); no
-        // anchor across undid it.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))
-            guard let reached = spots.scroll?.contentOffset,
-                  abs(reached.y - y) < 1 || abs(reached.x) > 0.5 else { return }
-            // Slid sideways means the request was carried out, even when it
-            // stopped short of `y` at the list's top.
-            scrollPosition.scrollTo(point: CGPoint(x: 0, y: reached.y))
+        if asked {
+            // The request by id stopped short (it's worked out from the
+            // lazy list's guess at its own height): the rest of the way as
+            // a point, which a hidden list carries out after such a request.
+            scrollPosition.scrollTo(point: point)
+        } else {
+            // Asked by id first, with the anchor that puts the card there.
+            // `scrollPosition.scrollTo(y:)` alone was taken but never
+            // carried out while the overview was hidden, and asked again
+            // with the same offset as it showed, it was dropped as nothing
+            // new: the last tab came back half under the bar (David's
+            // recording, 2026-11-14). `scrollTo(id:)` lines the card's
+            // anchor up with the same point of the scroll view's whole
+            // height, the status bar and top margin included.
+            let region = view + scroll.contentInsets.top
+            let top = now - (y - scroll.contentOffset.y) + scroll.contentInsets.top
+            let unit = min(max(top / max(region - frame.height, 1), 0), 1)
+            scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: unit))
         }
+        again(asked: true)
+    }
+
+    /// The list's position, as `scrollPosition` takes a point, for an
+    /// offset: a point counts from where the top inset starts, the offset
+    /// from where it ends. Set without the inset, the list landed that far
+    /// up: about 70pt on David's iPhone, each time a sideways slip was put
+    /// right (his recording, 2026-11-19).
+    private static func pin(_ y: CGFloat, in scroll: ScrollGeometry) -> CGPoint {
+        CGPoint(x: 0, y: y + scroll.contentInsets.top)
     }
 
     /// Opens a tab.

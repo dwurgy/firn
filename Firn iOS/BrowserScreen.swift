@@ -847,9 +847,12 @@ struct BrowserScreen: View {
     /// starts at the finger's speed (`Flight`); `curve` then moves only its
     /// corners, strip, and what fades.
     private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double, finger: CGSize? = nil) {
-        hold.follower.stop()
         Task {
-            guard let measured = await spot(of: tab) else {
+            // The page keeps closing on the finger's place while the card's
+            // spot is found; the flight starts from where it is by then.
+            let found = await spot(of: tab)
+            hold.follower.stop()
+            guard let measured = found else {
                 Self.landingLog.notice("close faded: no spot on screen (known: \(spots.frames[tab.id] != nil, privacy: .public), tile: \(tab.place == .basecamp, privacy: .public))")
                 return fadeToTabs()
             }
@@ -1211,6 +1214,7 @@ struct BrowserScreen: View {
             if pulledSize != nil {
                 if pull.sideways { box = pulledBox(pull) } else { hold.follower.aim(pulledBox(pull)) }
                 followPull(pull)
+                gridFollows(speed: -drag.velocity.height, of: pull)
             }
             return
         }
@@ -1254,6 +1258,7 @@ struct BrowserScreen: View {
         neighborsIn = up ? 0 : 1
         neighborsPeek = up
         hold.neighborsLeft = false
+        hold.gridEarly = false
         heldShift = 0
         if up, !beside.isEmpty {
             Task {
@@ -1328,6 +1333,27 @@ struct BrowserScreen: View {
         followPull(started)
     }
 
+    /// On a flick the blurred grid is behind the page from its first
+    /// frames, as Safari's (David's recording, 2026-11-20, light: Firn's
+    /// pale haze flipped to the dark grid in one frame as the finger left,
+    /// a flash). A finger moving up this fast is on its way to the grid, so
+    /// it fades in at once; slowed to a hold lower down, it fades back out,
+    /// since Safari keeps the grid out of a hold (`Landing.heldIn`).
+    private func gridFollows(speed: CGFloat, of pull: Pull) {
+        guard !pull.sideways, !landing.heldHigh else { return }
+        if !hold.gridEarly, speed > Self.flickSpeed {
+            hold.gridEarly = true
+            withAnimation(.easeOut(duration: 0.12)) { landing.heldIn = 1 }
+        } else if hold.gridEarly, speed < Self.flickSpeed / 4 {
+            hold.gridEarly = false
+            withAnimation(.easeOut(duration: 0.3)) { landing.heldIn = 0 }
+        }
+    }
+
+    /// The finger's speed up (points a second) from which a pull counts
+    /// as a flick for the grid behind it.
+    private static let flickSpeed: CGFloat = 900
+
     /// How far up the page has been pulled, 0 at rest and 1 at half the
     /// screen's height (past that it gives less and less).
     private func lift(_ pull: Pull) -> CGFloat {
@@ -1367,6 +1393,7 @@ struct BrowserScreen: View {
         let high = scale < (landing.heldHigh ? Self.heldGridScale + 0.015 : Self.heldGridScale)
         if high != landing.heldHigh {
             landing.heldHigh = high
+            hold.gridEarly = false
             if high, !landing.heldSeen { landing.heldSeen = true }
             withAnimation(.easeOut(duration: Self.heldGridFade)) { landing.heldIn = high ? 1 : 0 }
             // The tabs beside the page belong to a hold lower down: they

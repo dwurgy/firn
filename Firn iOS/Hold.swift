@@ -70,6 +70,9 @@ final class Hold {
     /// This pull has been past the point where the grid comes in behind
     /// the page: the tabs beside it have left and don't come back.
     @ObservationIgnored var neighborsLeft = false
+    /// The grid came in early behind this pull, for a finger flicking up
+    /// (`BrowserScreen.gridFollows`).
+    @ObservationIgnored var gridEarly = false
     var heldShift: CGFloat = 0
     var swiping = false
     var newTabReach: CGFloat = 0

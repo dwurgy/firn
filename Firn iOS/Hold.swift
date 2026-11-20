@@ -29,12 +29,12 @@ final class Hold {
     struct Neighbor: Identifiable {
         let id: UUID
         let tab: FirnCore.Tab
-        let image: UIImage?
+        var image: UIImage?
         var place: Int
         /// The strip under the clock while it's beside: its picture's top
         /// edge, else the page's own color (none while asleep or loading,
         /// when it's still black).
-        let top: CGColor?
+        var top: CGColor?
         /// Where it's drawn while set, rather than by its place: where it
         /// was as another tab was picked, so it glides on from there.
         var pinned: CGRect? = nil

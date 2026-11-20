@@ -404,6 +404,7 @@ struct BrowserScreen: View {
             foldOtherGroups()
         }
         .onChange(of: store.activeTabID) { old, new in tabCameOnScreen(from: old, to: new) }
+        .task(id: store.activeTabID) { await readyNeighborPictures() }
         .onChange(of: showingTabs) { foldOtherGroups() }
     }
 
@@ -1415,8 +1416,35 @@ struct BrowserScreen: View {
         return [-1, 1].compactMap { place in
             let i = index + place
             guard tabs.indices.contains(i) else { return nil }
-            let image = pictures.image(for: tabs[i].id)
+            // Only a picture already in memory: read from disk here, at the
+            // grab, it was decoded on the main thread and held the pull
+            // still for up to 140ms (David's iPhone, 2026-11-19). One not
+            // in memory is read off the main thread and set when it comes.
+            let image = pictures.cachedImage(for: tabs[i].id)
+            if image == nil { fillIn(tabs[i]) }
             return Neighbor(id: tabs[i].id, tab: tabs[i], image: image, place: place, top: stripColor(tabs[i], image))
+        }
+    }
+
+    /// A tab beside's picture, read off the main thread, set once it's in.
+    private func fillIn(_ tab: FirnCore.Tab) {
+        Task {
+            await pictures.loadImage(for: tab.id)
+            guard let image = pictures.cachedImage(for: tab.id),
+                  let i = neighbors.firstIndex(where: { $0.id == tab.id && $0.image == nil }) else { return }
+            neighbors[i].image = image
+            neighbors[i].top = stripColor(tab, image)
+        }
+    }
+
+    /// The pictures of the tabs beside the one on screen, in memory before
+    /// a swipe asks for them.
+    private func readyNeighborPictures() async {
+        guard let tab = store.activeTab else { return }
+        let tabs = swipeTabs
+        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        for i in [index - 1, index + 1] where tabs.indices.contains(i) {
+            await pictures.loadImage(for: tabs[i].id)
         }
     }
 

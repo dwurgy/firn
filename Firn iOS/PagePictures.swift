@@ -105,7 +105,10 @@ final class PagePictures {
         let store = store
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
             guard let picture = store.load(for: tabID) else { return nil }
-            return UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
+            let image = UIImage(cgImage: picture, scale: 2, orientation: .up).preparingForDisplay()
+            // Worked out here and kept with the picture (`topEdgeColor`).
+            _ = image?.topEdgeColor
+            return image
         }.value
         guard let image else { return }
         if slots[tabID]?.image == nil { keep(image, for: tabID) }
@@ -137,6 +140,9 @@ final class PagePictures {
             let measured = await depth.value
             guard let picture = taken else { return nil }
             let image = UIImage(cgImage: picture, scale: 2, orientation: .up)
+            // Its top color worked out off the main thread, before anything
+            // asks: here it cost the frame the picture arrived in about 6ms.
+            await Task.detached(priority: .userInitiated) { _ = image.topEdgeColor }.value
             slot(for: id).depth = measured
             keep(image, for: id)
             // Encoding and writing happen off the main thread.
@@ -186,6 +192,20 @@ extension UIImage {
     /// steamdb.info, bright blue over a dark header; David's recording,
     /// 2026-11-11). Drawn down to 32 pixels, so it costs next to nothing.
     var topEdgeColor: CGColor? {
+        // Kept with the picture: working it out copies the picture's
+        // pixels, about 6ms on David's iPhone (2026-11-19), and it's asked
+        // for as a tab opens and all through a pull.
+        if let kept = objc_getAssociatedObject(self, &Self.topEdgeKey) {
+            return kept is NSNull ? nil : (kept as! CGColor)
+        }
+        let color = measuredTopEdgeColor
+        objc_setAssociatedObject(self, &Self.topEdgeKey, color ?? NSNull(), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        return color
+    }
+
+    private nonisolated(unsafe) static var topEdgeKey: UInt8 = 0
+
+    private var measuredTopEdgeColor: CGColor? {
         guard let image = cgImage, image.width > 0, image.height > 0,
               let edge = image.cropping(to: CGRect(x: 0, y: 0, width: image.width, height: min(6, image.height))),
               let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }

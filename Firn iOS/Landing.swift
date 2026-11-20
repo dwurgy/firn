@@ -28,8 +28,8 @@ final class Landing {
     var heldCard: UUID?
     /// How far the overview has arrived, 0 to 1 (`BrowserScreen.arrival`).
     var arrival: CGFloat = 0
-    /// A tab is opening: the page's bar waits until the page has all but
-    /// landed (`BarHost`), as Safari's does.
+    /// A tab is opening: the page's bar comes back on its own stretch of the
+    /// glide (`BarHost.lateRange`), as Safari's does.
     var barLate = false
     /// How much of the overview's list shows (`BrowserScreen.listIn`).
     var listIn: CGFloat = 0

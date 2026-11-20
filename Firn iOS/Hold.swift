@@ -324,9 +324,9 @@ struct BarHost<Content: View>: View {
     let editing: Bool
     @ViewBuilder let content: Content
 
-    /// How much of the page's way is left as the bar starts back in on an
-    /// opening tab (`Landing.barLate`).
-    static var lateSpan: CGFloat { 0.04 }
+    /// The stretch of the overview's arrival, running down, over which the
+    /// bar comes back on an opening tab (`Landing.barLate`).
+    static var lateRange: ClosedRange<CGFloat> { 0.04...0.38 }
 
     var body: some View {
         let shown = landing.arrival < 1 || editing
@@ -343,14 +343,15 @@ struct BarHost<Content: View>: View {
             // opacity fades straight from start to end, so both bars
             // faded at once and their words smudged together (David's
             // recording, 2026-11-09).
-            // As a tab opens it comes in only over the page's last 4% of
-            // the way (from about 0.28s of the 0.50s glide, the long tail),
-            // as Safari's does: measured in the Simulator, Safari's bar
-            // starts at about 0.28s and is whole by about 0.55s (step 5,
-            // 2026-11-19). Over the last fifth, as it goes on a close, it
-            // was whole while the page was still growing.
+            // As a tab opens it comes in while the page is between about
+            // 62% and 96% of its way (0.13s to 0.28s of the 0.50s glide),
+            // as Safari's does on David's iPhone (his recording,
+            // 2026-11-19: faint at about 0.13s, whole by about 0.27s).
+            // Over the last fifth, as it goes on a close, it started at
+            // about 0.19s; over the last 4%, at 0.30s (the Simulator's
+            // Safari, which is later than the iPhone's).
             .modifier(ArrivalBand(arrival: editing ? 0 : landing.arrival,
-                                  range: landing.barLate ? 0...Self.lateSpan : 0...0.2, fadesIn: false,
+                                  range: landing.barLate ? Self.lateRange : 0...0.2, fadesIn: false,
                                   floor: !editing && landing.gliding != nil ? 0.002 : 0))
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)

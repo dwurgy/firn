@@ -1023,7 +1023,7 @@ struct BrowserScreen: View {
         guard let standInSize else { return hideTabs() }
         // The bar comes back late (`BarHost`), unless it's still partly
         // there (a pull let go early): the switch would cut it.
-        if arrival >= 0.2 { landing.barLate = true }
+        if arrival >= BarHost<EmptyView>.lateRange.upperBound { landing.barLate = true }
         if let stepsBack {
             withAnimation(.easeOut(duration: stepsBack)) {
                 forward = 0

@@ -54,8 +54,9 @@ struct FrozenOverview {
     /// Behind a page pulled up high and held (`Landing.heldSeen`), less:
     /// Safari's grid there is soft, but its cards' shapes can still be made
     /// out, about half as blurred as Firn's was (David's screenshots side
-    /// by side on his iPhone, 2026-11-20).
-    static let heldRadius: CGFloat = 15
+    /// by side on his iPhone, 2026-11-20). 15 tried: a touch sharper than
+    /// Safari's, lines showing inside the cards; 18, David's pick.
+    static let heldRadius: CGFloat = 18
     /// How far the picture runs past the window on each side (pt), filled
     /// with the picture mirrored. It grows from 92% with the list
     /// (`ComesForward.depth`), and stopped at its own faded edges before,

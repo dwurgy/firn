@@ -357,7 +357,7 @@ struct TabOverview: View {
         // picture, no blur at all.
         .overlay {
             if let frozen, pictured {
-                LandingFrozen(landing: landing, image: frozen.image, middle: screenMiddle)
+                LandingFrozen(landing: landing, image: frozen.image, pad: frozen.pad, middle: screenMiddle)
             }
         }
         .background {

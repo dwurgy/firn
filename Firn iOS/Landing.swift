@@ -136,11 +136,12 @@ struct LandingDim: View {
 struct LandingFrozen: View {
     let landing: Landing
     let image: UIImage
+    let pad: CGSize
     let middle: CGPoint?
 
     var body: some View {
         if landing.gliding != nil {
-            FrozenOverviewView(image: image, effects: LandingFocusPull(landing: landing)
+            FrozenOverviewView(image: image, pad: pad, effects: LandingFocusPull(landing: landing)
                 .concat(LandingStep(landing: landing, value: \.listIn, from: 0.0001, off: landing.behind))
                 .concat(LandingForward(landing: landing, middle: middle, off: false, behindToo: true)))
                 .transition(.identity)

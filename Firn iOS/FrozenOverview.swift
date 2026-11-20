@@ -51,13 +51,27 @@ struct FrozenOverview {
     /// How soft it starts (pt). Safari's starts so soft the cards can
     /// hardly be read (David's recording beside Safari's, 2026-11-13).
     static let radius: CGFloat = 26
-    /// The overview as it is now, its edges faded off the main thread.
-    /// They fade out over this much (pt): it grows from 92% with the
-    /// list, and a hard edge showed against the haze behind it (Simulator,
-    /// 2026-11-14); the 8% it starts short is about 16pt a side.
-    static let feather: CGFloat = 28
+    /// How far the picture runs past the window on each side (pt), filled
+    /// with the picture mirrored. It grows from 92% with the list
+    /// (`ComesForward.depth`), and stopped at its own faded edges before,
+    /// so a frame of bare wash showed around the blurred grid for a whole
+    /// hold; Safari's fills the screen (David's second recording,
+    /// 2026-11-19). Mirrored, not smeared: under the blur a card cut by the
+    /// edge carries on as a card. Enough for the 8% it starts short, plus
+    /// room for the blur to thin out in, off screen.
+    let pad: CGSize
 
-    /// `picture`: the overview drawn alone (`OverviewCanvas.take`).
+    /// The room the blur thins out in, past what the shrink shows (pt).
+    static let blurRoom: CGFloat = 44
+
+    @MainActor static func pad(for size: CGSize) -> CGSize {
+        let depth = ComesForward.depth
+        func side(_ length: CGFloat) -> CGFloat { ((length * depth / 2 + blurRoom) / (1 - depth)).rounded(.up) }
+        return CGSize(width: side(size.width), height: side(size.height))
+    }
+
+    /// `picture`: the overview drawn alone (`OverviewCanvas.take`). Padded
+    /// off the main thread.
     @MainActor static func make(from picture: UIImage, look: Look) async -> FrozenOverview? {
         // At the screen's own scale: it becomes sharp, then swaps with the
         // live list. At one pixel a point, iOS drew it snapped to whole
@@ -65,59 +79,49 @@ struct FrozenOverview {
         // swap showed double (Simulator, 2026-11-19).
         guard let source = picture.cgImage else { return nil }
         let scale = picture.scale
-        let feather = Self.feather * scale
-        let feathered = await Task.detached(priority: .utility) {
-            Self.feather(source, over: feather)
+        let pad = Self.pad(for: picture.size)
+        // Whole pixels, so the middle stays exactly where it was.
+        let padX = Int((pad.width * scale).rounded()), padY = Int((pad.height * scale).rounded())
+        let padded = await Task.detached(priority: .utility) {
+            Self.mirrored(source, padX: padX, padY: padY)
         }.value
-        guard let feathered else { return nil }
-        return FrozenOverview(image: UIImage(cgImage: feathered, scale: scale, orientation: .up), look: look)
+        guard let padded else { return nil }
+        return FrozenOverview(image: UIImage(cgImage: padded, scale: scale, orientation: .up), look: look,
+                              pad: CGSize(width: CGFloat(padX) / scale, height: CGFloat(padY) / scale))
     }
 
-    /// The picture with its edges faded out over `feather` pixels.
-    private nonisolated static func feather(_ source: CGImage, over feather: CGFloat) -> CGImage? {
+    /// The picture with a border around it of itself mirrored at each edge.
+    private nonisolated static func mirrored(_ source: CGImage, padX: Int, padY: Int) -> CGImage? {
         let width = source.width, height = source.height
-        guard width > 0, height > 0 else { return nil }
-        let rowBytes = width * 4
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        let info = CGImageAlphaInfo.premultipliedLast.rawValue
-        var spare = [UInt8](repeating: 0, count: rowBytes * height)
-        let done: Bool = spare.withUnsafeMutableBytes { raw in
-            guard let context = CGContext(data: raw.baseAddress, width: width, height: height,
-                                          bitsPerComponent: 8, bytesPerRow: rowBytes, space: space,
-                                          bitmapInfo: info) else { return false }
-            context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        // Premultiplied, so every channel fades.
-        guard done else { return nil }
-        let reach = max(feather, 1)
-        // Only the bands near an edge: the middle is left alone.
-        let band = min(Int(reach.rounded(.up)), width / 2)
-        func fade(_ x: Int, _ y: Int, _ fromY: CGFloat) {
-            let near = min(fromY, CGFloat(min(x, width - 1 - x)) + 0.5)
-            guard near < reach else { return }
-            let t = near / reach
-            let keep = t * t * (3 - 2 * t)
-            let i = y * rowBytes + x * 4
-            for c in 0..<4 { spare[i + c] = UInt8(CGFloat(spare[i + c]) * keep) }
-        }
-        for y in 0..<height {
-            let fromY = CGFloat(min(y, height - 1 - y)) + 0.5
-            if fromY < reach {
-                for x in 0..<width { fade(x, y, fromY) }
-            } else {
-                for x in 0..<band { fade(x, y, fromY) }
-                for x in (width - band)..<width { fade(x, y, fromY) }
+        guard width > 0, height > 0, padX <= width, padY <= height else { return nil }
+        guard let context = CGContext(data: nil, width: width + 2 * padX, height: height + 2 * padY,
+                                      bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let w = CGFloat(width), h = CGFloat(height)
+        let whole = CGRect(x: 0, y: 0, width: w, height: h)
+        for row in -1...1 {
+            for column in -1...1 {
+                context.saveGState()
+                context.translateBy(x: CGFloat(padX) + CGFloat(column) * w, y: CGFloat(padY) + CGFloat(row) * h)
+                if column != 0 {
+                    context.translateBy(x: w, y: 0)
+                    context.scaleBy(x: -1, y: 1)
+                }
+                if row != 0 {
+                    context.translateBy(x: 0, y: h)
+                    context.scaleBy(x: 1, y: -1)
+                }
+                context.draw(source, in: whole)
+                context.restoreGState()
             }
         }
-        guard let provider = CGDataProvider(data: Data(spare) as CFData) else { return nil }
-        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: rowBytes, space: space, bitmapInfo: CGBitmapInfo(rawValue: info),
-                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        return context.makeImage()
     }
 }
 
-/// The frozen picture, placed where it was taken: it's of the whole window.
+/// The frozen picture, placed where it was taken: it's of the whole window,
+/// and runs past it by `pad` on every side.
 /// `effects` (the focus pull and the growth) go on the picture itself,
 /// inside the placing: around it, the growth also scaled the place this
 /// reads for itself, and the picture slid up and left of the live list by a
@@ -125,6 +129,7 @@ struct FrozenOverview {
 /// 2026-11-19).
 struct FrozenOverviewView<Effects: ViewModifier>: View {
     let image: UIImage
+    let pad: CGSize
     let effects: Effects
 
     var body: some View {
@@ -134,7 +139,7 @@ struct FrozenOverviewView<Effects: ViewModifier>: View {
                 .resizable()
                 .frame(width: image.size.width, height: image.size.height)
                 .modifier(effects)
-                .offset(x: -frame.minX, y: -frame.minY)
+                .offset(x: -frame.minX - pad.width, y: -frame.minY - pad.height)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)

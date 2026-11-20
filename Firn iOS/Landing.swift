@@ -175,11 +175,22 @@ struct LandingFocusPull: ViewModifier {
 /// One picture blurred each frame; the live list was about 200 passes.
 struct FocusPull: ViewModifier, Animatable {
     var focus: CGFloat
-    /// From here on the picture fades out over the live list. Not held to
-    /// the very end: the picture was taken the last time the overview
-    /// rested, and its scroll may be a few points off (`Look.scroll`), so
-    /// the two swap while the blur left (about 2.5pt) still hides that.
-    static let handOver: CGFloat = 0.9
+    /// From here on the picture fades out over the live list, while about
+    /// 4pt of blur is left: the sharp list coming through the soft picture
+    /// over the glide's last third is what reads as clearing evenly to the
+    /// last frame (a picture's fine edges, a title's letters, stay soft
+    /// under even half a point of blur, so swapped late it was a step).
+    /// The picture was taken the last time the overview rested, and its
+    /// scroll may be a few points off (`Look.scroll`).
+    static let handOver: CGFloat = 0.6
+    /// The radius falls as this power of what's left of the focus. To the
+    /// eye a blur clears mostly in its last few points: on a plain share the
+    /// picture looked as soft as ever for most of the glide, then went sharp
+    /// within two or three frames (the step David saw beside Safari's,
+    /// 2026-11-19; measured in the Simulator, 2026-11-20: a title's edges
+    /// at a quarter of full strength three frames from the end). Squared,
+    /// the large radii pass early and the last points get the time.
+    static let ease: CGFloat = 2
 
     nonisolated var animatableData: CGFloat {
         get { focus }
@@ -189,8 +200,11 @@ struct FocusPull: ViewModifier, Animatable {
     func body(content: Content) -> some View {
         let focus = min(max(focus, 0), 1)
         content
-            .blur(radius: FrozenOverview.radius * (1 - focus))
-            .opacity(focus < Self.handOver ? 1 : Double((1 - focus) / (1 - Self.handOver)))
+            .blur(radius: FrozenOverview.radius * pow(1 - focus, Self.ease))
+            // The square root: the focus eases to its end, so a plain share
+            // left the picture nearly gone for the fade's last frames and
+            // packed the swap into two or three; this is about even in time.
+            .opacity(focus < Self.handOver ? 1 : Double(((1 - focus) / (1 - Self.handOver)).squareRoot()))
     }
 }
 

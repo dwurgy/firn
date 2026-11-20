@@ -638,43 +638,100 @@ struct BrowserScreen: View {
         // page's picture is taken meanwhile.
         SwipeTiming.begin("tabs button", tab: tab.id)
         landing.unpose()
-        let picture = pictures.capture(tab)
+        // A tab just opened keeps its picture over the page until the page
+        // has loaded (`land(onPage:)`). That picture is what's on screen,
+        // so it closes at once, as a pull takes it over; a new one would be
+        // of the blank page under it.
+        let lingering = standIn
+        let picture = lingering == nil ? pictures.capture(tab) : nil
         beginGlide(of: tab)
-        // WebKit may never answer (a busy page). Waited on with no limit,
-        // the page stayed over the overview and every swipe up after was
-        // refused; after half a second the overview fades in instead, and
-        // a picture that comes later is dropped.
         let glide = UUID()
         pullAwaitingPicture = glide
-        Task {
-            // No new picture (a page still loading, as a tile just opened
-            // is): the one it had stands in, as on a swipe up. Without it
-            // the page vanished and the overview faded in, no glide
-            // (David's recordings, 2026-11-19).
-            let fresh = await picture?.value
-            SwipeTiming.mark(fresh == nil ? "no new picture" : "picture arrived")
-            let image = fresh ?? pictures.image(for: tab.id)
-            guard let image, pullAwaitingPicture == glide else {
-                if image == nil { Self.landingLog.notice("close faded: no picture of the page") }
-                if pullAwaitingPicture == glide { pullAwaitingPicture = nil; fadeToTabs() }
-                return
-            }
+        /// The picture takes the page's place and glides into the card.
+        func close(with image: UIImage) {
             pullAwaitingPicture = nil
             putStandIn(image, of: tab, at: pageBox(for: image))
             SwipeTiming.mark("picture set")
-            if tab.place == .basecamp {
-                land(inCardOf: tab, curve: Self.tileCloseGlide, duration: Self.tileCloseDuration)
-            } else {
-                land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
+            Task {
+                // The picture has to reach the screen, in the page's place,
+                // before it's told to move. When the card's spot was already
+                // known (a tab or tile opened from the overview since launch,
+                // which stays laid out behind the page), the landing began in
+                // the same instant: the picture was first drawn already
+                // landed, a tile's faded out for its swap, so the page just
+                // vanished and the overview came in with no glide. A tab
+                // there since launch had to wait a frame for its spot, and
+                // glided: hence "sometimes" (David's iPhone, 2026-11-19;
+                // caught in the Simulator, the values logged).
+                try? await Task.sleep(for: .milliseconds(16))
+                // Still this close (no pull or pick began meanwhile).
+                guard gliding == tab.id, standIn === image, showingTabs else { return }
+                if tab.place == .basecamp {
+                    land(inCardOf: tab, curve: Self.tileCloseGlide, duration: Self.tileCloseDuration)
+                } else {
+                    land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
+                }
             }
         }
+        if let lingering {
+            SwipeTiming.mark("used the picture already up")
+            return close(with: lingering)
+        }
+        /// With no new picture: the one the tab had, else plain paper the
+        /// page's size, so the close always glides. Faded instead, a tile
+        /// whose page was still loading sometimes closed with no glide
+        /// (David's iPhone, 2026-11-19).
+        func standBy() -> UIImage? {
+            if let kept = pictures.image(for: tab.id) { return kept }
+            Self.landingLog.notice("close had no picture of the page: plain paper")
+            return plainPicture()
+        }
         Task {
-            try? await Task.sleep(for: .milliseconds(500))
+            // No new picture (a page still loading, as a tile just opened
+            // is): the one it had stands in, as on a swipe up.
+            let fresh = await picture?.value
+            SwipeTiming.mark(fresh == nil ? "no new picture" : "picture arrived")
+            // Given up on meanwhile: the close is already on its way.
             guard pullAwaitingPicture == glide else { return }
-            pullAwaitingPicture = nil
-            SwipeTiming.mark("gave up waiting, faded")
-            Self.landingLog.notice("close faded: gave up waiting for the page's picture")
-            fadeToTabs()
+            guard let image = fresh ?? standBy() else {
+                pullAwaitingPicture = nil
+                return fadeToTabs()
+            }
+            close(with: image)
+        }
+        // WebKit may never answer (a busy page). Waited on with no limit,
+        // the page stayed over the overview and every swipe up after was
+        // refused; after half a second the close goes on without the new
+        // picture, which is dropped if it comes later. A page still loading
+        // has little to picture and can keep WebKit waiting, so it gets
+        // only a few frames.
+        let patience = tab.page?.isLoading == true ? 100 : 500
+        Task {
+            try? await Task.sleep(for: .milliseconds(patience))
+            guard pullAwaitingPicture == glide else { return }
+            SwipeTiming.mark("gave up waiting for the picture")
+            Self.landingLog.notice("close gave up waiting for the page's picture")
+            guard let image = standBy() else {
+                pullAwaitingPicture = nil
+                return fadeToTabs()
+            }
+            close(with: image)
+        }
+    }
+
+    /// Plain paper the size of the page below the status bar, to stand in
+    /// for a page that has no picture yet (never kept as the tab's).
+    private func plainPicture() -> UIImage? {
+        let size = CGSize(width: pageFrame.width, height: pageFrame.height - pictures.topInset)
+        guard size.width > 0, size.height > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let dark = UITraitCollection.current.userInterfaceStyle == .dark
+        let paper = UIColor(Theme.page).resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            paper.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
         }
     }
 

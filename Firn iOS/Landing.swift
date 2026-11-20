@@ -39,6 +39,11 @@ final class Landing {
     var forward: CGFloat = 0
     /// How far it has come into focus (`ComesForward.focus`).
     var focus: CGFloat = 0
+    /// A page pulled up is held over the overview: the overview's picture
+    /// shows behind it from the grab, fully blurred and dimmed, as Safari's
+    /// grid does (David's recording beside Safari's, 2026-11-19). Until the
+    /// glide ends (`BrowserScreen.gliding`).
+    var behind = false
     /// The overview, hidden behind the page, laid out in its settled look
     /// for the moment its picture is taken (`TabOverview.freezeSoon`, step
     /// 1b): behind the page it otherwise waits as a landing starts, its
@@ -96,10 +101,12 @@ struct LandingForward: ViewModifier {
     var scalesWithList = false
     /// `middle` is in the scroll view's own points (`ComesForward.inScroll`).
     var inScroll = false
+    /// The overview's picture: dimmed behind a held page too (`Landing.behind`).
+    var behindToo = false
 
     func body(content: Content) -> some View {
         let posed = landing.posed
-        let listing = posed || landing.listIn > 0
+        let listing = posed || landing.listIn > 0 || (behindToo && landing.behind)
         content.modifier(ComesForward(through: posed ? 1 : landing.forward, focus: posed ? 1 : landing.focus,
                                       middle: middle, off: off,
                                       inScroll: inScroll, blurs: listing, scales: scalesWithList ? listing : true))
@@ -119,10 +126,12 @@ struct LandingDim: View {
 }
 
 /// The overview's picture (`FrozenOverview`) over the list and bar while a
-/// tab glides, pulled into focus: there at full strength from the let-go's
-/// first frame (never during a hold, when only the haze shows), its blur
-/// shrinking to nothing, then the live list takes over. Opening runs it
-/// backward. Put in as the glide begins and shown by a step, not by being
+/// tab glides, pulled into focus: there at full strength, fully blurred,
+/// behind a page from the moment it's pulled up (`Landing.behind`; only the
+/// wash showed during a hold until 2026-11-19, and the blurred grid popped
+/// in at the let-go), and from the first frame of a close by the tabs
+/// button; its blur shrinking to nothing once the page is let go, then the
+/// live list takes over. Opening runs it backward. Put in as the glide begins and shown by a step, not by being
 /// added later: a view added mid-animation starts at the animation's end.
 struct LandingFrozen: View {
     let landing: Landing
@@ -132,8 +141,8 @@ struct LandingFrozen: View {
     var body: some View {
         if landing.gliding != nil {
             FrozenOverviewView(image: image, effects: LandingFocusPull(landing: landing)
-                .concat(LandingStep(landing: landing, value: \.listIn, from: 0.0001))
-                .concat(LandingForward(landing: landing, middle: middle, off: false)))
+                .concat(LandingStep(landing: landing, value: \.listIn, from: 0.0001, off: landing.behind))
+                .concat(LandingForward(landing: landing, middle: middle, off: false, behindToo: true)))
                 .transition(.identity)
         }
     }

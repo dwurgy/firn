@@ -209,7 +209,11 @@ struct BrowserScreen: View {
     /// The tab whose card is hidden while the picture stands in for it.
     private var gliding: UUID? {
         get { landing.gliding }
-        nonmutating set { if landing.gliding != newValue { landing.gliding = newValue } }
+        nonmutating set {
+            if landing.gliding != newValue { landing.gliding = newValue }
+            // The glide is over: the picture behind a held page goes with it.
+            if newValue == nil, landing.behind { landing.behind = false }
+        }
     }
     /// The tab on screen's title line, faded in after the landing.
     private var lineShown: Bool {
@@ -1202,6 +1206,8 @@ struct BrowserScreen: View {
         }
         if up {
             beginGlide(of: tab)
+            // The overview's picture, blurred, behind the held page at once.
+            if !landing.behind { landing.behind = true }
         } else {
             // The overview stays out of a sideways swipe.
             gliding = tab.id

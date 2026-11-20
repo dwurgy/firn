@@ -610,6 +610,7 @@ Safari's fit a spring with no bounce: open about `response 0.33`, close about `0
   4. *Every touch down* costs 14 to 20ms of SwiftUI's hit testing through the whole screen, before anything else.
   All four are the same cost as 2i found: one change at a turn runs the whole screen's views again. Fencing `gliding` and `showingTabs` off as `Landing` and `Hold` were would shorten 1 to 3; its own step, after the six.
 - Each glide's frames come at a mix of 120 and 60 a second (about a third at 60, more in the tail), with the main thread idle between: iOS choosing the rate, not Firn falling behind. Not compared with Safari.
+- **David checked it on his iPhone (2026-11-19): no hitches on a slow swipe up** (before the fix, that was where he felt them). "Still needs polish overall." In the last recording a slow swipe up still has two frames of about 30ms in its first 120ms, and its let-go's first step comes 25 to 33ms late: for the polish after the six steps.
 - Markers for Instruments (`OSSignposter`, Points of Interest) were tried and taken out: the Animation Hitches template doesn't record an app's own.
 
 Not verified: how far the overview grows as it comes forward (92% to full, measured 2026-11-13, not measured again here), and whether Safari's held page shrinks further than Firn's for the same finger travel (58% against 69% in these recordings, but the travel wasn't the same).

@@ -29,6 +29,7 @@ struct SettingsSheet: View {
     @AppStorage(SearchEngine.preferenceKey) private var searchEngine = SearchEngine.default
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -37,6 +38,7 @@ struct SettingsSheet: View {
                 searchSection
                 privacySection
                 syncSection
+                defaultBrowserSection
                 tipJarSection
             }
             .listStyle(.insetGrouped)
@@ -158,6 +160,32 @@ struct SettingsSheet: View {
     }
 
     static var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
+
+    /// The way to iOS's own choice: the default browser can only be picked
+    /// in the Settings app, so this row opens Firn's page there. Firn can't
+    /// say whether it's already the default (iOS lets an app ask only a few
+    /// times a year), so the row never claims either way.
+    private var defaultBrowserSection: some View {
+        Section {
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+            } label: {
+                HStack {
+                    Text("Default Browser")
+                        .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Image(systemName: "arrow.up.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.faint)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .accessibilityHint("Opens the Settings app")
+        } footer: {
+            Text("Opens Firn in the Settings app. Choose Default Browser App there, then Firn, so links from mail, chat, and other apps open here.")
+        }
+    }
 
     /// The tip jar (`TipJar.swift`): the family's line, then the three tips
     /// with the App Store's own prices; after a tip, the thank-you in their

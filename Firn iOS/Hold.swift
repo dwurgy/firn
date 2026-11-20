@@ -56,6 +56,11 @@ final class Hold {
     /// Into a tile the strip fades early, before the tile forms.
     var bandFade: Double = 1
     var boxSkip: CGFloat = 0
+    /// A let-go's flight into its card, and how far through its time it is
+    /// (0 to 1, at an even pace): while set, the page's picture and its
+    /// strip are placed by the flight, not by `box`.
+    var flight: Flight?
+    var flightTime: CGFloat = 0
     var tileCrop: (from: CGRect, to: CGSize)?
     var pull: Pull?
     var neighbors: [Neighbor] = []
@@ -140,6 +145,110 @@ final class Hold {
         let coming = t > 0 ? -1 : 1
         guard t != 0, neighbors.contains(where: { $0.place == coming }) else { return BarSlide(progress: 0) }
         return BarSlide(progress: t)
+    }
+}
+
+/// A page let go on a spring that carries the finger, as Safari's (the
+/// held-page plan's step 3, `docs/IOS-PLAN.md`; David's recording,
+/// 2026-11-20): its middle (across and up), its width, and its shape each
+/// on the same spring, which doesn't bounce by itself, each started at its
+/// own speed. So a page let go from still eases in, and a flicked one
+/// shrinks past its card and grows back, rises a little above it, and
+/// keeps the finger's sideways drift before it swings back.
+///
+/// Worked out from the spring's own formula for a point in time, and
+/// played by a plain clock of fixed length (`Hold.flightTime`), not run as
+/// a SwiftUI spring: a spring reports done before it has landed, and the
+/// swap with the card jumped the last points. The little that's left near
+/// the end is eased away, so the page is exactly on its card as the clock
+/// ends, and the landing's other clocks can keep a fixed time.
+struct Flight: Equatable {
+    var from: CGRect
+    var to: CGRect
+    /// The middle's speed across and down, and the width's, in points a
+    /// second.
+    var velocity: CGVector = .zero
+    var widthVelocity: CGFloat = 0
+    /// What rides along, from the let-go to the card, on the same spring
+    /// from still: the corners, how much of the page's top is left out,
+    /// and the strip under the clock (gone in a card).
+    var radius: ClosedPair = .init(0, 0)
+    var skip: ClosedPair = .init(0, 0)
+    var band: CGFloat = 0
+
+    struct ClosedPair: Equatable {
+        var from: CGFloat
+        var to: CGFloat
+        init(_ from: CGFloat, _ to: CGFloat) { self.from = from; self.to = to }
+    }
+
+    /// Safari's spring: let go from still, halfway at about 0.11s, 90% at
+    /// 0.25s, and at rest by about 0.4s (measured: 0.115s, 0.24s, 0.38s).
+    static let response = 0.4
+    /// The clock's length: the spring is within 1.5% by then.
+    static let duration = 0.44
+    /// From this share of the time on, what's left is eased to nothing.
+    static let closes: CGFloat = 0.6
+    /// The most a flick may take the width past its card: Safari's went to
+    /// 34% of the screen for a 44% card, about a third of the way it came.
+    static let mostCarry: CGFloat = 2.7
+    /// The fastest finger that counts, in points a second.
+    static let fastest: CGFloat = 5000
+
+    /// A page at `from`, let go at the finger's `velocity`, bound for `to`.
+    /// `shrink` is how much of its width the held page loses for each point
+    /// the finger rises.
+    init(from: CGRect, to: CGRect, finger velocity: CGSize, shrink: CGFloat,
+         radius: ClosedPair, skip: ClosedPair, band: CGFloat) {
+        self.from = from
+        self.to = to
+        self.radius = radius
+        self.skip = skip
+        self.band = band
+        let limit = Self.fastest
+        let vx = min(max(velocity.width, -limit), limit)
+        let vy = min(max(velocity.height, -limit), limit)
+        self.velocity = CGVector(dx: vx, dy: vy)
+        // The width keeps shrinking (or growing) as the finger left it,
+        // but only so fast that it passes its card by about a third.
+        let omega = 2 * .pi / Self.response
+        let most = Self.mostCarry * omega * max(abs(from.width - to.width), to.width * 0.2)
+        widthVelocity = min(max(vy * shrink, -most), most)
+    }
+
+    /// How much is left of the way, let go from still: 1 to 0.
+    private func left(at time: CGFloat) -> CGFloat {
+        let time = min(max(time, 0), 1)
+        let t = time * Self.duration
+        let omega = 2 * .pi / Self.response
+        let close = min(max((time - Self.closes) / (1 - Self.closes), 0), 1)
+        return (1 + omega * t) * exp(-omega * t) * (1 - close * close * (3 - 2 * close))
+    }
+
+    func radius(at time: CGFloat) -> CGFloat { radius.to + (radius.from - radius.to) * left(at: time) }
+    func skip(at time: CGFloat) -> CGFloat { skip.to + (skip.from - skip.to) * left(at: time) }
+    func band(at time: CGFloat) -> CGFloat { band * left(at: time) }
+
+    /// Where the page is, `time` of the way through the clock (0 to 1).
+    func box(at time: CGFloat) -> CGRect {
+        let time = min(max(time, 0), 1)
+        guard time < 1, from.width > 0, to.width > 0 else { return to }
+        let t = time * Self.duration
+        let omega = 2 * .pi / Self.response
+        let fall = exp(-omega * t)
+        let close = min(max((time - Self.closes) / (1 - Self.closes), 0), 1)
+        let left = 1 - close * close * (3 - 2 * close)
+        // A fully damped spring: how far from its end a value is, having
+        // started `apart` from it at `speed`.
+        func away(_ apart: CGFloat, _ speed: CGFloat) -> CGFloat {
+            (apart + (speed + omega * apart) * t) * fall * left
+        }
+        let midX = to.midX + away(from.midX - to.midX, velocity.dx)
+        let midY = to.midY + away(from.midY - to.midY, velocity.dy)
+        let width = max(to.width + away(from.width - to.width, widthVelocity), to.width * 0.5)
+        let shape = to.height / to.width + away(from.height / from.width - to.height / to.width, 0)
+        let height = width * shape
+        return CGRect(x: midX - width / 2, y: midY - height / 2, width: width, height: height)
     }
 }
 
@@ -241,7 +350,8 @@ struct StandInLayer: View {
                     // `topBand` above).
                     if !hold.swiping, hold.standIn != nil {
                         Color.clear
-                            .modifier(BandGlide(box: box, radius: boxRadius, band: hold.band,
+                            .modifier(BandGlide(box: box, flight: hold.flight, time: hold.flightTime,
+                                                radius: boxRadius, band: hold.band,
                                                 room: pictures.topInset,
                                                 color: hold.standInTop.map { Color(cgColor: $0) } ?? Theme.page))
                             .opacity(hold.bandFade)
@@ -250,7 +360,8 @@ struct StandInLayer: View {
                         if let standIn = hold.standIn { Image(uiImage: standIn).resizable() }
                     }
                     .frame(width: width, height: height)
-                    .modifier(CardGlide(width: width, box: box, radius: boxRadius, skip: hold.boxSkip,
+                    .modifier(CardGlide(width: width, box: box, flight: hold.flight, time: hold.flightTime,
+                                        radius: boxRadius, skip: hold.boxSkip,
                                         cropFrom: hold.tileCrop?.from, cropTo: hold.tileCrop?.to,
                                         face: tileFace))
                     .modifier(ArrivalBand(arrival: hold.standInTab?.place == .basecamp ? landing.tileReveal : 0,
@@ -419,17 +530,27 @@ struct NewTabHintLayer: View {
 /// it shows around a landed card's corners.
 private struct BandGlide: ViewModifier, Animatable {
     var box: CGRect
+    var flight: Flight? = nil
+    var time: CGFloat = 0
     var radius: CGFloat
     var band: CGFloat
     let room: CGFloat
     let color: Color
 
-    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(box.animatableData, AnimatablePair(radius, band)) }
-        set { box.animatableData = newValue.first; radius = newValue.second.first; band = newValue.second.second }
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>> {
+        get { AnimatablePair(box.animatableData, AnimatablePair(radius, AnimatablePair(band, time))) }
+        set {
+            box.animatableData = newValue.first
+            radius = newValue.second.first
+            band = newValue.second.second.first
+            time = newValue.second.second.second
+        }
     }
 
     func body(content: Content) -> some View {
+        let box = flight?.box(at: time) ?? box
+        let radius = flight?.radius(at: time) ?? radius
+        let band = flight?.band(at: time) ?? band
         let rise = room * min(max(band, 0), 1)
         UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous)
             .fill(color)
@@ -444,7 +565,11 @@ private struct BandGlide: ViewModifier, Animatable {
 /// only, so nothing lays out again while it moves.
 private struct CardGlide: ViewModifier, Animatable {
     let width: CGFloat
-    var box: CGRect
+    /// Where the picture is, unless a flight says (`placed`).
+    var rest: CGRect
+    /// A let-go's flight, and how far through its time it is.
+    var flight: Flight? = nil
+    var time: CGFloat = 0
     var radius: CGFloat
     /// How much of the page's top the shown part leaves out, in the page's
     /// own points: 0 on the page, the header's depth in a tall card (2j),
@@ -474,10 +599,31 @@ private struct CardGlide: ViewModifier, Animatable {
 
     // Worked out on every frame, so the shown part, the ring, and the line
     // all agree on the box mid-glide.
-    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(box.animatableData, AnimatablePair(radius, skip)) }
-        set { box.animatableData = newValue.first; radius = newValue.second.first; skip = newValue.second.second }
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>> {
+        get { AnimatablePair(rest.animatableData, AnimatablePair(radius, AnimatablePair(skip, time))) }
+        set {
+            rest.animatableData = newValue.first
+            radius = newValue.second.first
+            skip = newValue.second.second.first
+            time = newValue.second.second.second
+        }
     }
+
+    init(width: CGFloat, box: CGRect, flight: Flight? = nil, time: CGFloat = 0, radius: CGFloat,
+         skip: CGFloat = 0, cropFrom: CGRect? = nil, cropTo: CGSize? = nil, face: ((CGFloat) -> AnyView)? = nil) {
+        self.width = width
+        self.rest = box
+        self.flight = flight
+        self.time = time
+        self.radius = radius
+        self.skip = skip
+        self.cropFrom = cropFrom
+        self.cropTo = cropTo
+        self.face = face
+    }
+
+    /// The picture's place on this frame.
+    private var box: CGRect { flight?.box(at: time) ?? rest }
 
     /// The shown part's height on screen.
     /// How far the picture has shrunk toward the tile, 0 to 1, by width.
@@ -501,6 +647,9 @@ private struct CardGlide: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
+        let box = box
+        let radius = flight?.radius(at: time) ?? radius
+        let skip = flight?.skip(at: time) ?? skip
         let scale = width > 0 && box.width > 0 ? box.width / width : 1
         let formed = face == nil ? 0 : formed
         content

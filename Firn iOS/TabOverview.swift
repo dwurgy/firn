@@ -508,9 +508,27 @@ struct TabOverview: View {
                 scroll(to: id, scroller, asked: asked, tries: tries - 1)
             }
         }
-        guard let frame = spots.frames[id], let scroll = spots.scroll, let scrollTop = spots.scrollTop,
-              frame.maxY > scrollTop, frame.minY < scrollTop + scroll.containerSize.height else {
-            scroller.scrollTo(id, anchor: .center)
+        // The card's spot where it's laid out in view; or, for a loose card
+        // out of view, worked out from its run's (`looseSpot`).
+        let seen: (frame: CGRect, scroll: ScrollGeometry, scrollTop: CGFloat)? = {
+            guard let scroll = spots.scroll, let scrollTop = spots.scrollTop else { return nil }
+            let inView: (CGRect) -> Bool = { $0.maxY > scrollTop && $0.minY < scrollTop + scroll.containerSize.height }
+            let loose = looseSpot(of: id)
+            if let frame = spots.frames[id], inView(frame) { return (frame, scroll, scrollTop) }
+            if let loose, let run = spots.runs[loose.run], inView(run) {
+                return (CGRect(x: run.minX, y: run.minY + loose.top, width: run.width, height: loose.height),
+                        scroll, scrollTop)
+            }
+            return nil
+        }()
+        guard let (frame, scroll, scrollTop) = seen else {
+            // Nothing in view to measure from: to the card's run (the list
+            // can't look a loose card up by id), or to the card itself.
+            if let loose = looseSpot(of: id) {
+                scroller.scrollTo(loose.run, anchor: .top)
+            } else {
+                scroller.scrollTo(id, anchor: .center)
+            }
             again(asked: false)
             return
         }
@@ -557,6 +575,24 @@ struct TabOverview: View {
             scroller.scrollTo(id, anchor: UnitPoint(x: 0.5, y: unit))
         }
         again(asked: true)
+    }
+
+    /// A loose card's run in UIKit's grid and the card's place in it: how
+    /// far below the run's top, and how tall. Loose cards are cells of a
+    /// collection view, which the SwiftUI list can't look up by id, and a
+    /// cell out of view has no spot of its own: the last of many tabs was
+    /// never scrolled to, so the overview opened at the top with no card
+    /// for its page to land in (Simulator, 2026-11-19). Nil for a grouped
+    /// tab, a tile, and the SwiftUI grid, whose cards the list knows.
+    private func looseSpot(of id: UUID) -> (run: String, top: CGFloat, height: CGFloat)? {
+        guard systemDrag else { return nil }
+        let metrics = gridMetrics
+        for run in OverviewGridRun.runs(shownItems, inRun: { folderCell($0) }) {
+            guard case let .tabs(_, entries) = run, let place = entries.firstIndex(where: { $0.id == id }) else { continue }
+            let row = CGFloat(place / max(metrics.columns, 1))
+            return (run.id, row * (metrics.cardHeight + OverviewGridMetrics.rowSpacing), metrics.cardHeight)
+        }
+        return nil
     }
 
     /// The list's position, as `scrollPosition` takes a point, for an
@@ -764,6 +800,7 @@ struct TabOverview: View {
                           },
                           fold: glide?.token,
                           reduceMotion: reduceMotion)
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.runs[run.id] = $0 }
                 // A run that comes or goes with a fold: its cards glide on
                 // their own (`GridCards`), so the run itself doesn't fade.
                 .transition(.identity)
@@ -2538,6 +2575,9 @@ struct ComesForward: ViewModifier, Animatable {
     /// Open groups in the grid where they're laid out, to bring one to
     /// the middle as it opens.
     var openGroups: [UUID: CGRect] = [:]
+    /// Each run of loose cards (`OverviewGridRun.id`) where it's laid out,
+    /// to work out the spot of a card that's out of view (`looseSpot`).
+    var runs: [String: CGRect] = [:]
     /// Where the list's contents start on screen (they scroll).
     var listOrigin: CGPoint?
     /// The list's own frame, to find the tab under a pinch.

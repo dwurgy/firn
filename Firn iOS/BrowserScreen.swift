@@ -1306,20 +1306,34 @@ struct BrowserScreen: View {
     /// The held page's width, as a share of the screen's, below which the
     /// blurred grid comes in behind it, and how long its fade takes (s):
     /// Safari's, measured from David's recording (2026-11-19). Here that's
-    /// a finger about three quarters of the screen's height up.
+    /// a finger pulled up about a third of the screen's height.
     private static let heldGridScale: CGFloat = 0.54
     private static let heldGridFade = 0.7
 
-    /// Where the picture is while pulled: smaller as it rises (down to
-    /// about 58% of the screen, then slower), and the point under the
-    /// finger when it came down stays under the finger, in any direction.
+    /// The held page's size, as a share of its full size, for a lift (the
+    /// finger's travel up over half the page's height): Safari's,
+    /// measured from David's recording (2026-11-20). It shrinks evenly,
+    /// to 56% after about a third of the way up (270pt on his iPhone,
+    /// where the page between the clock and the home bar is 759pt tall),
+    /// then eases to a stop at 47%, a little larger than a card, however
+    /// far the finger goes.
+    static func heldScale(lift: CGFloat) -> CGFloat {
+        let pace: CGFloat = 0.44 / (2 * 270 / 759)   // shrink per unit of lift
+        let floor: CGFloat = 0.47, knee: CGFloat = 0.53
+        let straight = 1 - pace * max(lift, 0)
+        guard straight < knee else { return straight }
+        // Past the knee, the same pace at first, then less and less.
+        let past = lift - (1 - knee) / pace
+        return floor + (knee - floor) * exp(-past * pace / (knee - floor))
+    }
+
+    /// Where the picture is while pulled: smaller as it rises (see
+    /// `heldScale`), and the point under the finger when it came down
+    /// stays under the finger, in any direction.
     private func pulledBox(_ pull: Pull) -> CGRect {
         guard let size = pulledSize else { return box }
         let page = pageBox(size: size)
-        let lift = lift(pull)
-        // Past half the screen, each point of lift shrinks it less.
-        let beyond = max(0, lift - 1)
-        let scale = 1 - 0.42 * min(lift, 1) - 0.12 * (1 - 1 / (1 + beyond))
+        let scale = Self.heldScale(lift: lift(pull))
         // Pulled down, it barely gives; swiped sideways, it stays level.
         let dy = pull.sideways ? 0
             : pull.translation.height > 0 ? pull.translation.height * 0.15 : pull.translation.height

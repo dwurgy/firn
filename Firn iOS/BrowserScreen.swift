@@ -461,8 +461,18 @@ struct BrowserScreen: View {
     /// shrinks evenly, while Firn's wide card mostly loses height, so its
     /// bottom edge travels about twice as far and the same clock felt
     /// faster (David, 2026-11-13).
-    private static let glide = Animation.timingCurve(0.25, 0.4, 0.1, 1, duration: glideDuration)
-    private static let glideDuration = 0.46
+    /// Measured again (2026-11-19, the plan's step 3; two opens in David's
+    /// recording, the page's left edge and width in every frame): Safari's
+    /// open is a spring with no bounce, about `response 0.35`: halfway at
+    /// 0.10s, 90% at 0.23s, 97% at 0.32s, 99% at 0.40s, and still for good
+    /// at about 0.55s. Firn's curve before (0.25, 0.4, 0.1, 1 over 0.46s)
+    /// began too briskly (13% ahead of Safari's at 80ms) and ended early.
+    /// This one is within 2.5% of Safari's in every frame measured, long
+    /// tail included (the last tenth of a second moves the page's edge
+    /// under a point). The grid's cards have Safari's proportions now, so the same
+    /// clock, not the 15% slower one above.
+    private static let glide = Animation.timingCurve(0.35, 0.475, 0.025, 1, duration: glideDuration)
+    private static let glideDuration = 0.50
     /// Out of a Basecamp tile, as iOS opens an app (2k step 3, David's
     /// recording of the App Library, 2026-11-18): full screen in about
     /// 0.2s, then a short settle, everything ending together. On the card's
@@ -488,6 +498,20 @@ struct BrowserScreen: View {
     /// carried a flick on at full speed, halfway in about 45ms, and read as
     /// a snap; David, 2026-11-13).
     private static let closeStartLimit = 0.45
+    /// Let go after a hold, the page lands more softly than from the tabs
+    /// button or a short swipe, as Safari's (the plan's step 3; three slow
+    /// swipe ups in David's recording, 2026-11-19, alike to the frame): an
+    /// even pace to about 60% of the way, then a gentle ease, halfway at
+    /// 0.115s, 90% at 0.24s, at rest by 0.40s. On the button's curve Firn's
+    /// was halfway at 0.095s and at rest by 0.32s.
+    private static let heldCloseDuration = 0.40
+    private static let heldCloseX1 = 0.35
+    private static let heldCloseStart = 0.40
+    private static let heldCloseTail = 0.30
+    /// The finger's speed toward the card (points a second) below which a
+    /// let-go counts as held still, and from which it's a short swipe, which
+    /// lands as the button does; between, the two curves blend.
+    private static let heldSpeed: ClosedRange<Double> = 100...600
     /// Into a Basecamp tile: slower and more even (2g, step 2). A page
     /// going down to 56pt travels much further than one landing in a card,
     /// and on the card's curve the whole landing showed for about 6 frames,
@@ -833,7 +857,9 @@ struct BrowserScreen: View {
             // after the page lands: done with the focus, it was forward
             // before you had a chance to notice; Safari's can be seen coming
             // (David's recording beside Safari's, 2026-11-13).
-            withAnimation(.timingCurve(Self.forwardCurve, duration: Self.forwardTime)) {
+            // A softer landing (let go after a hold) keeps the same lead.
+            let forwardTime = tile ? Self.forwardTime : duration + (Self.forwardTime - Self.closeDuration)
+            withAnimation(.timingCurve(Self.forwardCurve, duration: forwardTime)) {
                 forward = 1
             } completion: {
                 // Still this landing (nothing opened meanwhile).
@@ -853,7 +879,7 @@ struct BrowserScreen: View {
                 // Once the overview is full size, so the real tile is where
                 // the flying one waits.
                 let reveal = duration * 0.08
-                withAnimation(.easeInOut(duration: reveal).delay(max(duration * 0.86, Self.forwardTime - reveal))) {
+                withAnimation(.easeInOut(duration: reveal).delay(max(duration * 0.86, forwardTime - reveal))) {
                     tileReveal = 1
                 }
             }
@@ -1299,10 +1325,17 @@ struct BrowserScreen: View {
                                          tail: Self.tileCloseTail),
                          duration: Self.tileCloseDuration)
                 } else {
+                    // Held still, the soft landing; flicked, the button's.
+                    let quick = quickness(of: velocity, to: spot)
+                    func mix(_ held: Double, _ swiped: Double) -> Double { held + (swiped - held) * quick }
+                    let duration = mix(Self.heldCloseDuration, Self.closeDuration)
                     land(inCardOf: pull.tab,
-                         curve: carrying(velocity, to: spot, duration: Self.closeDuration, x1: 0.25,
-                                         least: Self.closeStart, most: Self.closeStartLimit, tail: 0.35),
-                         duration: Self.closeDuration)
+                         curve: carrying(velocity, to: spot, duration: duration,
+                                         x1: mix(Self.heldCloseX1, 0.25),
+                                         least: mix(Self.heldCloseStart, Self.closeStart),
+                                         most: Self.closeStartLimit,
+                                         tail: mix(Self.heldCloseTail, 0.35)),
+                         duration: duration)
                 }
             } else {
                 let page = pageBox(size: standInSize!)
@@ -1466,6 +1499,17 @@ struct BrowserScreen: View {
     /// An ease-out glide whose start matches the finger's speed toward
     /// where it's going: a fast flick carries straight on, a slow let-go
     /// starts gently. A curve, not a spring, so it lands exactly on time.
+    /// How much of a short swipe a let-go is, from 0 (held still) to 1, by
+    /// the finger's speed toward the card (`heldSpeed`).
+    private func quickness(of velocity: CGSize, to target: CGRect) -> Double {
+        let dx = target.midX - box.midX
+        let dy = target.midY - box.midY
+        let distance = max(hypot(dx, dy), 1)
+        let toward = (velocity.width * dx + velocity.height * dy) / distance
+        let range = Self.heldSpeed
+        return min(max((toward - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1)
+    }
+
     private func carrying(_ velocity: CGSize, to target: CGRect, duration: Double = 0.34,
                           x1: Double = 0.2, least: Double = 0.16, most: Double = 1,
                           tail: Double = 0.25) -> Animation {

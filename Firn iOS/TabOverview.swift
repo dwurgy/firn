@@ -20,7 +20,7 @@ struct TabOverview: View {
     /// What a swipe up or a tab opening moves (`Landing`): read only by
     /// the small views that use each value, so its changes don't run this
     /// body and its whole list again (2i step 3). Only `gliding` and
-    /// `heldCard` are read here: they change which card shows what.
+    /// `heldCard` are read here, and `posed`: they change which card shows what.
     let landing: Landing
     /// The tab whose card the page is gliding into or out of: hidden, so
     /// the page is the only one of it on screen.
@@ -187,6 +187,11 @@ struct TabOverview: View {
     /// The room above the list's first item.
     private static let topMargin: CGFloat = 8
     var body: some View {
+        // Read here so the pose runs this body: the grid's cards are made
+        // from UIKit's side, where reading it isn't noticed, and the tab
+        // on screen's card stayed in the picture unless something else
+        // happened to run the body in time (David's iPhone, 2026-11-20).
+        let _ = landing.posed
         ScrollViewReader { scroller in
             // A plain stack, not a List: List's own swipe can't follow the
             // finger and slide the row away the way Safari's does.

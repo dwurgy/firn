@@ -53,7 +53,9 @@ struct AddressBar: View {
     @Environment(\.showDownloads) private var showDownloads
     @Environment(\.barQuiet) private var barQuiet
     /// A finger is holding the field (from the touch, before it's a hold).
-    @GestureState private var holding = false
+    /// A plain box nothing watches (`FieldHold` keeps the gesture's own).
+    @State private var held = BarQuiet()
+    private var holding: Bool { held.on }
     /// The held field sinks a little until the page menu opens, as a held
     /// tab does before its menu (`pressedScale`).
     @State private var fieldPressed = false
@@ -394,8 +396,11 @@ struct AddressBar: View {
                                         : .smooth(duration: 0.2), value: fieldPressed)
                 // Kept on while the hold that opened the menu is down, so
                 // the finger can go on to a row.
-                .simultaneousGesture(holdForMenu, including: canHoldForMenu || holdTracking ? .all : .subviews)
-                .onChange(of: holding) { pressHeld() }
+                .modifier(FieldHold(including: canHoldForMenu || holdTracking ? .all : .subviews,
+                                    changed: holdChanged, ended: holdEnded) { now in
+                    held.on = now
+                    pressHeld()
+                })
                 .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
                 // The page coming in brings its own pill, an empty one of
                 // the same frost, growing out from the other button. Outside
@@ -477,33 +482,27 @@ struct AddressBar: View {
     /// (a highlight follows it, with a tick per row) and lets go to pick
     /// it, as on a held tab's menu (David, 2026-11-13). Let go without
     /// sliding, the menu stays open for a tap.
-    private var holdForMenu: some Gesture {
-        LongPressGesture(minimumDuration: HoldThenMove.menuHold)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-            .updating($holding) { value, state, _ in
-                if case .first(true) = value { state = true }
-            }
-            .onChanged { value in
-                guard case let .second(true, drag) = value else { return }
-                if !holdTracking {
-                    guard canHoldForMenu, barQuiet?.on != true else { return }
-                    holdTracking = true
-                    fieldPressed = false
-                    holdOpenings += 1
-                    menuOpen = true
-                }
-                guard menuOpen, let drag else { return }
-                let moved = hypot(drag.translation.width, drag.translation.height)
-                if menuPoint != nil || moved > Self.pointSlop { menuPoint = drag.location }
-            }
-            .onEnded { _ in
-                if holdTracking, menuOpen, let point = menuPoint {
-                    menuLiftPoint = point
-                    menuLift += 1
-                }
-                holdTracking = false
-                menuPoint = nil
-            }
+    private func holdChanged(_ value: FieldHold.Value) {
+        guard case let .second(true, drag) = value else { return }
+        if !holdTracking {
+            guard canHoldForMenu, barQuiet?.on != true else { return }
+            holdTracking = true
+            fieldPressed = false
+            holdOpenings += 1
+            menuOpen = true
+        }
+        guard menuOpen, let drag else { return }
+        let moved = hypot(drag.translation.width, drag.translation.height)
+        if menuPoint != nil || moved > Self.pointSlop { menuPoint = drag.location }
+    }
+
+    private func holdEnded() {
+        if holdTracking, menuOpen, let point = menuPoint {
+            menuLiftPoint = point
+            menuLift += 1
+        }
+        holdTracking = false
+        menuPoint = nil
     }
 
     /// The sinking starts a beat into the touch, as a held tab's does, so a

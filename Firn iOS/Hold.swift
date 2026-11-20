@@ -569,12 +569,15 @@ struct BarPull: ViewModifier {
     let including: GestureMask
     let moved: (DragGesture.Value) -> Void
     let ended: (DragGesture.Value) -> Void
+    /// A finger came down on the bar, or left it (before it's a drag).
+    var touched: (Bool) -> Void = { _ in }
     /// The finger is off the bar, whether the drag ended or iOS took the
     /// touch away (which `ended` never hears about).
     let stopped: () -> Void
     /// True while a finger is on the bar's drag; iOS resets it when the
     /// drag is cancelled too.
     @GestureState private var dragging = false
+    @GestureState private var touching = false
 
     func body(content: Content) -> some View {
         content
@@ -586,6 +589,40 @@ struct BarPull: ViewModifier {
                 including: including
             )
             .onChange(of: dragging) { _, now in if !now { stopped() } }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .updating($touching) { _, state, _ in state = true },
+                including: including
+            )
+            .onChange(of: touching) { _, now in touched(now) }
+    }
+}
+
+/// The field's hold for the page menu, with its own finger-down state:
+/// kept on the bar, a finger coming down ran the whole bar again, 8 to 12ms
+/// just before a grab (the trace of 2026-11-20).
+struct FieldHold: ViewModifier {
+    typealias Value = SequenceGesture<LongPressGesture, DragGesture>.Value
+    let including: GestureMask
+    let changed: (Value) -> Void
+    let ended: () -> Void
+    /// A finger is holding the field (from the touch, before it's a hold).
+    let holding: (Bool) -> Void
+    @GestureState private var down = false
+
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: HoldThenMove.menuHold)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+                    .updating($down) { value, state, _ in
+                        if case .first(true) = value { state = true }
+                    }
+                    .onChanged(changed)
+                    .onEnded { _ in ended() },
+                including: including
+            )
+            .onChange(of: down) { _, now in holding(now) }
     }
 }
 

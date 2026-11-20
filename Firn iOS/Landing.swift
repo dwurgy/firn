@@ -66,6 +66,12 @@ final class Landing {
     /// a grab runs only the small pieces that read it, not the screen and
     /// the overview whole (the trace of 2026-11-20: one 21 to 36ms turn).
     var shown = false
+    /// A finger is on the page's bar, so a swipe up may be a moment away:
+    /// the hidden overview is drawn at a hair of its strength, behind the
+    /// page, so iOS has its cards and glass ready. Shown for the first time
+    /// at the grab, that readying took iOS 13 to 17ms of one frame, the
+    /// frame every flick dropped (the trace of 2026-11-20).
+    var warm = false
 
     /// A swipe up or the tabs button: the overview is about to show.
     func unpose() {
@@ -102,7 +108,7 @@ struct LandingBand: ViewModifier {
     var off = false
 
     func body(content: Content) -> some View {
-        let floor = !off && landing.gliding != nil ? max(floor, glidingFloor) : floor
+        let floor = !off && (landing.gliding != nil || landing.warm) ? max(floor, glidingFloor) : floor
         content.modifier(ArrivalBand(arrival: off ? 0 : landing.posed ? 1 : landing[keyPath: value], range: range,
                                      fadesIn: true, floor: floor))
     }
@@ -327,7 +333,7 @@ struct OverviewVisible: ViewModifier {
     func body(content: Content) -> some View {
         let shown = landing.shown
         content
-            .opacity(shown ? 1 : 0)
+            .opacity(shown ? 1 : landing.warm ? 0.002 : 0)
             .allowsHitTesting(shown && !editing && landing.gliding == nil)
             .accessibilityHidden(!shown || editing)
     }

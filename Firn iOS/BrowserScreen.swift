@@ -421,6 +421,7 @@ struct BrowserScreen: View {
         // glide starting or the overview showing doesn't run this body.
         .background {
             LandingWatch(landing: landing, shownChanged: { _ in foldOtherGroups() }, glideEnded: {
+                if landing.warm { landing.warm = false }
                 if barQuiet { barQuiet = false }
                 foldOtherGroups()
             })
@@ -588,7 +589,8 @@ struct BrowserScreen: View {
             // Only the full bar: the small pill is tap-only, as Safari's
             // (David, 2026-11-11); a tap grows the bar, and then it swipes.
             .modifier(BarPull(including: barShrunk ? .subviews : .all, moved: pullMoved,
-                              ended: { pullEnded(translation: $0.translation, velocity: $0.velocity) }) {
+                              ended: { pullEnded(translation: $0.translation, velocity: $0.velocity) },
+                              touched: warmOverview) {
                 if newTabSwipe {
                     Task {
                         try? await Task.sleep(for: .milliseconds(50))
@@ -612,6 +614,14 @@ struct BrowserScreen: View {
             // page's own fields leave it resting behind the keyboard, as in
             // Safari.
             .ignoresSafeArea(.keyboard, edges: editing ? [] : .bottom)
+    }
+
+    /// A finger on the bar readies the hidden overview (`Landing.warm`);
+    /// lifted with no pull under way, it rests again. A glide's end rests
+    /// it too (`LandingWatch`).
+    private func warmOverview(_ down: Bool) {
+        let warm = down ? !showingTabs && !reduceMotion && !editing : gliding != nil
+        if landing.warm != warm { landing.warm = warm }
     }
 
     @ViewBuilder private var pageLayer: some View {

@@ -456,6 +456,18 @@ struct TabOverview: View {
             // 2026-11-19: no picture yet, so no blur).
             try? await Task.sleep(for: .milliseconds(shown ? 350 : 120))
             guard !Task.isCancelled else { return }
+            if !shown {
+                // A tab just opened is still gliding to the screen: wait
+                // it out, or the picture kept would be the one from on
+                // screen, with that tab's card in it (David's iPhone,
+                // 2026-11-20: the held tab's copy still behind the blur).
+                var waits = 0
+                while !hiddenAtRest, waits < 20 {
+                    try? await Task.sleep(for: .milliseconds(150))
+                    guard !Task.isCancelled else { return }
+                    waits += 1
+                }
+            }
             let now = look()
             // One taken behind the page has an empty place for the tab on
             // screen, one taken on screen has every card: each only serves

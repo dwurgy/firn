@@ -51,6 +51,11 @@ struct FrozenOverview {
     /// How soft it starts (pt). Safari's starts so soft the cards can
     /// hardly be read (David's recording beside Safari's, 2026-11-13).
     static let radius: CGFloat = 26
+    /// Behind a page pulled up high and held (`Landing.heldSeen`), less:
+    /// Safari's grid there is soft, but its cards' shapes can still be made
+    /// out, about half as blurred as Firn's was (David's screenshots side
+    /// by side on his iPhone, 2026-11-20).
+    static let heldRadius: CGFloat = 15
     /// How far the picture runs past the window on each side (pt), filled
     /// with the picture mirrored. It grows from 92% with the list
     /// (`ComesForward.depth`), and stopped at its own faded edges before,

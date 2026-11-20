@@ -168,7 +168,8 @@ struct LandingFocusPull: ViewModifier {
     let landing: Landing
 
     func body(content: Content) -> some View {
-        content.modifier(FocusPull(focus: landing.focus))
+        content.modifier(FocusPull(focus: landing.focus,
+                                   radius: landing.heldSeen ? FrozenOverview.heldRadius : FrozenOverview.radius))
     }
 }
 
@@ -179,6 +180,8 @@ struct LandingFocusPull: ViewModifier {
 /// One picture blurred each frame; the live list was about 200 passes.
 struct FocusPull: ViewModifier, Animatable {
     var focus: CGFloat
+    /// How soft it starts (pt).
+    var radius: CGFloat = FrozenOverview.radius
     /// From here on the picture fades out over the live list, while about
     /// 4pt of blur is left: the sharp list coming through the soft picture
     /// over the glide's last third is what reads as clearing evenly to the
@@ -204,7 +207,7 @@ struct FocusPull: ViewModifier, Animatable {
     func body(content: Content) -> some View {
         let focus = min(max(focus, 0), 1)
         content
-            .blur(radius: FrozenOverview.radius * pow(1 - focus, Self.ease))
+            .blur(radius: radius * pow(1 - focus, Self.ease))
             // The square root: the focus eases to its end, so a plain share
             // left the picture nearly gone for the fade's last frames and
             // packed the swap into two or three; this is about even in time.

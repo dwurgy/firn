@@ -30,6 +30,8 @@ struct SettingsSheet: View {
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
     @Environment(\.openURL) private var openURL
+    /// Send Feedback found no mail app to open its draft in.
+    @State private var noMailApp = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -39,6 +41,7 @@ struct SettingsSheet: View {
                 privacySection
                 syncSection
                 defaultBrowserSection
+                feedbackSection
                 tipJarSection
             }
             .listStyle(.insetGrouped)
@@ -184,6 +187,35 @@ struct SettingsSheet: View {
             .accessibilityHint("Opens the Settings app")
         } footer: {
             Text("Opens Firn in the Settings app. Choose Default Browser App there, then Firn, so links from mail, chat, and other apps open here.")
+        }
+    }
+
+    /// A blank email to David in the person's own mail app (`FeedbackEmail`),
+    /// with only the versions and the model filled in. Firn sends nothing
+    /// itself. With no mail app set up, the footer says where to write.
+    private var feedbackSection: some View {
+        Section {
+            Button {
+                openURL(FeedbackEmail.url) { opened in noMailApp = !opened }
+            } label: {
+                HStack {
+                    Text("Send Feedback")
+                        .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Image(systemName: "arrow.up.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.faint)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .accessibilityHint("Opens an email")
+        } footer: {
+            if noMailApp {
+                Text("No mail app is set up on this \(Self.device). Write to \(FeedbackEmail.address) from anywhere.")
+            } else {
+                Text("Opens an email to \(FeedbackEmail.address) for bugs, ideas, or anything else. Firn fills in its version, the iOS version, and the \(Self.device) model; nothing is sent until you send it.")
+            }
         }
     }
 

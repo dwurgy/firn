@@ -163,6 +163,9 @@ struct BrowserCommands: Commands {
             Button("Show Welcome Again") { window.showWelcome() }
                 .disabled(window.showsWelcome)
             Button("Report a Problem…") { window.reportProblem() }
+            // A blank email in the person's own mail app, for anyone without
+            // a GitHub account; Firn's own fixed address, never a page's.
+            Button("Send Feedback…") { NSWorkspace.shared.open(FeedbackEmail.url) }
         }
         CommandGroup(before: .windowArrangement) {
             // Held, ⌃Tab shows the recent tabs to pick from (`TabSwitchKeys`);

@@ -63,9 +63,6 @@ enum BrandFont {
 
 /// Firn's tool type: SF, as Apple's own apps title their screens.
 enum ToolFont {
-    /// Settings, History, and every other panel's title: 22pt semibold
-    /// (title 2's size), following Dynamic Type.
-    static let panelTitle = Font.title2.weight(.semibold)
     /// The scam warning's headline: 27pt regular, near the title style.
     /// Shown in `Theme.danger`, as before.
     static let scamWarningSize: CGFloat = 27

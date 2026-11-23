@@ -101,18 +101,6 @@ enum Theme {
     /// washed with the space's color.
     static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xFFFFFF, darkOpacity: 0.05)
     static let groupTint = 0.10
-    /// The iPhone's group cards: the same recipe, stronger. The Mac's card
-    /// sits on an even sidebar; the iPhone's sits on a haze that can be any
-    /// mid tone of the page, where the Mac's numbers vanished (David's
-    /// screenshots, 2026-11-08). Fixed levels, never adapting.
-    static let groupCardFill = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xFFFFFF, darkOpacity: 0.11)
-    static let groupCardShadow = Color(light: 0x000000, lightOpacity: 0.12, dark: 0x000000, darkOpacity: 0.35)
-    /// The iPhone's slim tab rows: flat, like paper rather than frost (no
-    /// blur, rim, or tint), a step lighter than the haze and the group
-    /// cards so each row reads as something to tap (David, 2026-11-08).
-    /// One recipe for both modes; only the wash differs (page white in
-    /// light, warm white in dark). With a hairline and `shadowSoft`.
-    static let slimRowFill = Color(light: 0xFFFFFF, lightOpacity: 0.72, dark: 0xFFFFFF, darkOpacity: 0.10)
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
     /// The frost that forms across the address field while a page loads, in
@@ -145,8 +133,6 @@ enum Theme {
     /// The chosen tile's ring is a little thicker than a hairline, so it reads
     /// as a lip of colored glass.
     static let tileRingWidth: CGFloat = 2.5
-    /// The thin sheen along the ring's outer top edge.
-    static let tileRingSheen = Color(light: 0xFFFFFF, lightOpacity: 0.65, dark: 0xFFFFFF, darkOpacity: 0.4)
 
     /// A calm color for a site's letter mark (and its tile, until the site's
     /// icon arrives). Picked steadily from the address so it never changes.
@@ -209,28 +195,6 @@ enum Theme {
         return Color(light: hex, dark: hex)
     }
 
-    /// The ring around the tab on screen's card (iOS): the space's color
-    /// eased a tenth toward warm grey, so it reads as frost, not paint
-    /// (David, 2026-11-15: Sage's ring read vivid green over a white page;
-    /// 2026-11-16: a quarter left Glacier's looking washed out).
-    static func spaceRing(_ name: String) -> Color {
-        let hex = spaceHex(name)
-        return Color(light: mix(hex, 0x9D9389, 0.1), dark: mix(hex, 0x958D85, 0.1))
-    }
-
-    /// The tab overview's haze (iOS): the frame's color washed over the
-    /// blurred picture of the page you came from, at one level for every
-    /// page (like the Mac's window, it shows whatever is behind it).
-    static let overviewWash = Color(light: 0xE9E3DA, lightOpacity: 0.6, dark: 0x28241F, darkOpacity: 0.7)
-
-    /// The fill of a tall card's title pill and X (iOS), over a real blur of
-    /// the page's picture: the group cards' frost, stronger, so the title
-    /// reads over any page, at one level for every page. Dark is a lighter
-    /// warm gray than the frame, so the pill lifts off a dark page. Light
-    /// always bleeds through, like a frosted cabin window (David,
-    /// 2026-11-08): the blur erases shapes, so the fill can stay light;
-    /// one level in both modes (David, 2026-11-08).
-    static let cardPillVeil = Color(light: 0xFFFFFF, lightOpacity: 0.42, dark: 0x48484A, darkOpacity: 0.42)
     /// The iPhone's bars (the address bar, and the overview's bar): Firn's
     /// frost over iOS's thinnest material, which already blurs and veils,
     /// so the fill is far lighter than the pills': 42%, then 24%, still

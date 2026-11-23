@@ -77,11 +77,6 @@ extension InsettableShape {
         gradient.mask { strokeBorder(.black, lineWidth: lineWidth) }
             .allowsHitTesting(false)
     }
-
-    /// A shape filled with a gradient, drawn by the GPU (see `gradientBorder`).
-    func gradientFill<G: ShapeStyle & View>(_ gradient: G) -> some View {
-        gradient.clipShape(self)
-    }
 }
 
 /// A button on Firn's frost, pressed: the warm wash in its shape, never a

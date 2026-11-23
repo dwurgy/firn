@@ -953,3 +953,23 @@ From David's recordings beside Safari's: as the bar shrank to the small pill, it
 **Fix.** `GlassFrame` is now distances in from the view's own edges (`left`, `top`, `right`, `bottom`), as `GrowingGlass` already was, so iOS draws it in the field's gliding bounds. The small pill reads no measured size at all (`compactTopDrop` down, `compactDrop` below). The page menu and a sideways slide still use the measured size, turned into edge distances (`GlassFrame(frame:in:radius:)`); both start from a field that isn't changing size.
 
 **Checked** in the Simulator (iPhone 18 Pro, light), every frame of a recording: the glass narrows over the whole glide going down and widens over it coming back, the page menu grows out of the field as before, and a sideways swipe between two tabs shares the gap as before. Not run: dark, Reduce Motion, Reduce Transparency, and David's iPhone. Whatever else differs from Safari's shrink is the next detail, from a new recording.
+
+### After David's iPhone (2026-11-23): Safari's bar follows the finger first
+
+David, from two recordings on steamdb.info (Firn, then Safari on iOS 27): the snap is gone, but Firn's shrink "only has one speed", and Back and the tabs button fade away up where the bar was instead of going down with the pill. Both recordings read frame by frame, the pill's top edge and the page's scroll measured in every frame (`ffmpeg`, 60 frames a second).
+
+**Measured, Safari.** The pill's top travels 36pt, as Firn's. The move has two parts:
+
+- **Shrinking (scrolling down):** nothing for the first 15pt or so of scroll. Then the bar follows the scroll: the pill's top drops about 12pt (a third of the way) over the next 30pt or so of scroll, slowly with a slow finger, in two frames with a fast one. At about a third it lets go and finishes on its own in about 0.25s, easing out.
+- **Growing (scrolling up):** nothing for the first 50pt or so. Then it follows: about 6pt (a sixth of the way) over the next 30pt or so, and it stands still while the finger stands still (eight frames in one case). Past about 90pt it finishes on its own in about 0.3s.
+- **Back and the tabs button** stay beside the pill the whole way: they go down with it, a little smaller, and fade out by about halfway. Reload and the page menu's mark are gone within two or three frames.
+
+Two or three samples of each, so the distances are rough.
+
+**Measured, Firn.** Every shrink and every grow is the same curve, about 0.3s, started at one point of the scroll; nothing follows the finger. (The note of 2026-11-09, "on its own rather than following the finger, as Safari's on iOS 26", no longer matches Safari.) Back and the tabs button shrink to a dot and fade where they stand, at the full bar's height, while the pill drops away below them.
+
+**Proposed, not yet agreed (two pieces, in this order):**
+
+1. **Back and the tabs button go down with the pill.** Small and on its own: they ride down beside the pill, a little smaller, and fade by halfway, in place of shrinking to a dot above it. Worth testing by itself.
+2. **The bar follows the finger first, then finishes on its own.** Three steps that are one motion, to be judged once at the end: (a) how far along the bar is, worked out from the scroll with Safari's distances, as a small tested type; (b) the bar drawn from that amount instead of an on/off flag (glass, name, buttons, and the page's room); (c) the finish on a spring that carries the scroll's speed. Reduce Motion keeps its cross-fade.
+

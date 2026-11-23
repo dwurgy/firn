@@ -8,7 +8,7 @@ for e in root.iter():
     if e.get('id'): ids[e.get('id')]=e
 R=lambda e: ids[e.get('ref')] if e.get('ref') else e
 g=float(sys.argv[2]); lo=g-(float(sys.argv[3]) if len(sys.argv)>3 else 0.04); hi=g+(float(sys.argv[4]) if len(sys.argv)>4 else 0.17)
-keys=['pullMoved','pullEnded','beginGlide','Follower.tick','land(inCardOf','land(onPage','putStandIn','showTabs','openTab',
+keys=['pullMoved','pullEnded','beginGlide','Follower.tick','FlightClock','land(inCardOf','land(onPage','putStandIn','showTabs','openTab',
       'ShakeToUndo','hitTest','BrowserScreen.body.getter','TabOverview.body.getter','AddressBar.body.getter','OverviewBar.body',
       'GridCards','BasecampTiles.body','displayLinkTimer','flushTransactions','CA::Transaction::commit','layoutSubviews',
       'snapshot','sendEvent','DisplayList.ViewUpdater.render','swapIntoCard']

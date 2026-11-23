@@ -494,7 +494,11 @@ struct BrowserScreen: View {
     /// tail included (the last tenth of a second moves the page's edge
     /// under a point). The grid's cards have Safari's proportions now, so the same
     /// clock, not the 15% slower one above.
-    private static let glide = Animation.timingCurve(0.35, 0.475, 0.025, 1, duration: glideDuration)
+    private static let glide = Animation.timingCurve(glideCurve.x1, glideCurve.y1, glideCurve.x2, glideCurve.y2,
+                                                     duration: glideDuration)
+    /// The same curve for the opening page itself, which runs on Firn's
+    /// own clock (`FlightClock`).
+    private static let glideCurve = Flight.Curve(x1: 0.35, y1: 0.475, x2: 0.025, y2: 1)
     private static let glideDuration = 0.50
     /// Out of a Basecamp tile, as iOS opens an app (2k step 3, David's
     /// recording of the App Library, 2026-11-18): full screen in about
@@ -1091,7 +1095,8 @@ struct BrowserScreen: View {
             await Task.yield()
             if tile { withAnimation(.easeIn(duration: Self.tileOpenDuration * 0.6)) { hold.bandFade = 1 } }
             land(onPage: tab, curve: tile ? Self.tileOpen : Self.glide, switching: switching,
-                 stepsBack: tile ? Self.tileOpenDuration : Self.glideDuration)
+                 stepsBack: tile ? Self.tileOpenDuration : Self.glideDuration,
+                 clocked: tile ? nil : Self.glideCurve)
         }
     }
 
@@ -1104,10 +1109,26 @@ struct BrowserScreen: View {
     /// softened picture fades in over it (`FrozenOverview`), all on the
     /// glide's clock; the list goes once the page covers it. Without it
     /// (a pull let go, a sideways swipe), the list just fades.
+    /// `clocked`: the page itself runs on Firn's own clock, on this curve
+    /// over `stepsBack` seconds, so it moves on the very next frame and at
+    /// the screen's full rate. As a SwiftUI animation it started 40 to
+    /// 50ms after the tap and ran at half that rate (traced with the
+    /// cable, 2026-11-22). The rest still follows `curve`.
     private func land(onPage tab: FirnCore.Tab, curve: Animation, switching: Bool,
-                      stepsBack: Double? = nil) {
+                      stepsBack: Double? = nil, clocked: Flight.Curve? = nil) {
         hold.follower.stop()
         guard let standInSize else { return hideTabs() }
+        if let clocked, let stepsBack {
+            withTransaction(Transaction(animation: nil)) {
+                hold.flight = Flight(from: box, to: pageBox(size: standInSize), curve: clocked,
+                                     radius: .init(boxRadius, screenRadius), skip: .init(boxSkip, 0),
+                                     band: band, bandTo: 1)
+                hold.flightTime = 0
+            }
+            hold.flightClock.run(for: stepsBack) { [hold] time in
+                if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
+            }
+        }
         // The bar comes back on its own clock (`BarReturn`), unless it's
         // still partly there (a pull let go early): the switch would cut it.
         if arrival >= 0.2 {
@@ -1143,6 +1164,8 @@ struct BrowserScreen: View {
             neighborsPeek = false
             for i in neighbors.indices { neighbors[i].pinned = nil }
         } completion: {
+            // `box` is at the page's place by now: it places the picture again.
+            endFlight()
             // Stepped back: the list goes now, under the full-screen page.
             withTransaction(Transaction(animation: nil)) { listIn = 0 }
             endBarReturn()

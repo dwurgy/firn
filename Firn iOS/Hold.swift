@@ -329,6 +329,10 @@ struct Flight: Equatable {
     var radius: ClosedPair = .init(0, 0)
     var skip: ClosedPair = .init(0, 0)
     var band: CGFloat = 0
+    /// Opening: the strip's end, and the timing curve it all runs on in
+    /// place of the spring.
+    var bandTo: CGFloat = 0
+    var curve: Curve? = nil
 
     struct ClosedPair: Equatable {
         var from: CGFloat
@@ -376,8 +380,45 @@ struct Flight: Equatable {
         widthVelocity = min(max(vy * shrink, -most), most)
     }
 
+    /// A page opening from its card, on a timing curve, from still: the
+    /// same glide as SwiftUI's `timingCurve`, worked out here so it can run
+    /// on Firn's own clock (`FlightClock`). `band` grows to `bandTo`.
+    init(from: CGRect, to: CGRect, curve: Curve, radius: ClosedPair, skip: ClosedPair,
+         band: CGFloat, bandTo: CGFloat) {
+        self.from = from
+        self.to = to
+        self.curve = curve
+        self.radius = radius
+        self.skip = skip
+        self.band = band
+        self.bandTo = bandTo
+    }
+
+    /// A cubic timing curve from (0, 0) to (1, 1), as `Animation.timingCurve`.
+    struct Curve: Equatable {
+        var x1: CGFloat, y1: CGFloat, x2: CGFloat, y2: CGFloat
+
+        /// How far along, 0 to 1, at `time` of the way through (0 to 1).
+        func value(at time: CGFloat) -> CGFloat {
+            guard time > 0 else { return 0 }
+            guard time < 1 else { return 1 }
+            func at(_ s: CGFloat, _ a: CGFloat, _ b: CGFloat) -> CGFloat {
+                let r = 1 - s
+                return 3 * r * r * s * a + 3 * r * s * s * b + s * s * s
+            }
+            // The curve's own parameter at this time, by halving.
+            var low: CGFloat = 0, high: CGFloat = 1
+            for _ in 0..<24 {
+                let mid = (low + high) / 2
+                if at(mid, x1, x2) < time { low = mid } else { high = mid }
+            }
+            return at((low + high) / 2, y1, y2)
+        }
+    }
+
     /// How much is left of the way, let go from still: 1 to 0.
     private func left(at time: CGFloat) -> CGFloat {
+        if let curve { return 1 - curve.value(at: time) }
         let time = min(max(time, 0), 1)
         let t = time * Self.duration
         let omega = 2 * .pi / Self.response
@@ -387,12 +428,19 @@ struct Flight: Equatable {
 
     func radius(at time: CGFloat) -> CGFloat { radius.to + (radius.from - radius.to) * left(at: time) }
     func skip(at time: CGFloat) -> CGFloat { skip.to + (skip.from - skip.to) * left(at: time) }
-    func band(at time: CGFloat) -> CGFloat { band * left(at: time) }
+    func band(at time: CGFloat) -> CGFloat { bandTo + (band - bandTo) * left(at: time) }
 
     /// Where the page is, `time` of the way through the clock (0 to 1).
     func box(at time: CGFloat) -> CGRect {
         let time = min(max(time, 0), 1)
         guard time < 1, from.width > 0, to.width > 0 else { return to }
+        if curve != nil {
+            // Each side on the curve, as SwiftUI moves a rectangle.
+            let left = left(at: time)
+            return CGRect(x: to.minX + (from.minX - to.minX) * left, y: to.minY + (from.minY - to.minY) * left,
+                          width: to.width + (from.width - to.width) * left,
+                          height: to.height + (from.height - to.height) * left)
+        }
         let t = time * Self.duration
         let omega = 2 * .pi / Self.response
         let fall = exp(-omega * t)

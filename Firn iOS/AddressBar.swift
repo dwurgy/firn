@@ -468,28 +468,31 @@ struct AddressBar: View {
     /// only then is its glass pressed by a finger.
     private var fieldAtRest: Bool { !menuOpen && !compact && activeSlide == nil }
 
-    /// The field's size, for the shape its glass takes.
+    /// The field's size at rest, for the page menu and a sideways slide,
+    /// which start from a field that isn't changing size. The small pill
+    /// never reads it: the field's width glides as it shrinks, and a
+    /// measured width arrives whole, in one frame.
     @State private var fieldSize: CGSize = .zero
 
-    /// Where the field's one glass is, in the field's own space: the
+    /// The field's one glass, measured from the field's own edges: the
     /// field, the page menu above it, the small pill below it, or its share
     /// of the gap mid-slide.
-    private func glassFrame(fieldSize: CGSize) -> (frame: CGRect, radius: CGFloat) {
-        guard fieldSize != .zero else { return (.zero, 0) }
-        if menuOpen { return (menuFrame(fieldSize: fieldSize), PageMenuPanel.cornerRadius) }
+    private func glassShape(fieldSize: CGSize) -> GlassFrame {
         if compact {
-            let small = CGRect(x: 0, y: fieldSize.height - Self.compactHeight + Self.compactDrop,
-                               width: fieldSize.width, height: Self.compactHeight)
-            return (small, small.height / 2)
+            return GlassFrame(top: Self.compactTopDrop, bottom: -Self.compactDrop, radius: Self.compactHeight / 2)
         }
-        if let held = activeSlide?.pills(in: fieldSize).held { return (held, held.height / 2) }
-        return (CGRect(origin: .zero, size: fieldSize), fieldSize.height / 2)
+        let rest = GlassFrame(radius: BarButton.glassSize / 2)
+        guard fieldSize != .zero else { return rest }
+        if menuOpen {
+            return GlassFrame(frame: menuFrame(fieldSize: fieldSize), in: fieldSize, radius: PageMenuPanel.cornerRadius)
+        }
+        if let held = activeSlide?.pills(in: fieldSize).held {
+            return GlassFrame(frame: held, in: fieldSize, radius: held.height / 2)
+        }
+        return rest
     }
 
-    private var glassShape: GlassFrame {
-        let glass = glassFrame(fieldSize: fieldSize)
-        return GlassFrame(frame: glass.frame, radius: glass.radius)
-    }
+    private var glassShape: GlassFrame { glassShape(fieldSize: fieldSize) }
 
     /// The field can be held for the page menu: at rest on a page, the full
     /// bar (a tap on the small pill grows it), and not mid-swipe.
@@ -580,13 +583,14 @@ struct AddressBar: View {
     /// The loading frost, over the field's glass in the glass's own shape;
     /// gone while the menu is open.
     private func loadingTint(fieldSize: CGSize) -> some View {
-        let glass = glassFrame(fieldSize: fieldSize)
-        let shape = RoundedRectangle(cornerRadius: glass.radius, style: .continuous)
+        let glass = glassShape(fieldSize: fieldSize)
+        let frame = glass.box(in: CGRect(origin: .zero, size: fieldSize))
+        let shape = RoundedRectangle(cornerRadius: min(glass.radius, frame.height / 2), style: .continuous)
         return LoadingFrost(isLoading: page?.isLoading ?? false, progress: page?.progress ?? 0, space: space)
             .opacity(menuOpen ? 0 : 1)
             .clipShape(shape)
-            .frame(width: glass.frame.width, height: glass.frame.height)
-            .position(x: glass.frame.midX, y: glass.frame.midY)
+            .frame(width: frame.width, height: frame.height)
+            .position(x: frame.midX, y: frame.midY)
             .allowsHitTesting(false)
     }
 

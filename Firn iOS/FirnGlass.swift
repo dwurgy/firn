@@ -128,30 +128,67 @@ private struct FirnGlassSurface<S: InsettableShape>: ViewModifier {
 
 /// One glass that changes shape (David, 2026-11-18: one native glass per
 /// button, never a second glass taking over mid-move): a rounded rectangle
-/// at `frame`, in the view's own space, which may reach outside the view
-/// (the page menu grows above the field, the small pill hangs below it).
-/// Animatable, so iOS's glass glides from one frame to the next. An empty
-/// frame means the view's own bounds, a capsule.
+/// set in from the view's own edges by `left`, `top`, `right`, and `bottom`
+/// (negative reaches outside the view: the page menu grows above the field,
+/// the small pill hangs below it). Animatable, so iOS's glass glides from
+/// one shape to the next.
+///
+/// Measured from the view's edges, never as a fixed rectangle, so the glass
+/// keeps up with a view whose own size is gliding: the address bar's field
+/// narrowing to the small pill took a measured width, which arrived whole
+/// in one frame, and the glass snapped to it (David's recording,
+/// 2026-11-23). All zero is the view's own bounds, a capsule.
 struct GlassFrame: InsettableShape {
-    var frame: CGRect
-    var radius: CGFloat
+    var left: CGFloat = 0
+    var top: CGFloat = 0
+    var right: CGFloat = 0
+    var bottom: CGFloat = 0
+    /// The corners; never more than a capsule's, so the default is one.
+    var radius: CGFloat = GlassFrame.capsule
     var inset: CGFloat = 0
+
+    static let capsule: CGFloat = 1000
+
+    /// The shape that is `frame` in a view of `size`.
+    init(frame: CGRect, in size: CGSize, radius: CGFloat) {
+        left = frame.minX
+        top = frame.minY
+        right = size.width - frame.maxX
+        bottom = size.height - frame.maxY
+        self.radius = radius
+    }
+
+    init(left: CGFloat = 0, top: CGFloat = 0, right: CGFloat = 0, bottom: CGFloat = 0,
+         radius: CGFloat = GlassFrame.capsule) {
+        self.left = left
+        self.top = top
+        self.right = right
+        self.bottom = bottom
+        self.radius = radius
+    }
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat>> {
         get {
-            AnimatablePair(AnimatablePair(frame.minX, frame.minY),
-                           AnimatablePair(AnimatablePair(frame.width, frame.height), radius))
+            AnimatablePair(AnimatablePair(left, top), AnimatablePair(AnimatablePair(right, bottom), radius))
         }
         set {
-            frame = CGRect(x: newValue.first.first, y: newValue.first.second,
-                           width: newValue.second.first.first, height: newValue.second.first.second)
+            left = newValue.first.first
+            top = newValue.first.second
+            right = newValue.second.first.first
+            bottom = newValue.second.first.second
             radius = newValue.second.second
         }
     }
 
+    /// Where the glass is in a view with these bounds, before `inset`.
+    func box(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.minX + left, y: rect.minY + top,
+               width: max(rect.width - left - right, 0), height: max(rect.height - top - bottom, 0))
+    }
+
     func path(in rect: CGRect) -> Path {
-        let box = (frame.isEmpty ? rect : frame).insetBy(dx: inset, dy: inset)
-        let corner = min(frame.isEmpty ? box.height / 2 : radius, box.height / 2, box.width / 2)
+        let box = box(in: rect).insetBy(dx: inset, dy: inset)
+        let corner = min(radius, box.height / 2, box.width / 2)
         return RoundedRectangle(cornerRadius: max(corner, 0), style: .continuous).path(in: box)
     }
 
@@ -184,8 +221,8 @@ struct GrowingGlass: InsettableShape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let from = base.frame.isEmpty ? rect : base.frame
-        let fromRadius = base.frame.isEmpty ? from.height / 2 : min(base.radius, from.height / 2)
+        let from = base.box(in: rect)
+        let fromRadius = min(base.radius, from.height / 2)
         let to = CGRect(x: rect.midX - grown.width / 2, y: rect.maxY - grown.height,
                         width: grown.width, height: grown.height)
         let t = open

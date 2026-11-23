@@ -303,7 +303,7 @@ struct OverviewBar: View {
 
     /// The pill's one glass, grown into the menu while it's open.
     private var pillGlass: GrowingGlass {
-        GrowingGlass(base: GlassFrame(frame: .zero, radius: 0), grown: menuSize, radius: SpaceMenuPanel.cornerRadius, open: menuOpen ? 1 : 0)
+        GrowingGlass(base: GlassFrame(), grown: menuSize, radius: SpaceMenuPanel.cornerRadius, open: menuOpen ? 1 : 0)
     }
 
     @ViewBuilder private func menuPanel(pill: CGSize) -> some View {

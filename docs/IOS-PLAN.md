@@ -943,3 +943,13 @@ Checked in the Simulator frame by frame (2026-11-23), dark and light, slow swipe
 - **A flick showed the coming space late**, popping in as it landed: the copies are now made once the overview has been at rest a moment (`copySoon`), not as the finger comes down, and made again only when what they show has changed (`copyStamp`). Two more overviews are alive while the overview is open; whether that costs memory or frames is to be seen.
 
 David checked these on his iPhone (2026-11-23, a recording read frame by frame: "pretty good"): the pill holds through a held swipe, a flick, and each landing, the names slide through it, and no dim frames follow the switch. Still not run: Reduce Motion, three or more spaces, groups, and the iPad.
+
+## 11. The address bar's shrink: the glass narrows with the field (2026-11-23)
+
+From David's recordings beside Safari's: as the bar shrank to the small pill, its glass was pill-width in one frame while the words and buttons were still gliding.
+
+**Cause.** The field's one glass (`GlassFrame`) was a fixed rectangle built from the field's measured size (`fieldSize`, set by `onGeometryChange`). The field's width glides as it shrinks, but a measured size arrives whole, in one step, so the glass jumped to the final width.
+
+**Fix.** `GlassFrame` is now distances in from the view's own edges (`left`, `top`, `right`, `bottom`), as `GrowingGlass` already was, so iOS draws it in the field's gliding bounds. The small pill reads no measured size at all (`compactTopDrop` down, `compactDrop` below). The page menu and a sideways slide still use the measured size, turned into edge distances (`GlassFrame(frame:in:radius:)`); both start from a field that isn't changing size.
+
+**Checked** in the Simulator (iPhone 18 Pro, light), every frame of a recording: the glass narrows over the whole glide going down and widens over it coming back, the page menu grows out of the field as before, and a sideways swipe between two tabs shares the gap as before. Not run: dark, Reduce Motion, Reduce Transparency, and David's iPhone. Whatever else differs from Safari's shrink is the next detail, from a new recording.

@@ -58,6 +58,7 @@ struct NewSpaceSheet: View {
                         .submitLabel(.done)
                         .textInputAutocapitalization(.words)
                         .accessibilityLabel("Name")
+                        .tint(Theme.accent)
                         .onChange(of: name) {
                             if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) }
                         }
@@ -89,7 +90,9 @@ struct NewSpaceSheet: View {
                 }
             }
         }
-        .tint(Theme.accent)
+        // Ink, as Settings: no words are Glacier (the "Share with" value was).
+        // The cursor and the check take their Glacier by themselves.
+        .tint(Theme.ink)
         .presentationDetents([.large])
         .onAppear(perform: start)
     }
@@ -207,7 +210,7 @@ private struct Choice: View {
                 Spacer(minLength: 0)
                 Image(systemName: "checkmark")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Theme.accent)
                     .opacity(isSelected ? 1 : 0)
                     .accessibilityHidden(true)
             }

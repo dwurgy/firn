@@ -8,8 +8,9 @@ import SwiftUI
 /// with iOS's glass press; the pill takes the glass press too.
 ///
 /// The pill is the space switcher (phase 4, step 1): a dot per space under
-/// the name, as on the Mac; a tap opens the space menu (iOS's own, David,
-/// 2026-11-17, as the grid's cards); a sideways swipe on
+/// the name, as on the Mac; a tap turns the pill itself into the space menu,
+/// as the address bar's field turns into the page menu (David, 2026-11-22,
+/// after Apple Sports' Home button); a sideways swipe on
 /// it changes space with the address bar's sliding pills (`BarSlide`; David,
 /// 2026-11-13: the same movement as swiping between tabs).
 struct OverviewBar: View {
@@ -50,8 +51,8 @@ struct OverviewBar: View {
     /// pill took the old space's width again, then glided back (David's
     /// recording, 2026-11-13).
     @State private var landedWidth: CGFloat?
-    /// Bumped by a tap on the pill: the menu opens.
-    @State private var opens = 0
+    /// The pill has grown into the space menu.
+    @State private var menuOpen = false
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -91,6 +92,7 @@ struct OverviewBar: View {
                 .padding(.horizontal, Self.height + 16)
                 .background { measuring }
             HStack {
+                hidesForMenu(toward: .trailing) {
                 Button(action: newTab) {
                     Image(systemName: "plus")
                         .font(BarButton.symbolFont)
@@ -100,7 +102,9 @@ struct OverviewBar: View {
                 }
                 .firnGlassButton()
                 .accessibilityLabel("New Tab")
+                }
                 Spacer()
+                hidesForMenu(toward: .leading) {
                 Button(action: done) {
                     Image(systemName: "checkmark")
                         .font(BarButton.symbolFont)
@@ -112,14 +116,30 @@ struct OverviewBar: View {
                 // prominent glass in the space's vivid color.
                 .firnGlassButton(tint: Theme.spaceVivid(space.color))
                 .accessibilityLabel("Done")
+                }
             }
         }
+        // The menu closes on a tap anywhere else, as the page menu does
+        // (no dim: it's a small menu, not a mode). Far past the bar's own
+        // edges, without taking room in its layout.
+        .background {
+            if menuOpen {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: 4000, height: 4000)
+                    .onTapGesture { menuOpen = false }
+                    .accessibilityHidden(true)
+            }
+        }
+        // One glide, no bounce, the page menu's own.
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: menuOpen)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, AddressBar.sideInset)
         .padding(.top, 8)
         .padding(.bottom, 0)
         // A space changed elsewhere (the menu, the command bar) mid-slide.
         .onChange(of: space.id) {
+            menuOpen = false
             if !finishing { progress = 0 }
             var quiet = Transaction()
             quiet.disablesAnimations = true
@@ -164,29 +184,22 @@ struct OverviewBar: View {
         .padding(.horizontal, 24)
     }
 
-    /// iOS's own menu on the pill (David, 2026-11-17: the grid's cards have
-    /// iOS's menus, so this one matches): the spaces, the one on screen
-    /// checked, then New Space… and Space Settings…, in the Mac's order. A
-    /// tap opens it and a sideways swipe changes space, as before.
-    ///
-    /// It opens above the name, never over it (David, 2026-11-17: over it,
-    /// the name showed under the menu and + and the check had to hide): the
-    /// menu hangs from an unseen UIKit menu button, a thin strip just above
-    /// the pill, opened by Firn's own tap. SwiftUI's `Menu` can only open
-    /// over its own label.
+    /// The space menu: the pill's own glass grows upward into it, as the
+    /// address bar's field grows into the page menu (David, 2026-11-22,
+    /// after Apple Sports' Home button): the name fades in place, the rows
+    /// come in once the glass has mostly grown, and + and the check slip
+    /// into it. A tap opens it; a hold only presses the glass (iOS's glass
+    /// press), and a sideways swipe changes space, as before.
     private var spaceMenu: some View {
         pill
-            .background(alignment: .top) {
-                SpaceMenuAnchor(menu: spaceUIMenu, opens: opens)
-                    .frame(height: 1)
-                    .offset(y: -Self.menuGap)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            .onTapGesture { if progress == 0 { opens += 1 } }
+            .onTapGesture { if progress == 0, !menuOpen { menuOpen = true } }
             .gesture(spaceSwipe)
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { opens += 1 }
+            .accessibilityAction { menuOpen = true }
+            .accessibilityHidden(menuOpen)
+            // After the pill's own tap shape (its capsule), so the rows,
+            // which reach above it, take their taps.
+            .overlay { GeometryReader { menuPanel(pill: $0.size) } }
     }
 
     /// The pill's size, for the shape its glass takes.
@@ -200,45 +213,47 @@ struct OverviewBar: View {
         return GlassFrame(frame: held, radius: held.height / 2)
     }
 
-    /// The menu's rows, as UIKit's.
-    private var spaceUIMenu: UIMenu {
-        let pick = select
-        let spaceRows = spaces.map { each in
-            UIAction(title: each.name, image: Self.dot(each.color), state: each.id == space.id ? .on : .off) { _ in
-                MainActor.assumeIsolated { pick(each) }
-            }
-        }
-        var more: [UIMenuElement] = []
-        if let newSpace {
-            more.append(UIAction(title: "New Space…", image: UIImage(systemName: "plus")) { _ in
-                MainActor.assumeIsolated { newSpace() }
-            })
-        }
-        if let spaceSettings {
-            more.append(UIAction(title: "Settings…", image: UIImage(systemName: "gearshape")) { _ in
-                MainActor.assumeIsolated { spaceSettings() }
-            })
-        }
-        let sections = [spaceRows, more].filter { !$0.isEmpty }
-            .map { UIMenu(options: .displayInline, children: $0) }
-        return UIMenu(children: sections)
+    private var menuSize: CGSize {
+        CGSize(width: SpaceMenuPanel.width,
+               height: SpaceMenuPanel.height(spaces: spaces.count,
+                                             more: (newSpace == nil ? 0 : 1) + (spaceSettings == nil ? 0 : 1)))
     }
 
-    /// How far above the pill the strip sits: iOS draws a menu about 18pt
-    /// down over the view it hangs from, so this leaves 8pt between the
-    /// menu and the pill (Simulator, iOS 27).
-    private static let menuGap: CGFloat = 26
+    /// The pill's one glass, grown into the menu while it's open.
+    private var pillGlass: GrowingGlass {
+        GrowingGlass(base: heldGlass, grown: menuSize, radius: SpaceMenuPanel.cornerRadius, open: menuOpen ? 1 : 0)
+    }
+
+    @ViewBuilder private func menuPanel(pill: CGSize) -> some View {
+        if menuOpen {
+            let size = menuSize
+            SpaceMenuPanel(spaces: spaces, current: space.id, select: { each in
+                menuOpen = false
+                if each.id != space.id { select(each) }
+            }, newSpace: newSpace, spaceSettings: spaceSettings) { menuOpen = false }
+                .frame(width: size.width, height: size.height)
+                .position(x: pill.width / 2, y: pill.height - size.height / 2)
+                // The words come in once the glass has mostly grown, and go
+                // first when it closes, as the page menu's.
+                .transition(.asymmetric(
+                    insertion: .opacity.animation(.easeOut(duration: 0.16).delay(reduceMotion ? 0 : 0.12)),
+                    removal: .opacity.animation(.easeOut(duration: 0.08))))
+        }
+    }
+
+    /// Slips into the pill while the menu is open and comes back out after,
+    /// keeping its place, as Back and the tabs button do for the page menu.
+    private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .scaleEffect(menuOpen && !reduceMotion ? 0.01 : 1, anchor: anchor)
+            .opacity(menuOpen ? 0 : 1)
+            .allowsHitTesting(!menuOpen)
+            .accessibilityHidden(menuOpen)
+    }
 
     /// How near the two sliding pills have to come before iOS melts them
     /// together: just past their 6pt seam.
     private static let meltDistance: CGFloat = 10
-
-    /// A space's dot in the menu: its own color, which iOS's menus keep only
-    /// for an image drawn in it (they tint symbols otherwise).
-    private static func dot(_ color: String) -> UIImage {
-        let symbol = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(scale: .small))
-        return (symbol ?? UIImage()).withTintColor(UIColor(Theme.spaceColor(color)), renderingMode: .alwaysOriginal)
-    }
 
     private var pill: some View {
         label(space)
@@ -249,6 +264,12 @@ struct OverviewBar: View {
             // Sliding, the words fade and dissolve toward the seam with
             // their pill, as the address bar's do.
             .opacity(slide?.wordsOpacity ?? 1)
+            // The name goes at once as the glass starts to grow, and comes
+            // back only as the glass is nearly the pill again (sooner, it
+            // showed inside the shrinking menu, over its rows).
+            .opacity(menuOpen ? 0 : 1)
+            .animation(menuOpen || reduceMotion ? .easeOut(duration: 0.1) : .easeOut(duration: 0.12).delay(0.18),
+                       value: menuOpen)
             .frame(maxWidth: .infinity)
             // A space picked from the menu or the command bar glides to its
             // own width; a swipe already moves it with the seam.
@@ -275,8 +296,9 @@ struct OverviewBar: View {
             // The name's one glass, iOS's own, on the pill itself (David,
             // 2026-11-18: one native glass per button), so a finger on the
             // name reaches it and it takes iOS's press. Sliding, this same
-            // glass narrows to its share of the gap (`GlassFrame`).
-            .firnGlassSurface(heldGlass, interactive: slide == nil)
+            // glass narrows to its share of the gap (`GlassFrame`), and
+            // open, it is the menu (`GrowingGlass`).
+            .firnGlassSurface(pillGlass, interactive: slide == nil && !menuOpen)
             .background {
                 GeometryReader { geo in
                     let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
@@ -313,7 +335,7 @@ struct OverviewBar: View {
             .updating($touching) { _, state, _ in state = true }
             .onChanged { drag in
                 // Reduce Motion: nothing slides; the swipe is judged as it ends.
-                guard !reduceMotion, !finishing,
+                guard !reduceMotion, !finishing, !menuOpen,
                       abs(drag.translation.width) > abs(drag.translation.height) || progress != 0
                 else { return }
                 let width = max(restWidth(space), 1)
@@ -321,6 +343,7 @@ struct OverviewBar: View {
                 progress = neighbor(t) == nil ? 0 : t
             }
             .onEnded { drag in
+                guard !menuOpen else { return }
                 if reduceMotion { return swipeWithoutSliding(drag) }
                 guard !finishing, progress != 0 else { return }
                 let width = max(restWidth(space), 1)
@@ -392,29 +415,106 @@ private struct SpaceDots: View {
     }
 }
 
-/// The space menu's unseen UIKit button, a thin strip above the pill:
-/// opened when `opens` changes.
-private struct SpaceMenuAnchor: UIViewRepresentable {
-    let menu: UIMenu
-    let opens: Int
+/// The space menu's rows, inside the pill's grown glass: every space (its
+/// dot, its name, and a check on the one on screen), then New Space… and
+/// Settings…, in the Mac's order. The page menu's rows, sizes, and press.
+private struct SpaceMenuPanel: View {
+    let spaces: [Space]
+    let current: UUID
+    let select: (Space) -> Void
+    let newSpace: SheetAction?
+    let spaceSettings: SheetAction?
+    let close: () -> Void
+    /// VoiceOver starts on the space on screen.
+    @AccessibilityFocusState private var focused: UUID?
 
-    func makeUIView(context: Context) -> SpaceMenuButton {
-        let button = SpaceMenuButton()
-        button.showsMenuAsPrimaryAction = true
-        button.preferredMenuElementOrder = .fixed
-        button.opens = opens
-        return button
+    static let width: CGFloat = 250
+    static let cornerRadius: CGFloat = 22
+    private static let rowHeight: CGFloat = 48
+    private static let inset: CGFloat = 6
+    /// The hairline between the spaces and the two rows under them.
+    private static let ruleHeight: CGFloat = 9
+
+    static func height(spaces: Int, more: Int) -> CGFloat {
+        rowHeight * CGFloat(spaces + more) + (more > 0 ? ruleHeight : 0) + inset * 2
     }
 
-    func updateUIView(_ button: SpaceMenuButton, context: Context) {
-        button.menu = menu
-        if opens != button.opens {
-            button.opens = opens
-            button.performPrimaryAction()
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(spaces) { space in
+                row(space.name, checked: space.id == current) {
+                    Circle()
+                        .fill(Theme.spaceColor(space.color))
+                        .frame(width: 10, height: 10)
+                } action: { select(space) }
+                    .accessibilityFocused($focused, equals: space.id)
+                    .accessibilityAddTraits(space.id == current ? .isSelected : [])
+            }
+            if newSpace != nil || spaceSettings != nil {
+                Rectangle()
+                    .fill(Theme.ink.opacity(0.12))
+                    .frame(height: 1)
+                    .padding(.horizontal, 14)
+                    .frame(height: Self.ruleHeight)
+                    .accessibilityHidden(true)
+            }
+            if let newSpace {
+                row("New Space…", checked: false) {
+                    Image(systemName: "plus").font(BarButton.symbolFont)
+                } action: {
+                    close()
+                    newSpace()
+                }
+            }
+            if let spaceSettings {
+                row("Settings…", checked: false) {
+                    Image(systemName: "gearshape").font(BarButton.symbolFont)
+                } action: {
+                    close()
+                    spaceSettings()
+                }
+            }
         }
+        .padding(Self.inset)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, close)
+        .onAppear { focused = current }
+    }
+
+    private func row(_ title: String, checked: Bool, @ViewBuilder mark: () -> some View,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                mark()
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.body)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+                if checked {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 14)
+            .frame(height: Self.rowHeight)
+            .contentShape(.rect)
+        }
+        .buttonStyle(SpaceRowPress())
     }
 }
 
-final class SpaceMenuButton: UIButton {
-    var opens = 0
+/// A row pressed: Firn's warm wash, in the row's rounded shape, as the page
+/// menu's rows.
+private struct SpaceRowPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Theme.press : .clear,
+                        in: .rect(cornerRadius: SpaceMenuPanel.cornerRadius - 6, style: .continuous))
+    }
 }

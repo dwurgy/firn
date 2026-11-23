@@ -162,6 +162,48 @@ struct GlassFrame: InsettableShape {
     }
 }
 
+/// A `GlassFrame` that grows upward into a menu (the overview's space
+/// name, David, 2026-11-22): at `open` 0 it is `base`; at 1, a rounded
+/// rectangle `grown` in size, centered on the view, its bottom edge on the
+/// view's. In between, each edge and the corners glide, so iOS's one glass
+/// becomes the menu and comes back. Measured from the view's own bounds, so
+/// it keeps up with a view whose width is gliding too.
+struct GrowingGlass: InsettableShape {
+    var base: GlassFrame
+    var grown: CGSize
+    var radius: CGFloat
+    var open: CGFloat
+    var inset: CGFloat = 0
+
+    var animatableData: AnimatablePair<GlassFrame.AnimatableData, CGFloat> {
+        get { AnimatablePair(base.animatableData, open) }
+        set {
+            base.animatableData = newValue.first
+            open = newValue.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let from = base.frame.isEmpty ? rect : base.frame
+        let fromRadius = base.frame.isEmpty ? from.height / 2 : min(base.radius, from.height / 2)
+        let to = CGRect(x: rect.midX - grown.width / 2, y: rect.maxY - grown.height,
+                        width: grown.width, height: grown.height)
+        let t = open
+        let box = CGRect(x: from.minX + (to.minX - from.minX) * t, y: from.minY + (to.minY - from.minY) * t,
+                         width: from.width + (to.width - from.width) * t,
+                         height: from.height + (to.height - from.height) * t)
+            .insetBy(dx: inset, dy: inset)
+        let corner = min(fromRadius + (radius - fromRadius) * t, box.height / 2, box.width / 2)
+        return RoundedRectangle(cornerRadius: max(corner, 0), style: .continuous).path(in: box)
+    }
+
+    func inset(by amount: CGFloat) -> GrowingGlass {
+        var copy = self
+        copy.inset += amount
+        return copy
+    }
+}
+
 extension View {
     /// Glass shapes inside are drawn together by iOS, and melt into one
     /// another when they come within `spacing`.

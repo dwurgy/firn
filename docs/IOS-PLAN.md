@@ -884,10 +884,13 @@ David's recording of Apple Sports' Home button: a tap turns the button itself in
 
 So iOS's morph goes pill, round blob, menu; Sports' grows straight from the button (its panel isn't a stock menu). With iOS's own menu the blob is what we get.
 
-**Steps** (links of one motion: judge it whole after step 3, not between):
+**Decided and built (David, 2026-11-22): the address bar's way, not `UIMenu`.** David pointed out the address bar already swipes sideways and its ••• menu animates like Sports'. That menu is the field's one iOS glass changing shape (`GlassFrame`) with Firn's rows drawn inside it, which is why it grows straight, with no blob, and can't open on a hold unless Firn says so. The space name now works the same way:
 
-1. The UIKit glass button becomes the pill's one glass at rest (over the same thin blur), taking the finger itself so iOS's press is its own; its menu is attached only as a tap ends, so a hold never opens it. The name and dots stay SwiftUI's, drawn over it.
-2. As the menu opens, the name, dots, and blur fade out in about 0.1s, and come back as it closes, so nothing shows under the blob.
-3. The sideways swipe: the sliding glass (`GlassFrame`, the two pills melting) takes over from the button as a slide starts and hands back as it lands, with nothing to see at either swap. If the swap shows, stop and rethink before going on.
-4. + and the check while the menu is open: judged on David's iPhone (leave them, or fade them).
-5. A look over: light, dark, Reduce Motion, Reduce Transparency, VoiceOver (the pill still says "space 2 of 3" and opens the menu), iPad.
+- The pill's one glass grows upward into the menu and back (`GrowingGlass` in `FirnGlass.swift`, measured from the pill's own bounds so it keeps up with a pill whose width is gliding); the page menu's spring (0.32s, no bounce).
+- The name fades out in 0.1s as it starts and comes back only as the glass is nearly the pill again (0.18s into the close; sooner, it showed over the rows). The rows come in 0.12s into the growth and go first.
+- + and the check slip into the pill while it's open, as Back and the tabs button do for the page menu.
+- A tap opens it; a hold only presses the glass (iOS's glass press), and letting go after a hold opens nothing. A tap anywhere else closes it. The sideways swipe is untouched: the same glass, as before.
+- Rows (`SpaceMenuPanel` in `OverviewBar.swift`): each space's dot and name, a check on the one on screen, a hairline, then New Space… and Settings…; the page menu's row height, press, and corners. VoiceOver starts on the space on screen; Escape closes.
+- The unseen UIKit menu button and its `UIMenu` are gone.
+
+Checked in the Simulator (iPhone 18 Pro, dark, one space), recorded and read frame by frame: the open, the close, and the hold. Not yet run: light, two or more spaces (the swipe, picking another space), Reduce Motion, Reduce Transparency, VoiceOver, iPad. Not yet on David's iPhone.

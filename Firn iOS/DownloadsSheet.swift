@@ -344,15 +344,20 @@ private struct DownloadRow: View {
     let share: () -> Void
     let stop: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The symbol's tile grows with the text, so it never looks lost beside
+    /// a large name.
+    @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 40
+
     var body: some View {
         HStack(spacing: 12) {
             // The row's own button: a tap anywhere but ↑ or ✕ opens the file.
             Button(action: open) {
                 HStack(spacing: 12) {
                     Image(systemName: symbol)
-                        .font(.system(size: 18))
+                        .font(.body)
                         .foregroundStyle(Color.secondary)
-                        .frame(width: 40, height: 40)
+                        .frame(width: tile, height: tile)
                         .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10, style: .continuous))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
@@ -360,7 +365,9 @@ private struct DownloadRow: View {
                         // style would follow the tint.
                         Text(download.fileName ?? "Download")
                             .foregroundStyle(Color.primary)
-                            .lineLimit(1)
+                            // Large text fits few letters on a line: a
+                            // long name gets three before it's cut.
+                            .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                             .truncationMode(.middle)
                         Text(status)
                             .font(.footnote)
@@ -379,6 +386,7 @@ private struct DownloadRow: View {
             }
             .disabled(download.state != .finished || missing)
             .accessibilityElement(children: .combine)
+            .accessibilityHint(download.state == .finished && !missing ? "Opens the file" : "")
 
             if download.state == .downloading {
                 sideButton("xmark", label: "Stop Download", action: stop)

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Firn's privacy manifest, which the App Store requires. It must stay
+  literally true: Firn doesn't track, and collects nothing (iCloud sync goes
+  to the person's own private iCloud, sealed on the device, where Firn's
+  developer can't read it).
+
+  The two "reason" entries cover Apple's reason-required APIs that Firn (and
+  FirnCore, which is linked into the app) calls:
+  - UserDefaults, for Firn's own settings (CA92.1: only the app itself reads them).
+  - System uptime (ProcessInfo.systemUptime), only to time things inside the
+    app, such as how long ago a touch or a menu choice was (35F9.1).
+  Firn reads no file timestamps and no disk space. If code starts to
+  (creation or modification dates, free space, the active keyboards), add
+  its reason here first.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -870,3 +870,24 @@ From the build installed 2026-11-18 (TestFlight configuration). One at a time, d
 10. **The address bar pill on Back and Forward:** it jumps a little instead of resizing smoothly.
 11. Native glass ("Frosty, no tint"): David is generally happy with it. Nothing to do.
 12. **The Basecamp tile's hold menu** (David, 2026-11-19; for later, not started): still not fixed. Two things. (a) It is still Firn's own menu (`FrostMenu`, `TabOverview.tileMenu`), where tabs and groups have iOS's own; taken to mean it should become iOS's own too ("Plan: iOS's own menus and drag"); ask David if he meant something else as well. (b) The words: the row that closes a tile says "Remove from Basecamp", which isn't intuitive and isn't the Mac's. It becomes **Close**, beside **Move to Tabs** (already there), as the Mac's tile menu; the shake's undo name and VoiceOver follow, and CLAUDE.md's line on iOS's red Close rows names "Remove from Basecamp" and needs the same change.
+
+## 8. Plan: the space menu grows out of the name (David, 2026-11-22)
+
+David's recording of Apple Sports' Home button: a tap turns the button itself into its menu, and a hold only lights the button under the finger. He wants the space name to do that, growing upward, with iOS's own menu (never a handmade one). This takes back the 2026-11-17 choice that the menu opens above the name.
+
+**Sports, frame by frame (60 a second):** on a tap the button lights for about 3 frames, then its glass grows into the menu from the button's corner in about 0.15s, the label fading out in place as the rows fade in, sharp about 0.1s later. Closing is the reverse in about 0.17s, then the label fades back. Held, the button brightens and widens about 8% and stays so; letting go opens nothing.
+
+**Two try-outs in the Simulator (iPhone 18 Pro, iOS 27), recorded and read frame by frame, code not kept:**
+
+1. *SwiftUI's `Menu` on a glass button (`.firnGlassButton(.capsule)`).* iOS does the morph by itself: the pill lights, gathers into a round blob, and the blob grows into the menu, its bottom edge where the pill's was; closing runs it back. The name fades with it. But the menu opens about 0.2s into a hold, as every iOS menu button does, so a hold is not just a press. The menu is wider than the room between + and the check and covers their inner edges.
+2. *Today's pill, with the unseen UIKit menu button given iOS's glass and the pill's own frame, still opened by Firn's tap.* A hold lights and widens the pill and opens nothing (a let-go after a long hold opens nothing either, as Sports); a tap opens the menu, growing as the same blob, over the pill. But the pill's own name and glass stay drawn until the menu covers them, and there are two glasses at rest.
+
+So iOS's morph goes pill, round blob, menu; Sports' grows straight from the button (its panel isn't a stock menu). With iOS's own menu the blob is what we get.
+
+**Steps** (links of one motion: judge it whole after step 3, not between):
+
+1. The UIKit glass button becomes the pill's one glass at rest (over the same thin blur), taking the finger itself so iOS's press is its own; its menu is attached only as a tap ends, so a hold never opens it. The name and dots stay SwiftUI's, drawn over it.
+2. As the menu opens, the name, dots, and blur fade out in about 0.1s, and come back as it closes, so nothing shows under the blob.
+3. The sideways swipe: the sliding glass (`GlassFrame`, the two pills melting) takes over from the button as a slide starts and hands back as it lands, with nothing to see at either swap. If the swap shows, stop and rethink before going on.
+4. + and the check while the menu is open: judged on David's iPhone (leave them, or fade them).
+5. A look over: light, dark, Reduce Motion, Reduce Transparency, VoiceOver (the pill still says "space 2 of 3" and opens the menu), iPad.

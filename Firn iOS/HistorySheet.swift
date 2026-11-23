@@ -27,6 +27,9 @@ struct HistorySheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The site's icon grows with the text, as Downloads' does.
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 24
 
     @State private var search = ""
     @State private var visits: [HistoryVisit] = []
@@ -117,15 +120,26 @@ struct HistorySheet: View {
     }
 
     /// One visit: the site's icon, the page's title over its site, and the
-    /// time. A tap opens it as a new tab.
+    /// time. A tap opens it as a new tab. At accessibility text sizes the
+    /// time moves under the site and the title may take two lines, so the
+    /// title isn't squeezed to a few letters.
     private func row(_ visit: HistoryVisit) -> some View {
+        let large = typeSize.isAccessibilitySize
+        let time = Text(visit.visitedAt.formatted(date: .omitted, time: .shortened))
+            .font(.footnote)
+            .monospacedDigit()
+            .foregroundStyle(Color.secondary)
+        return rowButton(visit, large: large, time: time)
+    }
+
+    private func rowButton(_ visit: HistoryVisit, large: Bool, time: some View) -> some View {
         Button {
             // Only web addresses, whatever the file holds.
             guard WebAddress.isWebURL(visit.url) else { return }
             open(visit.url)
         } label: {
             HStack(spacing: 12) {
-                SiteIconView(icon: icons[visit.url.host(percentEncoded: false)?.lowercased() ?? ""], size: 24) {
+                SiteIconView(icon: icons[visit.url.host(percentEncoded: false)?.lowercased() ?? ""], size: iconSize) {
                     LetterMark(site: visit.site)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -133,17 +147,16 @@ struct HistorySheet: View {
                     // style would follow the tint.
                     Text(visit.title.isEmpty ? visit.site : visit.title)
                         .foregroundStyle(Color.primary)
+                        .lineLimit(large ? 2 : 1)
                     Text(visit.site)
                         .font(.footnote)
                         .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                    if large { time }
                 }
-                .lineLimit(1)
                 .truncationMode(.tail)
                 Spacer(minLength: 8)
-                Text(visit.visitedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.footnote)
-                    .monospacedDigit()
-                    .foregroundStyle(Color.secondary)
+                if !large { time }
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
@@ -228,14 +241,29 @@ struct HistorySheet: View {
     private func delete(_ visit: HistoryVisit) {
         let space = space
         removeRows { $0.id == visit.id }
-        Task { await store.deleteHistory(visits: [visit.id], in: space) }
+        Task {
+            await store.deleteHistory(visits: [visit.id], in: space)
+            await topUp()
+        }
     }
 
     /// Deletes every visit to `site`, including those not read yet.
     private func deleteAll(from site: String) {
         let space = space
         removeRows { $0.site == site }
-        Task { await store.deleteHistory(fromSite: site, in: space) }
+        Task {
+            await store.deleteHistory(fromSite: site, in: space)
+            await topUp()
+        }
+    }
+
+    /// After a delete leaves less than a page showing while older visits are
+    /// still unread, reads again: the last row may already be on screen (or
+    /// gone), so scrolling would never ask for more, and an emptied list
+    /// would say "No history yet" over visits that are there.
+    private func topUp() async {
+        guard !reachedEnd, visits.count < BrowserStore.historyPageSize else { return }
+        await readFirstPage()
     }
 
     private func removeRows(where gone: (HistoryVisit) -> Bool) {

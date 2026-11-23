@@ -942,4 +942,4 @@ Checked in the Simulator frame by frame (2026-11-23), dark and light, slow swipe
 - **A dim flash about a fifth of a second after landing:** UIKit cross-fading the grid's cards when a space's cards replaced another's (`apply(animatingDifferences:)`). Cards that share none with the ones before now take their place at once.
 - **A flick showed the coming space late**, popping in as it landed: the copies are now made once the overview has been at rest a moment (`copySoon`), not as the finger comes down, and made again only when what they show has changed (`copyStamp`). Two more overviews are alive while the overview is open; whether that costs memory or frames is to be seen.
 
-Not yet seen on his iPhone after these.
+David checked these on his iPhone (2026-11-23, a recording read frame by frame: "pretty good"): the pill holds through a held swipe, a flick, and each landing, the names slide through it, and no dim frames follow the switch. Still not run: Reduce Motion, three or more spaces, groups, and the iPad.

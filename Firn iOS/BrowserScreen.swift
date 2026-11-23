@@ -560,7 +560,13 @@ struct BrowserScreen: View {
     /// Safari's grid builds over 6 to 8 frames from the let-go (David's
     /// recording, 2026-11-22); at a tenth of a second eased out, Firn's was
     /// there in 2 ("fades kinda quick").
-    private static let listComes = Animation.linear(duration: 0.13)
+    private static let listComes = Animation.linear(duration: listComesTime)
+    private static let listComesTime: CGFloat = 0.13
+    /// The same curves as below and in `land(inCardOf:)`, for what rides
+    /// Firn's own clock (`FlightClock`) on a let-go.
+    private static let fingerFocus = Flight.Curve(x1: 0.25, y1: 0.46, x2: 0.45, y2: 0.94)
+    private static let forwardBezier = Flight.Curve(x1: 0.25, y1: 0.1, x2: 0.25, y2: 1)
+    private static let heldClose = Flight.Curve(x1: heldCloseX1, y1: heldCloseStart, x2: heldCloseTail, y2: 1)
     /// The overview growing to full size as a tab lands (`ComesForward`),
     /// as Safari's (David's recording, frame by frame, 2026-11-13): an
     /// even ease through the glide, running on about 0.12s past the
@@ -887,7 +893,10 @@ struct BrowserScreen: View {
                 tileCrop = (from: box, to: spot.size)
             }
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
-            withAnimation(Self.listComes) { listIn = 1 }
+            // Let go by a finger into a card, all of this rides Firn's own
+            // clock with the flight (below), each on the curve it has here.
+            let onClock = finger != nil && !tile
+            if !onClock { withAnimation(Self.listComes) { listIn = 1 } }
             // The overview comes forward over the glide itself, finishing
             // as the page lands (as a tile's swap starts), on a curve that
             // keeps some of the growth for the end: tied to the list's
@@ -907,8 +916,10 @@ struct BrowserScreen: View {
             let focusCurve: Animation = finger != nil && !tile
                 ? .timingCurve(0.25, 0.46, 0.45, 0.94, duration: duration)
                 : .timingCurve(0.45, 0, 0.55, 1, duration: duration * (tile ? 0.86 : 1))
-            withAnimation(focusCurve) {
-                focus = 1
+            if !onClock {
+                withAnimation(focusCurve) {
+                    focus = 1
+                }
             }
             // Growing on a slower clock of its own, still coming forward
             // after the page lands: done with the focus, it was forward
@@ -916,11 +927,13 @@ struct BrowserScreen: View {
             // (David's recording beside Safari's, 2026-11-13).
             // A softer landing (let go after a hold) keeps the same lead.
             let forwardTime = tile ? Self.forwardTime : duration + (Self.forwardTime - Self.closeDuration)
-            withAnimation(.timingCurve(Self.forwardCurve, duration: forwardTime)) {
-                forward = 1
-            } completion: {
-                // Still this landing (nothing opened meanwhile).
-                if gliding == tab.id, showingTabs { swapIntoCard() }
+            if !onClock {
+                withAnimation(.timingCurve(Self.forwardCurve, duration: forwardTime)) {
+                    forward = 1
+                } completion: {
+                    // Still this landing (nothing opened meanwhile).
+                    if gliding == tab.id, showingTabs { swapIntoCard() }
+                }
             }
             if tile {
                 // Into a tile: the flying tile and the real one swap
@@ -965,7 +978,6 @@ struct BrowserScreen: View {
                     hold.flightTime = 0
                 }
                 SwipeTiming.mark("flight begins")
-                withAnimation(curve) { arrival = 1 }
                 // The flight's clock runs evenly, and everything the
                 // picture's layer reads is set with it, last: what's
                 // animated in one turn reaches a view as one animation, the
@@ -974,9 +986,22 @@ struct BrowserScreen: View {
                 // Simulator, 2026-11-20). The flight itself places the
                 // picture and shapes its corners and strip (`Flight`).
                 // The clock itself is Firn's own, already ticking
-                // (`FlightClock`), so the page moves on the very next frame.
-                hold.flightClock.run(for: Flight.duration) { [hold] time in
+                // (`FlightClock`), so the page moves on the very next frame;
+                // the list, the focus, the overview coming forward, and the
+                // bars ride it too, at the screen's full rate.
+                let landing = landing
+                let list0 = listIn, focus0 = focus, forward0 = forward, arrival0 = arrival
+                let flying = CGFloat(Flight.duration), forwards = CGFloat(forwardTime)
+                let whole = max(flying, forwards)
+                hold.flightClock.run(for: Double(whole)) { [hold] seconds in
+                    let time = min(seconds / flying, 1)
                     if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
+                    landing.listIn = list0 + (1 - list0) * min(seconds / Self.listComesTime, 1)
+                    landing.focus = focus0 + (1 - focus0) * Self.fingerFocus.value(at: time)
+                    landing.forward = forward0 + (1 - forward0) * Self.forwardBezier.value(at: seconds, of: forwards)
+                    landing.arrival = arrival0 + (1 - arrival0) * Self.heldClose.value(at: time)
+                    // Still this landing (nothing opened meanwhile).
+                    if seconds >= whole, gliding == tab.id, showingTabs { swapIntoCard() }
                 }
                 withAnimation(.linear(duration: Flight.duration)) {
                     box = spot
@@ -1125,20 +1150,37 @@ struct BrowserScreen: View {
                                      band: band, bandTo: 1)
                 hold.flightTime = 0
             }
-            hold.flightClock.run(for: stepsBack) { [hold] time in
+            // The overview stepping back, its focus, the dim, and the bar's
+            // return ride the same clock, each on the curve it had: on
+            // SwiftUI's they started late and ran at half the rate too.
+            let late = arrival >= 0.2
+            if late { landing.barLate = true }
+            let landing = landing
+            let forward0 = forward, focus0 = focus, arrival0 = arrival
+            let length = CGFloat(stepsBack)
+            hold.flightClock.run(for: stepsBack) { [hold] seconds in
+                let time = seconds / length
                 if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
+                let back = 1 - Flight.Curve.easeOut.value(at: time)
+                landing.forward = forward0 * back
+                landing.focus = focus0 * back
+                landing.arrival = arrival0 * (1 - clocked.value(at: time))
+                if late { landing.barIn = min(max((time - BarReturn.wait) / BarReturn.fade, 0), 1) }
             }
         }
+        let onClock = clocked != nil && stepsBack != nil
         // The bar comes back on its own clock (`BarReturn`), unless it's
         // still partly there (a pull let go early): the switch would cut it.
-        if arrival >= 0.2 {
+        if arrival >= 0.2, !onClock {
             let time = stepsBack ?? Self.glideDuration
             landing.barLate = true
             withAnimation(.linear(duration: time * BarReturn.fade).delay(time * BarReturn.wait)) {
                 landing.barIn = 1
             }
         }
-        if let stepsBack {
+        if onClock {
+            // On Firn's clock, above.
+        } else if let stepsBack {
             withAnimation(.easeOut(duration: stepsBack)) {
                 forward = 0
                 focus = 0
@@ -1159,13 +1201,18 @@ struct BrowserScreen: View {
             boxRadius = screenRadius
             band = 1
             boxSkip = 0
-            arrival = 0
+            if !onClock { arrival = 0 }
             // The tabs beside it glide from where they are to beside it.
             neighborsPeek = false
             for i in neighbors.indices { neighbors[i].pinned = nil }
         } completion: {
             // `box` is at the page's place by now: it places the picture again.
             endFlight()
+            if onClock {
+                forward = 0
+                focus = 0
+                arrival = 0
+            }
             // Stepped back: the list goes now, under the full-screen page.
             withTransaction(Transaction(animation: nil)) { listIn = 0 }
             endBarReturn()

@@ -177,8 +177,8 @@ final class FlightClock: NSObject {
         self.link = link
     }
 
-    /// A flight of `length` seconds from now: `step` gets how far through
-    /// it is, 0 to 1, on every frame, the last one exactly 1.
+    /// A landing of `length` seconds from now: `step` gets the seconds
+    /// since, on every frame, the last one exactly `length`.
     func run(for length: CFTimeInterval, step: @escaping (CGFloat) -> Void) {
         warm()
         self.length = length
@@ -207,8 +207,8 @@ final class FlightClock: NSObject {
             return
         }
         // Where the frame being made will be shown.
-        let time = length > 0 ? min(max((link.targetTimestamp - began) / length, 0), 1) : 1
-        if time >= 1 { stop() }
+        let time = min(max(link.targetTimestamp - began, 0), length)
+        if time >= length { stop() }
         step(CGFloat(time))
     }
 }
@@ -397,6 +397,14 @@ struct Flight: Equatable {
     /// A cubic timing curve from (0, 0) to (1, 1), as `Animation.timingCurve`.
     struct Curve: Equatable {
         var x1: CGFloat, y1: CGFloat, x2: CGFloat, y2: CGFloat
+
+        /// SwiftUI's `easeOut`.
+        static let easeOut = Curve(x1: 0, y1: 0, x2: 0.58, y2: 1)
+
+        /// How far along at `seconds` into a run of `length` seconds.
+        func value(at seconds: CGFloat, of length: CGFloat) -> CGFloat {
+            length > 0 ? value(at: min(max(seconds / length, 0), 1)) : 1
+        }
 
         /// How far along, 0 to 1, at `time` of the way through (0 to 1).
         func value(at time: CGFloat) -> CGFloat {

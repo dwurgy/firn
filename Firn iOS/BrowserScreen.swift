@@ -865,6 +865,7 @@ struct BrowserScreen: View {
             // The page keeps closing on the finger's place while the card's
             // spot is found; the flight starts from where it is by then.
             let found = await spot(of: tab)
+            SwipeTiming.mark("let-go: card's spot found")
             hold.follower.stop()
             guard let measured = found else {
                 Self.landingLog.notice("close faded: no spot on screen (known: \(spots.frames[tab.id] != nil, privacy: .public), tile: \(tab.place == .basecamp, privacy: .public))")
@@ -958,6 +959,7 @@ struct BrowserScreen: View {
                                          band: band)
                     hold.flightTime = 0
                 }
+                SwipeTiming.mark("flight begins")
                 withAnimation(curve) { arrival = 1 }
                 // The flight's clock runs evenly, and everything the
                 // picture's layer reads is set with it, last: what's
@@ -1487,6 +1489,7 @@ struct BrowserScreen: View {
             for _ in 0..<20 where standIn == nil {
                 try? await Task.sleep(for: .milliseconds(16))
             }
+            SwipeTiming.mark("let-go: picture in hand")
             guard standInSize != nil else {
                 // Too late now: a picture arriving after this is dropped.
                 // The live page, if it was held, goes back to its place.

@@ -17,6 +17,9 @@ extension EnvironmentValues {
     /// Downloads (docs/IOS-PLAN.md, phase 6): the page menu, the command
     /// bar, or the pill above the bar.
     var downloads = false
+    /// History (docs/IOS-PLAN.md, section 12): the page menu or the command
+    /// bar.
+    var history = false
 }
 
 /// Opens a sheet. Always equal to itself, so setting it never makes the

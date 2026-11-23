@@ -410,12 +410,22 @@ struct BrowserScreen: View {
         .environment(\.newSpace, SheetAction { [sheets] in sheets.newSpace = true })
         .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
         .environment(\.showDownloads, SheetAction { [sheets] in sheets.downloads = true })
-        .onChange(of: sheets.newSpace || sheets.settings || sheets.downloads) {
-            if sheets.newSpace || sheets.settings || sheets.downloads { editing = false }
+        .environment(\.showHistory, SheetAction { [sheets] in sheets.history = true })
+        .onChange(of: sheets.newSpace || sheets.settings || sheets.downloads || sheets.history) {
+            if sheets.newSpace || sheets.settings || sheets.downloads || sheets.history { editing = false }
         }
         .sheet(isPresented: $sheets.newSpace) { NewSpaceSheet(store: store) }
         .sheet(isPresented: $sheets.settings) { SettingsSheet(store: store, sync: sync) }
         .sheet(isPresented: $sheets.downloads) { DownloadsSheet(store: store) }
+        .sheet(isPresented: $sheets.history) {
+            // A visit opens as a new tab, where new tabs go, over the
+            // overview too, as a link from another app.
+            HistorySheet(store: store) { url in
+                sheets.history = false
+                store.openTab(url)
+                if showingTabs { hideTabs() }
+            }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { pictures.topInset = $0 }
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }

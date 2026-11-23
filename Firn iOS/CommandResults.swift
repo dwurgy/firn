@@ -142,6 +142,7 @@ private struct CommandResultRow: View {
         case "summarize": "text.line.3.summary"
         case "reopen": "arrow.uturn.backward"
         case "downloads": "arrow.down.circle"
+        case "history": "clock"
         default: "circle"
         }
     }

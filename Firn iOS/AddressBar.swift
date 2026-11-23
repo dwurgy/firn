@@ -58,6 +58,7 @@ struct AddressBar: View {
     /// The page menu's "Send to…" was picked: iOS's own list of devices.
     @State private var choosingDevice = false
     @Environment(\.showDownloads) private var showDownloads
+    @Environment(\.showHistory) private var showHistory
     @Environment(\.barQuiet) private var barQuiet
     /// A finger is holding the field (from the touch, before it's a hold).
     /// A plain box nothing watches (`FieldHold` keeps the gesture's own).
@@ -347,6 +348,9 @@ struct AddressBar: View {
             }
         }
         if let newSpace { add("new-space", "New Space…", ["space", "create"]) { newSpace() } }
+        if let showHistory {
+            add("history", "History", ["visited", "past", "recent", "pages"]) { showHistory() }
+        }
         if let showDownloads {
             add("downloads", "Downloads", ["files", "saved", "download"],
                 when: Downloads.shared.summary(for: store.activeSpace.dataStoreID) != nil) { showDownloads() }
@@ -579,6 +583,7 @@ struct AddressBar: View {
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
         let height = PageMenuPanel.height(rows: 2 + (findRow == nil ? 0 : 1) + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
+                                          + (showHistory == nil ? 0 : 1)
                                           + (sendRow == nil ? 0 : 1)
                                           + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
@@ -603,7 +608,8 @@ struct AddressBar: View {
             let frame = menuFrame(fieldSize: fieldSize)
             PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
                 if let page { store.toggleBlocking(on: page) }
-            }, find: findRow, reading: readingRow, send: sendRow, downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
+            }, find: findRow, reading: readingRow, send: sendRow, history: showHistory.map { show in { show() } },
+               downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
                liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -1164,6 +1170,8 @@ private struct PageMenuPanel: View {
         let send: () -> Void
     }
     let send: SendRow?
+    /// History, just above Downloads.
+    let history: (() -> Void)?
     /// Downloads, last, while the space has any.
     struct DownloadsRow {
         let detail: String
@@ -1236,6 +1244,12 @@ private struct PageMenuPanel: View {
             list.append(Entry(key: "blocking", title: blocking.title, detail: blocking.site, symbol: "hand.raised") {
                 close()
                 toggleBlocking()
+            })
+        }
+        if let history {
+            list.append(Entry(key: "history", title: "History", symbol: "clock") {
+                close()
+                history()
             })
         }
         if let downloads {

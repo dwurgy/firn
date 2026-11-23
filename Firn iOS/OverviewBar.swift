@@ -53,6 +53,22 @@ struct OverviewBar: View {
     @State private var landedWidth: CGFloat?
     /// The pill has grown into the space menu.
     @State private var menuOpen = false
+    /// A finger is holding the pill (from the touch, before it's a hold).
+    @State private var held = BarQuiet()
+    /// The pill sinks a little while it's held, as the address bar's field
+    /// does before its menu (`pressedScale`).
+    @State private var pillPressed = false
+    /// Bumped as a hold opens the menu: a medium tap.
+    @State private var holdOpenings = 0
+    /// The hold that opened the menu is still down.
+    @State private var holdTracking = false
+    /// Where that finger is (global), once it has slid toward the rows.
+    @State private var menuPoint: CGPoint?
+    /// Bumped as the sliding finger lifts, at `menuLiftPoint`.
+    @State private var menuLift = 0
+    @State private var menuLiftPoint: CGPoint?
+    /// How far the holding finger moves before it's pointing at rows.
+    private static let pointSlop: CGFloat = 10
 
     private var index: Int { spaces.firstIndex { $0.id == space.id } ?? 0 }
 
@@ -188,18 +204,73 @@ struct OverviewBar: View {
     /// address bar's field grows into the page menu (David, 2026-11-22,
     /// after Apple Sports' Home button): the name fades in place, the rows
     /// come in once the glass has mostly grown, and + and the check slip
-    /// into it. A tap opens it; a hold only presses the glass (iOS's glass
-    /// press), and a sideways swipe changes space, as before.
+    /// into it. A tap opens it, and so does a hold, exactly as the address
+    /// bar's field (David, 2026-11-22): the pill sinks from 0.15s, then at
+    /// 0.5s a medium tap and the menu grows; the same finger can slide onto
+    /// a row (a highlight follows it, a tick per row) and let go to pick
+    /// it. Let go without sliding, the menu stays open for a tap. A
+    /// sideways swipe changes space, as before (moving ends the hold).
     private var spaceMenu: some View {
         pill
             .onTapGesture { if progress == 0, !menuOpen { menuOpen = true } }
             .gesture(spaceSwipe)
+            // Kept on while the hold that opened the menu is down, so the
+            // finger can go on to a row.
+            .modifier(FieldHold(including: canHoldForMenu || holdTracking ? .all : .subviews,
+                                changed: holdChanged, ended: holdEnded) { now in
+                held.on = now
+                pressHeld()
+            })
+            .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { menuOpen = true }
             .accessibilityHidden(menuOpen)
             // After the pill's own tap shape (its capsule), so the rows,
             // which reach above it, take their taps.
             .overlay { GeometryReader { menuPanel(pill: $0.size) } }
+            // Reduce Motion: no sinking.
+            .scaleEffect(pillPressed && !reduceMotion ? pressedScale : 1)
+            .animation(pillPressed ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
+                                   : .smooth(duration: 0.2), value: pillPressed)
+    }
+
+    /// The pill can be held for the menu: at rest, not mid-swipe.
+    private var canHoldForMenu: Bool { !menuOpen && progress == 0 && !finishing }
+
+    private func holdChanged(_ value: FieldHold.Value) {
+        guard case let .second(true, drag) = value else { return }
+        if !holdTracking {
+            guard canHoldForMenu else { return }
+            holdTracking = true
+            pillPressed = false
+            holdOpenings += 1
+            menuOpen = true
+        }
+        guard menuOpen, let drag else { return }
+        let moved = hypot(drag.translation.width, drag.translation.height)
+        if menuPoint != nil || moved > Self.pointSlop { menuPoint = drag.location }
+    }
+
+    private func holdEnded() {
+        if holdTracking, menuOpen, let point = menuPoint {
+            menuLiftPoint = point
+            menuLift += 1
+        }
+        holdTracking = false
+        menuPoint = nil
+    }
+
+    /// The sinking starts a beat into the touch, as a held tab's does, so a
+    /// tap never dips the pill.
+    private func pressHeld() {
+        guard held.on else {
+            pillPressed = false
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(HoldThenMove.hold))
+            if held.on, canHoldForMenu { pillPressed = true }
+        }
     }
 
     /// The pill's size, for the shape its glass takes.
@@ -230,7 +301,8 @@ struct OverviewBar: View {
             SpaceMenuPanel(spaces: spaces, current: space.id, select: { each in
                 menuOpen = false
                 if each.id != space.id { select(each) }
-            }, newSpace: newSpace, spaceSettings: spaceSettings) { menuOpen = false }
+            }, newSpace: newSpace, spaceSettings: spaceSettings, pointer: menuPoint, lift: menuLift,
+               liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: size.width, height: size.height)
                 .position(x: pill.width / 2, y: pill.height - size.height / 2)
                 // The words come in once the glass has mostly grown, and go
@@ -424,9 +496,39 @@ private struct SpaceMenuPanel: View {
     let select: (Space) -> Void
     let newSpace: SheetAction?
     let spaceSettings: SheetAction?
+    /// The finger that held the pill open, once it has slid (global).
+    let pointer: CGPoint?
+    /// Bumped as that finger lifts, at `liftPoint`: the row there runs.
+    let lift: Int
+    let liftPoint: CGPoint?
     let close: () -> Void
     /// VoiceOver starts on the space on screen.
     @AccessibilityFocusState private var focused: UUID?
+    /// Each row's frame (global), for the sliding finger.
+    @State private var frames: [String: CGRect] = [:]
+    @Namespace private var highlight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let newKey = "new"
+    private static let settingsKey = "settings"
+
+    /// The row under a point (global), if any.
+    private func key(at point: CGPoint?) -> String? {
+        guard let point else { return nil }
+        return frames.first { $0.value.contains(point) }?.key
+    }
+
+    private func run(_ key: String) {
+        if key == Self.newKey, let newSpace {
+            close()
+            newSpace()
+        } else if key == Self.settingsKey, let spaceSettings {
+            close()
+            spaceSettings()
+        } else if let space = spaces.first(where: { $0.id.uuidString == key }) {
+            select(space)
+        }
+    }
 
     static let width: CGFloat = 250
     static let cornerRadius: CGFloat = 22
@@ -440,13 +542,14 @@ private struct SpaceMenuPanel: View {
     }
 
     var body: some View {
+        let lit = key(at: pointer)
         VStack(spacing: 0) {
             ForEach(spaces) { space in
-                row(space.name, checked: space.id == current) {
+                row(space.id.uuidString, space.name, checked: space.id == current, lit: lit) {
                     Circle()
                         .fill(Theme.spaceColor(space.color))
                         .frame(width: 10, height: 10)
-                } action: { select(space) }
+                }
                     .accessibilityFocused($focused, equals: space.id)
                     .accessibilityAddTraits(space.id == current ? .isSelected : [])
             }
@@ -458,22 +561,25 @@ private struct SpaceMenuPanel: View {
                     .frame(height: Self.ruleHeight)
                     .accessibilityHidden(true)
             }
-            if let newSpace {
-                row("New Space…", checked: false) {
+            if newSpace != nil {
+                row(Self.newKey, "New Space…", checked: false, lit: lit) {
                     Image(systemName: "plus").font(BarButton.symbolFont)
-                } action: {
-                    close()
-                    newSpace()
                 }
             }
-            if let spaceSettings {
-                row("Settings…", checked: false) {
+            if spaceSettings != nil {
+                row(Self.settingsKey, "Settings…", checked: false, lit: lit) {
                     Image(systemName: "gearshape").font(BarButton.symbolFont)
-                } action: {
-                    close()
-                    spaceSettings()
                 }
             }
+        }
+        // The highlight glides from row to row: quick, no bounce; none
+        // with Reduce Motion.
+        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: lit)
+        // A tick each time the sliding finger reaches another row.
+        .sensoryFeedback(trigger: lit) { _, now in now == nil ? nil : .selection }
+        // Let go on a row: it runs, as a tap. Elsewhere, the menu stays.
+        .onChange(of: lift) {
+            if let key = key(at: liftPoint) { run(key) }
         }
         .padding(Self.inset)
         .accessibilityElement(children: .contain)
@@ -482,9 +588,10 @@ private struct SpaceMenuPanel: View {
         .onAppear { focused = current }
     }
 
-    private func row(_ title: String, checked: Bool, @ViewBuilder mark: () -> some View,
-                     action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    /// A row; lit while the sliding finger is on it.
+    private func row(_ key: String, _ title: String, checked: Bool, lit: String?,
+                     @ViewBuilder mark: () -> some View) -> some View {
+        Button { run(key) } label: {
             HStack(spacing: 14) {
                 mark()
                     .frame(width: 24)
@@ -506,6 +613,14 @@ private struct SpaceMenuPanel: View {
             .contentShape(.rect)
         }
         .buttonStyle(SpaceRowPress())
+        .background {
+            if lit == key {
+                RoundedRectangle(cornerRadius: Self.cornerRadius - 6, style: .continuous)
+                    .fill(Theme.press)
+                    .matchedGeometryEffect(id: "lit", in: highlight)
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[key] = $0 }
     }
 }
 

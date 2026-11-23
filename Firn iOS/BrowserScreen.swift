@@ -292,6 +292,13 @@ struct BrowserScreen: View {
     @State private var barTop: CGFloat = 0
     /// Scrolling down to read has shrunk the bar to a small pill (phase 5).
     @State private var barShrunk = false
+    /// The bar's move to or from the small pill: following the finger, or
+    /// finishing on its own (`BarRun`). A new one for every move.
+    @State private var barRun = BarRun.onItsOwn()
+    /// The size the bar rests at, for the page's room: it changes once the
+    /// bar lets go of the finger, not while it follows (the page would lay
+    /// out again, and once more if the finger turned back).
+    @State private var barRestsSmall = false
     /// New Space or Settings is up. An object, not plain flags: the actions
     /// that set them live on in the environment (always equal, so they never
     /// redraw the overview), and a flag set through one didn't wake the
@@ -348,14 +355,14 @@ struct BrowserScreen: View {
             // Just above the bar while a download saves, then "Saved to
             // Files" (phase 6); a tap opens Downloads.
             DownloadPill(store: store, hold: hold, away: pageHidden || editing || menuOpen, landing: landing,
-                         barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop) {
+                         barTop: barTop > 0 && barRestsSmall ? barTop + AddressBar.compactTopDrop : barTop) {
                 sheets.downloads = true
             }
 
             // Just above the bar as a sent tab arrives ("From Mac"), or as
             // one is sent ("Sent to Mac"; sync step 6).
             SentPill(sending: sending, hold: hold, away: pageHidden || editing || menuOpen, landing: landing,
-                     barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop)
+                     barTop: barTop > 0 && barRestsSmall ? barTop + AddressBar.compactTopDrop : barTop)
 
             StandInLayer(hold: hold, landing: landing, store: store, pictures: pictures)
 
@@ -586,15 +593,17 @@ struct BrowserScreen: View {
 
     private var bar: some View {
         AddressBar(store: store, editing: $editing, typingNewTab: typingNewTab,
-                   showTabs: showTabs, opened: hideTabs, menuOpen: $menuOpen, shrunk: $barShrunk,
+                   showTabs: showTabs, opened: hideTabs, menuOpen: $menuOpen,
+                   shrunk: Binding { barShrunk } set: { setBar(shrunk: $0) },
+                   shrinkGlide: Animation(BarGlide(run: barRun)),
                    otherDeviceTabs: { [sync] in sync.otherDeviceTabs() })
             // Once the page is pulled, the bar's buttons let go of the
             // touch: lifting the finger over one mustn't tap it.
             .environment(\.barQuiet, quiet)
             // A new page or another tab starts with the full bar.
-            .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { barShrunk = false }
-            .onChange(of: store.activeTab?.page?.url) { barShrunk = false }
-            .onChange(of: voiceOver) { if voiceOver { barShrunk = false } }
+            .onChange(of: store.activeTab?.page.map { ObjectIdentifier($0) }) { setBar(shrunk: false) }
+            .onChange(of: store.activeTab?.page?.url) { setBar(shrunk: false) }
+            .onChange(of: voiceOver) { if voiceOver { setBar(shrunk: false) } }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
                 // Only the bar at rest counts: while it rides the keyboard,
                 // the page underneath shouldn't lay out again.
@@ -643,16 +652,54 @@ struct BrowserScreen: View {
         if landing.warm != warm { landing.warm = warm }
     }
 
+    /// The bar goes to a size on its own: a tap on the small pill, a new
+    /// page, or scrolling that went the whole way.
+    private func setBar(shrunk: Bool) {
+        // A move still following the finger is let go, so it ends.
+        barRun.finish()
+        if barRestsSmall != shrunk { barRestsSmall = shrunk }
+        guard barShrunk != shrunk else { return }
+        barRun = .onItsOwn()
+        barShrunk = shrunk
+    }
+
+    /// What the page's scrolling says about the bar (`BarFollow`). With
+    /// Reduce Motion nothing follows the finger: the bar changes where it
+    /// would have let go. VoiceOver keeps the full bar.
+    private func barScrolled(_ scroll: BarScroll) {
+        switch scroll {
+        case .shrink:
+            setBar(shrunk: !voiceOver)
+        case .grow:
+            setBar(shrunk: false)
+        case let .follow(shrink, lead):
+            guard !reduceMotion, !voiceOver else { return }
+            if barShrunk != shrink || !barRun.following {
+                // The bar sets off: from here it is drawn on its way to
+                // the other size, as far along as the finger has taken it.
+                barRun.finish()
+                barRun = BarRun()
+                barShrunk = shrink
+            }
+            barRun.follow(lead)
+        case .back:
+            guard barRun.following else { return }
+            // Back where it was: the move it had begun runs out, and one
+            // the other way starts with it, so the two cancel to a glide
+            // home from wherever the finger left it.
+            barRun.finish()
+            barRun = .onItsOwn()
+            barShrunk = barRestsSmall
+        }
+    }
+
     @ViewBuilder private var pageLayer: some View {
         if let page = store.activeTab?.page {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
-            HeldPage(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
+            HeldPage(page: page, barTop: barTop > 0 && barRestsSmall ? barTop + AddressBar.compactTopDrop : barTop,
                      barTopSpan: barTop > 0 ? barTop...(barTop + max(AddressBar.compactTopDrop, 0)) : nil,
-                     hold: hold) { scroll in
-                let shrink = scroll == .shrink && !voiceOver
-                if barShrunk != shrink { barShrunk = shrink }
-            }
+                     hold: hold) { barScrolled($0) }
                 // A failed load covers the page with Firn's own words.
                 .overlay {
                     LoadErrorCover(page: page, hold: hold, topRoom: pictures.topInset,

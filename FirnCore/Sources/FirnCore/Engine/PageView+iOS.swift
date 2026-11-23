@@ -153,13 +153,6 @@ public struct PageHold: Equatable, Sendable {
     }
 }
 
-/// What your own scrolling says about the bar, as in Safari: scrolling
-/// down to read shrinks it, scrolling back up (or reaching the page's top)
-/// grows it (`docs/IOS-PLAN.md`, phase 5, step 1).
-public enum BarScroll: Sendable {
-    case shrink, grow
-}
-
 /// Passes on only real sizes, as on the Mac: SwiftUI sizes a newly shown
 /// view at 0×0 first, and every size change makes WebKit lay the whole page
 /// out again.
@@ -183,10 +176,13 @@ private final class PageFrame: UIView {
     var onRefresh: (() -> Void)?
     /// Hears whether your scrolling should shrink or grow the bar.
     var onScroll: ((BarScroll) -> Void)?
-    /// The scroll position last seen, and how far the page has moved one
-    /// way since it last turned around.
+    /// The scroll position last seen, and what the scrolling since has
+    /// meant for the bar (`BarFollow`).
     private var lastOffset: CGFloat?
-    private var travel: CGFloat = 0
+    private var follow = BarFollow()
+    /// Looks in on a bar that is following the finger: scrolling that just
+    /// stops sends no last word.
+    private var followCheck: Task<Void, Never>?
     /// Moved by a pull: by its layer alone (a transform and a mask), never
     /// its frame. Moving the view itself made UIKit work out its safe area
     /// again every frame and WebKit lay the whole page out again, which
@@ -329,7 +325,7 @@ private final class PageFrame: UIView {
         let old = reader
         reader = newReader
         lastOffset = nil
-        travel = 0
+        say(follow.stopped())
         // Out of a reader still sweeping in: one never seen just goes; one
         // half uncovered fades from where its edge is, rather than jumping
         // whole and sweeping again.
@@ -559,10 +555,6 @@ private final class PageFrame: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    /// How far the page must move one way before the bar changes, so a
-    /// small wobble of the finger never flickers it.
-    private static let turnDistance: CGFloat = 24
-
     /// Only your own scrolling counts (a drag and the glide after it), not a
     /// page jumping to a #link or scrolling itself. At the top the bar is
     /// always full; past the end (a bounce) nothing changes, as Safari
@@ -572,30 +564,48 @@ private final class PageFrame: UIView {
         guard scroller === front.scrollView else { return }
         let y = scroller.contentOffset.y
         defer { lastOffset = y }
-        guard let onScroll, let last = lastOffset else { return }
+        guard onScroll != nil, let last = lastOffset else { return }
         let top = -scroller.contentInset.top
+        let own = scroller.isTracking || scroller.isDecelerating
         if y <= top + 1 {
-            travel = 0
-            if scroller.isTracking || scroller.isDecelerating { onScroll(.grow) }
-            return
-        }
-        guard scroller.isTracking || scroller.isDecelerating else {
-            travel = 0
+            // Not your own scrolling (a page jumping to its top): nothing
+            // new, but a bar that was following is put back.
+            say(own ? follow.reachedTop() : follow.stopped())
             return
         }
         let end = endOffset(front)
-        guard end > top + Self.turnDistance, y < end, last < end else {
-            travel = 0
+        guard own, end > top + Self.leastToScroll, y < end, last < end else {
+            say(follow.stopped())
             return
         }
-        let moved = y - last
-        guard moved != 0 else { return }
-        if (moved > 0) != (travel > 0) { travel = 0 }
-        travel += moved
-        if travel > Self.turnDistance {
-            onScroll(.shrink)
-        } else if travel < -Self.turnDistance {
-            onScroll(.grow)
+        guard y != last else { return }
+        say(follow.scrolled(by: y - last))
+        if follow.following { watchFollowing(scroller) }
+    }
+
+    /// A page with less than this to scroll never shrinks the bar.
+    private static let leastToScroll: CGFloat = 24
+
+    private func say(_ word: BarScroll?) {
+        guard let word else { return }
+        if !follow.following { followCheck?.cancel() }
+        onScroll?(word)
+    }
+
+    /// A finger resting on the page mid-follow keeps the bar where it is;
+    /// once the scrolling is over (the finger up, the glide run out), the
+    /// bar goes back.
+    private func watchFollowing(_ scroller: UIScrollView) {
+        followCheck?.cancel()
+        followCheck = Task { @MainActor [weak self, weak scroller] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled, let self, let scroller else { return }
+                if !scroller.isTracking, !scroller.isDecelerating {
+                    self.say(self.follow.stopped())
+                    return
+                }
+            }
         }
     }
 
@@ -640,13 +650,28 @@ private final class PageFrame: UIView {
 
     /// Firn's bar's room from the screen's bottom edge; 0 for no bar.
     var barRoom: CGFloat = 0 {
-        didSet { if barRoom != oldValue { setNeedsLayout() } }
+        didSet {
+            guard barRoom != oldValue else { return }
+            setNeedsLayout()
+            barRested()
+        }
     }
 
     /// The bar's room shrunk to its pill and at full size; nil when the
     /// bar is always `barRoom`.
     var barRoomSpan: ClosedRange<CGFloat>? {
-        didSet { if barRoomSpan != oldValue { setNeedsLayout() } }
+        didSet {
+            guard barRoomSpan != oldValue else { return }
+            setNeedsLayout()
+            barRested()
+        }
+    }
+
+    /// The bar's room says which size it is: a tap on the small pill or a
+    /// new page changes it without any scrolling.
+    private func barRested() {
+        guard let span = barRoomSpan, span.lowerBound < span.upperBound else { return }
+        follow.rests(small: barRoom < span.upperBound - 0.5)
     }
 
     override func layoutSubviews() {

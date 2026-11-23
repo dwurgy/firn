@@ -24,6 +24,9 @@ struct AddressBar: View {
     /// Scrolling down to read has shrunk the bar (phase 5); a tap on the
     /// small pill grows it back.
     @Binding var shrunk: Bool
+    /// The move between the full bar and the small pill: it follows the
+    /// finger first, then finishes on its own (`BarGlide`).
+    var shrinkGlide: Animation = AddressBar.plainShrinkGlide
     /// The other devices' tabs in the space on screen ("On your Mac";
     /// `ICloudSync.otherDeviceTabs`). None until sync's first sync.
     var otherDeviceTabs: () -> [DeviceTab] = { [] }
@@ -457,11 +460,12 @@ struct AddressBar: View {
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: page?.canGoForward)
-        // Shrinking and growing: one bounce-free glide, on its own rather
-        // than following the finger, as Safari's on iOS 26 (David,
-        // 2026-11-09). Reduce Motion: nothing moves; the full bar and the
-        // small pill cross-fade in place (`shrinkFade`, on each piece).
-        .animation(reduceMotion ? nil : Self.shrinkGlide, value: compact)
+        // Shrinking and growing: the bar follows the finger a little of
+        // the way, then finishes on its own, bounce-free, as Safari's on
+        // iOS 27 (David, 2026-11-23; `BarGlide`). Reduce Motion: nothing
+        // moves; the full bar and the small pill cross-fade in place
+        // (`shrinkFade`, on each piece).
+        .animation(reduceMotion ? nil : shrinkGlide, value: compact)
     }
 
     /// The field at its own size, nothing growing, shrinking, or sliding:
@@ -546,7 +550,7 @@ struct AddressBar: View {
         compact || menuOpen ? nil : barSlide
     }
 
-    static let shrinkGlide = Animation.spring(duration: 0.32, bounce: 0)
+    static let plainShrinkGlide = Animation.spring(duration: 0.32, bounce: 0)
     /// Reduce Motion's shrink and grow: a plain fade, carried by the
     /// pieces themselves, since the bar's own change isn't animated then.
     static let shrinkFade = AnyTransition.opacity.animation(.easeOut(duration: 0.2))
@@ -627,11 +631,11 @@ struct AddressBar: View {
         let riding = compact && !settling && !reduceMotion
         let scale: CGFloat = riding ? Self.compactHeight / BarButton.glassSize : hidden && !reduceMotion ? 0.01 : 1
         return content()
-            // The fade keeps its own short time; the size and the way down
-            // go with the bar's glide.
-            .opacity(hidden ? 0 : 1)
-            .animation(reduceMotion ? nil : compact ? .easeOut(duration: 0.14) : .easeOut(duration: 0.16).delay(0.12),
-                       value: compact)
+            // The fade goes with the bar's own move, gone by three
+            // quarters of the way, so it keeps with a bar that is
+            // following a slow finger.
+            .opacity(menuOpen || settling ? 0 : 1)
+            .modifier(FadesWithTheBar(amount: compact ? 1 : 0, gone: 0.75))
             .scaleEffect(scale, anchor: anchor)
             .offset(y: riding ? Self.compactTopDrop + (Self.compactHeight - BarButton.glassSize) / 2 : 0)
             .allowsHitTesting(!hidden)
@@ -1498,17 +1502,15 @@ struct BarSlide: Equatable {
 /// they stay in the field's row, so they ride its edges inward, smaller and
 /// lower with the site's name, as Back and Tabs ride their own pills. Removed
 /// instead, they faded where they stood while the glass slid out from under
-/// them (David's recording, 2026-11-13). They fade out quickly, before the
-/// edges reach the name, and back in only once the bar has mostly grown.
+/// them (David's recording, 2026-11-13). They fade with the bar's own move,
+/// gone before the edges reach the name (`FadesWithTheBar`).
 private struct RidesThePill: ViewModifier {
     let compact: Bool
     let drop: CGFloat
 
     func body(content: Content) -> some View {
         content
-            .opacity(compact ? 0 : 1)
-            .animation(compact ? .easeOut(duration: 0.12)
-                               : .easeOut(duration: 0.16).delay(0.14), value: compact)
+            .modifier(FadesWithTheBar(amount: compact ? 1 : 0, gone: 0.4))
             .scaleEffect(compact ? AddressBar.compactTextScale : 1)
             .offset(y: compact ? drop : 0)
             .allowsHitTesting(!compact)

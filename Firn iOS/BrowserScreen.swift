@@ -518,7 +518,12 @@ struct BrowserScreen: View {
     /// 2026-11-13). A property, not a local, so the build doesn't warn.
     static let setsDown = false
     private static let settleTime = 0.09
-    private static let closeGlide = Animation.timingCurve(0.25, closeStart, 0.35, 1, duration: closeDuration)
+    private static let closeGlide = Animation.timingCurve(closeCurve.x1, closeCurve.y1, closeCurve.x2, closeCurve.y2,
+                                                          duration: closeDuration)
+    /// The same curve for what rides Firn's own clock (`FlightClock`).
+    private static let closeCurve = Flight.Curve(x1: 0.25, y1: closeStart, x2: 0.35, y2: 1)
+    /// The overview coming into focus behind the tabs button's close.
+    private static let buttonFocus = Flight.Curve(x1: 0.45, y1: 0, x2: 0.55, y2: 1)
     private static let closeStart = 0.25
     /// Let go after a hold, the page lands more softly than from the tabs
     /// button or a short swipe, as Safari's (the plan's step 3; three slow
@@ -709,6 +714,8 @@ struct BrowserScreen: View {
         let lingering = standIn
         let picture = lingering == nil ? pictures.capture(tab) : nil
         beginGlide(of: tab)
+        // Ticking before the landing starts (`FlightClock`).
+        hold.flightClock.warm()
         let glide = UUID()
         pullAwaitingPicture = glide
         /// The picture takes the page's place and glides into the card.
@@ -736,7 +743,8 @@ struct BrowserScreen: View {
                 if tab.place == .basecamp {
                     land(inCardOf: tab, curve: Self.tileCloseGlide, duration: Self.tileCloseDuration)
                 } else {
-                    land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration)
+                    land(inCardOf: tab, curve: Self.closeGlide, duration: Self.closeDuration,
+                         clocked: Self.closeCurve)
                 }
             }
         }
@@ -871,7 +879,8 @@ struct BrowserScreen: View {
     /// `finger`: let go on a pull, the page flies there on a spring that
     /// starts at the finger's speed (`Flight`); `curve` then moves only its
     /// corners, strip, and what fades.
-    private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double, finger: CGSize? = nil) {
+    private func land(inCardOf tab: FirnCore.Tab, curve: Animation, duration: Double, finger: CGSize? = nil,
+                      clocked: Flight.Curve? = nil) {
         Task {
             // The page keeps closing on the finger's place while the card's
             // spot is found; the flight starts from where it is by then.
@@ -895,7 +904,7 @@ struct BrowserScreen: View {
             withTransaction(Transaction(animation: nil)) { stripOpacity = 0 }
             // Let go by a finger into a card, all of this rides Firn's own
             // clock with the flight (below), each on the curve it has here.
-            let onClock = finger != nil && !tile
+            let onClock = (finger != nil || clocked != nil) && !tile
             if !onClock { withAnimation(Self.listComes) { listIn = 1 } }
             // The overview comes forward over the glide itself, finishing
             // as the page lands (as a tile's swap starts), on a curve that
@@ -989,21 +998,27 @@ struct BrowserScreen: View {
                 // (`FlightClock`), so the page moves on the very next frame;
                 // the list, the focus, the overview coming forward, and the
                 // bars ride it too, at the screen's full rate.
-                let landing = landing
-                let list0 = listIn, focus0 = focus, forward0 = forward, arrival0 = arrival
-                let flying = CGFloat(Flight.duration), forwards = CGFloat(forwardTime)
-                let whole = max(flying, forwards)
-                hold.flightClock.run(for: Double(whole)) { [hold] seconds in
-                    let time = min(seconds / flying, 1)
-                    if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
-                    landing.listIn = list0 + (1 - list0) * min(seconds / Self.listComesTime, 1)
-                    landing.focus = focus0 + (1 - focus0) * Self.fingerFocus.value(at: time)
-                    landing.forward = forward0 + (1 - forward0) * Self.forwardBezier.value(at: seconds, of: forwards)
-                    landing.arrival = arrival0 + (1 - arrival0) * Self.heldClose.value(at: time)
-                    // Still this landing (nothing opened meanwhile).
-                    if seconds >= whole, gliding == tab.id, showingTabs { swapIntoCard() }
-                }
+                runLanding(of: tab, flying: Flight.duration, forwards: forwardTime,
+                           focus: Self.fingerFocus, arrival: Self.heldClose)
                 withAnimation(.linear(duration: Flight.duration)) {
+                    box = spot
+                    boxRadius = cardRadius
+                    band = 0
+                    boxSkip = skip
+                    neighborsOpacity = 0
+                }
+            } else if let clocked, !tile {
+                // The tabs button: the same glide on its curve, on Firn's
+                // own clock with the overview and the bars, as a let-go's.
+                withTransaction(Transaction(animation: nil)) {
+                    hold.flight = Flight(from: box, to: spot, curve: clocked,
+                                         radius: .init(boxRadius, cardRadius), skip: .init(boxSkip, skip),
+                                         band: band, bandTo: 0)
+                    hold.flightTime = 0
+                }
+                runLanding(of: tab, flying: duration, forwards: forwardTime,
+                           focus: Self.buttonFocus, arrival: clocked)
+                withAnimation(curve) {
                     box = spot
                     boxRadius = cardRadius
                     band = 0
@@ -1043,6 +1058,29 @@ struct BrowserScreen: View {
                     settle = 1
                 }
             }
+        }
+    }
+
+    /// A landing in a card on Firn's own clock (`FlightClock`), so it moves
+    /// on the very next frame and at the screen's full rate: the page's
+    /// flight over `flying` seconds, the list's fade, the focus and `arrival`
+    /// on their curves over the same time, and the overview coming forward
+    /// over `forwards`; then the card takes the picture's place.
+    private func runLanding(of tab: FirnCore.Tab, flying: Double, forwards: Double,
+                            focus focusCurve: Flight.Curve, arrival arrivalCurve: Flight.Curve) {
+        let landing = landing
+        let list0 = listIn, focus0 = focus, forward0 = forward, arrival0 = arrival
+        let flying = CGFloat(flying), forwards = CGFloat(forwards)
+        let whole = max(flying, forwards)
+        hold.flightClock.run(for: Double(whole)) { [hold] seconds in
+            let time = min(seconds / flying, 1)
+            if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
+            landing.listIn = list0 + (1 - list0) * min(seconds / Self.listComesTime, 1)
+            landing.focus = focus0 + (1 - focus0) * focusCurve.value(at: time)
+            landing.forward = forward0 + (1 - forward0) * Self.forwardBezier.value(at: seconds, of: forwards)
+            landing.arrival = arrival0 + (1 - arrival0) * arrivalCurve.value(at: time)
+            // Still this landing (nothing opened meanwhile).
+            if seconds >= whole, gliding == tab.id, showingTabs { swapIntoCard() }
         }
     }
 

@@ -29,11 +29,11 @@ struct SheetAction: Equatable {
 
 /// New Space on the iPhone (docs/IOS-PLAN.md, phase 4, step 2): a name, a
 /// color, and the one sharing choice, in the Mac's words
-/// (`Firn/SpaceSheet.swift`). Nothing changes until Create Space.
+/// (`Firn/SpaceSheet.swift`). Nothing changes until the ✓.
 ///
-/// iOS's own sheet (it slides up, swipes down to cancel, and keeps the
-/// keyboard clear), but on Firn's warm paper rather than stock glass, washed
-/// in the color being picked, so it previews the space as it's made.
+/// iOS's own form, as Settings (docs/IOS-PLAN.md, section 9): a grouped list
+/// on iOS's neutral background, never washed in the space's color; the picked
+/// swatch's ring is the only space color here. ✕ cancels, the ink ✓ creates.
 struct NewSpaceSheet: View {
     let store: BrowserStore
 
@@ -47,141 +47,79 @@ struct NewSpaceSheet: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-                    section("Name") { nameField }
-                    section("Color") { swatches }
-                    section("Sign-ins") { sharingChoice }
+        NavigationStack {
+            List {
+                Section {
+                    TextField(Space.defaultName, text: $name)
+                        .focused($nameFocused)
+                        .submitLabel(.done)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityLabel("Name")
+                        .onChange(of: name) {
+                            if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) }
+                        }
+                } header: {
+                    Text("Name")
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
+
+                Section {
+                    SpaceSwatches(selection: $color)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                } header: {
+                    Text("Color")
+                }
+
+                sharingSection
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.interactively)
-            createButton
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-        }
-        .presentationDetents([.large])
-        .presentationBackground {
-            ZStack {
-                Theme.page
-                Theme.frameTint(color)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: color)
+            .navigationTitle("New Space")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark", role: .cancel) { dismiss() }
+                        .tint(Theme.ink)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create Space", systemImage: "checkmark", role: .confirm, action: finish)
+                        .tint(Theme.ink)
+                }
             }
         }
-        .tint(Theme.ink)
+        .tint(Theme.accent)
+        .presentationDetents([.large])
         .onAppear(perform: start)
     }
 
     // MARK: Parts
 
-    /// Cancel on the left, the title in the middle, as iOS's sheets.
-    private var header: some View {
-        ZStack {
-            Text("New Space")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-                .accessibilityAddTraits(.isHeader)
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .font(.body)
-                    .foregroundStyle(Theme.ink)
-                    .frame(minHeight: 44)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-    }
-
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Theme.muted)
-                .accessibilityAddTraits(.isHeader)
-            content()
-        }
-    }
-
-    private var nameField: some View {
-        TextField(Space.defaultName, text: $name)
-            .font(.body)
-            .onChange(of: name) { if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) } }
-            .foregroundStyle(Theme.ink)
-            .focused($nameFocused)
-            .submitLabel(.done)
-            .textInputAutocapitalization(.words)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 46)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .fill(Theme.hover)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                    .strokeBorder(nameFocused ? Theme.frost : .clear, lineWidth: 2)
-            }
-            .accessibilityLabel("Name")
-    }
-
-    private var swatches: some View { SpaceSwatches(selection: $color) }
-
     /// Separate (recommended), or sharing another space's sign-ins.
-    private var sharingChoice: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var sharingSection: some View {
+        Section {
             Choice(
                 isSelected: !shares,
                 title: "Keep this space separate",
                 caption: "Recommended. It starts signed out of everything."
-            ) { shares = false }
+            ) { choose(sharing: false) }
             if let target = shareTarget {
                 Choice(
                     isSelected: shares,
                     title: "Share sign-ins with “\(target.name)”",
                     caption: "It starts signed in wherever “\(target.name)” is. Its tabs and Basecamp are still its own."
-                ) { shares = true }
+                ) { choose(sharing: true) }
                 if shares, store.spaces.count > 1 {
                     // With more than one space to share with, pick which;
                     // only once sharing is chosen, so the default stays quiet.
-                    HStack {
-                        Text("Share with")
-                            .font(.body)
-                            .foregroundStyle(Theme.muted)
-                        Spacer()
-                        Picker("Share with", selection: $shareWith) {
-                            ForEach(store.spaces) { space in
-                                Text(space.name).tag(Optional(space.id))
-                            }
+                    Picker("Share with", selection: $shareWith) {
+                        ForEach(store.spaces) { space in
+                            Text(space.name).tag(Optional(space.id))
                         }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
                     }
-                    .padding(.leading, 34)
-                    .frame(minHeight: 44)
-                    .transition(.opacity)
                 }
             }
+        } header: {
+            Text("Sign-ins")
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: shares)
-    }
-
-    /// Ink, never the system blue (CLAUDE.md: buttons are ink).
-    private var createButton: some View {
-        Button(action: finish) {
-            Text("Create Space")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Theme.page)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background { Capsule().fill(Theme.ink) }
-                .contentShape(Capsule())
-        }
-        .buttonStyle(FrostPress(shape: Capsule()))
     }
 
     // MARK: Actions
@@ -189,6 +127,10 @@ struct NewSpaceSheet: View {
     /// The space a new one would share with: the one picked, or the one on screen.
     private var shareTarget: Space? {
         store.spaces.first { $0.id == shareWith } ?? store.spaces.first { $0.id == store.activeSpaceID }
+    }
+
+    private func choose(sharing: Bool) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { shares = sharing }
     }
 
     private func start() {
@@ -238,8 +180,8 @@ struct SpaceSwatches: View {
     }
 }
 
-/// A radio-style row: a ring that fills when chosen, a title, and a quiet
-/// caption (the Mac's `ChoiceRow`, at the iPhone's sizes).
+/// One of the sign-in choices, as iOS's own pick-one rows: a title, a quiet
+/// caption, and a check on the one chosen.
 private struct Choice: View {
     let isSelected: Bool
     let title: String
@@ -248,28 +190,27 @@ private struct Choice: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Circle()
-                    .strokeBorder(isSelected ? Theme.ink : Theme.faint, lineWidth: 1.5)
-                    .overlay { Circle().fill(isSelected ? Theme.ink : .clear).padding(5) }
-                    .frame(width: 20, height: 20)
-                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
+                    // `Color`, not `.primary`: inside a list's button the
+                    // style would follow the tint.
                     Text(title)
-                        .font(.body)
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(Color.primary)
                     Text(caption)
                         .font(.footnote)
-                        .foregroundStyle(Theme.muted)
+                        .foregroundStyle(Color.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .opacity(isSelected ? 1 : 0)
+                    .accessibilityHidden(true)
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }

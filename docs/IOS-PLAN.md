@@ -894,3 +894,13 @@ So iOS's morph goes pill, round blob, menu; Sports' grows straight from the butt
 - The unseen UIKit menu button and its `UIMenu` are gone.
 
 Checked in the Simulator (iPhone 18 Pro, dark, one space), recorded and read frame by frame: the open and the close; by screenshot: a hold opening it, a hold slid onto New Space… and let go (the sheet opened), and a hold let go in place (the menu stayed). Not yet run: light, two or more spaces (the swipe, picking another space), Reduce Motion, Reduce Transparency, VoiceOver, iPad. Not yet on David's iPhone.
+
+## 9. Plan: the sheets as iOS's own (David, 2026-11-22)
+
+Settings is already iOS's own grouped list on iOS's neutral grey. New Space and Downloads were built earlier (2026-11-13 and 14) on warm paper washed in the space's color, with hand-drawn headers, fields, and cards. Since 2026-11-15 menus, cards, and bars are neutral, never tinted by the space, so those two are out of step. Both become what Settings is.
+
+1. **New Space as iOS's own form.** A `NavigationStack` and an inset grouped list, no `presentationBackground`, no space wash. Name is a form row; Color keeps `SpaceSwatches` in a section (the picked swatch's ring is the only space color left); Sign-ins is two rows with a check on the picked one and the same captions, and the "Share with" picker as a row when there's more than one space. The top bar: ✕ on the left (`role: .cancel`), an ink ✓ on the right that creates (as Settings' Done; David, 2026-11-22). The big Create Space button goes.
+2. **Downloads as iOS's own list.** The same list, neutral. Rows keep icon, name, progress, share, and stop. Holding a file opens iOS's menu (Share…, Show in Files, Delete), a swipe left deletes; Clear and ✓ in the top bar. `FrostMenu` leaves this sheet (Basecamp tiles are then its last user).
+3. **A look over.** The three sheets side by side in light, dark, large text, VoiceOver, and Reduce Transparency; the hand-drawn pieces nothing uses any more deleted.
+
+Steps 1 and 2 are each worth testing on their own.

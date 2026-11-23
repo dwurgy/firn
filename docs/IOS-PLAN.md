@@ -992,6 +992,6 @@ Needed before submitting 1.0: the iPhone records history but had no way to see o
 **Where it opens from** (David): the page menu (•••), a History row just above Downloads, and the command bar ("History"), as Downloads. Not a row in Settings: History and Downloads are places, not settings. The one exception is a **Clear History… row in Settings › Privacy** (step 3), where people look for it, as Safari's.
 
 1. **The History sheet.** The space on screen's visits, newest first, a section per day (Today, Yesterday, then the date), a search field, more read as the list scrolls (300 at a time). A tap opens a visit as a new tab, where new tabs go, and puts the sheet away. Empty and no-results messages in the Mac's words. *Built (2026-11-23).*
-2. **Deleting.** A swipe left deletes a visit; holding a row gives iOS's menu: Copy Link, Delete, and Delete All from [site]. No asking, as the Mac and Safari.
+2. **Deleting.** A swipe left deletes a visit; holding a row gives iOS's menu: Copy Link, Delete, and Delete All from [site]. No asking, as the Mac and Safari. *Built (2026-11-23): Simulator, dark; the swipe's Delete says its red outright, since the sheet's ink tint took it.*
 3. **Clear History.** Clear in the sheet's top bar asks how far back (the Mac's four ranges and words), naming the spaces that share this history when sign-ins are shared; the same choice from a Clear History… row in Settings › Privacy.
 4. **A look over.** Light, dark, large text, VoiceOver, and the security check.

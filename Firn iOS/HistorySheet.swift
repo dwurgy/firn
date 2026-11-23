@@ -15,7 +15,9 @@ extension EnvironmentValues {
 /// History, as iOS's own list (docs/IOS-PLAN.md, section 9's look): a
 /// grouped list on iOS's neutral background, as Downloads and Settings, never
 /// washed in the space's color. The space's visits, newest first, a section
-/// per day, with a search field. A tap opens a visit as a new tab.
+/// per day, with a search field. A tap opens a visit as a new tab; a swipe
+/// left deletes it, and holding it gives iOS's menu (Copy Link, Delete, and
+/// Delete All from its site).
 ///
 /// Visits are read a page at a time as the list scrolls, as on the Mac.
 struct HistorySheet: View {
@@ -24,6 +26,7 @@ struct HistorySheet: View {
     let open: (URL) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var search = ""
     @State private var visits: [HistoryVisit] = []
@@ -137,6 +140,19 @@ struct HistorySheet: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens in a new tab")
+        .contextMenu {
+            Button("Copy Link", systemImage: "link") { UIPasteboard.general.url = visit.url }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive) { delete(visit) }
+            Button("Delete All from \(visit.site)", systemImage: "trash", role: .destructive) {
+                deleteAll(from: visit.site)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            // iOS's red, said outright: the sheet's ink tint would take it.
+            Button("Delete", systemImage: "trash", role: .destructive) { delete(visit) }
+                .tint(.red)
+        }
     }
 
     /// "Today", "Yesterday", or the date ("Thursday, October 22"; the year
@@ -193,6 +209,29 @@ struct HistorySheet: View {
         if let currentStart { grouped.append(Day(start: currentStart, visits: current)) }
         days = grouped
         readIcons()
+    }
+
+    // MARK: Deleting
+
+    /// Deletes the visit at once (no asking: it's only history, and Safari
+    /// doesn't ask either, nor the Mac); its row leaves the list.
+    private func delete(_ visit: HistoryVisit) {
+        let space = space
+        removeRows { $0.id == visit.id }
+        Task { await store.deleteHistory(visits: [visit.id], in: space) }
+    }
+
+    /// Deletes every visit to `site`, including those not read yet.
+    private func deleteAll(from site: String) {
+        let space = space
+        removeRows { $0.site == site }
+        Task { await store.deleteHistory(fromSite: site, in: space) }
+    }
+
+    private func removeRows(where gone: (HistoryVisit) -> Bool) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+            show(visits.filter { !gone($0) })
+        }
     }
 
     /// Site icons from this history's own tabs, where there are any (history

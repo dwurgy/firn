@@ -45,6 +45,9 @@ public final class Tab: Identifiable {
     /// Where a page that slept while idle was (its history and scroll
     /// position), so it picks up there when it wakes.
     private var restingMemory: PageMemory?
+    /// The page was woken at an address the tab had been at before
+    /// (`addressWhileWaking`).
+    private var wokeWhereItWas = false
 
     init(
         id: UUID = UUID(), spaceID: UUID, place: Place = .open,
@@ -79,6 +82,18 @@ public final class Tab: Identifiable {
     /// After a failed load it's the address that failed: the error page
     /// covers the old page, so its address must not claim it's on screen.
     public var url: URL? { page?.loadError?.url ?? page?.url ?? restingURL }
+
+    /// For the address bar, while a page woken from rest hasn't arrived
+    /// yet: the address the tab was at, which it's on its way back to. Only
+    /// for a tab that had really been there (it rests with a title or its
+    /// history): one a link or a typed address has just opened rests at an
+    /// address nothing has loaded yet, and the bar never shows that as if
+    /// it were on screen. Nil once the page has an address of its own, or
+    /// has failed.
+    public var addressWhileWaking: URL? {
+        guard let page, wokeWhereItWas, page.url == nil, page.loadError == nil else { return nil }
+        return restingURL
+    }
 
     /// The page's title, falling back to its host, so a row is never blank.
     public var title: String {
@@ -191,6 +206,7 @@ public final class Tab: Identifiable {
         let page = makePage()
         self.page = page
         applyLinkRule()
+        wokeWhereItWas = restingURL != nil && (restingMemory != nil || !restingTitle.isEmpty)
         if let restingMemory {
             page.resume(from: restingMemory)
         } else if let restingURL {

@@ -715,7 +715,11 @@ private struct AddressField: View {
     /// The address the page shows: one that failed to load comes first, as
     /// on the Mac, so the bar never names the old site over Firn's error
     /// (and editing starts from the address to fix).
-    private var frontURL: URL? { page?.loadError?.url ?? page?.url }
+    /// The page's own address; while a tab woken from rest is still coming
+    /// back, the address it was at (`Tab.addressWhileWaking`, never one
+    /// nothing has loaded yet), so the bar names the site in the picture
+    /// instead of asking for an address.
+    private var frontURL: URL? { page?.loadError?.url ?? page?.url ?? store.activeTab?.addressWhileWaking }
     private var isEditing: Bool { editing.wrappedValue }
 
     var body: some View {

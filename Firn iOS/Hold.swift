@@ -578,6 +578,7 @@ struct StandInLayer: View {
                     .frame(width: width, height: height)
                     .modifier(CardGlide(width: width, box: box, flight: hold.flight, time: hold.flightTime,
                                         radius: boxRadius, skip: hold.boxSkip,
+                                        band: hold.swiping ? 0 : hold.band * CGFloat(hold.bandFade),
                                         cropFrom: hold.tileCrop?.from, cropTo: hold.tileCrop?.to,
                                         face: tileFace))
                     .modifier(ArrivalBand(arrival: hold.standInTab?.place == .basecamp ? landing.tileReveal : 0,
@@ -869,6 +870,13 @@ private struct CardGlide: ViewModifier, Animatable {
     /// own points: 0 on the page, the header's depth in a tall card (2j),
     /// so the header slides away as the page becomes its card.
     var skip: CGFloat = 0
+    /// How far the strip under the clock has risen above the picture, 0 to
+    /// 1 (`BandGlide`): the picture's top corners square off as it does,
+    /// since the rounded top is then the strip's. Left round under a whole
+    /// strip, a dark-topped page showed the strip's color in both corners,
+    /// flying and at rest while its picture waited for the page (David's
+    /// recording, 2026-11-23).
+    var band: CGFloat = 0
     /// Into a tile: where the glide started, and the tile's size. The
     /// shown part takes the tile's shape over the first 60% of the way, so
     /// the page becomes a tile as it shrinks, rather than flying as a tall
@@ -893,24 +901,27 @@ private struct CardGlide: ViewModifier, Animatable {
 
     // Worked out on every frame, so the shown part, the ring, and the line
     // all agree on the box mid-glide.
-    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>> {
-        get { AnimatablePair(rest.animatableData, AnimatablePair(radius, AnimatablePair(skip, time))) }
+    nonisolated var animatableData: AnimatablePair<CGRect.AnimatableData, AnimatablePair<CGFloat, AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>>>> {
+        get { AnimatablePair(rest.animatableData, AnimatablePair(radius, AnimatablePair(skip, AnimatablePair(time, band)))) }
         set {
             rest.animatableData = newValue.first
             radius = newValue.second.first
             skip = newValue.second.second.first
-            time = newValue.second.second.second
+            time = newValue.second.second.second.first
+            band = newValue.second.second.second.second
         }
     }
 
     init(width: CGFloat, box: CGRect, flight: Flight? = nil, time: CGFloat = 0, radius: CGFloat,
-         skip: CGFloat = 0, cropFrom: CGRect? = nil, cropTo: CGSize? = nil, face: ((CGFloat) -> AnyView)? = nil) {
+         skip: CGFloat = 0, band: CGFloat = 0, cropFrom: CGRect? = nil, cropTo: CGSize? = nil,
+         face: ((CGFloat) -> AnyView)? = nil) {
         self.width = width
         self.rest = box
         self.flight = flight
         self.time = time
         self.radius = radius
         self.skip = skip
+        self.band = band
         self.cropFrom = cropFrom
         self.cropTo = cropTo
         self.face = face
@@ -944,6 +955,8 @@ private struct CardGlide: ViewModifier, Animatable {
         let box = box
         let radius = flight?.radius(at: time) ?? radius
         let skip = flight?.skip(at: time) ?? skip
+        let risen = min(max(flight?.band(at: time) ?? band, 0), 1)
+        let top = radius * (1 - risen)
         let scale = width > 0 && box.width > 0 ? box.width / width : 1
         let formed = face == nil ? 0 : formed
         content
@@ -963,7 +976,9 @@ private struct CardGlide: ViewModifier, Animatable {
             }
             // One shape throughout, so its size and corners glide.
             .mask(alignment: .top) {
-                RoundedRectangle(cornerRadius: radius / scale, style: .continuous)
+                UnevenRoundedRectangle(topLeadingRadius: top / scale, bottomLeadingRadius: radius / scale,
+                                       bottomTrailingRadius: radius / scale, topTrailingRadius: top / scale,
+                                       style: .continuous)
                     .frame(height: shownHeight / scale)
                     .offset(y: skip)
             }

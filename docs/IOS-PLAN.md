@@ -914,3 +914,26 @@ Settings is already iOS's own grouped list on iOS's neutral grey. New Space and 
 3. **A look over.** The three sheets side by side in light, dark, large text, VoiceOver, and Reduce Transparency; the hand-drawn pieces nothing uses any more deleted. **Built (2026-11-22):** Downloads and New Space checked in the Simulator in light, dark, and the largest text sizes; both hold. Two fixes in the Downloads row: its symbol's tile grows with the text, and at accessibility sizes a long name gets three lines; VoiceOver hears "Opens the file" on a finished one. Steps 1 and 2 had already deleted every hand-drawn piece of the two sheets. Not run: VoiceOver itself and Reduce Transparency (the lists are iOS's own); the two fixes built but not seen on screen; not yet on David's iPhone.
 
 Steps 1 and 2 are each worth testing on their own.
+
+## 10. Plan: the next space arrives under the finger (David, 2026-11-23)
+
+David's recording (2026-11-22) of a swipe on the space's name: the backdrop went black for two frames and faded up, the name's pill was an empty blob for about 10 frames, "No open tabs" lingered over the next space's cards, and nothing slid. Then his ask: the next space's tabs should arrive as you swipe, as the next tab does on the address bar, the backdrop's colors cross-fading with it.
+
+What was wrong, as found:
+
+- **The black flash:** the old space's wash was added to the backdrop only as a change began, so under the animation that changed the space it faded in itself, from black. The washes are now always there (`SpaceWash`).
+- **The empty pill:** not a jump. A whole swipe was the pill's own width (about 97pt), so a flick crossed it in two or three frames and the pill then sat whole and empty until the finish's 0.25s ran out. A swipe is now the bar's width, about the screen's.
+- **"No open tabs"** faded on its own; it now goes and comes with its space.
+
+How it's built (five steps, built in a row: one motion, tested once at the end):
+
+1. **A look at another space, FirnCore:** `BrowserStore.peek(at:)`, a read-only copy of the tab list with another space in front, on the tab `selectSpace` would pick. It wakes no tab, loads no page, and is never saved. Tested (`aPeekShowsAnotherSpaceWithoutShowingIt`).
+2. **The slide, shared:** `SpaceSlide` (`Firn iOS/SpaceSlide.swift`) holds the swipe's progress, read by the pills, the lists, and the backdrop.
+3. **The coming space is the overview's own code:** a second `TabOverview` drawn from the copy (`peeking`), under the real list and over the backdrop, with no bar, backdrop, or touch of its own. So it is laid out exactly as the real one will be. The two lists slide a screen apart (`SlidesWithSpace`). The spaces on both sides are made as a finger comes down on the name, before it moves, and stay unseen for their first 100ms (their first frames were still finding their sizes and scroll).
+4. **The landing:** the copy stands still in the middle, the real list (unseen) takes the space's tabs and the copy's own scroll, and about 70ms later they swap in one frame (`showSpace`). A swipe let go short of 30% (or not flung) glides back and the copies are dropped.
+5. **The bar:** the coming space's name rides its pill in, the check's color mixes toward the coming space's, and the backdrop's third wash shows as far as the swipe has gone.
+
+Checked in the Simulator frame by frame (2026-11-23), dark and light, slow swipes, flicks, and a swipe let go early, between a space with tabs and an empty one. **Not yet:** on David's iPhone; Reduce Motion (the code path is the old one: no slide, the space changes, the name fades in); three spaces or more; a space with groups; iPad.
+
+Open, for David's iPhone: the leaving pill ends as a small nub on the coming pill's side for two or three frames (iOS melting the two glasses); whether cards whose pictures aren't in memory come in blank on the first swipe after launch; whether making two copies at a touch costs a frame.
+

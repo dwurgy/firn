@@ -22,6 +22,15 @@ struct OverviewBar: View {
     /// The space menu's last rows, when the app offers them.
     let newSpace: SheetAction?
     let spaceSettings: SheetAction?
+    /// The swipe between spaces, shared with the overview's list and
+    /// backdrop, which move with the pills (`SpaceSlide`).
+    let slide: SpaceSlide
+    /// The space a swipe is heading for (its tabs are readied to slide
+    /// in), or nil once it has settled back.
+    let aim: (Space?) -> Void
+    /// A finger has come down on the name, or lifted: the spaces beside
+    /// this one are readied before it moves.
+    let ready: (Bool) -> Void
 
     /// Back's and the tabs button's size, so + and the check sit exactly
     /// where they were.
@@ -30,8 +39,11 @@ struct OverviewBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// How far the pill has slid toward the next space, as the address
     /// bar's: positive to the right (the space before coming in from +'s
-    /// side). Only where there's a space to come in.
-    @State private var progress: CGFloat = 0
+    /// side). Only where there's a space to come in. Kept in `slide`.
+    private var progress: CGFloat {
+        get { slide.progress }
+        nonmutating set { if slide.progress != newValue { slide.progress = newValue } }
+    }
     /// Let go past the middle: the pills finish the slide, then it changes.
     @State private var finishing = false
     /// The arriving space's name, fading in once its pill is whole (as the
@@ -79,7 +91,7 @@ struct OverviewBar: View {
         return spaces.indices.contains(next) ? spaces[next] : nil
     }
 
-    private var slide: BarSlide? { progress == 0 ? nil : BarSlide(progress: progress) }
+    private var pills: BarSlide? { progress == 0 ? nil : BarSlide(progress: progress) }
 
     /// A space's pill at rest: as wide as its name (David, 2026-11-13), never
     /// narrower than two buttons, so it stays a pill to swipe, nor wider
@@ -130,7 +142,8 @@ struct OverviewBar: View {
                 }
                 // The one solid button, as Firn's buttons are ink: iOS's
                 // prominent glass in the space's vivid color.
-                .firnGlassButton(tint: Theme.spaceVivid(space.color))
+                // Mid-swipe, on its way to the coming space's.
+                .firnGlassButton(tint: checkTint)
                 .accessibilityLabel("Done")
                 }
             }
@@ -163,8 +176,16 @@ struct OverviewBar: View {
         }
         .onChange(of: touching) { _, now in
             guard !now, !finishing, progress != 0 else { return }
-            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { progress = 0 }
+            settleBack()
         }
+    }
+
+    /// The check's color: the space's, mixed toward the coming space's as
+    /// far as a swipe has gone, as the backdrop is.
+    private var checkTint: Color {
+        let own = Theme.spaceVivid(space.color)
+        guard let coming = slide.coming, slide.mix > 0 else { return own }
+        return own.mix(with: Theme.spaceVivid(coming.color), by: slide.mix)
     }
 
     /// Every space's label, unseen, at the width it wants.
@@ -220,6 +241,7 @@ struct OverviewBar: View {
                                 changed: holdChanged, ended: holdEnded) { now in
                 held.on = now
                 pressHeld()
+                ready(now)
             })
             .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
             .accessibilityAddTraits(.isButton)
@@ -279,7 +301,7 @@ struct OverviewBar: View {
     /// The name's glass: the whole pill at rest, its share of the gap
     /// mid-slide.
     private var heldGlass: GlassFrame {
-        guard let slide, pillSize != .zero else { return GlassFrame(frame: .zero, radius: 0) }
+        guard let slide = pills, pillSize != .zero else { return GlassFrame(frame: .zero, radius: 0) }
         let held = slide.pills(in: pillSize).held
         return GlassFrame(frame: held, radius: held.height / 2)
     }
@@ -335,7 +357,7 @@ struct OverviewBar: View {
             .opacity(wordsIn)
             // Sliding, the words fade and dissolve toward the seam with
             // their pill, as the address bar's do.
-            .opacity(slide?.wordsOpacity ?? 1)
+            .opacity(pills?.wordsOpacity ?? 1)
             // The name goes at once as the glass starts to grow, and comes
             // back only as the glass is nearly the pill again (sooner, it
             // showed inside the shrinking menu, over its rows).
@@ -353,7 +375,7 @@ struct OverviewBar: View {
             .frame(height: Self.height)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
             .mask {
-                if let slide {
+                if let slide = pills {
                     GeometryReader { geo in
                         let held = slide.pills(in: geo.size).held
                         slide.wordsMask(width: held.width)
@@ -370,13 +392,13 @@ struct OverviewBar: View {
             // name reaches it and it takes iOS's press. Sliding, this same
             // glass narrows to its share of the gap (`GlassFrame`), and
             // open, it is the menu (`GrowingGlass`).
-            .firnGlassSurface(pillGlass, interactive: slide == nil && !menuOpen)
+            .firnGlassSurface(pillGlass, interactive: pills == nil && !menuOpen)
             .background {
                 GeometryReader { geo in
-                    let pills = (slide ?? BarSlide(progress: 0)).pills(in: geo.size)
+                    let pills = (pills ?? BarSlide(progress: 0)).pills(in: geo.size)
                     // The coming space's own pill, growing out from the
                     // other button.
-                    if let coming = pills.coming, neighbor(progress) != nil {
+                    if let coming = pills.coming, let next = neighbor(progress) {
                         FirnGlass(shape: Capsule())
                             .frame(width: coming.width, height: coming.height)
                             .opacity(pills.comingOpacity)
@@ -387,6 +409,22 @@ struct OverviewBar: View {
             // The name's glass and the coming pill's in one container, so
             // they melt into each other across their seam as they slide.
             .glassContainer(spacing: Self.meltDistance)
+            // The coming space's name rides its pill in, over the glass,
+            // once the pill is most of the way, as the leaving name went:
+            // by the landing it's in the spot the space's own name takes.
+            .overlay {
+                GeometryReader { geo in
+                    if let slide = pills, let coming = slide.pills(in: geo.size).coming, let next = neighbor(progress) {
+                        label(next)
+                            .fixedSize()
+                            .opacity(BarSlide(progress: 1 - min(abs(progress), 1)).wordsOpacity)
+                            .frame(width: coming.width, height: coming.height)
+                            .clipShape(Capsule())
+                            .position(x: coming.midX, y: coming.midY)
+                    }
+                }
+                .allowsHitTesting(false)
+            }
             .contentShape(Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spaces.count > 1 ? "\(space.name), space \(index + 1) of \(spaces.count)" : space.name)
@@ -401,7 +439,15 @@ struct OverviewBar: View {
             }
     }
 
-    /// Sideways on the pill: the seam follows the finger across it.
+    /// How far a finger travels for a whole swipe: the bar's own width,
+    /// about the screen's, so the spaces' tabs keep up with the finger as
+    /// two pages do (the pills' seam crosses the name at the same share).
+    /// Over the pill's own width, as before the tabs slid too, they flew
+    /// four times as fast as the finger.
+    private var travel: CGFloat { max(room + 2 * (Self.height + 16), restWidth(space), 1) }
+
+    /// Sideways on the pill: the tabs follow the finger, and the seam
+    /// crosses the name with them.
     private var spaceSwipe: some Gesture {
         DragGesture(minimumDistance: 10)
             .updating($touching) { _, state, _ in state = true }
@@ -410,24 +456,26 @@ struct OverviewBar: View {
                 guard !reduceMotion, !finishing, !menuOpen,
                       abs(drag.translation.width) > abs(drag.translation.height) || progress != 0
                 else { return }
-                let width = max(restWidth(space), 1)
+                let width = travel
                 let t = min(max(drag.translation.width / width, -1), 1)
-                progress = neighbor(t) == nil ? 0 : t
+                let next = neighbor(t)
+                if let next { aim(next) }
+                progress = next == nil ? 0 : t
             }
             .onEnded { drag in
                 guard !menuOpen else { return }
                 if reduceMotion { return swipeWithoutSliding(drag) }
                 guard !finishing, progress != 0 else { return }
-                let width = max(restWidth(space), 1)
+                let width = travel
                 let flung = drag.predictedEndTranslation.width / width
                 let direction: CGFloat = progress > 0 ? 1 : -1
                 guard let next = neighbor(direction),
-                      abs(progress) > 0.4 || (flung * direction > 0.8) else {
-                    withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { progress = 0 }
+                      abs(progress) > 0.3 || (flung * direction > 0.6) else {
+                    settleBack()
                     return
                 }
                 finishing = true
-                withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
+                withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3)) {
                     progress = direction
                 } completion: {
                     // The coming pill is whole: it becomes the space's own,
@@ -436,14 +484,24 @@ struct OverviewBar: View {
                     quiet.disablesAnimations = true
                     withTransaction(quiet) {
                         landedWidth = restWidth(next)
+                        // The coming space's tabs stand where they landed
+                        // while the real list takes their place.
+                        slide.settling = slide.comingPeek?.id == next.id
                         progress = 0
-                        wordsIn = 0
                     }
                     finishing = false
+                    // The coming name rode its pill in: nothing to fade.
                     select(next)
-                    withAnimation(.easeOut(duration: 0.18)) { wordsIn = 1 }
                 }
             }
+    }
+
+    /// Let go short of the next space: everything glides back, and the
+    /// coming space's tabs are dropped once they're out of sight.
+    private func settleBack() {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) { progress = 0 } completion: {
+            if progress == 0, !finishing, !touching { aim(nil) }
+        }
     }
 
     /// Reduce Motion, as the address bar's tab swipe (which it leaves out):

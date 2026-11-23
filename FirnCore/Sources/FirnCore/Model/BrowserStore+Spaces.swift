@@ -92,6 +92,35 @@ extension BrowserStore {
         }
     }
 
+    /// Another space as it would look if it were shown, without showing it:
+    /// a copy of this store's lists with `space` in front, on the tab
+    /// `selectSpace` would pick. For drawing only (the iPhone's overview
+    /// slides the next space in under a swipe): it wakes no tab, loads no
+    /// page, records nothing, and is never saved. The tabs themselves are
+    /// shared with this store, so it must never be changed; make a new one
+    /// for each look.
+    public func peek(at space: Space) -> BrowserStore {
+        let copy = BrowserStore(spaces: spaces, makePage: makePage, now: now)
+        copy.groups = groups
+        copy.tabs = tabs
+        copy.splits = splits
+        copy.newTabPlacement = newTabPlacement
+        guard spaces.contains(where: { $0.id == space.id }) else { return copy }
+        copy.activeSpaceID = space.id
+        if space.id == activeSpaceID {
+            copy.activeTabID = activeTabID
+        } else if let id = lastTabBySpace[space.id], tabs.contains(where: { $0.id == id && $0.spaceID == space.id }) {
+            copy.activeTabID = id
+        } else {
+            // As `selectMostRecent`.
+            let awake = tabs.filter { $0.spaceID == space.id && !$0.isResting }
+            let shown = Set(copy.sidebarTabs.map(\.id))
+            let byRecent = { (a: Tab, b: Tab) in a.lastActiveAt < b.lastActiveAt }
+            copy.activeTabID = (awake.filter { shown.contains($0.id) }.max(by: byRecent) ?? awake.max(by: byRecent))?.id
+        }
+        return copy
+    }
+
     /// Shows the space at `position` (0-based); past the end means the last one.
     public func selectSpace(at position: Int) {
         guard position >= 0 else { return }

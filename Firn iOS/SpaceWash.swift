@@ -16,10 +16,14 @@ import SwiftUI
 /// Baked once per space and look as a small picture (a quarter of the
 /// screen's points, blurred, so nothing is lost scaling it up) and kept in
 /// memory: nothing redraws while the overview sits still or scrolls. A space
-/// change cross-fades over 600ms, easing out (at once with Reduce Motion).
+/// change cross-fades over 600ms, easing out (at once with Reduce Motion);
+/// a swipe between spaces mixes the coming space's wash in under the finger
+/// (`SpaceSlide`).
 /// Opaque, so Reduce Transparency keeps it as it is.
 struct SpaceWash: View {
     let space: String
+    /// A swipe between spaces, if this wash follows one.
+    var slide: SpaceSlide?
 
     /// Every number worth tuning, in one place. A stop's `mix` is how much
     /// of the space's color goes into its base (0.12 = 12% space color).
@@ -99,14 +103,20 @@ struct SpaceWash: View {
     private var dark: Bool { colorScheme == .dark }
 
     var body: some View {
+        let coming = slide?.coming?.color
         ZStack {
-            // The old space's wash stays fully there while the new one fades
-            // in over it, so the screen never dips (a plain opacity
-            // transition let both go half see-through, or dropped the old one
-            // at once, in the Simulator's recordings).
-            if let under, under != space { wash(for: under) }
+            // Three washes, always there, so none ever fades in from
+            // nothing: the space faded from, the space's own over it, and
+            // the one a swipe is bringing in. Added only as a change began,
+            // the old space's wash faded in itself, from black, on David's
+            // iPhone (his recording, 2026-11-22).
+            wash(for: under ?? space)
             wash(for: space)
                 .opacity(over)
+            // A swipe between spaces: the coming space's color, as far in
+            // as the swipe has gone (`SpaceSlide.mix`).
+            wash(for: coming ?? space)
+                .opacity(slide?.mix ?? 0)
             Image("PaperGrain")
                 .resizable(resizingMode: .tile)
                 .opacity(Theme.Sunrise.grainOpacity(dark: dark))
@@ -125,9 +135,20 @@ struct SpaceWash: View {
         // on top of the steps (boosted crops, 2026-11-16).
         .drawingGroup(opaque: true, colorMode: .linear)
         .onChange(of: space) { old, new in
-            guard !reduceMotion else { return under = new }
-            under = old
-            over = 0
+            // Whatever animation changed the space isn't this fade's.
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            // A swipe brought it in already, under the finger.
+            guard !reduceMotion, coming != new else {
+                return withTransaction(quiet) {
+                    under = new
+                    over = 1
+                }
+            }
+            withTransaction(quiet) {
+                under = old
+                over = 0
+            }
             withAnimation(.easeOut(duration: Tuning.fade)) { over = 1 } completion: {
                 if space == new { under = new }
             }

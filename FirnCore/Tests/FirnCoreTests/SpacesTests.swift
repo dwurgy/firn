@@ -35,6 +35,33 @@ struct SpacesTests {
         #expect(store.spaces.map(\.order) == [0, 1])
     }
 
+    @Test func aPeekShowsAnotherSpaceWithoutShowingIt() {
+        let store = makeStore()
+        let a = store.openTab(url("a"))
+        let work = store.addSpace(name: "Work", color: "sand")
+        let b = store.openTab(url("b"))
+        let c = store.openTab(url("c"))
+        store.select(b)
+        let asked = c.lastActiveAt
+
+        // From Work, a look at Personal: its tabs, on the tab it had.
+        let peek = store.peek(at: personal)
+        #expect(peek.activeSpaceID == personal.id)
+        #expect(peek.openTabs.map(\.id) == [a.id])
+        #expect(peek.activeTab?.id == a.id)
+        // Nothing changed in the real store.
+        #expect(store.activeSpaceID == work.id)
+        #expect(store.activeTab?.id == b.id)
+        #expect(c.lastActiveAt == asked)
+
+        // It's what showing the space then gives.
+        store.selectSpace(personal)
+        let back = store.peek(at: work)
+        #expect(back.openTabs.map(\.id) == [b.id, c.id])
+        store.selectSpace(work)
+        #expect(back.activeTab?.id == store.activeTab?.id)
+    }
+
     @Test func aSharedSpaceUsesTheSameDataButItsOwnTabs() {
         let store = makeStore()
         store.openTab(url("a"))

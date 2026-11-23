@@ -48,6 +48,25 @@ struct TabOverview: View {
     /// Typing from +: the address field takes the bar's place, so the bar
     /// steps out of its way (it would show through the field's glass).
     var typing = false
+    /// Set on the copy that draws the coming space during a swipe between
+    /// spaces (`SpaceSlide`): the same list, laid out the same, with no
+    /// bar, backdrop, or pictures of its own, and nothing to touch.
+    var peeking: SpaceSlide?
+    /// The side a copy waits on (`SpaceSlide.Peek.side`).
+    var peekSide: CGFloat = 0
+    private var isPeek: Bool { peeking != nil }
+    private var slides: SlidesWithSpace {
+        SlidesWithSpace(slide: slide, copyOf: isPeek ? store.activeSpace.id : nil, side: peekSide,
+                        laidOut: !isPeek || copyLaidOut, width: laidSize.width)
+    }
+    /// A copy has had its first few frames (`SlidesWithSpace.laidOut`).
+    @State private var copyLaidOut = false
+    /// The overview's size; a copy's first layout borrows the real one's,
+    /// so it's right from its first frame.
+    private var laidSize: CGSize { size == .zero ? (peeking?.size ?? .zero) : size }
+    /// A swipe between spaces on the name (the real overview's own).
+    @State private var ownSlide = SpaceSlide()
+    private var slide: SpaceSlide { peeking ?? ownSlide }
     /// On screen. The overview stays built behind the page while browsing
     /// (hidden), so a swipe up only reveals it; whatever it remembers
     /// resets as it hides. Never read in the body: showing runs only the
@@ -150,7 +169,7 @@ struct TabOverview: View {
     /// The overview's size, for the grid's columns and card height.
     @State private var size: CGSize = .zero
     private var gridMetrics: OverviewGridMetrics {
-        OverviewGridMetrics(width: size.width, height: size.height)
+        OverviewGridMetrics(width: laidSize.width, height: laidSize.height)
     }
     /// A card's height in the grid.
     private var cardHeight: CGFloat { gridMetrics.cardHeight }
@@ -229,6 +248,9 @@ struct TabOverview: View {
                 .onGeometryChange(for: CGPoint.self, of: { $0.frame(in: .global).origin }) { spots.listOrigin = $0 }
                 .overlay(alignment: .topLeading) { glideDrawing }
                 .padding(.horizontal, 16)
+                // A swipe between spaces slides the tabs off with the
+                // finger, the coming space's in beside them.
+                .modifier(slides)
                 // Where the top of the list's view is on screen, below the
                 // status bar and the top margin (the scroll view's own
                 // space starts there), to turn a card's spot into the list's
@@ -292,7 +314,10 @@ struct TabOverview: View {
                                          scalesWithList: true, inScroll: true))
             }
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.viewport = $0 }
-            .onGeometryChange(for: CGSize.self, of: \.size) { size = $0 }
+            .onGeometryChange(for: CGSize.self, of: \.size) {
+                size = $0
+                if !isPeek { ownSlide.size = $0 }
+            }
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in
                 spots.scroll = now
@@ -336,11 +361,19 @@ struct TabOverview: View {
                             .foregroundStyle(Theme.muted)
                             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.38)
                     }
+                    // With its space, whole: fading on its own, it lingered
+                    // over the next space's cards (David's recording,
+                    // 2026-11-22).
+                    .transition(.identity)
+                    .modifier(slides)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OverviewBar(space: store.activeSpace, spaces: store.spaces, newTab: newTab, done: finish,
-                            select: showSpace(_:), newSpace: newSpace, spaceSettings: spaceSettings)
+                            select: showSpace(_:), newSpace: newSpace, spaceSettings: spaceSettings,
+                            slide: ownSlide, aim: aim(at:), ready: readySpaces(_:))
+                    // The copy keeps the bar's room and nothing else.
+                    .opacity(isPeek ? 0 : 1)
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
@@ -358,6 +391,11 @@ struct TabOverview: View {
                 getReady(scroller)
                 freezeSoon()
             }
+            .task {
+                guard isPeek else { return }
+                try? await Task.sleep(for: .milliseconds(100))
+                copyLaidOut = true
+            }
             // Hidden again: a picture from behind the page, once it's still.
             .background {
                 LandingWatch(landing: landing, shownChanged: { now in
@@ -368,7 +406,12 @@ struct TabOverview: View {
                 })
             }
             .onChange(of: store.activeTab?.id) { if !shown { getReady(scroller) } }
-            .onChange(of: store.activeSpace.id) { if !shown { getReady(scroller) } }
+            .onChange(of: store.activeSpace.id) {
+                if !shown { getReady(scroller) }
+                // Changed some other way (the menu, the command bar) while
+                // a swipe's copy was up.
+                if !isPeek, !slide.settling { slide.clear() }
+            }
         }
         // As a tab lands, the overview's picture covers the list and bar,
         // its blur shrinking to nothing, growing and brightening with them,
@@ -401,11 +444,16 @@ struct TabOverview: View {
             }
         }
         .background {
+            // The coming space's tabs during a swipe between spaces, under
+            // this list and over the backdrop.
+            if !isPeek { SpacePeekLayer(slide: slide, pictures: pictures, screenMiddle: screenMiddle) }
+        }
+        .background {
             // The space wash: the space's color, as the Mac's tinted frame.
-            SpaceWash(space: space)
+            if !isPeek { SpaceWash(space: space, slide: slide) }
         }
         // It takes the keyboard's focus to hear a shake, only while shown.
-        .background { ShakeHost(landing: landing, undoManager: undoManager, closes: closes) }
+        .background { if !isPeek { ShakeHost(landing: landing, undoManager: undoManager, closes: closes) } }
         .basecampFullAlert(isPresented: $basecampFull)
         // Firn leaving the screen closes an open hold menu, as iOS's do;
         // its frost is a picture of the screen as it opened.
@@ -463,7 +511,7 @@ struct TabOverview: View {
     /// in that moment ends the pose and the picture is dropped.
     private func freezeSoon() {
         freezing?.cancel()
-        guard !reduceMotion else { return }
+        guard !reduceMotion, !isPeek else { return }
         let shown = shown
         freezing = Task {
             // Behind the page there's less to wait out, and a tab is often
@@ -1643,7 +1691,64 @@ struct TabOverview: View {
     /// Another space: its tabs take the list's place and the glow and tint
     /// cross-fade (a plain fade with Reduce Motion).
     private func showSpace(_ space: Space) {
-        withAnimation(.easeOut(duration: 0.25)) { store.selectSpace(space) }
+        guard slide.settling, let peek = slide.comingPeek, peek.id == space.id else {
+            slide.clear()
+            withAnimation(.easeOut(duration: 0.25)) { store.selectSpace(space) }
+            return
+        }
+        // A swipe has landed: the copy is standing where this list will
+        // be. Unseen, the list takes the space's tabs and the copy's own
+        // scroll; a few frames later, laid out, it takes the copy's place
+        // with nothing to see.
+        let scroll = peek.spots.scroll
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) {
+            store.selectSpace(space)
+            if let scroll { scrollPosition.scrollTo(point: Self.pin(scroll.contentOffset.y, in: scroll)) }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Self.swapWait))
+            if let scroll { scrollPosition.scrollTo(point: Self.pin(scroll.contentOffset.y, in: scroll)) }
+            try? await Task.sleep(for: .milliseconds(Self.swapWait))
+            guard slide.coming?.id == space.id else { return }
+            withTransaction(quiet) { slide.clear() }
+        }
+    }
+
+    /// Two waits of this long (milliseconds) between a swipe landing and
+    /// the real list taking the copy's place: time to lay out and scroll.
+    private static let swapWait = 34
+
+    /// A swipe on the name is heading for `space` (nil: for none, it has
+    /// settled back): its copy is made, or dropped.
+    private func aim(at space: Space?) {
+        guard slide.coming?.id != space?.id, !slide.settling else { return }
+        guard let space else { return slide.clear() }
+        makeCopies()
+        slide.coming = space
+    }
+
+    /// A finger has come down on the name (or lifted): the spaces to
+    /// either side are readied, a screen away, in case it swipes; dropped
+    /// again a moment after a touch that didn't.
+    private func readySpaces(_ on: Bool) {
+        guard !reduceMotion, !slide.settling else { return }
+        guard !on else { return makeCopies() }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            if slide.progress == 0, slide.coming == nil, !slide.settling { slide.clear() }
+        }
+    }
+
+    private func makeCopies() {
+        guard slide.peeks.isEmpty, let here = store.spaces.firstIndex(where: { $0.id == store.activeSpace.id })
+        else { return }
+        slide.peeks = [(here - 1, CGFloat(1)), (here + 1, CGFloat(-1))].compactMap { index, side in
+            guard store.spaces.indices.contains(index) else { return nil }
+            let space = store.spaces[index]
+            return SpaceSlide.Peek(space: space, store: store.peek(at: space), side: side)
+        }
     }
 
     /// The finger, still down from the hold, has moved: toward the menu

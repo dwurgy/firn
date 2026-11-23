@@ -10,9 +10,10 @@ import SwiftUI
 /// The pill is the space switcher (phase 4, step 1): a dot per space under
 /// the name, as on the Mac; a tap turns the pill itself into the space menu,
 /// as the address bar's field turns into the page menu (David, 2026-11-22,
-/// after Apple Sports' Home button); a sideways swipe on
-/// it changes space with the address bar's sliding pills (`BarSlide`; David,
-/// 2026-11-13: the same movement as swiping between tabs).
+/// after Apple Sports' Home button); a sideways swipe on it changes space,
+/// the next space's tabs arriving under the finger as the next tab does on
+/// the address bar, and its name sliding into the pill (`SpaceSlide`;
+/// David, 2026-11-23).
 struct OverviewBar: View {
     let space: Space
     let spaces: [Space]
@@ -91,7 +92,6 @@ struct OverviewBar: View {
         return spaces.indices.contains(next) ? spaces[next] : nil
     }
 
-    private var pills: BarSlide? { progress == 0 ? nil : BarSlide(progress: progress) }
 
     /// A space's pill at rest: as wide as its name (David, 2026-11-13), never
     /// narrower than two buttons, so it stays a pill to swipe, nor wider
@@ -295,17 +295,6 @@ struct OverviewBar: View {
         }
     }
 
-    /// The pill's size, for the shape its glass takes.
-    @State private var pillSize: CGSize = .zero
-
-    /// The name's glass: the whole pill at rest, its share of the gap
-    /// mid-slide.
-    private var heldGlass: GlassFrame {
-        guard let slide = pills, pillSize != .zero else { return GlassFrame(frame: .zero, radius: 0) }
-        let held = slide.pills(in: pillSize).held
-        return GlassFrame(frame: held, radius: held.height / 2)
-    }
-
     private var menuSize: CGSize {
         CGSize(width: SpaceMenuPanel.width,
                height: SpaceMenuPanel.height(spaces: spaces.count,
@@ -314,7 +303,7 @@ struct OverviewBar: View {
 
     /// The pill's one glass, grown into the menu while it's open.
     private var pillGlass: GrowingGlass {
-        GrowingGlass(base: heldGlass, grown: menuSize, radius: SpaceMenuPanel.cornerRadius, open: menuOpen ? 1 : 0)
+        GrowingGlass(base: GlassFrame(frame: .zero, radius: 0), grown: menuSize, radius: SpaceMenuPanel.cornerRadius, open: menuOpen ? 1 : 0)
     }
 
     @ViewBuilder private func menuPanel(pill: CGSize) -> some View {
@@ -345,19 +334,37 @@ struct OverviewBar: View {
             .accessibilityHidden(menuOpen)
     }
 
-    /// How near the two sliding pills have to come before iOS melts them
-    /// together: just past their 6pt seam.
-    private static let meltDistance: CGFloat = 10
+    /// The two names mid-swipe: this space's slides off with the finger
+    /// and the coming one's in beside it, a pill's width apart, as their
+    /// tabs do above, in one steady pill that cuts them at its edges
+    /// (David's iPhone, 2026-11-23: two glass pills splitting and melting
+    /// came out in the wrong places there, and the pill vanished for half a
+    /// second after each landing; the Simulator showed neither).
+    private var names: some View {
+        let p = min(max(progress, -1), 1)
+        let side: CGFloat = p > 0 ? 1 : -1
+        let width = pillWidth
+        return ZStack {
+            label(space)
+                // The name and dots change at once, never cross-fading (the
+                // old name came back for a frame as a slide landed).
+                .transaction(value: space.id) { $0.animation = nil }
+                .opacity(wordsIn)
+                // Whole as it leaves: held to the narrowing pill, it was
+                // cut to "so…" on its way out.
+                .fixedSize(horizontal: p != 0, vertical: false)
+                .offset(x: p * width)
+            if p != 0, let next = neighbor(p) {
+                label(next)
+                    .fixedSize()
+                    .offset(x: (p - side) * width)
+                    .transition(.identity)
+            }
+        }
+    }
 
     private var pill: some View {
-        label(space)
-            // The name and dots change at once, never cross-fading (the old
-            // name came back for a frame as a slide landed).
-            .transaction { $0.animation = nil }
-            .opacity(wordsIn)
-            // Sliding, the words fade and dissolve toward the seam with
-            // their pill, as the address bar's do.
-            .opacity(pills?.wordsOpacity ?? 1)
+        names
             // The name goes at once as the glass starts to grow, and comes
             // back only as the glass is nearly the pill again (sooner, it
             // showed inside the shrinking menu, over its rows).
@@ -366,65 +373,19 @@ struct OverviewBar: View {
                        value: menuOpen)
             .frame(maxWidth: .infinity)
             // A space picked from the menu or the command bar glides to its
-            // own width; a swipe already moves it with the seam.
+            // own width; a swipe already moves it with the finger.
             .transaction { t in
                 if progress == 0, t.animation == nil, !t.disablesAnimations {
                     t.animation = reduceMotion ? nil : .smooth(duration: 0.25)
                 }
             } body: { $0.frame(width: pillWidth) }
             .frame(height: Self.height)
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
-            .mask {
-                if let slide = pills {
-                    GeometryReader { geo in
-                        let held = slide.pills(in: geo.size).held
-                        slide.wordsMask(width: held.width)
-                            .clipShape(Capsule())
-                            .frame(width: held.width, height: held.height)
-                            .position(x: held.midX, y: held.midY)
-                    }
-                } else {
-                    Rectangle().padding(-400)
-                }
-            }
+            .clipShape(Capsule())
             // The name's one glass, iOS's own, on the pill itself (David,
             // 2026-11-18: one native glass per button), so a finger on the
-            // name reaches it and it takes iOS's press. Sliding, this same
-            // glass narrows to its share of the gap (`GlassFrame`), and
-            // open, it is the menu (`GrowingGlass`).
-            .firnGlassSurface(pillGlass, interactive: pills == nil && !menuOpen)
-            .background {
-                GeometryReader { geo in
-                    let pills = (pills ?? BarSlide(progress: 0)).pills(in: geo.size)
-                    // The coming space's own pill, growing out from the
-                    // other button.
-                    if let coming = pills.coming, let next = neighbor(progress) {
-                        FirnGlass(shape: Capsule())
-                            .frame(width: coming.width, height: coming.height)
-                            .opacity(pills.comingOpacity)
-                            .position(x: coming.midX, y: coming.midY)
-                    }
-                }
-            }
-            // The name's glass and the coming pill's in one container, so
-            // they melt into each other across their seam as they slide.
-            .glassContainer(spacing: Self.meltDistance)
-            // The coming space's name rides its pill in, over the glass,
-            // once the pill is most of the way, as the leaving name went:
-            // by the landing it's in the spot the space's own name takes.
-            .overlay {
-                GeometryReader { geo in
-                    if let slide = pills, let coming = slide.pills(in: geo.size).coming, let next = neighbor(progress) {
-                        label(next)
-                            .fixedSize()
-                            .opacity(BarSlide(progress: 1 - min(abs(progress), 1)).wordsOpacity)
-                            .frame(width: coming.width, height: coming.height)
-                            .clipShape(Capsule())
-                            .position(x: coming.midX, y: coming.midY)
-                    }
-                }
-                .allowsHitTesting(false)
-            }
+            // name reaches it and it takes iOS's press. Whole through a
+            // swipe; open, it is the menu (`GrowingGlass`).
+            .firnGlassSurface(pillGlass, interactive: !menuOpen)
             .contentShape(Capsule())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spaces.count > 1 ? "\(space.name), space \(index + 1) of \(spaces.count)" : space.name)

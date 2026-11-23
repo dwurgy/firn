@@ -935,5 +935,11 @@ How it's built (five steps, built in a row: one motion, tested once at the end):
 
 Checked in the Simulator frame by frame (2026-11-23), dark and light, slow swipes, flicks, and a swipe let go early, between a space with tabs and an empty one. **Not yet:** on David's iPhone; Reduce Motion (the code path is the old one: no slide, the space changes, the name fades in); three spaces or more; a space with groups; iPad.
 
-Open, for David's iPhone: the leaving pill ends as a small nub on the coming pill's side for two or three frames (iOS melting the two glasses); whether cards whose pictures aren't in memory come in blank on the first swipe after launch; whether making two copies at a touch costs a frame.
+**On David's iPhone (his recording, 2026-11-23), three faults the Simulator didn't show, and what was done:**
 
+- **The name's pill vanished for about half a second after each landing**, going and coming back in one frame, starting as the copies were dropped. Each copy had a hidden bar of its own, glass under the real bar's glass; the copies now keep only the bar's room (a clear spacer of its height). Likely the cause, not proven.
+- **The pills came out in the wrong places mid-swipe** (the coming one over by the check, both names overlapping), as in his first recording. The two glass pills that split and melt are gone: one steady glass, with the two names sliding through it a pill's width apart, cut at its edges. The tabs above carry the movement.
+- **A dim flash about a fifth of a second after landing:** UIKit cross-fading the grid's cards when a space's cards replaced another's (`apply(animatingDifferences:)`). Cards that share none with the ones before now take their place at once.
+- **A flick showed the coming space late**, popping in as it landed: the copies are now made once the overview has been at rest a moment (`copySoon`), not as the finger comes down, and made again only when what they show has changed (`copyStamp`). Two more overviews are alive while the overview is open; whether that costs memory or frames is to be seen.
+
+Not yet seen on his iPhone after these.

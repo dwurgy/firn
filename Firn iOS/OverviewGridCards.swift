@@ -479,6 +479,11 @@ struct GridCards: UIViewRepresentable {
                 }
             }
             if new.ids != shown {
+                // Another space's cards (none shared with these) take their
+                // place at once: animated, UIKit faded the new ones in over
+                // a quarter second, a dim flash after a swipe between spaces
+                // had already slid them in (David's recording, 2026-11-23).
+                let related = !Set(new.ids).isDisjoint(with: shown)
                 shown = new.ids
                 var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
                 snapshot.appendSections([0])
@@ -487,7 +492,7 @@ struct GridCards: UIViewRepresentable {
                 // the list). A fold or unfold lands at once: its glide is
                 // drawn over the list.
                 dataSource?.apply(snapshot, animatingDifferences: new.fold == nil && !new.reduceMotion
-                                  && view.window != nil)
+                                  && view.window != nil && related)
             }
         }
 

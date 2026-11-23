@@ -27,8 +27,12 @@ final class SpaceSlide {
     /// (made as the swipe began, their first frames were still finding
     /// their size and scroll; the Simulator's recording, 2026-11-23).
     var peeks: [Peek] = []
-    /// The real overview's size, for the copies' first layout.
+    /// The real overview's size, for the copies' first layout, and its
+    /// bar's height, whose room each copy keeps.
     @ObservationIgnored var size: CGSize = .zero
+    var barHeight: CGFloat = 0
+    /// What the copies were made from (`TabOverview.copyStamp`).
+    @ObservationIgnored var stamp = 0
 
     struct Peek: Identifiable {
         let space: Space

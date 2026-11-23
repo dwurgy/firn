@@ -61,6 +61,8 @@ struct TabOverview: View {
     }
     /// A copy has had its first few frames (`SlidesWithSpace.laidOut`).
     @State private var copyLaidOut = false
+    /// The wait before the copies are made (`copySoon`).
+    @State private var copying: Task<Void, Never>?
     /// The overview's size; a copy's first layout borrows the real one's,
     /// so it's right from its first frame.
     private var laidSize: CGSize { size == .zero ? (peeking?.size ?? .zero) : size }
@@ -369,11 +371,17 @@ struct TabOverview: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
+                // A copy keeps the bar's room and nothing else: with a
+                // hidden bar of its own, the real name's pill vanished for
+                // half a second as the copies were dropped (David's iPhone,
+                // 2026-11-23; glass under glass).
+                if let peeking {
+                    Color.clear.frame(height: peeking.barHeight)
+                } else {
                 OverviewBar(space: store.activeSpace, spaces: store.spaces, newTab: newTab, done: finish,
                             select: showSpace(_:), newSpace: newSpace, spaceSettings: spaceSettings,
                             slide: ownSlide, aim: aim(at:), ready: readySpaces(_:))
-                    // The copy keeps the bar's room and nothing else.
-                    .opacity(isPeek ? 0 : 1)
+                    .onGeometryChange(for: CGFloat.self, of: \.size.height) { ownSlide.barHeight = $0 }
                     // In over the glide's second half, once the page's bar
                     // is gone (see BrowserScreen's bar), never both at once;
                     // a hair above 0 while gliding keeps its glass ready.
@@ -381,6 +389,7 @@ struct TabOverview: View {
                                           glidingFloor: 0.002, off: typing))
                     .modifier(LandingUnderPicture(landing: landing, pictured: pictured))
                     .modifier(LandingForward(landing: landing, middle: screenMiddle, off: reduceMotion))
+                }
             }
             // Ready before it shows: sizes taken, the tidy read, and scrolled
             // to the tab on screen, so the page's card is in place the
@@ -400,6 +409,10 @@ struct TabOverview: View {
             .background {
                 LandingWatch(landing: landing, shownChanged: { now in
                     if !now { forgetOpening() }
+                    if !now, !isPeek {
+                        copying?.cancel()
+                        slide.clear()
+                    }
                     getReady(scroller)
                     if !now { handOverPicture() }
                     freezeSoon()
@@ -424,7 +437,10 @@ struct TabOverview: View {
         }
         .background {
             LandingRest(landing: landing, still: drag == nil && heldMenu == nil && !typing && !scrolling,
-                        rested: freezeSoon)
+                        rested: {
+                            freezeSoon()
+                            copySoon()
+                        })
         }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
         // Over everything, bar included: an open menu's dim (a tap on it
@@ -1713,6 +1729,7 @@ struct TabOverview: View {
             try? await Task.sleep(for: .milliseconds(Self.swapWait))
             guard slide.coming?.id == space.id else { return }
             withTransaction(quiet) { slide.clear() }
+            copySoon()
         }
     }
 
@@ -1729,21 +1746,56 @@ struct TabOverview: View {
         slide.coming = space
     }
 
-    /// A finger has come down on the name (or lifted): the spaces to
-    /// either side are readied, a screen away, in case it swipes; dropped
-    /// again a moment after a touch that didn't.
+    /// A finger has come down on the name: the spaces to either side are
+    /// made now if they aren't there yet (they usually are: `copySoon`).
     private func readySpaces(_ on: Bool) {
-        guard !reduceMotion, !slide.settling else { return }
-        guard !on else { return makeCopies() }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            if slide.progress == 0, slide.coming == nil, !slide.settling { slide.clear() }
+        guard on, !reduceMotion, !slide.settling else { return }
+        makeCopies()
+    }
+
+    /// Once the overview has been at rest a moment, the spaces to either
+    /// side are drawn a screen away, ready for a swipe: made only as the
+    /// swipe began, a flick showed them late, popping in as it landed
+    /// (David's recording, 2026-11-23). Made again only when what they
+    /// show has changed; dropped as the overview hides.
+    private func copySoon() {
+        copying?.cancel()
+        guard !isPeek, !reduceMotion, store.spaces.count > 1 else { return }
+        copying = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, shown, slide.progress == 0, !slide.settling, slide.coming == nil else { return }
+            let stamp = copyStamp
+            guard slide.peeks.isEmpty || slide.stamp != stamp else { return }
+            slide.clear()
+            makeCopies()
         }
+    }
+
+    /// What the copies show, in short: the space on screen, and every other
+    /// space's tabs and groups as they're laid out. (Titles, icons, and
+    /// pictures aren't in it: the copies share the real tabs.)
+    private var copyStamp: Int {
+        var hasher = Hasher()
+        let here = store.activeSpace.id
+        hasher.combine(here)
+        hasher.combine(store.spaces.map(\.id))
+        for tab in store.tabs where tab.spaceID != here {
+            hasher.combine(tab.id)
+            hasher.combine(tab.place)
+            hasher.combine(tab.groupID)
+        }
+        for group in store.groups where group.spaceID != here {
+            hasher.combine(group.id)
+            hasher.combine(group.folded)
+            hasher.combine(group.name)
+        }
+        return hasher.finalize()
     }
 
     private func makeCopies() {
         guard slide.peeks.isEmpty, let here = store.spaces.firstIndex(where: { $0.id == store.activeSpace.id })
         else { return }
+        slide.stamp = copyStamp
         slide.peeks = [(here - 1, CGFloat(1)), (here + 1, CGFloat(-1))].compactMap { index, side in
             guard store.spaces.indices.contains(index) else { return nil }
             let space = store.spaces[index]

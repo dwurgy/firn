@@ -70,9 +70,6 @@ final class Hold {
     /// This pull has been past the point where the grid comes in behind
     /// the page: the tabs beside it have left and don't come back.
     @ObservationIgnored var neighborsLeft = false
-    /// The grid came in early behind this pull, for a finger flicking up
-    /// (`BrowserScreen.gridFollows`).
-    @ObservationIgnored var gridEarly = false
     var heldShift: CGFloat = 0
     var swiping = false
     var newTabReach: CGFloat = 0
@@ -247,7 +244,7 @@ final class Follower: NSObject {
 /// 2026-11-20): its middle (across and up), its width, and its shape each
 /// on the same spring, which doesn't bounce by itself, each started at its
 /// own speed. So a page let go from still eases in, and a flicked one
-/// shrinks past its card and grows back, rises a little above it, and
+/// shrinks faster at first (never past its card), rises a little above it, and
 /// keeps the finger's sideways drift before it swings back.
 ///
 /// Worked out from the spring's own formula for a point in time, and
@@ -283,9 +280,15 @@ struct Flight: Equatable {
     static let duration = 0.44
     /// From this share of the time on, what's left is eased to nothing.
     static let closes: CGFloat = 0.6
-    /// The most a flick may take the width past its card: Safari's went to
-    /// 34% of the screen for a 44% card, about a third of the way it came.
-    static let mostCarry: CGFloat = 2.7
+    /// The fastest the width may start toward its card, as a share of the
+    /// speed at which it would just pass it. Safari's hardest flick (David's
+    /// recording, 2026-11-22, frame by frame): the page off the screen's
+    /// right edge and back, its size halfway to the card's 3 frames after
+    /// the let-go, 60% at 4, about 90% at 9, never smaller than its card.
+    /// That's this spring started at 0.88 of that speed. At 2.7 (a guess
+    /// from one recording, 2026-11-20) Firn's page was card-sized in 4 or 5
+    /// frames, then slid back at that size for 12 more: two moves.
+    static let mostCarry: CGFloat = 0.88
     /// The fastest finger that counts, in points a second.
     static let fastest: CGFloat = 5000
 
@@ -304,7 +307,7 @@ struct Flight: Equatable {
         let vy = min(max(velocity.height, -limit), limit)
         self.velocity = CGVector(dx: vx, dy: vy)
         // The width keeps shrinking (or growing) as the finger left it,
-        // but only so fast that it passes its card by about a third.
+        // but never so fast that it passes its card.
         let omega = 2 * .pi / Self.response
         let most = Self.mostCarry * omega * max(abs(from.width - to.width), to.width * 0.2)
         widthVelocity = min(max(vy * shrink, -most), most)

@@ -255,9 +255,13 @@ struct LandingStep: ViewModifier {
     }
 }
 
-/// The overview's picture: whole from the moment the list starts to come in
-/// (the let-go), and until then as much as a high hold has brought in
-/// (`Landing.heldIn`).
+/// The overview's picture: as much as a high hold has brought in
+/// (`Landing.heldIn`), and from the let-go it fades in with the list
+/// (`BrowserScreen.listComes`, a tenth of a second). In one step at the
+/// let-go, the pale haze flipped to the dark grid in a frame, a flash; and
+/// brought in early for a fast finger, guessing a flick, it flashed in and
+/// out when the finger slowed to a hold instead (David's recordings,
+/// 2026-11-20 and 2026-11-21).
 struct LandingHeldStep: ViewModifier {
     let landing: Landing
 
@@ -275,7 +279,7 @@ struct LandingHeldStep: ViewModifier {
         }
 
         func body(content: Content) -> some View {
-            content.opacity(listIn >= 0.0001 ? 1 : Double(min(max(heldIn, 0), 1)))
+            content.opacity(Double(min(max(heldIn, listIn, 0), 1)))
         }
     }
 }

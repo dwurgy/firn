@@ -552,7 +552,11 @@ struct BrowserScreen: View {
     /// mostly there by its middle, so the page lands among them.
     /// Quick: Safari's overview is behind the page from the let-go's first
     /// frame, blurred and dimmed (David's recording, 2026-11-13).
-    private static let listComes = Animation.easeOut(duration: 0.1)
+    /// The overview's picture fades in on this too (`LandingHeldStep`):
+    /// Safari's grid builds over 6 to 8 frames from the let-go (David's
+    /// recording, 2026-11-22); at a tenth of a second eased out, Firn's was
+    /// there in 2 ("fades kinda quick").
+    private static let listComes = Animation.linear(duration: 0.13)
     /// The overview growing to full size as a tab lands (`ComesForward`),
     /// as Safari's (David's recording, frame by frame, 2026-11-13): an
     /// even ease through the glide, running on about 0.12s past the
@@ -888,7 +892,16 @@ struct BrowserScreen: View {
             // the end, so the card it lands in is sharp when they swap.
             // As Safari's: fully soft for about the first third, then
             // clearing, sharp as the page lands.
-            withAnimation(.timingCurve(0.45, 0, 0.55, 1, duration: duration * (tile ? 0.86 : 1))) {
+            // Let go by a finger, the overview is in plain sight around a
+            // small page from the first frame, and on that curve it stayed
+            // fully soft for about 12 frames, then went sharp within 3;
+            // Safari's can be read about 9 frames after the let-go and
+            // clears evenly (David's recordings side by side, 2026-11-22).
+            // Eased out, the blur is down to about 5pt by then.
+            let focusCurve: Animation = finger != nil && !tile
+                ? .timingCurve(0.25, 0.46, 0.45, 0.94, duration: duration)
+                : .timingCurve(0.45, 0, 0.55, 1, duration: duration * (tile ? 0.86 : 1))
+            withAnimation(focusCurve) {
                 focus = 1
             }
             // Growing on a slower clock of its own, still coming forward
@@ -1224,7 +1237,6 @@ struct BrowserScreen: View {
             if pulledSize != nil {
                 if pull.sideways { box = pulledBox(pull) } else { hold.follower.aim(pulledBox(pull)) }
                 followPull(pull)
-                gridFollows(speed: -drag.velocity.height, of: pull)
             }
             return
         }
@@ -1268,7 +1280,6 @@ struct BrowserScreen: View {
         neighborsIn = up ? 0 : 1
         neighborsPeek = up
         hold.neighborsLeft = false
-        hold.gridEarly = false
         heldShift = 0
         if up, !beside.isEmpty {
             Task {
@@ -1343,27 +1354,6 @@ struct BrowserScreen: View {
         followPull(started)
     }
 
-    /// On a flick the blurred grid is behind the page from its first
-    /// frames, as Safari's (David's recording, 2026-11-20, light: Firn's
-    /// pale haze flipped to the dark grid in one frame as the finger left,
-    /// a flash). A finger moving up this fast is on its way to the grid, so
-    /// it fades in at once; slowed to a hold lower down, it fades back out,
-    /// since Safari keeps the grid out of a hold (`Landing.heldIn`).
-    private func gridFollows(speed: CGFloat, of pull: Pull) {
-        guard !pull.sideways, !landing.heldHigh else { return }
-        if !hold.gridEarly, speed > Self.flickSpeed {
-            hold.gridEarly = true
-            withAnimation(.easeOut(duration: 0.12)) { landing.heldIn = 1 }
-        } else if hold.gridEarly, speed < Self.flickSpeed / 4 {
-            hold.gridEarly = false
-            withAnimation(.easeOut(duration: 0.3)) { landing.heldIn = 0 }
-        }
-    }
-
-    /// The finger's speed up (points a second) from which a pull counts
-    /// as a flick for the grid behind it.
-    private static let flickSpeed: CGFloat = 900
-
     /// How far up the page has been pulled, 0 at rest and 1 at half the
     /// screen's height (past that it gives less and less).
     private func lift(_ pull: Pull) -> CGFloat {
@@ -1403,7 +1393,6 @@ struct BrowserScreen: View {
         let high = scale < (landing.heldHigh ? Self.heldGridScale + 0.015 : Self.heldGridScale)
         if high != landing.heldHigh {
             landing.heldHigh = high
-            hold.gridEarly = false
             if high, !landing.heldSeen { landing.heldSeen = true }
             withAnimation(.easeOut(duration: Self.heldGridFade)) { landing.heldIn = high ? 1 : 0 }
             // The tabs beside the page belong to a hold lower down: they
@@ -1427,10 +1416,9 @@ struct BrowserScreen: View {
     /// How much of its size the held page loses for each unit of lift.
     private static let heldPace: CGFloat = 0.44 / (2 * 270 / 759)
     /// How much faster than that the size is taken to be changing as the
-    /// finger lets go. At the held pace alone a flick never took the page
-    /// past its card; Safari's passes it by about a third of the way it
-    /// came (34% of the screen for a 44% card). A guess from one recording
-    /// with no finger in it: to be judged beside Safari on the iPhone.
+    /// finger lets go. A guess (2026-11-20); the flight caps what comes of
+    /// it (`Flight.mostCarry`, measured from Safari's, 2026-11-22), and a
+    /// quick flick reaches that cap either way.
     private static let flickCarry: CGFloat = 1.6
 
     /// The held page's size, as a share of its full size, for a lift (the

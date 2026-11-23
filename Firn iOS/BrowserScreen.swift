@@ -629,6 +629,7 @@ struct BrowserScreen: View {
             // The page's room follows the bar: shrunk, its end rests just
             // above the small pill (phase 5, step 3).
             HeldPage(page: page, barTop: barTop > 0 && barShrunk ? barTop + AddressBar.compactTopDrop : barTop,
+                     barTopSpan: barTop > 0 ? barTop...(barTop + max(AddressBar.compactTopDrop, 0)) : nil,
                      hold: hold) { scroll in
                 let shrink = scroll == .shrink && !voiceOver
                 if barShrunk != shrink { barShrunk = shrink }

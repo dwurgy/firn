@@ -10,6 +10,7 @@ import WebKit
 public struct PageView: UIViewControllerRepresentable {
     private let page: any PageController
     private let barTop: CGFloat
+    private let barTopSpan: ClosedRange<CGFloat>?
     private let held: PageHold?
     private let onScroll: ((BarScroll) -> Void)?
     /// Reader's own view, while Reader is on. Read here, in the caller's
@@ -20,11 +21,14 @@ public struct PageView: UIViewControllerRepresentable {
     /// for no bar), so WebKit can scroll the page's end clear of it and keep
     /// fixed footers above it. `onScroll` hears when your own scrolling
     /// should shrink the bar or grow it back (`BarScroll`). `held` moves
-    /// the live page while a finger pulls it (`PageHold`).
-    public init(page: any PageController, barTop: CGFloat = 0, held: PageHold? = nil,
-                onScroll: ((BarScroll) -> Void)? = nil) {
+    /// the live page while a finger pulls it (`PageHold`). `barTopSpan` is
+    /// every place the bar's top can be, from the full bar's to the shrunk
+    /// pill's, so a page's own screen-height units (`svh`, `lvh`) know both.
+    public init(page: any PageController, barTop: CGFloat = 0, barTopSpan: ClosedRange<CGFloat>? = nil,
+                held: PageHold? = nil, onScroll: ((BarScroll) -> Void)? = nil) {
         self.page = page
         self.barTop = barTop
+        self.barTopSpan = barTopSpan
         self.held = held
         self.onScroll = onScroll
         let webKitPage = page as? WebKitPageController
@@ -39,6 +43,7 @@ public struct PageView: UIViewControllerRepresentable {
 
     public func updateUIViewController(_ holder: PageHolder, context: Context) {
         holder.barTop = barTop
+        holder.barTopSpan = barTopSpan
         guard let frame = holder.view as? PageFrame else { return }
         frame.onScroll = onScroll
         frame.held = held
@@ -67,6 +72,15 @@ public final class PageHolder: UIViewController {
     var barTop: CGFloat = 0 {
         didSet {
             guard barTop != oldValue else { return }
+            updateBarInset()
+        }
+    }
+
+    /// The bar's top when full and when shrunk to its pill; nil when the
+    /// bar never moves.
+    var barTopSpan: ClosedRange<CGFloat>? {
+        didSet {
+            guard barTopSpan != oldValue else { return }
             updateBarInset()
         }
     }
@@ -103,7 +117,14 @@ public final class PageHolder: UIViewController {
     /// end rested 34pt behind the bar (phase 2, step 1's Known).
     private func updateBarInset() {
         guard let screen = view.window?.bounds, let frame = view as? PageFrame else { return }
-        frame.barRoom = barTop > 0 ? max(screen.maxY - barTop, 0) : 0
+        func room(_ top: CGFloat) -> CGFloat { top > 0 ? max(screen.maxY - top, 0) : 0 }
+        frame.barRoom = room(barTop)
+        // The lower the bar's top, the less room it takes.
+        if barTop > 0, let span = barTopSpan {
+            frame.barRoomSpan = room(span.upperBound)...room(span.lowerBound)
+        } else {
+            frame.barRoomSpan = nil
+        }
     }
 }
 
@@ -622,6 +643,12 @@ private final class PageFrame: UIView {
         didSet { if barRoom != oldValue { setNeedsLayout() } }
     }
 
+    /// The bar's room shrunk to its pill and at full size; nil when the
+    /// bar is always `barRoom`.
+    var barRoomSpan: ClosedRange<CGFloat>? {
+        didSet { if barRoomSpan != oldValue { setNeedsLayout() } }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
@@ -650,6 +677,21 @@ private final class PageFrame: UIView {
         let covered = UIEdgeInsets(top: top, left: 0, bottom: barRoom, right: 0)
         if webView.obscuredContentInsets != covered {
             webView.obscuredContentInsets = covered
+        }
+        // What a page's own screen-height units mean. Without this, 100svh
+        // and 100dvh were the whole web view, and a page sized to one
+        // screen ran behind Firn's bar (davidwurgler.com's hero, David,
+        // 2026-11-22). As Safari: the small screen (`svh`) is the room with
+        // the full bar, the large one (`lvh`) the room with the shrunk
+        // pill. Only on a change: it lays the page out again. WebKit
+        // refuses insets that leave no page, so a sliver of a view is left
+        // alone.
+        let rooms = barRoomSpan ?? barRoom...barRoom
+        let least = UIEdgeInsets(top: top, left: 0, bottom: rooms.lowerBound, right: 0)
+        let most = UIEdgeInsets(top: top, left: 0, bottom: rooms.upperBound, right: 0)
+        if top + rooms.upperBound < bounds.height,
+           webView.minimumViewportInset != least || webView.maximumViewportInset != most {
+            webView.setMinimumViewportInset(least, maximumViewportInset: most)
         }
         let scroller = webView.scrollView
         // Firn's inset already holds the status bar; left automatic, iOS

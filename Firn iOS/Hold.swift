@@ -486,6 +486,8 @@ struct StandInLayer: View {
 struct HeldPage: View {
     let page: any PageController
     let barTop: CGFloat
+    /// The bar's top when full and when shrunk (`PageView`).
+    let barTopSpan: ClosedRange<CGFloat>?
     let hold: Hold
     let onScroll: (BarScroll) -> Void
 
@@ -494,7 +496,7 @@ struct HeldPage: View {
         // the live page is the one held.
         let held = hold.livePull ? PageHold(box: hold.box, radius: hold.boxRadius, includesTop: hold.swiping,
                                             topShown: hold.band) : nil
-        PageView(page: page, barTop: barTop, held: held, onScroll: onScroll)
+        PageView(page: page, barTop: barTop, barTopSpan: barTopSpan, held: held, onScroll: onScroll)
     }
 }
 

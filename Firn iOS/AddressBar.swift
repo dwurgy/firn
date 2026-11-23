@@ -617,9 +617,23 @@ struct AddressBar: View {
     /// plain fade, David's recordings, 2026-11-04; kept as the move).
     private func hidesForMenu(toward anchor: UnitPoint, @ViewBuilder _ content: () -> some View) -> some View {
         let hidden = menuOpen || settling || compact
+        // Shrinking to the small pill is another move, Safari's (David's
+        // recordings side by side, 2026-11-23): Back and Tabs stay beside
+        // the pill and go down with it, at its smaller size, gone by about
+        // halfway and back only once the bar has mostly grown. Shrunk to a
+        // dot, they faded up where the bar had been while the pill dropped
+        // away below them. Sideways they already keep to the field's edges
+        // (the row lays out again around the narrower field).
+        let riding = compact && !settling && !reduceMotion
+        let scale: CGFloat = riding ? Self.compactHeight / BarButton.glassSize : hidden && !reduceMotion ? 0.01 : 1
         return content()
-            .scaleEffect(hidden && !reduceMotion ? 0.01 : 1, anchor: anchor)
+            // The fade keeps its own short time; the size and the way down
+            // go with the bar's glide.
             .opacity(hidden ? 0 : 1)
+            .animation(reduceMotion ? nil : compact ? .easeOut(duration: 0.14) : .easeOut(duration: 0.16).delay(0.12),
+                       value: compact)
+            .scaleEffect(scale, anchor: anchor)
+            .offset(y: riding ? Self.compactTopDrop + (Self.compactHeight - BarButton.glassSize) / 2 : 0)
             .allowsHitTesting(!hidden)
             .accessibilityHidden(hidden)
     }

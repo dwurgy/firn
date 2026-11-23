@@ -10,7 +10,7 @@ import SwiftUI
 /// - Spaces: every space in its order (hold and drag to reorder); a tap opens
 ///   its page (name, color, sign-ins, and Delete, in the Mac's words,
 ///   `Firn/SpacesSettings.swift`).
-/// - Privacy: blocking's switch. iCloud: sync's switch (docs/SYNC-PLAN.md).
+/// - Privacy: blocking's switch, and Clear History…. iCloud: sync's switch (docs/SYNC-PLAN.md).
 /// - Tip Jar, last: the family's shared jar, its words unchanged.
 ///
 /// Changes apply as they're made; only Stop Sharing and Delete ask first.
@@ -32,6 +32,7 @@ struct SettingsSheet: View {
     @Environment(\.openURL) private var openURL
     /// Send Feedback found no mail app to open its draft in.
     @State private var noMailApp = false
+    @State private var clearingHistory = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -127,7 +128,7 @@ struct SettingsSheet: View {
 
     /// "Block ads and trackers", the Mac's switch in the Mac's words
     /// (Settings › Privacy there). Pages follow from their next load.
-    private var privacySection: some View {
+    @ViewBuilder private var privacySection: some View {
         Section {
             Toggle("Block ads and trackers", isOn: $blocksContent)
                 .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
@@ -135,6 +136,13 @@ struct SettingsSheet: View {
             Text("Privacy")
         } footer: {
             Text("Uses the EasyList and EasyPrivacy lists, which come with Firn. To let one site show its ads, open it and choose Stop Blocking from the page menu; each space keeps its own choices.")
+        }
+        // Where people look for it, as Safari's; the same question as
+        // History's Clear, about the space on screen.
+        Section {
+            Button("Clear History…") { clearingHistory = true }
+                .foregroundStyle(Theme.ink)
+                .clearHistoryDialog(isPresented: $clearingHistory, store: store)
         }
     }
 

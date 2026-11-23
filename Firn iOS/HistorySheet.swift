@@ -17,7 +17,7 @@ extension EnvironmentValues {
 /// washed in the space's color. The space's visits, newest first, a section
 /// per day, with a search field. A tap opens a visit as a new tab; a swipe
 /// left deletes it, and holding it gives iOS's menu (Copy Link, Delete, and
-/// Delete All from its site).
+/// Delete All from its site). Clear, in the top bar, asks how far back.
 ///
 /// Visits are read a page at a time as the list scrolls, as on the Mac.
 struct HistorySheet: View {
@@ -35,6 +35,7 @@ struct HistorySheet: View {
     @State private var reachedEnd = false
     @State private var loadingMore = false
     @State private var icons: [String: Data] = [:]
+    @State private var clearing = false
 
     /// One day's visits, under its heading.
     private struct Day: Identifiable {
@@ -76,6 +77,15 @@ struct HistorySheet: View {
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Clear") { clearing = true }
+                        .tint(Theme.ink)
+                        .disabled(loaded && visits.isEmpty && !isSearching)
+                        .accessibilityLabel("Clear History")
+                        .clearHistoryDialog(isPresented: $clearing, store: store) {
+                            Task { await readFirstPage() }
+                        }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark", role: .confirm) { dismiss() }
                         .tint(Theme.ink)
@@ -246,5 +256,35 @@ struct HistorySheet: View {
             found[host] = icon
         }
         icons = found
+    }
+}
+
+// MARK: - Clear History
+
+extension View {
+    /// Clear History…: iOS's own question, how far back to clear, in the
+    /// Mac's four ranges and words (`HistoryClearRange`), saying whose history
+    /// it is (spaces sharing sign-ins share it). Asked from History's Clear
+    /// and from Settings › Privacy, about the space on screen. `cleared` runs
+    /// once the visits are gone.
+    func clearHistoryDialog(
+        isPresented: Binding<Bool>, store: BrowserStore, cleared: @escaping () -> Void = {}
+    ) -> some View {
+        // iOS colors the choices from the sheet's own tint: ink in History,
+        // Glacier in Settings (as its "Search with" picker).
+        confirmationDialog("Clear history", isPresented: isPresented, titleVisibility: .visible) {
+            ForEach(HistoryClearRange.allCases) { range in
+                Button(range.title) {
+                    let space = store.activeSpace
+                    Task {
+                        await store.clearHistory(range, in: space)
+                        cleared()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(store.clearHistoryExplanation(for: store.activeSpace))
+        }
     }
 }

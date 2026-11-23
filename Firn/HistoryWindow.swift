@@ -52,7 +52,7 @@ struct HistoryWindow: View {
             .modifier(PanelWindowTitle(title: "History", subtitle: space.name))
             .searchable(text: $search, placement: .toolbar, prompt: "Search History")
             .glassSheet(item: $clearing) { space in
-                ClearHistorySheet(space: space, sharing: store.spacesSharingHistory(with: space)) { range in
+                ClearHistorySheet(explanation: store.clearHistoryExplanation(for: space)) { range in
                     Task {
                         await store.clearHistory(range, in: space)
                         await readFirstPage(replacing: true)
@@ -354,8 +354,7 @@ private struct EmptyHistory: View {
 /// choice, then Cancel and the ink button. All four choices show at once,
 /// as radio buttons, like the choices in Settings.
 private struct ClearHistorySheet: View {
-    let space: Space
-    let sharing: [Space]
+    let explanation: String
     let clear: (HistoryClearRange) -> Void
 
     @Environment(\.dismissGlassSheet) private var dismiss
@@ -399,15 +398,6 @@ private struct ClearHistorySheet: View {
         .frame(width: 380)
     }
 
-    private var explanation: String {
-        let stays = "Sign-ins and open tabs stay."
-        guard sharing.count > 1 else {
-            return "Removes pages you visited in \(space.name). \(stays)"
-        }
-        let names = sharing.map(\.name).formatted(.list(type: .and))
-        let all = sharing.count == 2 ? "both" : "all of them"
-        return "\(names) share sign-ins, so this clears history in \(all). \(stays)"
-    }
 }
 
 /// One row's slice of its day's card: Settings' frost fill, the corners

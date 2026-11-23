@@ -51,6 +51,19 @@ extension BrowserStore {
         spaces.filter { $0.dataStoreID == space.dataStoreID }
     }
 
+    /// Clear History…'s one plain line: whose history goes (every space
+    /// sharing `space`'s sign-ins shares its history), and what stays.
+    public func clearHistoryExplanation(for space: Space) -> String {
+        let sharing = spacesSharingHistory(with: space)
+        let stays = "Sign-ins and open tabs stay."
+        guard sharing.count > 1 else {
+            return "Removes pages you visited in \(space.name). \(stays)"
+        }
+        let names = sharing.map(\.name).formatted(.list(type: .and))
+        let all = sharing.count == 2 ? "both" : "all of them"
+        return "\(names) share sign-ins, so this clears history in \(all). \(stays)"
+    }
+
     /// Deletes these visits from `space`'s history.
     public func deleteHistory(visits ids: [Int64], in space: Space) async {
         let dataStoreID = space.dataStoreID

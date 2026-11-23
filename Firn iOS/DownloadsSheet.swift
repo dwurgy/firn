@@ -222,86 +222,68 @@ private struct ProgressRing: View {
 
 // MARK: - The sheet
 
-/// Downloads, on warm paper as Settings and New Space. Tap a finished file
-/// to open it here (Quick Look); ↑ shares it; a saving one shows its
-/// progress and ✕ to stop it. Hold one for Share…, Show in Files, and
-/// Delete. Clear takes ended ones off the list (the files stay).
+/// Downloads, as iOS's own list (docs/IOS-PLAN.md, section 9): a grouped
+/// list on iOS's neutral background, as Settings and New Space, never washed
+/// in the space's color. Tap a finished file to open it here (Quick Look);
+/// ↑ shares it; a saving one shows its progress and ✕ to stop it. Hold a
+/// file for iOS's menu (Share…, Show in Files, Delete); a swipe left deletes.
+/// Clear takes ended ones off the list (the files stay).
 struct DownloadsSheet: View {
     let store: BrowserStore
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var preview: URL?
     @State private var deleting: Download?
-    /// Firn's own hold menu on a download (`FrostMenu`).
-    @State private var menu: OpenHoldMenu?
-    @State private var held: Download?
-    @State private var pressing: ObjectIdentifier?
-    @State private var pointer = MenuPointer()
-    @State private var frames: [ObjectIdentifier: CGRect] = [:]
 
     private var space: Space { store.activeSpace }
-    private var list: [Download] { Downloads.shared.list(for: space.dataStoreID) }
 
     var body: some View {
-        let list = list
-        VStack(spacing: 0) {
-            header(canClear: list.contains { $0.state != .downloading })
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+        let list = Downloads.shared.list(for: space.dataStoreID)
+        NavigationStack {
+            List {
+                Section {
                     if list.isEmpty {
                         Text("Nothing downloaded in this space since Firn opened.")
-                            .font(.callout)
-                            .foregroundStyle(Theme.muted)
-                            .frame(maxWidth: .infinity, minHeight: 68)
-                            .multilineTextAlignment(.center)
-                            .card()
+                            .foregroundStyle(Color.secondary)
                     } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(list.enumerated()), id: \.element.id) { index, download in
-                                if index > 0 {
-                                    Theme.holdMenuHairline.frame(height: 0.5).padding(.leading, 66)
-                                }
-                                row(download)
-                            }
+                        ForEach(list) { download in
+                            row(download)
                         }
-                        .card()
                     }
-                    Button(action: FilesApp.showDownloads) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "folder")
-                                .foregroundStyle(Theme.muted)
-                                .accessibilityHidden(true)
-                            Text("Open in Files").foregroundStyle(Theme.ink)
-                            Spacer(minLength: 0)
-                        }
-                        .font(.body)
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 52)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PressWash(radius: 22))
-                    .card()
-                    Text("Saved in On My iPhone › Firn › Downloads. Clear only takes them off this list.")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 14)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 24)
+
+                Section {
+                    Button(action: FilesApp.showDownloads) {
+                        Label {
+                            Text("Open in Files").foregroundStyle(Color.primary)
+                        } icon: {
+                            Image(systemName: "folder").foregroundStyle(Color.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Saved in On My iPhone › Firn › Downloads. Clear only takes them off this list.")
+                }
             }
-            .scrollDisabled(menu != nil)
-        }
-        .overlay { heldLayer }
-        .presentationDetents([.large])
-        .presentationBackground {
-            ZStack {
-                Theme.page
-                Theme.frameTint(space.color)
+            .listStyle(.insetGrouped)
+            .navigationTitle("Downloads")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Clear") { Downloads.shared.clear(space.dataStoreID) }
+                        .tint(Theme.ink)
+                        .disabled(!list.contains { $0.state != .downloading })
+                        .accessibilityHint("Takes finished downloads off this list. The files stay.")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark", role: .confirm) { dismiss() }
+                        .tint(Theme.ink)
+                }
             }
         }
+        // Ink, so iOS's menu draws its symbols neutral; only the progress
+        // bar is Glacier, as the system's other controls.
         .tint(Theme.ink)
+        .presentationDetents([.large])
         .quickLookPreview($preview)
         .alert("Delete this file?", isPresented: Binding(get: { deleting != nil },
                                                           set: { if !$0 { deleting = nil } }),
@@ -315,122 +297,29 @@ struct DownloadsSheet: View {
 
     // MARK: Parts
 
-    /// Clear on the left, the title in the middle, and Done on the right.
-    private func header(canClear: Bool) -> some View {
-        ZStack {
-            Text("Downloads")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-                .accessibilityAddTraits(.isHeader)
-            HStack {
-                Button("Clear") { Downloads.shared.clear(space.dataStoreID) }
-                    .font(.body)
-                    .foregroundStyle(canClear ? Theme.muted : Theme.faint)
-                    .disabled(!canClear)
-                    .frame(minHeight: 44)
-                    .accessibilityHint("Takes finished downloads off this list. The files stay.")
-                Spacer()
-                Button("Done") { dismiss() }
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(minHeight: 44)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-    }
-
-    private func row(_ download: Download) -> some View {
-        let id = ObjectIdentifier(download)
-        let isHeld = held === download
-        return DownloadRow(download: download, space: space.color,
-                           share: { share(download) }, stop: { download.cancel() })
-            .contentShape(Rectangle())
-            .scaleEffect(pressing == id && !reduceMotion ? 0.97 : 1)
-            .animation(.smooth(duration: 0.2), value: pressing == id)
-            .opacity(isHeld ? 0 : 1)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[id] = $0 }
-            .onTapGesture { open(download) }
-            .onLongPressGesture(minimumDuration: 0.4) {
-                pressing = nil
-                hold(download)
-            } onPressingChanged: { down in
-                pressing = down && canHold(download) ? id : nil
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(download.state == .finished ? .isButton : [])
-            .accessibilityAction { open(download) }
-            .accessibilityActions { actions(for: download) }
-    }
-
-    @ViewBuilder private func actions(for download: Download) -> some View {
-        if download.state == .downloading {
-            Button("Stop Download") { download.cancel() }
-        } else if download.state == .finished, exists(download) {
-            Button("Share…") { share(download) }
-            Button("Show in Files", action: FilesApp.showDownloads)
-            Button("Delete…") { deleting = download }
-        }
-    }
-
-    /// The held row, lifted on a dim with Firn's menu beside it.
-    @ViewBuilder private var heldLayer: some View {
-        ZStack(alignment: .topLeading) {
-            if menu != nil {
-                Theme.holdDim
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .accessibilityHidden(true)
-            }
-            if let held, let frame = frames[ObjectIdentifier(held)] {
-                GeometryReader { geo in
-                    let origin = geo.frame(in: .global).origin
-                    DownloadRow(download: held, space: space.color, share: {}, stop: {})
-                        .frame(width: frame.width, height: frame.height)
-                        .background(Theme.page, in: .rect(cornerRadius: 18, style: .continuous))
-                        .scaleEffect(menu != nil && !reduceMotion ? 1.03 : 1)
-                        .shadow(color: Theme.shadowPeek, radius: 9, y: 8)
-                        .offset(x: frame.minX - origin.x, y: frame.minY - origin.y)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-                .ignoresSafeArea()
-            }
-            if menu != nil {
-                // A tap anywhere but the card closes the menu.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .onTapGesture(perform: closeMenu)
-                    .accessibilityLabel("Close Menu")
-                    .accessibilityAddTraits(.isButton)
-            }
-            // The card just under the held row (above it near the bottom),
-            // lined up with its leading edge, placed in the sheet's own
-            // space: a plain frame, so every row takes its tap.
-            GeometryReader { geo in
-                if let menu {
-                    let box = geo.frame(in: .global)
-                    let height = FrostMenu.height(of: menu.sections)
-                    let below = menu.tile.maxY + 10 + height < box.maxY - 12
-                    let y = below ? menu.tile.maxY + 10 : menu.tile.minY - 10 - height
-                    FrostMenu(sections: menu.sections, space: space.color, backdrop: menu.backdrop,
-                              pointer: pointer, pick: { item in
-                                  closeMenu()
-                                  item.action()
-                              })
-                        .frame(width: min(HoldMenuPlacement.width, box.width - 32))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .offset(x: menu.tile.minX - box.minX, y: y - box.minY)
-                        .id(menu.token)
-                        .transition(reduceMotion ? .opacity
-                                    : .opacity.combined(with: .scale(scale: 0.9, anchor: below ? .topLeading : .bottomLeading)))
+    /// One row: a tap opens a finished file; iOS's own hold menu and swipe
+    /// only on a file that's really there.
+    @ViewBuilder private func row(_ download: Download) -> some View {
+        let there = download.state == .finished && exists(download)
+        DownloadRow(download: download, missing: download.state == .finished && !there,
+                    open: { preview = download.fileURL },
+                    share: { share(download) }, stop: { download.cancel() })
+            .contextMenu {
+                if there {
+                    Button("Share…", systemImage: "square.and.arrow.up") { share(download) }
+                    Button("Show in Files", systemImage: "folder", action: FilesApp.showDownloads)
+                    Divider()
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = download }
                 }
             }
-        }
-        .accessibilityAction(.escape) { if menu != nil { closeMenu() } }
-        .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.22), value: menu?.token)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if there {
+                    // No destructive role: the row stays until the alert's
+                    // Delete, since the file can't be brought back.
+                    Button("Delete", systemImage: "trash") { deleting = download }
+                        .tint(.red)
+                }
+            }
     }
 
     // MARK: Doing
@@ -439,38 +328,9 @@ struct DownloadsSheet: View {
         download.fileURL.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
     }
 
-    private func canHold(_ download: Download) -> Bool {
-        download.state == .finished && exists(download)
-    }
-
-    private func open(_ download: Download) {
-        guard menu == nil, download.state == .finished, exists(download) else { return }
-        preview = download.fileURL
-    }
-
     private func share(_ download: Download) {
         guard let url = download.fileURL, exists(download) else { return }
         ShareSheet.present(url)
-    }
-
-    private func hold(_ download: Download) {
-        guard canHold(download), let frame = frames[ObjectIdentifier(download)] else { return }
-        let items: [[HoldMenuItem]] = [
-            [HoldMenuItem(title: "Share…", systemImage: "square.and.arrow.up") { share(download) },
-             HoldMenuItem(title: "Show in Files", systemImage: "folder") { FilesApp.showDownloads() }],
-            [HoldMenuItem(title: "Delete", systemImage: "trash", closes: true) { deleting = download }],
-        ]
-        held = download
-        menu = OpenHoldMenu(id: download.id, tile: frame, fingerX: frame.minX + 40,
-                            sections: items, backdrop: ScreenPicture.take())
-    }
-
-    private func closeMenu() {
-        menu = nil
-        Task {
-            try? await Task.sleep(for: .seconds(0.2))
-            if menu == nil { held = nil }
-        }
     }
 }
 
@@ -478,73 +338,68 @@ struct DownloadsSheet: View {
 /// share (finished) or ✕ to stop (saving).
 private struct DownloadRow: View {
     let download: Download
-    let space: String
+    /// Finished, but moved or deleted in Files since.
+    let missing: Bool
+    let open: () -> Void
     let share: () -> Void
     let stop: () -> Void
 
-    private var missing: Bool {
-        download.state == .finished && !(download.fileURL.map {
-            FileManager.default.fileExists(atPath: $0.path(percentEncoded: false))
-        } ?? false)
-    }
-
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 18))
-                .foregroundStyle(Theme.muted)
-                .frame(width: 40, height: 40)
-                .background(Theme.hover, in: .rect(cornerRadius: 10, style: .continuous))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(download.fileName ?? "Download")
-                    .font(.callout)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(status)
-                    .font(.footnote)
-                    .monospacedDigit()
-                    .foregroundStyle(download.state == .failed ? Theme.danger : Theme.muted)
-                if download.state == .downloading {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Theme.holdMenuHairline)
-                            Capsule().fill(Theme.spaceColor(space))
-                                .frame(width: geo.size.width * (download.progress ?? 0))
-                                .animation(.easeOut(duration: 0.3), value: download.progress)
+            // The row's own button: a tap anywhere but ↑ or ✕ opens the file.
+            Button(action: open) {
+                HStack(spacing: 12) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 40, height: 40)
+                        .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        // `Color`, not `.primary`: inside a list's button the
+                        // style would follow the tint.
+                        Text(download.fileName ?? "Download")
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(status)
+                            .font(.footnote)
+                            .monospacedDigit()
+                            .foregroundStyle(download.state == .failed ? Theme.danger : Color.secondary)
+                        if download.state == .downloading {
+                            ProgressView(value: download.progress ?? 0)
+                                .tint(Theme.accent)
+                                .padding(.top, 4)
+                                .accessibilityHidden(true)
                         }
                     }
-                    .frame(height: 3)
-                    .padding(.top, 5)
-                    .accessibilityHidden(true)
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
+            .disabled(download.state != .finished || missing)
+            .accessibilityElement(children: .combine)
+
             if download.state == .downloading {
-                roundButton("xmark", label: "Stop Download", action: stop)
+                sideButton("xmark", label: "Stop Download", action: stop)
             } else if download.state == .finished, !missing {
-                roundButton("square.and.arrow.up", label: "Share", action: share)
+                sideButton("square.and.arrow.up", label: "Share", action: share)
             }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 12)
-        .padding(.vertical, 10)
-        .frame(minHeight: 68)
+        .padding(.vertical, 2)
     }
 
-    private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    /// Borderless, so it takes its own tap inside the row.
+    private func sideButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                .frame(width: 36, height: 36)
-                .background(Theme.hover, in: Circle())
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color.secondary)
                 // 44pt to tap.
                 .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .accessibilityLabel(label)
     }
 
@@ -574,29 +429,5 @@ private struct DownloadRow: View {
         case "pdf", "txt", "rtf", "doc", "docx", "pages", "md": return "doc.text"
         default: return "doc"
         }
-    }
-}
-
-/// A warm wash under a tapping finger, in the card's corners.
-private struct PressWash: ButtonStyle {
-    let radius: CGFloat
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(configuration.isPressed ? Theme.press : .clear)
-            }
-    }
-}
-
-private extension View {
-    /// The sheet's paper-white card: 22pt corners and a warm hairline.
-    func card() -> some View {
-        background(Theme.page, in: .rect(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Theme.holdMenuHairline, lineWidth: 0.5)
-            }
-            .clipShape(.rect(cornerRadius: 22, style: .continuous))
     }
 }

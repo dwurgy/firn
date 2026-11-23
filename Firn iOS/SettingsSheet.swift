@@ -58,7 +58,10 @@ struct SettingsSheet: View {
                 SpaceSettingsPage(store: store, spaceID: id)
             }
         }
-        .tint(Theme.accent)
+        // Ink, so no words are Glacier (David, 2026-11-23: tinted text is hard
+        // to read): the picker's value, and the choices in iOS's questions.
+        // Each switch takes its Glacier back by itself.
+        .tint(Theme.ink)
         .presentationDetents([.large])
         .task { availability = await ICloudSync.availability() }
         // Signed in or out of iCloud while Settings is open.
@@ -119,6 +122,7 @@ struct SettingsSheet: View {
                 ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
             }
             Toggle("Show suggestions as you type", isOn: $searchSuggestions)
+                .tint(Theme.accent)
         } header: {
             Text("Search")
         } footer: {
@@ -131,6 +135,7 @@ struct SettingsSheet: View {
     @ViewBuilder private var privacySection: some View {
         Section {
             Toggle("Block ads and trackers", isOn: $blocksContent)
+                .tint(Theme.accent)
                 .onChange(of: blocksContent) { BrowserEngine.setBlocking(enabled: blocksContent) }
         } header: {
             Text("Privacy")
@@ -155,6 +160,7 @@ struct SettingsSheet: View {
                 get: { syncIsOn && canSync },
                 set: { $0 ? sync.turnOn() : sync.turnOff() }
             ))
+            .tint(Theme.accent)
             .disabled(!canSync)
             // What syncs is one tap away even when the switch can't be used
             // yet, so the choice is clear before signing in.
@@ -345,6 +351,8 @@ private struct SpaceSettingsPage: View {
                     .submitLabel(.done)
                     .textInputAutocapitalization(.words)
                     .accessibilityLabel("Name")
+                    // The cursor and selection stay Glacier.
+                    .tint(Theme.accent)
                     .onChange(of: name) {
                         if name.count > Space.nameLimit { name = String(name.prefix(Space.nameLimit)) }
                         store.updateSpace(space, name: name, color: space.color)

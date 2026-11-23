@@ -270,8 +270,8 @@ extension View {
     func clearHistoryDialog(
         isPresented: Binding<Bool>, store: BrowserStore, cleared: @escaping () -> Void = {}
     ) -> some View {
-        // iOS colors the choices from the sheet's own tint: ink in History,
-        // Glacier in Settings (as its "Search with" picker).
+        // iOS colors the choices from the sheet's own tint, ink in both
+        // History and Settings.
         confirmationDialog("Clear history", isPresented: isPresented, titleVisibility: .visible) {
             ForEach(HistoryClearRange.allCases) { range in
                 Button(range.title) {

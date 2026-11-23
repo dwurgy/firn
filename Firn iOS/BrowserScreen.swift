@@ -836,6 +836,7 @@ struct BrowserScreen: View {
     /// No flight is under way: `box` places the picture again, and the
     /// flight's clock is back at its start, where the next one begins.
     private func endFlight() {
+        hold.flightClock.rest()
         guard hold.flight != nil || hold.flightTime != 0 else { return }
         withTransaction(Transaction(animation: nil)) {
             hold.flight = nil
@@ -968,8 +969,12 @@ struct BrowserScreen: View {
                 // ran ahead and the spring with it (logged in the
                 // Simulator, 2026-11-20). The flight itself places the
                 // picture and shapes its corners and strip (`Flight`).
+                // The clock itself is Firn's own, already ticking
+                // (`FlightClock`), so the page moves on the very next frame.
+                hold.flightClock.run(for: Flight.duration) { [hold] time in
+                    if hold.flight != nil, hold.flightTime != time { hold.flightTime = time }
+                }
                 withAnimation(.linear(duration: Flight.duration)) {
-                    hold.flightTime = 1
                     box = spot
                     boxRadius = cardRadius
                     band = 0
@@ -1347,6 +1352,7 @@ struct BrowserScreen: View {
         var resting = started
         resting.translation = .zero
         box = pulledBox(resting)
+        hold.flightClock.warm()
         hold.follower.start(at: box) { [hold] placed in
             if hold.box != placed { hold.box = placed }
             // Its corners and the grid behind follow its size.

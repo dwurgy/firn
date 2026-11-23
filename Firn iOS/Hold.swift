@@ -79,6 +79,8 @@ final class Hold {
     var pageFrame: CGRect = .zero
     /// Moves a page pulled up toward the finger's place (`Follower`).
     @ObservationIgnored let follower = Follower()
+    /// Runs a let-go's flight (`FlightClock`).
+    @ObservationIgnored let flightClock = FlightClock()
 
     /// The screen's own corners, for the flying page. iOS has no public
     /// way to ask, so: iPhones with a home bar about 55pt (47 to 62 across
@@ -147,6 +149,67 @@ final class Hold {
         let coming = t > 0 ? -1 : 1
         guard t != 0, neighbors.contains(where: { $0.place == coming }) else { return BarSlide(progress: 0) }
         return BarSlide(progress: t)
+    }
+}
+
+/// The clock a let-go's flight runs on: Firn's own display link, already
+/// ticking while the finger is down, so the flight's first frame is the
+/// very next one. As a SwiftUI animation the flight began about 50ms after
+/// the let-go (SwiftUI's own frames took that long to start, traced with
+/// the cable, 2026-11-22), and the page sat still until then, then leapt.
+@MainActor
+final class FlightClock: NSObject {
+    private var link: CADisplayLink?
+    private var began: CFTimeInterval?
+    private var length: CFTimeInterval = 0
+    private var step: ((CGFloat) -> Void)?
+    private var idleSince: CFTimeInterval = 0
+    /// Ticking with no flight, it stops by itself after this long.
+    private static let longestIdle: CFTimeInterval = 8
+
+    /// Ticking from now on, ready for a flight.
+    func warm() {
+        idleSince = CACurrentMediaTime()
+        guard link == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    /// A flight of `length` seconds from now: `step` gets how far through
+    /// it is, 0 to 1, on every frame, the last one exactly 1.
+    func run(for length: CFTimeInterval, step: @escaping (CGFloat) -> Void) {
+        warm()
+        self.length = length
+        self.step = step
+        began = CACurrentMediaTime()
+    }
+
+    /// No flight any more; still ticking, for the next one.
+    func rest() {
+        guard began != nil else { return }
+        began = nil
+        step = nil
+        idleSince = CACurrentMediaTime()
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+        began = nil
+        step = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        guard let began, let step else {
+            if CACurrentMediaTime() - idleSince > Self.longestIdle { stop() }
+            return
+        }
+        // Where the frame being made will be shown.
+        let time = length > 0 ? min(max((link.targetTimestamp - began) / length, 0), 1) : 1
+        if time >= 1 { stop() }
+        step(CGFloat(time))
     }
 }
 

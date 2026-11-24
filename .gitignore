@@ -68,3 +68,6 @@ DerivedData/
 
 # Licensed fonts, kept only on David's Mac (never commit: the license forbids sharing)
 PrivateFonts/
+
+# App Store screenshots and review pictures: kept on the Mac, not in the public repo
+docs/app-store/

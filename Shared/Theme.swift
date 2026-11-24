@@ -229,6 +229,10 @@ enum Theme {
     /// in light and brighter in dark, since the menu's see-through frost is
     /// mid-toned and `danger` read faint on it (David, 2026-11-09).
     static let menuDanger = Color(light: 0xA2442F, dark: 0xF2A68C)
+    /// The system's own destructive red, for a Close row in a menu that
+    /// sits beside iOS's menus (the iPhone bar's menu), so they match
+    /// (David, 2026-11-23). Terracotta stays for scam warnings.
+    static let systemDestructive = Color.red
 
     /// `a` blended toward `b` by `amount` (0 is all `a`, 1 is all `b`).
     private static func mix(_ a: UInt32, _ b: UInt32, _ amount: Double) -> UInt32 {

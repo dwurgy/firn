@@ -1257,7 +1257,7 @@ private struct PageMenuPanel: View {
         /// What VoiceOver says, when the two lines read badly together.
         var spoken: String?
         let icon: Icon
-        /// Close Tab: Firn's muted terracotta.
+        /// Close Tab: iOS's destructive red, as its own menus' (David, 2026-11-23).
         var closes = false
         /// A list of its own, which the menu turns to.
         var children: [Entry] = []
@@ -1412,7 +1412,7 @@ private struct PageMenuPanel: View {
     /// sliding finger is on it. The way back is smaller and muted.
     private func row(_ entry: Entry, lit: String?) -> some View {
         let back = entry.key == Self.backKey
-        let ink = entry.closes ? Theme.menuDanger : back ? Theme.muted : Theme.ink
+        let ink = entry.closes ? Theme.systemDestructive : back ? Theme.muted : Theme.ink
         return Button { run(entry) } label: {
             HStack(spacing: 14) {
                 Group {

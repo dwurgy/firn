@@ -123,8 +123,9 @@ struct TabOverview: View {
     @State private var name = ""
     @State private var lastDrop = Date.distantPast
     @State private var lifts = 0
-    /// The grid on iOS 27: what iOS's drag is carrying, so its X hides
-    /// (the lift is only the picture, as the menu's).
+    /// The grid on iOS 27: the cards iOS has lifted, for its menu or its
+    /// drag (`GridCards.held`), so their X hides (the lift is only the
+    /// picture).
     @State private var systemDragged: Set<UUID> = []
     /// A group folding into its cell or opening out of it (the grid on
     /// iOS 27), drawn over the list until it's done (`GroupGlideView`),
@@ -159,8 +160,8 @@ struct TabOverview: View {
     @State private var freezing: Task<Void, Never>?
     @State private var scrolling = false
     @Environment(\.colorScheme) private var colorScheme
-    /// On iOS 27, iOS's own hold menu and drag to reorder
-    /// (`OverviewGridReorder.swift`) instead of Firn's.
+    /// On iOS 27, the grid is a collection view with iOS's own hold menu
+    /// and drag (`OverviewGridCards.swift`) instead of Firn's.
     private var systemDrag: Bool {
         if #available(iOS 27, *) { return true }
         return false
@@ -272,11 +273,8 @@ struct TabOverview: View {
                 // and a gesture on its tile went with the old one, ending
                 // the drag under a finger still down (David's recording,
                 // 2026-11-08).
-                // The grid on iOS 27 leaves holds and drags to iOS.
-                .modifier(GridReorderContainer(on: systemDrag, enabled: !busy, landing: landing,
-                                               dragging: { systemDragged = $0 }) { move in
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { move.apply(to: store) }
-                })
+                // The grid on iOS 27 leaves cards and groups to its
+                // collection view (`firnHolds`).
                 // Nothing lifts while a page glides (asked as a touch comes
                 // down, so a glide starting doesn't run this body).
                 .gesture(HoldToDrag(enabled: true,
@@ -849,7 +847,7 @@ struct TabOverview: View {
     /// A tab's tile: in the list, or lifted under the finger.
     private func tile(_ tab: FirnCore.Tab, spot: @escaping (CGRect) -> Void, at index: Int? = nil,
                       moveUp: (() -> Void)? = nil, moveDown: (() -> Void)? = nil,
-                      holdMenu: (() -> [[HoldMenuItem]])? = nil, inCollection: Bool = false,
+                      inCollection: Bool = false,
                       height: CGFloat? = nil, bare: Bool = false, titled: Bool = true) -> some View {
         let onScreen = isOnScreen(tab)
         return OverviewRow(
@@ -869,7 +867,6 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: height ?? cardHeight,
-            holdMenu: holdMenu,
             carried: systemDragged.contains(tab.id),
             bare: bare,
             titled: titled,
@@ -1067,36 +1064,16 @@ struct TabOverview: View {
         let metrics = gridMetrics
         ForEach(OverviewGridRun.runs(items)) { run in
             switch run {
-            case let .tabs(after, entries):
+            case let .tabs(_, entries):
                 let tabs = entries.compactMap { entry in entry.tab.map { (index: entry.index, tab: $0) } }
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {
-                    let cards = ForEach(tabs.map { GridEntry(id: $0.tab.id, index: $0.index, tab: $0.tab) }) { entry in
-                        if let tab = entry.tab { listTile(tab, at: entry.index, of: items.count, loose: true) }
-                    }
-                    if systemDrag, #available(iOS 27, *) {
-                        cards.reorderable(collectionID: GridCollection.loose(after: after))
-                    } else {
-                        cards
+                    ForEach(tabs, id: \.tab.id) { entry in
+                        listTile(entry.tab, at: entry.index, of: items.count, loose: true)
                     }
                 }
             case let .group(index, group):
-                // Safari's room around an open group (`GroupCard.gapAbove`),
-                // on top of the list's 12pt: more under a row of titles
-                // than under another group or at the top.
                 groupTiles(group, at: index, of: items.count)
-                    .padding(.top, systemDrag && underTabs(items, at: index) ? GroupCard.gapAbove - Self.listSpacing : 0)
-                    .padding(.bottom, systemDrag ? GroupCard.gapBelow - Self.listSpacing : 0)
             }
-        }
-    }
-
-    /// Whether the item before this one is a row of cards (loose tabs or a
-    /// folded group's cell), not an open group or the list's top.
-    private func underTabs(_ items: [TabListItem], at index: Int) -> Bool {
-        guard index > 0 else { return false }
-        switch items[index - 1] {
-        case .tab: return true
-        case let .group(other): return folderCell(other)
         }
     }
 
@@ -1184,11 +1161,8 @@ struct TabOverview: View {
         // Grouped tabs move within their group, and only while it shows
         // them all: folded, the one tab showing would skip past hidden ones.
         let movable = !lifted && tabs.count == store.tabs(in: group).count
-        // The grid on iOS 27: the name line and the tabs are iOS's to hold
-        // and drag (`OverviewGridReorder.swift`).
-        let system = systemDrag && !lifted
         return VStack(spacing: 0) {
-            let line = GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
+            GroupLine(group: group, height: closed ? GroupCard.foldedHeight : GroupCard.headerHeight,
                                  naming: store.isNaming(group), toggle: { fold(group) },
                                  icons: closed ? store.tabs(in: group) : [])
                 // Hold the name line, then move, to drag the whole group
@@ -1196,47 +1170,26 @@ struct TabOverview: View {
                 // holding still opens its menu.
                 .modifier(groupMenu(group).actions)
                 .modifier(GroupMoveActions(moves: moves))
-            if system, #available(iOS 27, *) {
-                // A collection of one, so the folder can be moved by its
-                // name line, and its menu there.
-                ForEach([GridEntry(id: group.id, index: 0, tab: nil)]) { _ in
-                    line.systemHoldMenu(true, shape: RoundedRectangle(cornerRadius: GroupCard.cornerRadius,
-                                                                      style: .continuous)) {
-                        groupMenu(group).sections
-                    }
-                }
-                .reorderable(collectionID: GridCollection.line(group.id))
-            } else {
-                line
-            }
             // The header's own 44pt sets the room above the first tab.
-            let groupTabs = ForEach(tabs.enumerated().map { GridEntry(id: $0.element.id, index: $0.offset,
-                                                                      tab: $0.element) }) { entry in
-                if let tab = entry.tab {
-                    if lifted {
-                        tile(tab, spot: { _ in }, height: gridMetrics.groupCardHeight)
-                    } else {
-                        listTile(tab, at: movable ? entry.index : nil, of: tabs.count, loose: false)
-                    }
-                }
-            }
             // Opened, a folder shows its tabs as a grid inside it, the same
             // columns as outside, at Safari's spacing (`GroupCard`).
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: GroupCard.columnGap,
                                                          alignment: .top),
                                      count: gridMetrics.columns),
                       spacing: GroupCard.rowGap) {
-                if system, #available(iOS 27, *) {
-                    groupTabs.reorderable(collectionID: GridCollection.tabs(group.id))
-                } else {
-                    groupTabs
+                ForEach(Array(tabs.enumerated()), id: \.element.id) { place, tab in
+                    if lifted {
+                        tile(tab, spot: { _ in }, height: gridMetrics.groupCardHeight)
+                    } else {
+                        listTile(tab, at: movable ? place : nil, of: tabs.count, loose: false)
+                    }
                 }
             }
         }
         .padding(.horizontal, GroupCard.side)
         .padding(.bottom, closed ? 0 : GroupCard.bottom)
         // Folding cards are cut off by the tint closing over them.
-        .modifier(FoldMask(on: !system))
+        .modifier(FoldMask())
         .background {
             GroupCard(space: space)
                 // The card around the tab on screen gathers as the page
@@ -1585,11 +1538,7 @@ struct TabOverview: View {
         let up: (() -> Void)? = index.flatMap { index in index > 0 ? { move(tab, to: index - 1) } : nil }
         let down: (() -> Void)? = index.flatMap { index in index < count - 1 ? { move(tab, to: index + 1) } : nil }
         return tile(tab, spot: spot, at: index, moveUp: up, moveDown: down,
-                    holdMenu: systemDrag ? { menu(for: tab) } : nil,
                     height: loose ? nil : gridMetrics.groupCardHeight)
-            // The grid on iOS 27: iOS's own menu sits on the card's picture
-            // (`OverviewRow.holdMenu`); the drag lifts that same picture.
-            .modifier(GridDragShape(on: systemDrag))
             // Its place stays open while it's held or its menu is open
             // (see EmptyWhileHeld).
             // A card stays while its page glides (only its window empties,

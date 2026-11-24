@@ -181,21 +181,14 @@ struct GroupCard: View {
 /// folding away is cut off by the tint closing over it, not left fading
 /// under the row below (David's recording, 2026-11-06). Open at the sides
 /// and top, and a little below, so the ring around the tab on screen keeps
-/// its glow. Off in the grid on iOS 27: iOS's drag couldn't draw or drop a
-/// card inside a mask (Simulator, 2026-11-16).
+/// its glow.
 struct FoldMask: ViewModifier {
-    let on: Bool
-
     func body(content: Content) -> some View {
-        if on {
-            content.mask {
-                Rectangle()
-                    .padding(.horizontal, -24)
-                    .padding(.top, -24)
-                    .padding(.bottom, -2)
-            }
-        } else {
-            content
+        content.mask {
+            Rectangle()
+                .padding(.horizontal, -24)
+                .padding(.top, -24)
+                .padding(.bottom, -2)
         }
     }
 }

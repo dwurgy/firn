@@ -41,11 +41,8 @@ struct OverviewRow: View {
     /// A card's height, which grows with its column so the picture stays
     /// portrait (`OverviewGridMetrics`).
     var cardHeight: CGFloat = OverviewRow.cardHeight
-    /// The grid on iOS 27: iOS's own hold menu, on the picture only, as
-    /// Safari's (nil: none here).
-    var holdMenu: (() -> [[HoldMenuItem]])?
-    /// Carried by iOS's drag (the grid on iOS 27): its X hides, so the
-    /// drag lifts only the picture, as the menu does.
+    /// Held by iOS, for its menu or its drag (the grid on iOS 27): its X
+    /// hides, so only the picture lifts.
     var carried = false
     /// Drawn as a group folds or opens (`GroupGlideView`): only the
     /// picture, as it is in the folder; the X, title, and shadow fade.
@@ -67,8 +64,6 @@ struct OverviewRow: View {
     @State private var width: CGFloat = 0
     /// Set once the row is on its way out, so it takes no more touches.
     @State private var leaving = false
-    /// iOS's hold menu is open on the grid card.
-    @State private var menuOpen = false
     /// A grid card being swiped: grown, from the
     /// first move until it's eased home (or closed), as Safari's.
     @State private var swiped = false
@@ -139,12 +134,6 @@ struct OverviewRow: View {
                     .contentShape(shape)
             }
             .buttonStyle(.plain)
-            // iOS's menu lifts only the picture, as Safari's: the title, the
-            // X, and the shadow stay behind under iOS's blur (David,
-            // 2026-11-16). The drag that can follow lifts the same shape
-            // (`gridPictureShape`, on the whole tile).
-            .systemHoldMenu(holdMenu != nil, shape: shape, opened: { menuOpen = $0 },
-                            sections: holdMenu ?? { [] })
             .background {
                 // Gone while iOS lifts the picture: it sits outside what
                 // iOS lifts, so it showed as a dark copy left behind when
@@ -154,16 +143,16 @@ struct OverviewRow: View {
                     .shadow(color: reduceTransparency ? .clear : Theme.gridCardShadow,
                             radius: Self.gridShadowRadius, y: Self.gridShadowDrop)
                     .modifier(CardWindow(landing: landing, tab: tab.id, onScreen: isOnScreen,
-                                         hidden: menuOpen || carried || bare))
+                                         hidden: carried || bare))
                     .animation(.easeOut(duration: Self.bareFade), value: bare)
             }
             .overlay(alignment: .topTrailing) {
-                // Hidden while its menu is open too: a drag pulled off the
-                // menu takes its picture then, and Safari's carries no X.
+                // Hidden while iOS holds the card, for its menu or its drag
+                // (`carried`): Safari's lifted picture carries no X.
                 GridCloseButton(title: tab.title, close: close)
                     // A swiped card keeps it, riding and growing with the
                     // card, as Safari's (David's recording, 2026-11-17).
-                    .opacity(carried || menuOpen || bare ? 0 : 1)
+                    .opacity(carried || bare ? 0 : 1)
                     .animation(.easeOut(duration: Self.bareFade), value: bare)
             }
             // No ring on the tab on screen in the grid, as Safari's: the
@@ -213,12 +202,6 @@ struct OverviewRow: View {
     /// A swiped card's shadow grows with it (the cell's growth scales it).
     private static let gridShadowRadius: CGFloat = 7
     private static let gridShadowDrop: CGFloat = 5
-    /// A grid card's picture within its whole tile (the title under it
-    /// left out), for the drag's lift, so it matches the menu's.
-    static var gridPictureShape: some Shape {
-        UnevenInsetShape(bottom: gridTitleHeight,
-                         shape: RoundedRectangle(cornerRadius: gridCornerRadius, style: .continuous))
-    }
     /// The icon and title under a grid card.
     nonisolated static let gridTitleHeight: CGFloat = 30
 
@@ -345,18 +328,6 @@ struct GridCloseButton: View {
         .buttonStyle(.plain)
         .padding(-7)
         .accessibilityLabel("Close \(title)")
-    }
-}
-
-/// A shape drawn in its rect with the bottom left out.
-struct UnevenInsetShape<S: Shape>: Shape {
-    let bottom: CGFloat
-    let shape: S
-
-    func path(in rect: CGRect) -> Path {
-        var r = rect
-        r.size.height = max(r.height - bottom, 1)
-        return shape.path(in: r)
     }
 }
 

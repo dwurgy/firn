@@ -995,7 +995,7 @@ David, on davidwurgler.com: the name "resizing all over the place" as he scrolle
 
 ### Reload and the page menu's mark leave at once (David, 2026-11-23)
 
-From David's Safari recording (uniqlo.com) beside Firn's: Safari's Reload and page menu's mark are gone two or three frames after the bar starts to move; Firn's faded with the bar's own move, so they hung half faded while the bar followed a slow finger. **Fix** (`RidesThePill` in `AddressBar.swift`): shrinking, they fade out on their own clock, 0.05s; growing, and when the finger turns back, they come in with the bar's move as before (`FadesWithTheBar`). Back and the tabs button are unchanged. **Checked** in the Simulator ("Firn 15 Pro", light), every tenth frame of a recording: a follow, a turn back, a shrink, and a grow. Not run: dark, Reduce Motion (they leave with the cross-fade there, unchanged), and David's iPhone (Release installed).
+From David's Safari recording (uniqlo.com) beside Firn's: Safari's Reload and page menu's mark are gone two or three frames after the bar starts to move; Firn's faded with the bar's own move, so they hung half faded while the bar followed a slow finger. **Fix** (`RidesThePill` in `AddressBar.swift`): shrinking, they fade out on their own clock, 0.05s; growing, and when the finger turns back, they come in with the bar's move as before (`FadesWithTheBar`). Back and the tabs button are unchanged. **Checked** in the Simulator ("Firn 15 Pro", light), every tenth frame of a recording: a follow, a turn back, a shrink, and a grow. Not run: dark and Reduce Motion (they leave with the cross-fade there, unchanged). David checked it on his iPhone (2026-11-23: "good to go").
 
 ## 12. Plan: History on the iPhone (David, 2026-11-23)
 

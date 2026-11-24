@@ -993,6 +993,10 @@ David, on davidwurgler.com: the name "resizing all over the place" as he scrolle
 
 **Checked** in the Simulator ("Firn 15 Pro", an iPhone 15 Pro on iOS 27.0, light), from a recording: rest, shrink, grow, and rest again, the name the same size before and after. Not run: dark, Reduce Motion, a plain-http site, a name too long even at 0.9, and David's iPhone (Release installed).
 
+### Reload and the page menu's mark leave at once (David, 2026-11-23)
+
+From David's Safari recording (uniqlo.com) beside Firn's: Safari's Reload and page menu's mark are gone two or three frames after the bar starts to move; Firn's faded with the bar's own move, so they hung half faded while the bar followed a slow finger. **Fix** (`RidesThePill` in `AddressBar.swift`): shrinking, they fade out on their own clock, 0.05s; growing, and when the finger turns back, they come in with the bar's move as before (`FadesWithTheBar`). Back and the tabs button are unchanged. **Checked** in the Simulator ("Firn 15 Pro", light), every tenth frame of a recording: a follow, a turn back, a shrink, and a grow. Not run: dark, Reduce Motion (they leave with the cross-fade there, unchanged), and David's iPhone (Release installed).
+
 ## 12. Plan: History on the iPhone (David, 2026-11-23)
 
 Needed before submitting 1.0: the iPhone records history but had no way to see or clear it. The Mac's History window (`Firn/HistoryWindow.swift`) as one of iOS's own sheets (section 9's look: a grouped list on iOS's neutral grey, no space wash). FirnCore already does the work (`Model/HistoryWindow.swift`: `historyVisits`, `deleteHistory`, `clearHistory`, `HistoryClearRange`); the iPhone only needs the screen, `Firn iOS/HistorySheet.swift`.

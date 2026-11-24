@@ -1542,14 +1542,18 @@ struct BarSlide: Equatable {
 /// they stay in the field's row, so they ride its edges inward, smaller and
 /// lower with the site's name, as Back and Tabs ride their own pills. Removed
 /// instead, they faded where they stood while the glass slid out from under
-/// them (David's recording, 2026-11-13). They fade with the bar's own move,
-/// gone before the edges reach the name (`FadesWithTheBar`).
+/// them (David's recording, 2026-11-13). Shrinking, they're gone at once, in
+/// about three frames, as Safari's: fading with the bar's move, they hung
+/// half faded while the bar followed a slow finger (David's recordings,
+/// 2026-11-23). Growing, they come back with the bar's own move, once the
+/// edges have cleared the name (`FadesWithTheBar`).
 private struct RidesThePill: ViewModifier {
     let compact: Bool
     let drop: CGFloat
 
     func body(content: Content) -> some View {
         content
+            .animation(compact ? .easeOut(duration: 0.05) : nil) { $0.opacity(compact ? 0 : 1) }
             .modifier(FadesWithTheBar(amount: compact ? 1 : 0, gone: 0.4))
             .scaleEffect(compact ? AddressBar.compactTextScale : 1)
             .offset(y: compact ? drop : 0)

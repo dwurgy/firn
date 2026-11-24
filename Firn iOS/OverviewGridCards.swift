@@ -12,9 +12,9 @@ import UIKit
 // SwiftUI scroll view, as tall as its cards (step 3 makes it the whole
 // overview).
 
-/// A grid card's cell. Its own card hides the moment iOS starts lifting it:
-/// the lift is a picture taken just before, and on a quick drag the cell
-/// left showing under it read as a second copy (David's recording,
+/// A grid card's cell. Its own card hides the moment iOS's drag begins
+/// (`dragStateDidChange`): iOS carries a picture of it, and on a quick drag
+/// the cell left showing under it read as a second copy (David's recording,
 /// 2026-11-16).
 /// The card last touched sits above the rest, so a card swiped left to
 /// close passes over its neighbor, never under it: the collection view
@@ -113,10 +113,16 @@ final class GridCardCell: UICollectionViewCell {
 
     override func dragStateDidChange(_ state: UICollectionViewCell.DragState) {
         super.dragStateDidChange(state)
-        // Not forced instant: hidden at once, the card was gone before iOS
-        // took the picture it carries, so drags carried nothing (David's
-        // recording, 2026-11-17).
-        contentView.alpha = state == .none ? 1 : 0
+        // Hidden only once the drag has begun, and then at once. iOS takes
+        // the picture it carries from the card on screen, between the lift
+        // and the drag beginning: hidden at once as the lift began, drags
+        // carried nothing (David's recording, 2026-11-17); faded from the
+        // lift, the picture caught the card part way through its fade, a
+        // pale ghost, fainter or stronger by chance (David's recording,
+        // 2026-11-23). While it lifts, iOS's picture covers the card.
+        guard state != .lifting else { return }
+        UIView.performWithoutAnimation { contentView.alpha = state == .none ? 1 : 0 }
+        contentView.layer.removeAnimation(forKey: "opacity")
     }
 }
 

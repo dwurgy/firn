@@ -965,9 +965,9 @@ struct TabOverview: View {
                               if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
                           }
                       },
-                      move: { id, before, after in
-                          GridMove(sources: [id], collection: .loose(after: after), before: before,
-                                   inRun: inRun).apply(to: store)
+                      move: { id, before, group, after in
+                          GridMove(sources: [id], collection: group.map { .tabs($0) } ?? .loose(after: after),
+                                   before: before, inRun: inRun).apply(to: store)
                       },
                       swipe: { id, phase in
                           // The title and X go quickly as the swipe starts

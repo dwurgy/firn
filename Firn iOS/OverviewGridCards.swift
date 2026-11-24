@@ -160,9 +160,9 @@ struct GridCards: UIViewRepresentable {
     /// A card held (its menu open, or carried by the drag), so its X hides:
     /// iOS lifts only the picture, as Safari's.
     let held: (UUID, Bool) -> Void
-    /// A card let go before another (nil: at the run's end), in the run
-    /// after an open group (nil: the first run).
-    let move: (UUID, UUID?, UUID?) -> Void
+    /// A card let go before another (nil: at the end), among an open
+    /// group's tabs, or in the run after an open group (nil: the first run).
+    let move: (_ id: UUID, _ before: UUID?, _ group: UUID?, _ after: UUID?) -> Void
     /// A card's swipe to close moving on.
     let swipe: (UUID, GridSwipe) -> Void
     /// A card swiped off: its tab closes.
@@ -234,10 +234,22 @@ struct GridCards: UIViewRepresentable {
         /// What the collection view shows: the store's order, or a drop's
         /// before the store catches up.
         private var shown: [GridPlan.Section] = []
-        /// The run a card sits in (never an open group), in `shown`.
-        private func run(of id: UUID) -> Int? {
-            shown.firstIndex { $0.group == nil && $0.ids.contains(id) }
+        /// Where a card sits in `shown`: its section (a run or an open
+        /// group) and its place among that section's cards. Never a group's
+        /// name line, which is no card.
+        private func spot(of id: UUID) -> (section: Int, place: Int)? {
+            for (s, section) in shown.enumerated() {
+                if let place = section.ids.firstIndex(of: id) { return (s, place) }
+            }
+            return nil
         }
+        /// A card's cell: in an open group, the name line comes first.
+        private func path(_ section: Int, _ place: Int, in sections: [GridPlan.Section]) -> IndexPath {
+            IndexPath(item: place + (sections[section].group == nil ? 0 : 1), section: section)
+        }
+        /// The drop has saved where the card sits (`settle`), so the drag's
+        /// end doesn't save it again.
+        private var landed = false
         /// The card iOS's drag carries, until it's down: set only once the
         /// drag has really begun (`dragSessionWillBegin`).
         private var carried: UUID?
@@ -501,7 +513,10 @@ struct GridCards: UIViewRepresentable {
                 layout.groupCardHeight = new.groupCardHeight
                 layout.invalidateLayout()
             }
-            if new.sections != shown {
+            // Not while a card is carried: the drag's own order stands until
+            // it's down (a card may be between sections, in a run made for
+            // it), and the store's comes with the drop.
+            if new.sections != shown, carried == nil {
                 // Another space's cards (none shared with these) take their
                 // place at once: animated, UIKit faded the new ones in over
                 // a quarter second, a dim flash after a swipe between spaces
@@ -540,6 +555,24 @@ struct GridCards: UIViewRepresentable {
                 snapshot.appendItems(section.items, toSection: section.id)
             }
             dataSource?.apply(snapshot, animatingDifferences: animated)
+            hideOnlyCarried(in: view)
+            DispatchQueue.main.async { [weak self, weak view] in
+                if let view { self?.hideOnlyCarried(in: view) }
+            }
+        }
+
+        /// While a card is carried, its own cell is the only one hidden.
+        /// As the carried card changed sections, UIKit took another cell
+        /// for the dragged one: the tab left behind in a group vanished
+        /// until the drop (the Simulator's recording, 2026-11-24).
+        private func hideOnlyCarried(in view: UICollectionView) {
+            guard let carried else { return }
+            UIView.performWithoutAnimation {
+                for cell in view.visibleCells {
+                    guard let path = view.indexPath(for: cell) else { continue }
+                    cell.contentView.alpha = dataSource?.itemIdentifier(for: path) == carried ? 0 : 1
+                }
+            }
         }
 
         /// The card's picture, without its title: what iOS lifts, for its
@@ -624,9 +657,9 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, itemsForBeginning session: any UIDragSession,
                             at path: IndexPath) -> [UIDragItem] {
-            // A card being swiped isn't lifted. Nor, yet, a tab in an open
-            // group or a group's name line (step 3's parts 2 and 3).
-            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path), run(of: id) != nil else { return [] }
+            // A card being swiped isn't lifted. Nor, yet, a group's name
+            // line (step 3's part 3).
+            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path), spot(of: id) != nil else { return [] }
             lifting = id
             if let cell = view.cellForItem(at: path) {
                 let finger = session.location(in: view)
@@ -651,6 +684,8 @@ struct GridCards: UIViewRepresentable {
             // (the Simulator's log, 2026-11-23).
             carried = session.items.first?.localObject as? UUID ?? lifting
             lifting = nil
+            landed = false
+            stay = nil
             if let carried { parent?.held(carried, true) }
             watch(session, in: view)
         }
@@ -686,9 +721,13 @@ struct GridCards: UIViewRepresentable {
         func collectionView(_ view: UICollectionView, dragSessionDidEnd session: any UIDragSession) {
             unwatch()
             // Let go outside the grid: it stays where it was last moved to.
-            if let id = carried { settle(id); parent?.held(id, false) }
+            let down = carried
+            if let id = down, !landed { settle(id) }
             carried = nil
             lifting = nil
+            // After `carried` is cleared: the overview's redraw then takes
+            // the store's order (a group left empty is gone).
+            if let id = down { parent?.held(id, false) }
             // Every card shown again once the drop has landed: a card hidden
             // while carried stayed invisible once (David, 2026-11-17, not
             // caught on a recording), likely never told its drag had ended.
@@ -734,6 +773,10 @@ struct GridCards: UIViewRepresentable {
         private func follow(_ finger: CGPoint, in view: UICollectionView) {
             guard let id = carried else { return }
             let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
+            if cross(id, middle: middle, in: view) {
+                aim(at: nil, in: view)
+                return
+            }
             if !aimAtFolder(carrying: id, middle: middle, in: view),
                let spot = nearestSpot(to: middle, in: view) {
                 makeRoom(for: id, at: spot, in: view)
@@ -782,28 +825,129 @@ struct GridCards: UIViewRepresentable {
         private static let roomSpring = UISpringTimingParameters(mass: 1, stiffness: 900, damping: 60,
                                                                  initialVelocity: .zero)
 
-        private func makeRoom(for id: UUID, at spot: Int, in view: UICollectionView) {
-            guard let run = run(of: id), let from = shown[run].ids.firstIndex(of: id) else { return }
-            let to = min(max(spot, 0), shown[run].ids.count - 1)
+        private func makeRoom(for id: UUID, at place: Int, in view: UICollectionView) {
+            guard let (section, from) = spot(of: id) else { return }
+            let to = min(max(place, 0), shown[section].ids.count - 1)
             guard to != from else { return }
             var sections = shown
-            sections[run].ids.remove(at: from)
-            sections[run].ids.insert(id, at: to)
+            sections[section].ids.remove(at: from)
+            sections[section].ids.insert(id, at: to)
+            glide(to: sections, in: view)
+        }
+
+        private func glide(to sections: [GridPlan.Section], in view: UICollectionView) {
             let reduce = parent?.reduceMotion ?? false
             let glide = UIViewPropertyAnimator(duration: 0, timingParameters: Self.roomSpring)
             glide.addAnimations { self.show(sections, in: view, animated: !reduce) }
             glide.startAnimation()
         }
 
+        // MARK: Into and out of an open group
+
+        /// The carried card changes sections once its middle is somewhere
+        /// else: on an open group's glass (a tab only: groups never nest),
+        /// or among the loose cards over, under, or between groups. Where
+        /// no loose cards are yet (over a first group, between two groups),
+        /// a run is made for it; a run it leaves empty goes. A group it
+        /// leaves empty keeps its name line until the card is down, since
+        /// it may come back. Returns whether it moved.
+        ///
+        /// A group's glass counts from the middle of its name line down, so
+        /// the room between two groups with nothing between them (16pt)
+        /// isn't all there is to aim at.
+        private func cross(_ id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
+            guard let layout = view.collectionViewLayout as? GridPlanLayout, let plan = layout.plan,
+                  plan.sections == shown, let from = spot(of: id) else { return false }
+            let tab = parent?.kind(id) == .card
+            // An existing section, or a run to make before section `gap`.
+            var target: Int?
+            var gap = shown.count
+            var found = false
+            for (s, card) in plan.cards.enumerated() {
+                guard let card, middle.y <= card.maxY else { continue }
+                found = true
+                if middle.y >= card.minY + GroupCard.headerHeight / 2 {
+                    // A folded group over an open one stays where it is.
+                    guard tab else { return false }
+                    target = s
+                } else if s > 0, shown[s - 1].group == nil {
+                    target = s - 1
+                } else {
+                    gap = s
+                }
+                break
+            }
+            if !found, let last = shown.indices.last, shown[last].group == nil { target = last }
+            guard target != from.section else {
+                stay = nil
+                return false
+            }
+            if let stayed = stay {
+                // Its section moved out from under it as it crossed: it
+                // stays until it's carried a card's height further away.
+                let extent = plan.cards[from.section]
+                    ?? plan.frames[from.section].reduce(CGRect.null) { $0.union($1) }
+                let away = max(extent.minY - middle.y, middle.y - extent.maxY, 0)
+                if stayed < 0 || away < stayed {
+                    stay = away
+                    return false
+                }
+                if away <= stayed + layout.cardHeight { return false }
+                stay = nil
+            }
+
+            var sections = shown
+            sections[from.section].ids.remove(at: from.place)
+            var home = from.section
+            var to: Int
+            if let target {
+                to = target
+            } else {
+                let after = gap > 0 ? sections[gap - 1].group : nil
+                sections.insert(GridPlan.Section(group: nil, after: after, ids: []), at: gap)
+                to = gap
+                if gap <= home { home += 1 }
+            }
+            if sections[home].group == nil, sections[home].ids.isEmpty {
+                sections.remove(at: home)
+                if home < to { to -= 1 }
+            }
+            // Its place there: the one nearest its middle, counting the end.
+            sections[to].ids.append(id)
+            let trial = GridPlan(sections: sections, width: view.bounds.width, columns: layout.columns,
+                                 cardHeight: layout.cardHeight, groupCardHeight: layout.groupCardHeight)
+            let place = sections[to].ids.indices.min { a, b in
+                let fa = trial.frames[to][path(to, a, in: sections).item]
+                let fb = trial.frames[to][path(to, b, in: sections).item]
+                return hypot(fa.midX - middle.x, fa.midY - middle.y) < hypot(fb.midX - middle.x, fb.midY - middle.y)
+            } ?? 0
+            sections[to].ids.removeLast()
+            sections[to].ids.insert(id, at: place)
+            glide(to: sections, in: view)
+            stay = -1
+            return true
+        }
+
+        /// How far the carried card's middle was from its new section just
+        /// after it crossed into it (below zero: not yet measured), or nil
+        /// once it's inside. Crossing moves the sections themselves: a card
+        /// carried down out of a row of its own and onto a group pulls the
+        /// group up a whole row, out from under the finger, and by where
+        /// its middle then was it had already passed the group and landed
+        /// under it (the Simulator, 2026-11-24). So it stays in the section
+        /// it crossed into until its middle is inside it (the usual rules
+        /// from then on), or has gone a card's height further away.
+        private var stay: CGFloat?
+
         /// The spot whose middle is nearest a point. A spot changes only
         /// once the carried card's middle passes halfway to the next, so it
         /// can't flip back and forth.
         private func nearestSpot(to point: CGPoint, in view: UICollectionView) -> Int? {
-            guard let id = carried, let run = run(of: id) else { return nil }
+            guard let id = carried, let (section, _) = spot(of: id) else { return nil }
             let layout = view.collectionViewLayout
-            return shown[run].ids.indices.min { a, b in
-                let ca = layout.layoutAttributesForItem(at: IndexPath(item: a, section: run))?.center ?? .zero
-                let cb = layout.layoutAttributesForItem(at: IndexPath(item: b, section: run))?.center ?? .zero
+            return shown[section].ids.indices.min { a, b in
+                let ca = layout.layoutAttributesForItem(at: path(section, a, in: shown))?.center ?? .zero
+                let cb = layout.layoutAttributesForItem(at: path(section, b, in: shown))?.center ?? .zero
                 return hypot(ca.x - point.x, ca.y - point.y) < hypot(cb.x - point.x, cb.y - point.y)
             }
         }
@@ -822,8 +966,8 @@ struct GridCards: UIViewRepresentable {
         /// folder never slips out from under a tab on its way in. Returns
         /// whether the folder decided, so no room is made.
         private func aimAtFolder(carrying id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
-            guard let parent, parent.kind(id) == .card, let run = run(of: id),
-                  let from = shown[run].ids.firstIndex(of: id) else {
+            guard let parent, parent.kind(id) == .card, let (run, from) = spot(of: id),
+                  shown[run].group == nil else {
                 aim(at: nil, in: view)
                 return false
             }
@@ -873,10 +1017,10 @@ struct GridCards: UIViewRepresentable {
 
         /// Saves where the carried card now sits, once.
         private func settle(_ id: UUID) {
-            guard let run = run(of: id), let at = shown[run].ids.firstIndex(of: id),
-                  shown != parent?.sections else { return }
-            let ids = shown[run].ids
-            parent?.move(id, at + 1 < ids.count ? ids[at + 1] : nil, shown[run].after)
+            guard let (section, at) = spot(of: id), shown != parent?.sections else { return }
+            landed = true
+            let ids = shown[section].ids
+            parent?.move(id, at + 1 < ids.count ? ids[at + 1] : nil, shown[section].group, shown[section].after)
         }
 
         func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {

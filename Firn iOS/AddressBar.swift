@@ -732,6 +732,9 @@ private struct AddressField: View {
     @State private var text = ""
     /// The site's name at its resting size, so the small pill fits it.
     @State private var labelWidth: CGFloat = 0
+    /// The room the name has in the full bar, between the page menu and
+    /// Reload. Kept from the full bar only; the small pill's is its own.
+    @State private var restWidth: CGFloat = 0
     /// The address editing started from, so it alone shows no results.
     @State private var startedWith = ""
     @State private var selection: TextSelection?
@@ -971,19 +974,28 @@ private struct AddressField: View {
             .font(.callout.weight(.medium))
             .lineLimit(1)
             .allowsTightening(true)
-            .minimumScaleFactor(0.9)
+            // Only until the room is known: after that the squeeze is
+            // Firn's own (`restTextScale`).
+            .minimumScaleFactor(restWidth > 0 ? 1 : 0.9)
             .truncationMode(.tail)
             // Laid out at its resting size and then scaled down, so the words
-            // glide smaller rather than jumping to a new font size.
-            .frame(width: compact ? compactTextWidth : nil)
+            // glide smaller rather than jumping to a new font size. A name a
+            // little too long for the full bar is laid out whole there too,
+            // and scaled to fit: left to the text to shrink itself, it came
+            // back from the small pill unshrunk, against Reload, until the
+            // next move (David's recording, 2026-11-23).
+            .frame(width: compact ? compactTextWidth : restTextWidth)
             // The name and "Reader available" cross-fade, never slide.
             .id(showsReaderNote)
             .transition(.opacity.animation(.easeOut(duration: 0.3)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity)
-        .scaleEffect(compact ? AddressBar.compactTextScale : 1)
+        // The room it's given whatever the name's own width (with no least
+        // width, a wider name made this frame wider too).
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !compact { restWidth = $0 } }
+        .scaleEffect(compact ? AddressBar.compactTextScale : restTextScale)
         .offset(y: compact ? compactDrop : 0)
         .background {
             Text(verbatim: text.isEmpty ? "Search or enter address"
@@ -1053,6 +1065,20 @@ private struct AddressField: View {
     private var compactWidth: CGFloat {
         min(labelWidth * AddressBar.compactTextScale + AddressBar.compactPadding * 2,
             AddressBar.compactMaxWidth)
+    }
+
+    /// How much the name is scaled to fit the full bar: a touch smaller
+    /// for one a little too long, as Safari's (never under 0.9; past that
+    /// it's cut short). "Reader available" and a name that fits aren't.
+    private var restTextScale: CGFloat {
+        guard !showsReaderNote, restWidth > 0, labelWidth > restWidth else { return 1 }
+        return max(restWidth / labelWidth, 0.9)
+    }
+
+    /// The name's width in the full bar before `restTextScale`; nil for
+    /// one that fits, which takes the room it's given.
+    private var restTextWidth: CGFloat? {
+        restTextScale < 1 ? restWidth / restTextScale : nil
     }
 
     /// The name's width before it's scaled into the small pill.

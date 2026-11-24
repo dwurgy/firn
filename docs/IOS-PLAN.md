@@ -985,6 +985,14 @@ David checked piece 1 on his iPhone (2026-11-23: "looks good").
 **Checked** in the Simulator (iPhone 18 Pro, light), from recordings: a slow scroll down with a pause (the bar follows, stands still while the finger does, goes on, then finishes), a slow scroll up, a flick, and a follow that was let go or turned back (it glides home). The pause on the way up and Reduce Motion were not run. Release on David's iPhone, not yet judged beside Safari; the distances are from two or three samples, so they may want tuning there.
 
 
+### The name came back from the small pill too big (David's recordings, 2026-11-23)
+
+David, on davidwurgler.com: the name "resizing all over the place" as he scrolled. **Cause.** A name a little too wide for the full bar (131pt in 121pt on an iPhone 15 Pro) was shrunk to fit by the text itself (`minimumScaleFactor`). The small pill lays the name out whole, at a fixed width; coming back, the text kept that whole width and wasn't shrunk again, so it sat about 9% bigger, against Reload, until the next move laid it out afresh. Not the following itself, and not a resting finger (both tried in the Simulator, where it only showed after a shrink and a grow).
+
+**Fix** (`AddressBar.swift`, `restTextScale` and `restTextWidth`): such a name is laid out whole in the full bar too, and Firn scales it to fit (never under 0.9, then cut short, as before). The room is measured from the full bar only (`restWidth`). Both sizes now share one layout, so the name only ever glides between two scales. A plain-http name may draw a touch smaller than before: its width is an estimate that runs wide.
+
+**Checked** in the Simulator ("Firn 15 Pro", an iPhone 15 Pro on iOS 27.0, light), from a recording: rest, shrink, grow, and rest again, the name the same size before and after. Not run: dark, Reduce Motion, a plain-http site, a name too long even at 0.9, and David's iPhone (Release installed).
+
 ## 12. Plan: History on the iPhone (David, 2026-11-23)
 
 Needed before submitting 1.0: the iPhone records history but had no way to see or clear it. The Mac's History window (`Firn/HistoryWindow.swift`) as one of iOS's own sheets (section 9's look: a grouped list on iOS's neutral grey, no space wash). FirnCore already does the work (`Model/HistoryWindow.swift`: `historyVisits`, `deleteHistory`, `clearHistory`, `HistoryClearRange`); the iPhone only needs the screen, `Firn iOS/HistorySheet.swift`.

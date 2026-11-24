@@ -1492,35 +1492,32 @@ struct TabOverview: View {
             link.append(HoldMenuItem(title: "Copy Link", systemImage: "link") { UIPasteboard.general.url = url })
             keep.append(HoldMenuItem(title: "Add to Basecamp", systemImage: "mountain.2") { addToBasecamp(tab) })
         }
-        if tab.groupID == nil {
-            keep.append(HoldMenuItem(title: "New Group with This Tab", systemImage: "folder.badge.plus") {
-                newGroup(with: tab)
-            })
-        } else {
-            keep.append(HoldMenuItem(title: "Remove from Group", systemImage: "folder.badge.minus") {
+        // Move to Group reads the same in every menu: New Group first, then
+        // this space's other groups (nothing crosses between spaces), and
+        // Remove from Group last for a tab that's in one.
+        var groups = [HoldMenuItem(title: "New Group", systemImage: "folder.badge.plus") { newGroup(with: tab) }]
+        groups += store.tabGroups.filter { $0.id != tab.groupID }.map { group in
+            HoldMenuItem(title: group.name, systemImage: nil) {
+                withAnimation(glide) { store.move(tab, toEndOf: group) }
+            }
+        }
+        if tab.groupID != nil {
+            groups.append(HoldMenuItem(title: "Remove from Group", systemImage: "folder.badge.minus") {
                 withAnimation(glide) { store.takeOutOfGroup(tab) }
             })
         }
-        // Only this space's groups, so nothing crosses between spaces.
-        let others = store.tabGroups.filter { $0.id != tab.groupID }
-        if !others.isEmpty {
-            keep.append(HoldMenuItem(title: "Move to Group", systemImage: "folder", children: others.map { group in
-                HoldMenuItem(title: group.name, systemImage: nil) {
-                    withAnimation(glide) { store.move(tab, toEndOf: group) }
-                }
-            }))
-        }
-        var close = [HoldMenuItem(title: "Close Tab", systemImage: "xmark", closes: true) { self.close(tab) }]
-        if tab.groupID == nil, !store.otherLooseTabs(than: tab).isEmpty {
-            close.append(HoldMenuItem(title: "Close Other Tabs", systemImage: "xmark.square", closes: true) {
-                closeOthers(than: tab)
+        keep.append(HoldMenuItem(title: "Move to Group", systemImage: "folder", children: groups))
+        if tab.url != nil {
+            keep.append(HoldMenuItem(title: "Duplicate Tab", systemImage: "plus.square.on.square") {
+                withAnimation(glide) { _ = store.duplicate(tab) }
             })
         }
         // Any tab, not only the one on screen (David, 2026-11-17).
         let send = sending?.menuItems(for: tab) ?? []
         // No line under Copy Link, so a pointing finger's highlight glides
-        // through every row down to the Close rows (David, 2026-11-09).
-        return [link + keep + send, close]
+        // through every row down to Close Tab (David, 2026-11-09). Close
+        // Other Tabs is gone: the menu has room for 8 rows (David, 2026-11-17).
+        return [link + keep + send, [HoldMenuItem(title: "Close Tab", systemImage: "xmark", closes: true) { self.close(tab) }]]
     }
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
@@ -1574,29 +1571,6 @@ struct TabOverview: View {
             return
         }
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { _ = store.addToBasecamp(tab) }
-    }
-
-    /// Close Other Tabs: the space's other loose tabs go, and a shake
-    /// brings them all back.
-    private func closeOthers(than tab: FirnCore.Tab) {
-        let ids = store.otherLooseTabs(than: tab).map(\.id)
-        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25)) {
-            store.closeOtherLooseTabs(than: tab)
-        }
-        // Reopened with a shake: no glide with Reduce Motion, as everywhere else here.
-        let glide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
-        undoManager?.registerUndo(withTarget: store) { store in
-            MainActor.assumeIsolated {
-                withAnimation(glide) {
-                    // Last closed first, as Reopen Closed Tab does.
-                    for id in ids.reversed() {
-                        if let entry = store.recentlyClosed.first(where: { $0.id == id }) { store.reopen(entry) }
-                    }
-                }
-            }
-        }
-        undoManager?.setActionName("Close Other Tabs")
-        closes += 1
     }
 
     // MARK: - Dragging a tab to a new place

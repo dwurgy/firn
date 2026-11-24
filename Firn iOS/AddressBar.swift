@@ -55,8 +55,14 @@ struct AddressBar: View {
     @Environment(\.newSpace) private var newSpace
     /// Send to My Mac (sync step 6): the devices to send to.
     @Environment(Sending.self) private var sending: Sending?
-    /// The page menu's "Send to…" was picked: iOS's own list of devices.
-    @State private var choosingDevice = false
+    /// The menu was opened by holding the field: its own short rows, about
+    /// this tab (Copy Link, Paste and Go, Close Tab), not •••'s.
+    @State private var heldMenu = false
+    /// The row whose list the menu has turned to (Move to Group, or Send
+    /// to… with several devices), by its key; nil for the menu itself.
+    @State private var menuTurned: String?
+    /// Something is copied, as the held menu opens: Paste and Go shows.
+    @State private var canPaste = false
     @Environment(\.showDownloads) private var showDownloads
     @Environment(\.showHistory) private var showHistory
     @Environment(\.barQuiet) private var barQuiet
@@ -92,50 +98,119 @@ struct AddressBar: View {
         return store.blockingToggleName(for: page, enabled: blocksContent)
     }
 
-    /// The same choice in the page menu: the words, and the site on a
-    /// second line, since a whole "Stop Blocking on …" won't fit its width.
-    private var blockingRow: PageMenuPanel.Blocking? {
-        guard blockingName != nil, let url = page?.url, let site = BlockingSite.of(url) else { return nil }
-        return PageMenuPanel.Blocking(title: store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers",
-                                      site: site)
-    }
-    /// Find on Page, in the page menu: iOS's own find bar, on a page that loaded.
-    private var findRow: (() -> Void)? {
-        guard let page, page.url != nil, page.loadError == nil else { return nil }
-        return { page.showFind() }
-    }
-    /// The page menu's last row while the space has downloads: Downloads,
-    /// and under it how many are saving, or how many there are.
-    private var downloadsRow: PageMenuPanel.DownloadsRow? {
-        guard let showDownloads, let detail = Downloads.shared.summary(for: store.activeSpace.dataStoreID) else {
-            return nil
-        }
-        return PageMenuPanel.DownloadsRow(detail: detail) { showDownloads() }
-    }
-
-    /// The page menu's Send to My Mac, with another device known: sent at
-    /// once, or, with several, iOS's list of them.
-    private var sendRow: PageMenuPanel.SendRow? {
-        guard let sending, let tab = store.activeTab else { return nil }
-        let targets = sending.targets(for: tab)
-        guard let title = SendTarget.menuTitle(for: targets), let first = targets.first else { return nil }
-        if targets.count == 1 {
-            return PageMenuPanel.SendRow(title: title, symbol: first.kind.symbol) { sending.send(tab, to: first) }
-        }
-        return PageMenuPanel.SendRow(title: title, symbol: "laptopcomputer.and.iphone") { choosingDevice = true }
-    }
-
-    /// The page menu's Reader row, on pages that read as articles.
-    private var readingRow: PageMenuPanel.Reading? {
-        guard let page, page.isArticle || page.isReading else { return nil }
+    /// The menu's rows, in quiet sections (David, 2026-11-17, after
+    /// Safari's). From •••, about the page: Show Reader, Summarize · Share…,
+    /// Send to My Mac · Add to Basecamp, Move to Group · Find on Page, Stop
+    /// Blocking · History, Downloads. From holding the field, about this
+    /// tab, quick: Copy Link, Paste and Go, Move to Group, Send to My Mac ·
+    /// Close Tab.
+    private var menuSections: [[PageMenuPanel.Entry]] {
+        typealias Entry = PageMenuPanel.Entry
+        guard let page, let url = page.url, let tab = store.activeTab else { return [] }
         let space = space
-        // Summarize sits just under it, as Safari's, only with Apple
-        // Intelligence on; otherwise simply absent.
-        let summarize: (() -> Void)? = ArticleSummarizer.isOffered
-            ? { ReaderStyle.shared.summarize(page, space: space) } : nil
-        return PageMenuPanel.Reading(isOn: page.isReading, toggle: {
-            ReaderStyle.shared.toggle(page, space: space)
-        }, summarize: summarize)
+        // Move to Group reads the same in every menu: New Group first, then
+        // this space's other groups, and Remove from Group last for a tab
+        // that's in one. Not for a Basecamp tile.
+        var keep: [Entry] = []
+        if tab.place == .open {
+            var groups = [Entry(key: "group-new", title: "New Group", icon: .symbol("folder.badge.plus")) {
+                _ = store.newGroup(with: tab)
+            }]
+            groups += store.tabGroups.filter { $0.id != tab.groupID }.map { group in
+                Entry(key: "group-\(group.id)", title: group.name, icon: .dot) { store.move(tab, toEndOf: group) }
+            }
+            if tab.groupID != nil {
+                groups.append(Entry(key: "group-leave", title: "Remove from Group", icon: .symbol("folder.badge.minus")) {
+                    store.takeOutOfGroup(tab)
+                })
+            }
+            keep.append(Entry(key: "group", title: "Move to Group", icon: .symbol("folder"), children: groups))
+        }
+        // Send to My Mac, with another device known: sent at once, or, with
+        // several, "Send to…" and their names.
+        var send: [Entry] = []
+        if let sending {
+            let targets = sending.targets(for: tab)
+            if let title = SendTarget.menuTitle(for: targets), let first = targets.first {
+                if targets.count == 1 {
+                    send.append(Entry(key: "send", title: title, icon: .symbol(first.kind.symbol)) {
+                        sending.send(tab, to: first)
+                    })
+                } else {
+                    send.append(Entry(key: "send", title: title, icon: .symbol("laptopcomputer.and.iphone"),
+                                      children: targets.map { target in
+                        Entry(key: "send-\(target.id)", title: target.name, icon: .symbol(target.kind.symbol)) {
+                            sending.send(tab, to: target)
+                        }
+                    }))
+                }
+            }
+        }
+
+        if heldMenu {
+            var first = [Entry(key: "copy", title: "Copy Link", icon: .symbol("link")) { UIPasteboard.general.url = url }]
+            if canPaste {
+                // Reading what's copied is when iOS may ask "Allow Paste?".
+                first.append(Entry(key: "paste", title: "Paste and Go", icon: .symbol("doc.on.clipboard")) {
+                    // A copied link may come as an address alone, with no text.
+                    let copied = UIPasteboard.general.string ?? UIPasteboard.general.url?.absoluteString
+                    guard let text = copied,
+                          let url = AddressInput.url(for: text, searchEngine: SearchEngine.chosen) else { return }
+                    InsecureFallback.remember(typed: text)
+                    page.load(url)
+                })
+            }
+            return [first + keep + send, [
+                Entry(key: "close", title: "Close Tab", icon: .symbol("xmark"), closes: true) { store.close(tab) },
+            ]]
+        }
+
+        // Show Reader first, on a page that reads as an article (as
+        // Safari); Summarize just under it, only with Apple Intelligence.
+        var reading: [Entry] = []
+        if page.isArticle || page.isReading {
+            reading.append(Entry(key: "reader", title: page.isReading ? "Hide Reader" : "Show Reader", icon: .book) {
+                ReaderStyle.shared.toggle(page, space: space)
+            })
+            if ArticleSummarizer.isOffered {
+                reading.append(Entry(key: "summarize", title: "Summarize", icon: .symbol("text.line.3.summary")) {
+                    ReaderStyle.shared.summarize(page, space: space)
+                })
+            }
+        }
+        let share = [Entry(key: "share", title: "Share…", icon: .symbol("square.and.arrow.up")) { ShareSheet.present(url) }]
+        if tab.place == .open {
+            keep.insert(Entry(key: "basecamp", title: "Add to Basecamp", icon: .symbol("mountain.2")) {
+                if store.canAddToBasecamp { _ = store.addToBasecamp(tab) } else { basecampFull = true }
+            }, at: 0)
+        }
+        // Find on Page (iOS's own find bar, on a page that loaded), and the
+        // site's blocking: the words, and the site on a second line, since
+        // a whole "Stop Blocking on …" won't fit the menu's width.
+        var onPage: [Entry] = []
+        if page.loadError == nil {
+            onPage.append(Entry(key: "find", title: "Find on Page", icon: .symbol("doc.text.magnifyingglass")) {
+                page.showFind()
+            })
+        }
+        if blockingName != nil, let site = BlockingSite.of(url) {
+            let title = store.blocksContent(on: url) ? "Stop Blocking" : "Block Ads and Trackers"
+            onPage.append(Entry(key: "blocking", title: title, detail: site, spoken: "\(title) on \(site)",
+                                icon: .symbol("hand.raised")) {
+                store.toggleBlocking(on: page)
+            })
+        }
+        // History, and Downloads while the space has any: how many are
+        // saving, or how many there are.
+        var places: [Entry] = []
+        if let showHistory {
+            places.append(Entry(key: "history", title: "History", icon: .symbol("clock")) { showHistory() })
+        }
+        if let showDownloads, let detail = Downloads.shared.summary(for: store.activeSpace.dataStoreID) {
+            places.append(Entry(key: "downloads", title: "Downloads", detail: detail,
+                                icon: .symbol("arrow.down.circle")) { showDownloads() })
+        }
+        return [reading, share + send, keep, onPage, places].filter { !$0.isEmpty }
     }
 
     /// The small pill shows only at rest: typing and the page menu always
@@ -170,13 +245,11 @@ struct AddressBar: View {
         .padding(.bottom, editing.wrappedValue ? 8 : 0)
         .onChange(of: page?.url) { menuOpen = false }
         .basecampFullAlert(isPresented: $basecampFull)
-        // "Send to…" with more than one other device: each one's name.
-        .confirmationDialog("Send to…", isPresented: $choosingDevice, titleVisibility: .visible) {
-            if let sending, let tab = store.activeTab {
-                ForEach(sending.targets(for: tab)) { target in
-                    Button(target.name) { sending.send(tab, to: target) }
-                }
-            }
+        // Closed, the menu forgets how it was opened and what it had turned to.
+        .onChange(of: menuOpen) {
+            guard !menuOpen else { return }
+            heldMenu = false
+            menuTurned = nil
         }
         // History is on this device, so it's read at once; each key cancels
         // the last lookup.
@@ -460,6 +533,8 @@ struct AddressBar: View {
         // One glide, no bounce: Safari's move, made calm. Reduce Motion: the
         // menu fades in place instead (below).
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: menuOpen)
+        // The same glide as the menu turns to a row's list and back.
+        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0), value: menuTurned)
         // Forward coming or going moves the pill and the field together, in
         // one glide. Reduce Motion: a short plain ease rather than a jump
         // (it's a small change of width, not movement across the screen).
@@ -519,6 +594,9 @@ struct AddressBar: View {
             holdTracking = true
             fieldPressed = false
             holdOpenings += 1
+            // Whether something is copied never asks; reading it does.
+            canPaste = UIPasteboard.general.hasStrings || UIPasteboard.general.hasURLs
+            heldMenu = true
             menuOpen = true
         }
         guard menuOpen, let drag else { return }
@@ -582,10 +660,7 @@ struct AddressBar: View {
         let width = max(fieldSize.width, PageMenuPanel.width)
         let rightEdge = fieldSize.width + Self.spacing + BarButton.glassSize
         let x = min(0, rightEdge - width)
-        let height = PageMenuPanel.height(rows: 2 + (findRow == nil ? 0 : 1) + (blockingRow == nil ? 0 : 1) + (downloadsRow == nil ? 0 : 1)
-                                          + (showHistory == nil ? 0 : 1)
-                                          + (sendRow == nil ? 0 : 1)
-                                          + (readingRow.map { $0.summarize == nil ? 1 : 2 } ?? 0))
+        let height = PageMenuPanel.height(sections: menuSections, turned: menuTurned)
         return CGRect(x: x, y: fieldSize.height - height, width: width, height: height)
     }
 
@@ -604,13 +679,10 @@ struct AddressBar: View {
     }
 
     @ViewBuilder private func menuPanel(fieldSize: CGSize) -> some View {
-        if menuOpen, let url = page?.url, fieldSize != .zero {
+        if menuOpen, page?.url != nil, fieldSize != .zero {
             let frame = menuFrame(fieldSize: fieldSize)
-            PageMenuPanel(url: url, blocking: blockingRow, toggleBlocking: {
-                if let page { store.toggleBlocking(on: page) }
-            }, find: findRow, reading: readingRow, send: sendRow, history: showHistory.map { show in { show() } },
-               downloads: downloadsRow, pointer: menuPoint, lift: menuLift,
-               liftPoint: menuLiftPoint) { menuOpen = false }
+            PageMenuPanel(sections: menuSections, turned: $menuTurned, space: space, pointer: menuPoint,
+                          lift: menuLift, liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
                 // The words come in once the glass has mostly grown, and go
@@ -1164,188 +1236,205 @@ private struct AddressField: View {
     }
 }
 
-/// The page's own short menu, grown out of the field's glass (Firn's own,
-/// not iOS's, so it carries the bar's tint and glass). Only what people
-/// reach for, Find on Page, and Stop Blocking for the site; Zoom and
-/// Request Desktop Site join it in phase 6.
+/// The bar's own short menu, grown out of the field's glass (Firn's own,
+/// not iOS's, so it's the field's one glass changing shape). Its rows come
+/// in quiet sections, a thin line between them; a row with a list of its
+/// own (Move to Group) turns the menu to that list, with a way back on
+/// top, as Basecamp's hold menu does.
 private struct PageMenuPanel: View {
-    let url: URL
-    /// "Stop Blocking" (or "Block Ads and Trackers") and its site, or nil
-    /// when there's no site for it.
-    struct Blocking {
+    struct Entry {
+        enum Icon {
+            case symbol(String)
+            /// Reader's book.
+            case book
+            /// A dot in the space's color: a group, by its name.
+            case dot
+        }
+        let key: String
         let title: String
-        let site: String
+        /// A second, quieter line (the site, or how many downloads).
+        var detail: String?
+        /// What VoiceOver says, when the two lines read badly together.
+        var spoken: String?
+        let icon: Icon
+        /// Close Tab: Firn's muted terracotta.
+        var closes = false
+        /// A list of its own, which the menu turns to.
+        var children: [Entry] = []
+        var action: @MainActor () -> Void = {}
     }
-    let blocking: Blocking?
-    let toggleBlocking: () -> Void
-    /// Find on Page, just above Stop Blocking; nil when nothing loaded.
-    let find: (() -> Void)?
-    /// Show Reader (or Hide Reader) first, on a page that reads as an
-    /// article (David, 2026-11-13, as Safari); nil on other pages.
-    struct Reading {
-        let isOn: Bool
-        let toggle: () -> Void
-        /// Summarize, just under it; nil without Apple Intelligence.
-        let summarize: (() -> Void)?
-    }
-    let reading: Reading?
-    /// Send to My Mac, just under Share (sync step 6).
-    struct SendRow {
-        let title: String
-        let symbol: String
-        let send: () -> Void
-    }
-    let send: SendRow?
-    /// History, just above Downloads.
-    let history: (() -> Void)?
-    /// Downloads, last, while the space has any.
-    struct DownloadsRow {
-        let detail: String
-        let open: () -> Void
-    }
-    let downloads: DownloadsRow?
+
+    let sections: [[Entry]]
+    /// The row whose list is showing, by its key (the bar keeps it, since
+    /// the glass changes size with it).
+    @Binding var turned: String?
+    let space: String
     /// The finger that held the bar open, once it has slid (global).
     let pointer: CGPoint?
     /// Bumped as that finger lifts, at `liftPoint`: the row there runs.
     let lift: Int
     let liftPoint: CGPoint?
     let close: () -> Void
-    /// VoiceOver starts on the first row: Reader's, or else Share.
-    @AccessibilityFocusState private var focusedRow: Int?
+    /// VoiceOver starts on the first row.
+    @AccessibilityFocusState private var focused: String?
     /// Each row's frame (global), for the sliding finger.
     @State private var frames: [String: CGRect] = [:]
+    /// A finger resting on Move to Group: its list opens after a moment.
+    @State private var opening: Task<Void, Never>?
     @Namespace private var highlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static func parent(in sections: [[Entry]], turned: String?) -> Entry? {
+        guard let turned else { return nil }
+        return sections.joined().first { $0.key == turned && !$0.children.isEmpty }
+    }
+
+    private var parent: Entry? { Self.parent(in: sections, turned: turned) }
+
+    private static let backKey = "back"
+
+    /// The rows on screen: the menu's, or a list's with its way back.
+    private var visible: [Entry] {
+        guard let parent else { return Array(sections.joined()) }
+        return [Entry(key: Self.backKey, title: parent.title, icon: .symbol("chevron.left"))] + parent.children
+    }
 
     /// The row under a point (global), if any.
     private func key(at point: CGPoint?) -> String? {
         guard let point else { return nil }
-        return frames.first { $0.value.contains(point) }?.key
+        return visible.first { frames[$0.key]?.contains(point) == true }?.key
     }
 
-    private struct Entry {
-        let key: String
-        let title: String
-        var detail: String?
-        /// An SF Symbol, or nil for Reader's book.
-        let symbol: String?
-        let action: () -> Void
-    }
-
-    private var entries: [Entry] {
-        var list: [Entry] = []
-        if let reading {
-            list.append(Entry(key: "reader", title: reading.isOn ? "Hide Reader" : "Show Reader", symbol: nil) {
-                close()
-                reading.toggle()
-            })
-            if let summarize = reading.summarize {
-                list.append(Entry(key: "summarize", title: "Summarize", symbol: "text.line.3.summary") {
-                    close()
-                    summarize()
-                })
-            }
-        }
-        list.append(Entry(key: "share", title: "Share…", symbol: "square.and.arrow.up") { [url] in
+    /// A row tapped, or let go on: a list turns the menu, the way back
+    /// turns it back, and anything else closes the menu and runs.
+    private func run(_ entry: Entry) {
+        opening?.cancel()
+        if entry.key == Self.backKey {
+            turned = nil
+        } else if !entry.children.isEmpty {
+            turned = entry.key
+        } else {
             close()
-            ShareSheet.present(url)
-        })
-        if let send {
-            list.append(Entry(key: "send", title: send.title, symbol: send.symbol) {
-                close()
-                send.send()
-            })
+            entry.action()
         }
-        list.append(Entry(key: "copy", title: "Copy Link", symbol: "link") { [url] in
-            UIPasteboard.general.url = url
-            close()
-        })
-        if let find {
-            list.append(Entry(key: "find", title: "Find on Page", symbol: "doc.text.magnifyingglass") {
-                close()
-                find()
-            })
-        }
-        if let blocking {
-            list.append(Entry(key: "blocking", title: blocking.title, detail: blocking.site, symbol: "hand.raised") {
-                close()
-                toggleBlocking()
-            })
-        }
-        if let history {
-            list.append(Entry(key: "history", title: "History", symbol: "clock") {
-                close()
-                history()
-            })
-        }
-        if let downloads {
-            list.append(Entry(key: "downloads", title: "Downloads", detail: downloads.detail,
-                              symbol: "arrow.down.circle") {
-                close()
-                downloads.open()
-            })
-        }
-        return list
     }
 
     static let width: CGFloat = 250
     static let cornerRadius: CGFloat = 22
     private static let rowHeight: CGFloat = 48
     private static let inset: CGFloat = 6
-    static func height(rows: Int) -> CGFloat {
-        rowHeight * CGFloat(rows) + inset * 2
+    /// A section's line: a hairline with 4pt above and below.
+    private static let lineHeight: CGFloat = 9
+    /// A list longer than this scrolls (a space with many groups).
+    private static let longList = 8
+
+    static func height(sections: [[Entry]], turned: String?) -> CGFloat {
+        if let parent = parent(in: sections, turned: turned) {
+            return rowHeight * CGFloat(min(parent.children.count, longList) + 1) + lineHeight + inset * 2
+        }
+        let rows = sections.reduce(0) { $0 + $1.count }
+        return rowHeight * CGFloat(rows) + lineHeight * CGFloat(max(sections.count - 1, 0)) + inset * 2
     }
 
     var body: some View {
-        let entries = entries
         let lit = key(at: pointer)
         VStack(spacing: 0) {
-            ForEach(entries, id: \.key) { entry in
-                row(entry, lit: lit)
-                    .accessibilityFocused($focusedRow, equals: entry.key == "reader" ? 0 : entry.key == "share" ? 1 : -1)
-                    .accessibilityLabel(entry.detail.map { "\(entry.title) on \($0)" } ?? entry.title)
+            if let parent {
+                Group {
+                    row(Entry(key: Self.backKey, title: parent.title, icon: .symbol("chevron.left")), lit: lit)
+                        .accessibilityLabel("Back")
+                    line
+                    if parent.children.count > Self.longList {
+                        ScrollView { VStack(spacing: 0) { rows(parent.children, lit: lit) } }
+                            .scrollIndicators(.hidden)
+                    } else {
+                        rows(parent.children, lit: lit)
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                Group {
+                    ForEach(Array(sections.enumerated()), id: \.offset) { index, entries in
+                        if index > 0 { line }
+                        rows(entries, lit: lit)
+                    }
+                }
+                .transition(.opacity)
             }
         }
+        // The words change with a short fade as the menu turns.
+        .animation(.easeOut(duration: 0.15), value: turned)
         // The highlight glides from row to row: quick, no bounce; none
         // with Reduce Motion.
         .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: lit)
         // A tick each time the sliding finger reaches another row.
         .sensoryFeedback(trigger: lit) { _, now in now == nil ? nil : .selection }
+        // The sliding finger resting on a row with a list: it opens.
+        .onChange(of: lit) { _, now in
+            opening?.cancel()
+            guard let now, let entry = visible.first(where: { $0.key == now }), !entry.children.isEmpty else { return }
+            opening = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.5))
+                guard !Task.isCancelled, key(at: pointer) == now else { return }
+                turned = now
+            }
+        }
         // Let go on a row: it runs, as a tap. Elsewhere, the menu stays.
         .onChange(of: lift) {
-            guard let key = key(at: liftPoint), let entry = entries.first(where: { $0.key == key }) else { return }
-            entry.action()
+            guard let key = key(at: liftPoint), let entry = visible.first(where: { $0.key == key }) else { return }
+            run(entry)
         }
         .padding(Self.inset)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .accessibilityAction(.escape, close)
-        .onAppear { focusedRow = reading == nil ? 1 : 0 }
+        .accessibilityAction(.escape) { if turned != nil { turned = nil } else { close() } }
+        .onAppear { focused = visible.first?.key }
+        .onChange(of: turned) { focused = visible.first?.key }
+        .onDisappear { opening?.cancel() }
     }
 
-    /// A row with an SF Symbol, or Reader's book when `symbol` is nil; lit
-    /// while the sliding finger is on it.
+    private func rows(_ entries: [Entry], lit: String?) -> some View {
+        ForEach(entries, id: \.key) { entry in
+            row(entry, lit: lit)
+                .accessibilityLabel(entry.spoken ?? entry.detail.map { "\(entry.title), \($0)" } ?? entry.title)
+        }
+    }
+
+    private var line: some View {
+        Theme.holdMenuHairline
+            .frame(height: 1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, (Self.lineHeight - 1) / 2)
+            .accessibilityHidden(true)
+    }
+
+    /// A row: its symbol, Reader's book, or a group's dot; lit while the
+    /// sliding finger is on it. The way back is smaller and muted.
     private func row(_ entry: Entry, lit: String?) -> some View {
-        let title = entry.title, detail = entry.detail, symbol = entry.symbol
-        return Button(action: entry.action) {
+        let back = entry.key == Self.backKey
+        let ink = entry.closes ? Theme.menuDanger : back ? Theme.muted : Theme.ink
+        return Button { run(entry) } label: {
             HStack(spacing: 14) {
                 Group {
-                    if let symbol {
-                        Image(systemName: symbol).font(BarButton.symbolFont)
-                    } else {
+                    switch entry.icon {
+                    case let .symbol(name):
+                        Image(systemName: name).font(back ? .footnote.weight(.semibold) : BarButton.symbolFont)
+                    case .book:
                         ReaderBookShape()
                             .stroke(style: StrokeStyle(lineWidth: 1.9, lineJoin: .round))
                             .frame(width: 19, height: 19)
+                    case .dot:
+                        Circle().fill(Theme.spaceColor(space)).frame(width: 8, height: 8)
                     }
                 }
                 .frame(width: 24)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.body)
+                    Text(entry.title)
+                        .font(back ? .footnote.weight(.semibold) : .body)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
-                    if let detail {
+                    if let detail = entry.detail {
                         // A long site's name loses its middle, keeping both ends.
                         Text(detail)
                             .font(.footnote)
@@ -1355,13 +1444,20 @@ private struct PageMenuPanel: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if !entry.children.isEmpty {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.muted)
+                        .accessibilityHidden(true)
+                }
             }
-            .foregroundStyle(Theme.ink)
+            .foregroundStyle(ink)
             .padding(.horizontal, 14)
             .frame(height: Self.rowHeight)
             .contentShape(.rect)
         }
         .buttonStyle(MenuRowStyle())
+        .accessibilityFocused($focused, equals: entry.key)
         .background {
             if lit == entry.key {
                 RoundedRectangle(cornerRadius: Self.cornerRadius - 6, style: .continuous)

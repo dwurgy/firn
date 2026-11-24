@@ -31,6 +31,14 @@ final class GridCardCell: UICollectionViewCell {
     var raises = true {
         didSet { if !raises, raised { raised = false } }
     }
+    /// The tab or group it shows, set as it's drawn. The grid finds a
+    /// card's cell by this, never by where the cell sits: while cards are
+    /// gliding to new places (and sections come and go under a carried
+    /// card) a place can still answer with the cell that was there before.
+    /// Asked by place, the carried card's cell was now and then another
+    /// open group's name line, which was hidden and shown again, flashing
+    /// for as long as the drag went on (David's recording, 2026-11-24).
+    var item: UUID?
     /// The swiped card easing home, so a new swipe can catch it mid-way.
     var settle: UIViewPropertyAnimator?
     /// Where a swipe has moved the card. The cell itself moves, not its
@@ -200,9 +208,8 @@ struct GridCards: UIViewRepresentable {
     @MainActor static func framesOnScreen() -> [UUID: CGRect] {
         var frames: [UUID: CGRect] = [:]
         for view in live.allObjects where view.window != nil {
-            guard let source = view.dataSource as? UICollectionViewDiffableDataSource<GridSectionID, UUID> else { continue }
-            for cell in view.visibleCells {
-                guard let path = view.indexPath(for: cell), let id = source.itemIdentifier(for: path) else { continue }
+            for case let cell as GridCardCell in view.visibleCells {
+                guard let id = cell.item else { continue }
                 frames[id] = cell.convert(cell.bounds, to: nil)
             }
         }
@@ -513,6 +520,7 @@ struct GridCards: UIViewRepresentable {
             guard let parent else { return }
             cell.backgroundConfiguration = .clear()
             cell.clipsToBounds = false
+            (cell as? GridCardCell)?.item = id
             (cell as? GridCardCell)?.raises = parent.kind(id) != .line
             cell.contentConfiguration = UIHostingConfiguration {
                 parent.card(id)
@@ -563,10 +571,9 @@ struct GridCards: UIViewRepresentable {
             }
             // Cards show what's new (the X hiding, a new title, a picture),
             // and a group's cell what it now is (a folder, or its name line).
-            for path in view.indexPathsForVisibleItems {
-                if let cell = view.cellForItem(at: path), let id = dataSource?.itemIdentifier(for: path) {
-                    configure(cell, id)
-                }
+            // Each by the card it shows (`GridCardCell.item`), not its place.
+            for case let cell as GridCardCell in view.visibleCells {
+                if let id = cell.item { configure(cell, id) }
             }
             for path in view.indexPathsForVisibleSupplementaryElements(ofKind: GridPlanLayout.cardKind) {
                 if let card = view.supplementaryView(forElementKind: GridPlanLayout.cardKind, at: path)
@@ -654,9 +661,8 @@ struct GridCards: UIViewRepresentable {
         private func hideOnlyCarried(in view: UICollectionView) {
             guard let carried else { return }
             UIView.performWithoutAnimation {
-                for cell in view.visibleCells {
-                    guard let path = view.indexPath(for: cell) else { continue }
-                    cell.contentView.alpha = dataSource?.itemIdentifier(for: path) == carried ? 0 : 1
+                for case let cell as GridCardCell in view.visibleCells {
+                    cell.contentView.alpha = cell.item == carried ? 0 : 1
                 }
             }
         }
@@ -842,17 +848,33 @@ struct GridCards: UIViewRepresentable {
                 floor = 0
                 view?.invalidateIntrinsicContentSize()
             }
-            if let id = reopen {
-                reopen = nil
-                // Once the overview has the group where it landed.
-                DispatchQueue.main.async { [weak self] in self?.parent?.landed(id) }
+            // The group opens once iOS's picture has landed (`performDrop`);
+            // let go outside the grid, or if iOS never says it landed, from
+            // here.
+            DispatchQueue.main.asyncAfter(deadline: .now() + (landing ? 1.2 : 0)) { [weak self] in
+                self?.reopenNow()
             }
             // Every card shown again once the drop has landed: a card hidden
             // while carried stayed invisible once (David, 2026-11-17, not
             // caught on a recording), likely never told its drag had ended.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self, weak view] in
                 guard let self, carried == nil, let view else { return }
-                for case let cell as GridCardCell in view.visibleCells { cell.contentView.alpha = 1 }
+                // A card that has two cells shows only its own: the other is
+                // one the grid has done with and not yet taken away. A group
+                // carried by its name line left that line's cell behind,
+                // hidden, and showing "every cell" brought a scrap of the
+                // name back over the opened group for a moment (the
+                // Simulator, 2026-11-24).
+                let cells = view.visibleCells.compactMap { $0 as? GridCardCell }
+                let shared = Dictionary(grouping: cells.compactMap(\.item)) { $0 }.filter { $0.value.count > 1 }
+                for cell in cells {
+                    if let id = cell.item, shared[id] != nil {
+                        let own = dataSource?.indexPath(for: id).flatMap { view.cellForItem(at: $0) }
+                        cell.contentView.alpha = own === cell ? 1 : 0
+                    } else {
+                        cell.contentView.alpha = 1
+                    }
+                }
             }
         }
 
@@ -1130,8 +1152,8 @@ struct GridCards: UIViewRepresentable {
         }
 
         private func cell(for id: UUID, in view: UICollectionView) -> GridCardCell? {
-            guard let path = dataSource?.indexPath(for: id) else { return nil }
-            return view.cellForItem(at: path) as? GridCardCell
+            for case let cell as GridCardCell in view.visibleCells where cell.item == id { return cell }
+            return nil
         }
 
         func collectionView(_ view: UICollectionView, dropSessionDidExit session: any UIDropSession) {
@@ -1168,8 +1190,30 @@ struct GridCards: UIViewRepresentable {
                 parent?.join(id, folder)
                 return
             }
-            coordinator.drop(item.dragItem, toItemAt: home)
+            let flight = coordinator.drop(item.dragItem, toItemAt: home)
             settle(id)
+            if reopen == id {
+                // The group opens only once iOS's carried picture is down.
+                // Opened while it was still on its way, the picture's last
+                // frames were of the cell it was landing on, by then the
+                // name line again: a scrap of the name hung over the opened
+                // group (the Simulator, 2026-11-24).
+                landing = true
+                flight.addCompletion { [weak self] _ in
+                    MainActor.assumeIsolated { self?.reopenNow() }
+                }
+            }
+        }
+
+        /// iOS's picture of a carried group is on its way down.
+        private var landing = false
+
+        /// The carried group opens where it landed, once.
+        private func reopenNow() {
+            landing = false
+            guard let id = reopen else { return }
+            reopen = nil
+            parent?.landed(id)
         }
     }
 }

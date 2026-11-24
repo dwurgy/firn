@@ -1,16 +1,17 @@
 import SwiftUI
 import UIKit
 
-// TestFlight's grid, step 1 of "Plan: the grid as a UIKit collection view"
-// (docs/IOS-PLAN.md): a run of loose cards as a UIKit collection view, so
-// iOS's hold menu and iOS's drag are UIKit's own, as Safari's grid most
-// likely is. UIKit, not SwiftUI, because SwiftUI's `.reorderable()` shrank
-// the dragged card to about half and had no way to ask for full size;
-// UIKit's drop proposal does (`prefersFullSizePreview`). Each cell still
-// draws Firn's own card (`OverviewRow`, through `UIHostingConfiguration`).
+// The grid's tabs and groups as one UIKit collection view, so iOS's hold
+// menu and iOS's drag are UIKit's own, as Safari's grid most likely is
+// ("Plan: the grid as a UIKit collection view" and step 3 of "Plan: the
+// drag polish", docs/IOS-PLAN.md). UIKit, not SwiftUI, because SwiftUI's
+// `.reorderable()` shrank the dragged card to about half and had no way to
+// ask for full size; UIKit's drop proposal does (`prefersFullSizePreview`).
+// Each cell still draws Firn's own card (`OverviewRow`, through
+// `UIHostingConfiguration`). Runs of loose cards and folded groups, and
+// each open group, are sections laid out by `GridPlan`.
 // For now the collection view doesn't scroll: it sits in the overview's
-// SwiftUI scroll view, as tall as its cards (step 3 makes it the whole
-// overview).
+// SwiftUI scroll view, as tall as everything in it.
 
 /// A grid card's cell. Its own card hides the moment iOS's drag begins
 /// (`dragStateDidChange`): iOS carries a picture of it, and on a quick drag
@@ -23,6 +24,12 @@ import UIKit
 final class GridCardCell: UICollectionViewCell {
     private var raised = false {
         didSet { layer.zPosition = raised ? 1 : 0 }
+    }
+    /// Whether a touch raises it: only a card or a folder, which can pass
+    /// over its neighbors. A folder tapped open was raised by that tap, and
+    /// its cell becomes the group's name line: it comes back down.
+    var raises = true {
+        didSet { if !raises, raised { raised = false } }
     }
     /// The swiped card easing home, so a new swipe can catch it mid-way.
     var settle: UIViewPropertyAnimator?
@@ -95,11 +102,13 @@ final class GridCardCell: UICollectionViewCell {
         layer.removeAnimation(forKey: "shrink")
         layer.sublayerTransform = CATransform3DIdentity
         contentView.alpha = 1
+        raised = false
+        raises = true
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
-        if hit != nil, event?.type == .touches, !raised { raise() }
+        if hit != nil, event?.type == .touches, !raised, raises { raise() }
         return hit
     }
 
@@ -132,12 +141,18 @@ enum GridSwipe: Equatable {
     case none, swiping, easingHome
 }
 
-/// A run of loose cards in the grid, as one UIKit collection view.
+/// The grid's tabs and groups, as one UIKit collection view: runs of loose
+/// cards (and folded groups), and each open group a section of its own
+/// (`GridPlan`).
 struct GridCards: UIViewRepresentable {
-    /// The run's tabs, in order.
-    let ids: [UUID]
+    /// The runs and open groups, in order.
+    let sections: [GridPlan.Section]
     let columns: Int
     let cardHeight: CGFloat
+    /// A card's height inside an open group.
+    let groupCardHeight: CGFloat
+    /// An open group's glass card, behind its name line and tabs.
+    let groupCard: (UUID) -> AnyView
     /// A card, drawn by the overview as everywhere else.
     let card: (UUID) -> AnyView
     /// The card's hold menu, made as it opens.
@@ -145,17 +160,16 @@ struct GridCards: UIViewRepresentable {
     /// A card held (its menu open, or carried by the drag), so its X hides:
     /// iOS lifts only the picture, as Safari's.
     let held: (UUID, Bool) -> Void
-    /// A card let go before another (nil: at the run's end).
-    let move: (UUID, UUID?) -> Void
+    /// A card let go before another (nil: at the run's end), in the run
+    /// after an open group (nil: the first run).
+    let move: (UUID, UUID?, UUID?) -> Void
     /// A card's swipe to close moving on.
     let swipe: (UUID, GridSwipe) -> Void
     /// A card swiped off: its tab closes.
     let close: (UUID) -> Void
-    /// Whether a cell swipes to close: a folded group's doesn't.
-    var swipes: (UUID) -> Bool = { _ in true }
-    /// Whether a cell is a folded group, which a carried tab can be put
-    /// into (step 4 of "a folded group is one tab's size").
-    var isFolder: (UUID) -> Bool = { _ in false }
+    /// What a cell is. Only a card swipes to close; a carried tab can be
+    /// put into a folder (step 4 of "a folded group is one tab's size").
+    var kind: (UUID) -> GridCellKind = { _ in .card }
     /// A tab let go on a folded group: it goes into the group, at its end.
     var join: (UUID, UUID) -> Void = { _, _ in }
     /// A group folding or opening (`GroupGlide`'s token): cards change
@@ -178,7 +192,7 @@ struct GridCards: UIViewRepresentable {
     @MainActor static func framesOnScreen() -> [UUID: CGRect] {
         var frames: [UUID: CGRect] = [:]
         for view in live.allObjects where view.window != nil {
-            guard let source = view.dataSource as? UICollectionViewDiffableDataSource<Int, UUID> else { continue }
+            guard let source = view.dataSource as? UICollectionViewDiffableDataSource<GridSectionID, UUID> else { continue }
             for cell in view.visibleCells {
                 guard let path = view.indexPath(for: cell), let id = source.itemIdentifier(for: path) else { continue }
                 frames[id] = cell.convert(cell.bounds, to: nil)
@@ -188,8 +202,7 @@ struct GridCards: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UICollectionView {
-        let view = UICollectionView(frame: .zero, collectionViewLayout: Self.layout(columns: columns,
-                                                                                   cardHeight: cardHeight))
+        let view = UICollectionView(frame: .zero, collectionViewLayout: GridPlanLayout())
         view.backgroundColor = .clear
         view.isScrollEnabled = false
         view.clipsToBounds = false
@@ -203,42 +216,28 @@ struct GridCards: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UICollectionView, context: Context) {
-        let coordinator = context.coordinator
-        if coordinator.columns != columns || coordinator.cardHeight != cardHeight {
-            view.setCollectionViewLayout(Self.layout(columns: columns, cardHeight: cardHeight), animated: false)
-        }
-        coordinator.update(self, in: view)
+        context.coordinator.update(self, in: view)
     }
 
-    /// As tall as its rows of cards: the overview's scroll view scrolls it.
+    /// As tall as everything in it: the overview's scroll view scrolls it.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UICollectionView, context: Context) -> CGSize? {
-        let rows = (ids.count + columns - 1) / max(columns, 1)
-        let height = rows == 0 ? 0 : CGFloat(rows) * cardHeight + CGFloat(rows - 1) * OverviewGridMetrics.rowSpacing
-        return CGSize(width: proposal.width ?? 0, height: height)
-    }
-
-    /// The grid's columns, 17pt apart, rows 9pt apart (Safari's).
-    private static func layout(columns: Int, cardHeight: CGFloat) -> UICollectionViewLayout {
-        let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .fractionalWidth(1 / CGFloat(columns)),
-                                                            heightDimension: .absolute(cardHeight)))
-        let group = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .fractionalWidth(1),
-                                                                         heightDimension: .absolute(cardHeight)),
-                                                       repeatingSubitem: item, count: columns)
-        group.interItemSpacing = .fixed(OverviewGridMetrics.spacing)
-        let section = NSCollectionLayoutSection(group: group)
-        section.interGroupSpacing = OverviewGridMetrics.rowSpacing
-        return UICollectionViewCompositionalLayout(section: section)
+        let width = proposal.width ?? 0
+        let plan = GridPlan(sections: sections, width: width, columns: columns, cardHeight: cardHeight,
+                            groupCardHeight: groupCardHeight)
+        return CGSize(width: width, height: plan.height)
     }
 
     @MainActor final class Coordinator: NSObject, UICollectionViewDelegate, UICollectionViewDragDelegate,
         UICollectionViewDropDelegate, UIGestureRecognizerDelegate {
-        private var dataSource: UICollectionViewDiffableDataSource<Int, UUID>?
+        private var dataSource: UICollectionViewDiffableDataSource<GridSectionID, UUID>?
         private var parent: GridCards?
-        var columns = 0
-        var cardHeight: CGFloat = 0
         /// What the collection view shows: the store's order, or a drop's
         /// before the store catches up.
-        private var shown: [UUID] = []
+        private var shown: [GridPlan.Section] = []
+        /// The run a card sits in (never an open group), in `shown`.
+        private func run(of id: UUID) -> Int? {
+            shown.firstIndex { $0.group == nil && $0.ids.contains(id) }
+        }
         /// The card iOS's drag carries, until it's down: set only once the
         /// drag has really begun (`dragSessionWillBegin`).
         private var carried: UUID?
@@ -274,6 +273,13 @@ struct GridCards: UIViewRepresentable {
             }
             dataSource = UICollectionViewDiffableDataSource(collectionView: view) { view, path, id in
                 view.dequeueConfiguredReusableCell(using: cell, for: path, item: id)
+            }
+            let card = UICollectionView.SupplementaryRegistration<GridGroupCardView>(
+                elementKind: GridPlanLayout.cardKind) { [weak self] view, _, path in
+                self?.configure(view, section: path.section)
+            }
+            dataSource?.supplementaryViewProvider = { view, _, path in
+                view.dequeueConfiguredReusableSupplementary(using: card, for: path)
             }
             view.delegate = self
             view.dragDelegate = self
@@ -339,6 +345,7 @@ struct GridCards: UIViewRepresentable {
                     other.isEnabled = false
                     other.isEnabled = true
                 }
+                // Only cards swipe (`gestureRecognizerShouldBegin`).
                 cell.raise()
                 // Caught while easing home: it carries on from where it is.
                 cell.settle?.stopAnimation(true)
@@ -384,7 +391,7 @@ struct GridCards: UIViewRepresentable {
                 self?.parent?.close(id)
                 // Not closed after all (the overview was busy): back home.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    guard let self, shown.contains(id) else { return }
+                    guard let self, shown.contains(where: { $0.ids.contains(id) }) else { return }
                     cell.swipe = .identity
                     cell.grow(to: 1, stiffness: Self.homeStiffness)
                     cell.contentView.alpha = 1
@@ -443,7 +450,7 @@ struct GridCards: UIViewRepresentable {
                   ProcessInfo.processInfo.systemUptime - touchedAt < Self.swipeWindow else { return false }
             if let view = sideways.view as? UICollectionView,
                let path = view.indexPathForItem(at: sideways.location(in: view)),
-               let id = dataSource?.itemIdentifier(for: path), parent?.swipes(id) == false { return false }
+               let id = dataSource?.itemIdentifier(for: path), parent?.kind(id) != .card { return false }
             let speed = sideways.velocity(in: sideways.view)
             return abs(speed.x) > abs(speed.y)
         }
@@ -473,37 +480,66 @@ struct GridCards: UIViewRepresentable {
             guard let parent else { return }
             cell.backgroundConfiguration = .clear()
             cell.clipsToBounds = false
+            (cell as? GridCardCell)?.raises = parent.kind(id) != .line
             cell.contentConfiguration = UIHostingConfiguration {
                 parent.card(id)
             }.margins(.all, 0)
         }
 
+        private func configure(_ card: GridGroupCardView, section: Int) {
+            guard let parent, section < shown.count, let group = shown[section].group else { return }
+            card.show(UIHostingConfiguration { parent.groupCard(group) }.margins(.all, 0))
+        }
+
         func update(_ new: GridCards, in view: UICollectionView) {
             parent = new
-            columns = new.columns
-            cardHeight = new.cardHeight
-            // Cards show what's new (the X hiding, a new title, a picture).
+            if let layout = view.collectionViewLayout as? GridPlanLayout,
+               layout.columns != new.columns || layout.cardHeight != new.cardHeight
+               || layout.groupCardHeight != new.groupCardHeight {
+                layout.columns = new.columns
+                layout.cardHeight = new.cardHeight
+                layout.groupCardHeight = new.groupCardHeight
+                layout.invalidateLayout()
+            }
+            if new.sections != shown {
+                // Another space's cards (none shared with these) take their
+                // place at once: animated, UIKit faded the new ones in over
+                // a quarter second, a dim flash after a swipe between spaces
+                // had already slid them in (David's recording, 2026-11-23).
+                let old = Set(shown.flatMap(\.items))
+                let related = new.sections.contains { !old.isDisjoint(with: $0.items) }
+                // A card closed: the next slides into its place (0.25s, as
+                // the list). A fold or unfold lands at once: its glide is
+                // drawn over the list.
+                show(new.sections, in: view, animated: new.fold == nil && !new.reduceMotion
+                     && view.window != nil && related)
+            }
+            // Cards show what's new (the X hiding, a new title, a picture),
+            // and a group's cell what it now is (a folder, or its name line).
             for path in view.indexPathsForVisibleItems {
                 if let cell = view.cellForItem(at: path), let id = dataSource?.itemIdentifier(for: path) {
                     configure(cell, id)
                 }
             }
-            if new.ids != shown {
-                // Another space's cards (none shared with these) take their
-                // place at once: animated, UIKit faded the new ones in over
-                // a quarter second, a dim flash after a swipe between spaces
-                // had already slid them in (David's recording, 2026-11-23).
-                let related = !Set(new.ids).isDisjoint(with: shown)
-                shown = new.ids
-                var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
-                snapshot.appendSections([0])
-                snapshot.appendItems(new.ids)
-                // A card closed: the next slides into its place (0.25s, as
-                // the list). A fold or unfold lands at once: its glide is
-                // drawn over the list.
-                dataSource?.apply(snapshot, animatingDifferences: new.fold == nil && !new.reduceMotion
-                                  && view.window != nil && related)
+            for path in view.indexPathsForVisibleSupplementaryElements(ofKind: GridPlanLayout.cardKind) {
+                if let card = view.supplementaryView(forElementKind: GridPlanLayout.cardKind, at: path)
+                    as? GridGroupCardView {
+                    configure(card, section: path.section)
+                }
             }
+        }
+
+        /// The collection view shows these sections; the layout hears first,
+        /// since it's asked for the new places as the cells change.
+        private func show(_ sections: [GridPlan.Section], in view: UICollectionView, animated: Bool) {
+            shown = sections
+            (view.collectionViewLayout as? GridPlanLayout)?.sections = sections
+            var snapshot = NSDiffableDataSourceSnapshot<GridSectionID, UUID>()
+            for section in sections {
+                snapshot.appendSections([section.id])
+                snapshot.appendItems(section.items, toSection: section.id)
+            }
+            dataSource?.apply(snapshot, animatingDifferences: animated)
         }
 
         /// The card's picture, without its title: what iOS lifts, for its
@@ -511,10 +547,17 @@ struct GridCards: UIViewRepresentable {
         private func picture(_ view: UICollectionView, _ path: IndexPath) -> UIPreviewParameters? {
             guard let cell = view.cellForItem(at: path) else { return nil }
             let bounds = cell.bounds
-            let window = CGRect(x: 0, y: 0, width: bounds.width,
-                                height: max(bounds.height - OverviewRow.gridTitleHeight, 1))
             let parameters = UIPreviewParameters()
-            parameters.visiblePath = UIBezierPath(roundedRect: window, cornerRadius: OverviewRow.gridCornerRadius)
+            if let id = dataSource?.itemIdentifier(for: path), parent?.kind(id) == .line {
+                // A group's name line lifts whole, rounded as its card.
+                parameters.visiblePath = UIBezierPath(roundedRect: bounds,
+                                                      cornerRadius: min(GroupCard.cornerRadius, bounds.height / 2))
+            } else {
+                let window = CGRect(x: 0, y: 0, width: bounds.width,
+                                    height: max(bounds.height - OverviewRow.gridTitleHeight, 1))
+                parameters.visiblePath = UIBezierPath(roundedRect: window,
+                                                      cornerRadius: OverviewRow.gridCornerRadius)
+            }
             parameters.backgroundColor = .clear
             return parameters
         }
@@ -581,8 +624,9 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, itemsForBeginning session: any UIDragSession,
                             at path: IndexPath) -> [UIDragItem] {
-            // A card being swiped isn't lifted.
-            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path) else { return [] }
+            // A card being swiped isn't lifted. Nor, yet, a tab in an open
+            // group or a group's name line (step 3's parts 2 and 3).
+            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path), run(of: id) != nil else { return [] }
             lifting = id
             if let cell = view.cellForItem(at: path) {
                 let finger = session.location(in: view)
@@ -739,17 +783,15 @@ struct GridCards: UIViewRepresentable {
                                                                  initialVelocity: .zero)
 
         private func makeRoom(for id: UUID, at spot: Int, in view: UICollectionView) {
-            guard let from = shown.firstIndex(of: id) else { return }
-            let to = min(max(spot, 0), shown.count - 1)
+            guard let run = run(of: id), let from = shown[run].ids.firstIndex(of: id) else { return }
+            let to = min(max(spot, 0), shown[run].ids.count - 1)
             guard to != from else { return }
-            shown.remove(at: from)
-            shown.insert(id, at: to)
-            var snapshot = NSDiffableDataSourceSnapshot<Int, UUID>()
-            snapshot.appendSections([0])
-            snapshot.appendItems(shown)
+            var sections = shown
+            sections[run].ids.remove(at: from)
+            sections[run].ids.insert(id, at: to)
             let reduce = parent?.reduceMotion ?? false
             let glide = UIViewPropertyAnimator(duration: 0, timingParameters: Self.roomSpring)
-            glide.addAnimations { self.dataSource?.apply(snapshot, animatingDifferences: !reduce) }
+            glide.addAnimations { self.show(sections, in: view, animated: !reduce) }
             glide.startAnimation()
         }
 
@@ -757,10 +799,11 @@ struct GridCards: UIViewRepresentable {
         /// once the carried card's middle passes halfway to the next, so it
         /// can't flip back and forth.
         private func nearestSpot(to point: CGPoint, in view: UICollectionView) -> Int? {
+            guard let id = carried, let run = run(of: id) else { return nil }
             let layout = view.collectionViewLayout
-            return shown.indices.min { a, b in
-                let ca = layout.layoutAttributesForItem(at: IndexPath(item: a, section: 0))?.center ?? .zero
-                let cb = layout.layoutAttributesForItem(at: IndexPath(item: b, section: 0))?.center ?? .zero
+            return shown[run].ids.indices.min { a, b in
+                let ca = layout.layoutAttributesForItem(at: IndexPath(item: a, section: run))?.center ?? .zero
+                let cb = layout.layoutAttributesForItem(at: IndexPath(item: b, section: run))?.center ?? .zero
                 return hypot(ca.x - point.x, ca.y - point.y) < hypot(cb.x - point.x, cb.y - point.y)
             }
         }
@@ -779,13 +822,14 @@ struct GridCards: UIViewRepresentable {
         /// folder never slips out from under a tab on its way in. Returns
         /// whether the folder decided, so no room is made.
         private func aimAtFolder(carrying id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
-            guard let parent, !parent.isFolder(id), let from = shown.firstIndex(of: id) else {
+            guard let parent, parent.kind(id) == .card, let run = run(of: id),
+                  let from = shown[run].ids.firstIndex(of: id) else {
                 aim(at: nil, in: view)
                 return false
             }
             let layout = view.collectionViewLayout
-            for (spot, other) in shown.enumerated() where other != id && parent.isFolder(other) {
-                guard let frame = layout.layoutAttributesForItem(at: IndexPath(item: spot, section: 0))?.frame,
+            for (spot, other) in shown[run].ids.enumerated() where other != id && parent.kind(other) == .folder {
+                guard let frame = layout.layoutAttributesForItem(at: IndexPath(item: spot, section: run))?.frame,
                       frame.contains(middle) else { continue }
                 let inner = frame.insetBy(dx: frame.width / 4, dy: frame.height / 4)
                 if inner.contains(middle) {
@@ -829,14 +873,16 @@ struct GridCards: UIViewRepresentable {
 
         /// Saves where the carried card now sits, once.
         private func settle(_ id: UUID) {
-            guard let at = shown.firstIndex(of: id), shown != parent?.ids else { return }
-            parent?.move(id, at + 1 < shown.count ? shown[at + 1] : nil)
+            guard let run = run(of: id), let at = shown[run].ids.firstIndex(of: id),
+                  shown != parent?.sections else { return }
+            let ids = shown[run].ids
+            parent?.move(id, at + 1 < ids.count ? ids[at + 1] : nil, shown[run].after)
         }
 
         func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {
             unwatch()
             guard let item = coordinator.items.first, let id = item.dragItem.localObject as? UUID,
-                  let at = shown.firstIndex(of: id) else { return }
+                  let home = dataSource?.indexPath(for: id) else { return }
             if let folder = aimed, let path = dataSource?.indexPath(for: folder),
                let cell = view.cellForItem(at: path) {
                 // The carried picture shrinks into the folder's middle, about
@@ -851,7 +897,7 @@ struct GridCards: UIViewRepresentable {
                 parent?.join(id, folder)
                 return
             }
-            coordinator.drop(item.dragItem, toItemAt: IndexPath(item: at, section: 0))
+            coordinator.drop(item.dragItem, toItemAt: home)
             settle(id)
         }
     }

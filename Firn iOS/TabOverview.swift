@@ -676,22 +676,22 @@ struct TabOverview: View {
         again(asked: true)
     }
 
-    /// A loose card's run in UIKit's grid and the card's place in it: how
-    /// far below the run's top, and how tall. Loose cards are cells of a
+    /// UIKit's grid in the list and a card's place in it (`GridPlan`): how
+    /// far below the grid's top, and how tall. Its cards are cells of a
     /// collection view, which the SwiftUI list can't look up by id, and a
     /// cell out of view has no spot of its own: the last of many tabs was
     /// never scrolled to, so the overview opened at the top with no card
-    /// for its page to land in (Simulator, 2026-11-19). Nil for a grouped
-    /// tab, a tile, and the SwiftUI grid, whose cards the list knows.
+    /// for its page to land in (Simulator, 2026-11-19). Nil for a tab in a
+    /// folded group, a tile, and the SwiftUI grid, whose cards the list
+    /// knows.
     private func looseSpot(of id: UUID) -> (run: String, top: CGFloat, height: CGFloat)? {
         guard systemDrag else { return nil }
         let metrics = gridMetrics
-        for run in OverviewGridRun.runs(shownItems, inRun: { folderCell($0) }) {
-            guard case let .tabs(_, entries) = run, let place = entries.firstIndex(where: { $0.id == id }) else { continue }
-            let row = CGFloat(place / max(metrics.columns, 1))
-            return (run.id, row * (metrics.cardHeight + OverviewGridMetrics.rowSpacing), metrics.cardHeight)
-        }
-        return nil
+        let plan = GridPlan(sections: gridSections(shownItems),
+                            width: laidSize.width - 2 * OverviewGridMetrics.margin, columns: metrics.columns,
+                            cardHeight: metrics.cardHeight, groupCardHeight: metrics.groupCardHeight)
+        guard store.openTabs.contains(where: { $0.id == id }), let frame = plan.frame(of: id) else { return nil }
+        return (Self.gridID, frame.minY, frame.height)
     }
 
     /// The list's position, as `scrollPosition` takes a point, for an
@@ -885,64 +885,176 @@ struct TabOverview: View {
     /// grid only), an open group a full-width folder card, its tabs a grid
     /// inside it.
     @ViewBuilder private func gridTiles(_ items: [TabListItem]) -> some View {
+        if systemDrag {
+            systemGrid(items)
+        } else {
+            looseGrids(items)
+        }
+    }
+
+    /// The grid's one collection view in the list, by this name: for
+    /// scrolling to it, and for where it's laid out (`spots.runs`).
+    private static let gridID = "grid"
+
+    /// The grid's sections: each run of loose cards and folded groups, and
+    /// each open group with the tabs it shows.
+    private func gridSections(_ items: [TabListItem]) -> [GridPlan.Section] {
+        OverviewGridRun.runs(items, inRun: { folderCell($0) }).map { run in
+            switch run {
+            case let .tabs(after, entries): GridPlan.Section(group: nil, after: after, ids: entries.map(\.id))
+            case let .group(_, group): GridPlan.Section(group: group.id, after: nil, ids: shownTabs(in: group).map(\.id))
+            }
+        }
+    }
+
+    /// The grid as one UIKit collection view (`OverviewGridCards.swift`):
+    /// iOS's menu and iOS's drag, the card full size as it's carried. Loose
+    /// cards and folded groups in runs, each open group a section: its name
+    /// line, its tabs, and its glass card behind them.
+    @ViewBuilder private func systemGrid(_ items: [TabListItem]) -> some View {
         let metrics = gridMetrics
         let inRun: @MainActor (TabGroup) -> Bool = { group in folderCell(group) }
-        ForEach(OverviewGridRun.runs(items, inRun: { systemDrag && folderCell($0) })) { run in
-            switch run {
-            case let .tabs(after, entries) where systemDrag:
-                // UIKit's collection view: iOS's menu and iOS's drag, the
-                // card full size as it's carried (`OverviewGridCards.swift`).
-                let byID = Dictionary(entries.map { ($0.id, $0) }) { a, _ in a }
-                GridCards(ids: entries.map(\.id), columns: metrics.columns, cardHeight: metrics.cardHeight,
-                          card: { id in
-                              guard let entry = byID[id] else { return AnyView(EmptyView()) }
-                              if let group = entry.group {
-                                  return AnyView(folder(group, at: entry.index, of: items.count))
-                              }
-                              guard let tab = entry.tab else { return AnyView(EmptyView()) }
-                              return AnyView(gridCell(tab, at: entry.index, of: items.count))
-                          },
-                          menu: { id in
-                              guard let entry = byID[id] else { return [] }
-                              if let group = entry.group { return groupMenu(group).sections }
-                              return entry.tab.map { menu(for: $0) } ?? []
-                          },
-                          held: { id, held in
-                              withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
-                                  if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
-                              }
-                          },
-                          move: { id, before in
-                              GridMove(sources: [id], collection: .loose(after: after), before: before,
-                                       inRun: inRun).apply(to: store)
-                          },
-                          swipe: { id, phase in
-                              // The title and X go quickly as the swipe starts
-                              // and come back on the card's ease home.
-                              let ease: Animation? = switch phase {
-                              case .swiping: .smooth(duration: 0.2)
-                              case .easingHome: .smooth(duration: 0.45)
-                              case .none: nil
-                              }
-                              withAnimation(reduceMotion ? nil : ease) {
-                                  gridSwipes[id] = phase == .none ? nil : phase
-                              }
-                          },
-                          close: { id in
-                              if !busy, let tab = byID[id]?.tab { close(tab) }
-                          },
-                          swipes: { id in byID[id]?.tab != nil },
-                          isFolder: { id in byID[id]?.group != nil },
-                          join: { id, groupID in
-                              guard let tab = byID[id]?.tab, let group = byID[groupID]?.group else { return }
-                              store.move(tab, toGroup: group, at: store.tabs(in: group).count)
-                          },
-                          fold: glide?.token,
-                          reduceMotion: reduceMotion)
-                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.runs[run.id] = $0 }
-                // A run that comes or goes with a fold: its cards glide on
-                // their own (`GridCards`), so the run itself doesn't fade.
+        let runs = OverviewGridRun.runs(items, inRun: inRun)
+        let sections = gridSections(items)
+        // What each cell is: a loose card or folded group, an open group's
+        // name line, or a tab in an open group.
+        let loose: [UUID: GridRunItem] = Dictionary(runs.flatMap { run -> [(UUID, GridRunItem)] in
+            if case let .tabs(_, entries) = run { return entries.map { ($0.id, $0) } }
+            return []
+        }) { a, _ in a }
+        let open: [UUID: (index: Int, group: TabGroup, tabs: [FirnCore.Tab])] = Dictionary(
+            runs.compactMap { run -> (UUID, (index: Int, group: TabGroup, tabs: [FirnCore.Tab]))? in
+                if case let .group(index, group) = run { return (group.id, (index, group, shownTabs(in: group))) }
+                return nil
+            }) { a, _ in a }
+        let grouped: [UUID: (tab: FirnCore.Tab, place: Int, group: UUID)] = Dictionary(
+            open.values.flatMap { entry in
+                entry.tabs.enumerated().map { ($0.element.id, (tab: $0.element, place: $0.offset, group: entry.group.id)) }
+            }) { a, _ in a }
+        if !sections.isEmpty {
+            GridCards(sections: sections, columns: metrics.columns, cardHeight: metrics.cardHeight,
+                      groupCardHeight: metrics.groupCardHeight,
+                      groupCard: { id in
+                          guard let entry = open[id] else { return AnyView(EmptyView()) }
+                          return AnyView(groupGlass(entry.group, tabs: entry.tabs))
+                      },
+                      card: { id in
+                          if let entry = open[id] {
+                              return AnyView(groupLine(entry.group, tabs: entry.tabs, at: entry.index, of: items.count))
+                          }
+                          if let entry = grouped[id], let group = open[entry.group] {
+                              return AnyView(groupedCell(entry.tab, at: entry.place, in: group.group,
+                                                         showing: group.tabs.count))
+                          }
+                          guard let entry = loose[id] else { return AnyView(EmptyView()) }
+                          if let group = entry.group {
+                              return AnyView(folder(group, at: entry.index, of: items.count))
+                          }
+                          guard let tab = entry.tab else { return AnyView(EmptyView()) }
+                          return AnyView(gridCell(tab, at: entry.index, of: items.count))
+                      },
+                      menu: { id in
+                          if let entry = open[id] { return groupMenu(entry.group).sections }
+                          if let entry = grouped[id] { return menu(for: entry.tab) }
+                          guard let entry = loose[id] else { return [] }
+                          if let group = entry.group { return groupMenu(group).sections }
+                          return entry.tab.map { menu(for: $0) } ?? []
+                      },
+                      held: { id, held in
+                          withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+                              if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
+                          }
+                      },
+                      move: { id, before, after in
+                          GridMove(sources: [id], collection: .loose(after: after), before: before,
+                                   inRun: inRun).apply(to: store)
+                      },
+                      swipe: { id, phase in
+                          // The title and X go quickly as the swipe starts
+                          // and come back on the card's ease home.
+                          let ease: Animation? = switch phase {
+                          case .swiping: .smooth(duration: 0.2)
+                          case .easingHome: .smooth(duration: 0.45)
+                          case .none: nil
+                          }
+                          withAnimation(reduceMotion ? nil : ease) {
+                              gridSwipes[id] = phase == .none ? nil : phase
+                          }
+                      },
+                      close: { id in
+                          if !busy, let tab = loose[id]?.tab ?? grouped[id]?.tab { close(tab) }
+                      },
+                      kind: { id in
+                          if open[id] != nil { return .line }
+                          return loose[id]?.group != nil ? .folder : .card
+                      },
+                      join: { id, groupID in
+                          guard let tab = loose[id]?.tab, let group = loose[groupID]?.group else { return }
+                          store.move(tab, toGroup: group, at: store.tabs(in: group).count)
+                      },
+                      fold: glide?.token,
+                      reduceMotion: reduceMotion)
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.runs[Self.gridID] = $0 }
+                .id(Self.gridID)
+                // Its cards glide on their own (`GridCards`), so the grid
+                // itself never fades.
                 .transition(.identity)
+        }
+    }
+
+    /// An open group's name line in UIKit's grid. A tap folds the group;
+    /// holding it is iOS's menu, from the grid.
+    private func groupLine(_ group: TabGroup, tabs: [FirnCore.Tab], at index: Int, of count: Int) -> some View {
+        GroupLine(group: group, height: GroupCard.headerHeight, naming: store.isNaming(group),
+                         toggle: { fold(group) })
+            .modifier(groupMenu(group).actions)
+            .modifier(GroupMoveActions(moves: GroupMoves(
+                up: index > 0 ? { move(group, to: index - 1) } : nil,
+                down: index < count - 1 ? { move(group, to: index + 1) } : nil)))
+            .padding(.horizontal, GroupCard.side)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Folding or opening, it's drawn over the list (`glideDrawing`).
+            .opacity(glide?.id == group.id ? 0 : 1)
+    }
+
+    /// An open group's glass card in UIKit's grid, behind its name line and
+    /// its tabs (a view of its own there, `GridPlanLayout.cardKind`).
+    private func groupGlass(_ group: TabGroup, tabs: [FirnCore.Tab]) -> some View {
+        GroupCard(space: space)
+            // Gathers as the page shrinks into its card (`groupCard`).
+            .modifier(LandingGroupFade(landing: landing, holdsOnScreen: tabs.contains(where: isOnScreen)))
+            .animation(.easeInOut(duration: 0.4), value: space)
+            // Where the group is: to fold it from (`glidePlan`), and to
+            // bring it to the middle as it opens (`center`).
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                spots.frames[group.id] = frame
+                spots.openGroups[group.id] = frame
+            }
+            .opacity(glide?.id == group.id ? 0 : 1)
+    }
+
+    /// A tab in an open group, in UIKit's grid: a little shorter than a
+    /// loose card, its menu and swipe the collection view's.
+    private func groupedCell(_ tab: FirnCore.Tab, at place: Int, in group: TabGroup, showing count: Int) -> some View {
+        let spot: (CGRect) -> Void = { frame in
+            spots.frames[tab.id] = frame
+            spots.cards.insert(tab.id)
+        }
+        // Tabs move within their group only while it shows them all.
+        let movable = count == store.tabs(in: group).count
+        return tile(tab, spot: spot, at: movable ? place : nil,
+                    moveUp: movable && place > 0 ? { move(tab, to: place - 1) } : nil,
+                    moveDown: movable && place < count - 1 ? { move(tab, to: place + 1) } : nil,
+                    inCollection: true, height: gridMetrics.groupCardHeight)
+            .opacity(glide?.id == group.id || glide?.hidden.contains(tab.id) == true ? 0 : 1)
+    }
+
+    /// The grid without UIKit's collection view (before iOS 27): each run
+    /// of loose tabs a grid, each group a card, with Firn's own menu and drag.
+    @ViewBuilder private func looseGrids(_ items: [TabListItem]) -> some View {
+        let metrics = gridMetrics
+        ForEach(OverviewGridRun.runs(items)) { run in
+            switch run {
             case let .tabs(after, entries):
                 let tabs = entries.compactMap { entry in entry.tab.map { (index: entry.index, tab: $0) } }
                 LazyVGrid(columns: metrics.gridItems, spacing: OverviewGridMetrics.rowSpacing) {

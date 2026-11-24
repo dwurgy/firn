@@ -991,7 +991,7 @@ David, on davidwurgler.com: the name "resizing all over the place" as he scrolle
 
 **Fix** (`AddressBar.swift`, `restTextScale` and `restTextWidth`): such a name is laid out whole in the full bar too, and Firn scales it to fit (never under 0.9, then cut short, as before). The room is measured from the full bar only (`restWidth`). Both sizes now share one layout, so the name only ever glides between two scales. A plain-http name may draw a touch smaller than before: its width is an estimate that runs wide.
 
-**Checked** in the Simulator ("Firn 15 Pro", an iPhone 15 Pro on iOS 27.0, light), from a recording: rest, shrink, grow, and rest again, the name the same size before and after. Not run: dark, Reduce Motion, a plain-http site, a name too long even at 0.9, and David's iPhone (Release installed).
+**Checked** in the Simulator ("Firn 15 Pro", an iPhone 15 Pro on iOS 27.0, light), from a recording: rest, shrink, grow, and rest again, the name the same size before and after. Not run: dark, Reduce Motion, a plain-http site, and a name too long even at 0.9. David checked it on his iPhone (2026-11-23: "name is good").
 
 ### Reload and the page menu's mark leave at once (David, 2026-11-23)
 

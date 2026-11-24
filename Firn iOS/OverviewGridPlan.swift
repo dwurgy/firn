@@ -184,6 +184,12 @@ final class GridPlanLayout: UICollectionViewLayout {
 final class GridGroupCardView: UICollectionReusableView {
     private var content: (UIView & UIContentView)?
 
+    /// Hidden at once when its group was picked up by its name line.
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        alpha = 1
+    }
+
     func show(_ configuration: some UIContentConfiguration) {
         isUserInteractionEnabled = false
         clipsToBounds = false

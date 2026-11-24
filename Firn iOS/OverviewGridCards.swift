@@ -172,6 +172,11 @@ struct GridCards: UIViewRepresentable {
     var kind: (UUID) -> GridCellKind = { _ in .card }
     /// A tab let go on a folded group: it goes into the group, at its end.
     var join: (UUID, UUID) -> Void = { _, _ in }
+    /// An open group picked up by its name line: it folds at once, with no
+    /// glide of its own, and is carried as a folded group is.
+    var carry: (UUID) -> Void = { _ in }
+    /// That group is down: it opens where it landed.
+    var landed: (UUID) -> Void = { _ in }
     /// A group folding or opening (`GroupGlide`'s token): cards change
     /// grids at once, with no fade or slide of the collection view's own,
     /// since the glide is drawn over the list (`GroupGlideView`).
@@ -247,6 +252,14 @@ struct GridCards: UIViewRepresentable {
         private func path(_ section: Int, _ place: Int, in sections: [GridPlan.Section]) -> IndexPath {
             IndexPath(item: place + (sections[section].group == nil ? 0 : 1), section: section)
         }
+        /// An open group carried by its name line (part 3 of step 3): it
+        /// folds as its drag begins (`awaiting` until the overview shows it
+        /// folded) and opens again once it's down (`reopen`). iOS lifted
+        /// only the name line, so once the group's cell is its folder card
+        /// the drag is handed a picture of that (`carryFolder`).
+        private var reopen: UUID?
+        private var awaiting: UUID?
+        private weak var carriedItem: UIDragItem?
         /// The drop has saved where the card sits (`settle`), so the drag's
         /// end doesn't save it again.
         private var landed = false
@@ -516,7 +529,18 @@ struct GridCards: UIViewRepresentable {
             // Not while a card is carried: the drag's own order stands until
             // it's down (a card may be between sections, in a run made for
             // it), and the store's comes with the drop.
-            if new.sections != shown, carried == nil {
+            // Except a group picked up by its name line, now folded.
+            let folded = awaiting.map { id in !new.sections.contains { $0.group == id } } ?? false
+            if folded, let id = awaiting, let section = shown.firstIndex(where: { $0.group == id }) {
+                // Its tabs and glass go at once, the cards around closing
+                // up: fading, the glass went dark grey on its way out (the
+                // Simulator, 2026-11-24).
+                view.supplementaryView(forElementKind: GridPlanLayout.cardKind,
+                                       at: IndexPath(item: 0, section: section))?.alpha = 0
+                for tab in shown[section].ids { cell(for: tab, in: view)?.contentView.alpha = 0 }
+            }
+            if folded { awaiting = nil }
+            if new.sections != shown, carried == nil || folded {
                 // Another space's cards (none shared with these) take their
                 // place at once: animated, UIKit faded the new ones in over
                 // a quarter second, a dim flash after a swipe between spaces
@@ -540,6 +564,40 @@ struct GridCards: UIViewRepresentable {
                 if let card = view.supplementaryView(forElementKind: GridPlanLayout.cardKind, at: path)
                     as? GridGroupCardView {
                     configure(card, section: path.section)
+                }
+            }
+            // A redrawn cell comes back showing: the carried one hides again.
+            hideOnlyCarried(in: view)
+            if folded {
+                // A turn later, once the folder card has drawn in its cell.
+                DispatchQueue.main.async { [weak self, weak view] in
+                    if let view { self?.carryFolder(in: view) }
+                }
+            }
+        }
+
+        /// The drag carries a picture of the group's folder card from here
+        /// on, taken from its own cell (hidden, as any carried card's): the
+        /// same picture iOS carries for a group that was folded all along.
+        /// A folder card drawn apart from the screen came out as a flat
+        /// grey slab, its glass with nothing behind it (the Simulator,
+        /// 2026-11-24).
+        private func carryFolder(in view: UICollectionView) {
+            guard let id = carried, let item = carriedItem, let cell = cell(for: id, in: view) else { return }
+            view.layoutIfNeeded()
+            cell.contentView.alpha = 1
+            let shot = cell.snapshotView(afterScreenUpdates: true)
+            cell.contentView.alpha = 0
+            guard let shot else { return }
+            let window = CGRect(x: 0, y: 0, width: cell.bounds.width,
+                                height: max(cell.bounds.height - OverviewRow.gridTitleHeight, 1))
+            item.previewProvider = {
+                MainActor.assumeIsolated {
+                    let parameters = UIDragPreviewParameters()
+                    parameters.visiblePath = UIBezierPath(roundedRect: window,
+                                                          cornerRadius: OverviewRow.gridCornerRadius)
+                    parameters.backgroundColor = .clear
+                    return UIDragPreview(view: shot, parameters: parameters)
                 }
             }
         }
@@ -657,9 +715,10 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, itemsForBeginning session: any UIDragSession,
                             at path: IndexPath) -> [UIDragItem] {
-            // A card being swiped isn't lifted. Nor, yet, a group's name
-            // line (step 3's part 3).
-            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path), spot(of: id) != nil else { return [] }
+            // A card being swiped isn't lifted.
+            guard swiping == nil, let id = dataSource?.itemIdentifier(for: path), let parent else { return [] }
+            let line = parent.kind(id) == .line
+            guard line || spot(of: id) != nil else { return [] }
             lifting = id
             if let cell = view.cellForItem(at: path) {
                 let finger = session.location(in: view)
@@ -667,10 +726,13 @@ struct GridCards: UIViewRepresentable {
             } else {
                 grabOffset = .zero
             }
-            parent?.held(id, true)
+            parent.held(id, true)
             // Firn's own: never to another app (no address handed over).
             let item = UIDragItem(itemProvider: NSItemProvider())
             item.localObject = id
+            // A name line is carried as its group's folder card, which
+            // sits under the finger wherever the line was grabbed.
+            if line { grabOffset = .zero }
             session.localContext = ObjectIdentifier(self)
             return [item]
         }
@@ -687,6 +749,12 @@ struct GridCards: UIViewRepresentable {
             landed = false
             stay = nil
             if let carried { parent?.held(carried, true) }
+            if let carried, parent?.kind(carried) == .line {
+                reopen = carried
+                awaiting = carried
+                carriedItem = session.items.first
+                parent?.carry(carried)
+            }
             watch(session, in: view)
         }
 
@@ -728,6 +796,13 @@ struct GridCards: UIViewRepresentable {
             // After `carried` is cleared: the overview's redraw then takes
             // the store's order (a group left empty is gone).
             if let id = down { parent?.held(id, false) }
+            awaiting = nil
+            carriedItem = nil
+            if let id = reopen {
+                reopen = nil
+                // Once the overview has the group where it landed.
+                DispatchQueue.main.async { [weak self] in self?.parent?.landed(id) }
+            }
             // Every card shown again once the drop has landed: a card hidden
             // while carried stayed invisible once (David, 2026-11-17, not
             // caught on a recording), likely never told its drag had ended.

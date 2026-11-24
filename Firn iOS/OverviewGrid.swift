@@ -108,6 +108,12 @@ struct GroupFolder: View {
     let cardHeight: CGFloat
     let naming: Bool
     let open: () -> Void
+    /// A solid card in place of the glass: for the picture iOS carries when
+    /// an open group is moved by its name line. That picture is taken apart
+    /// from the screen, where glass has nothing behind it and came out a
+    /// flat dark grey (the Simulator, 2026-11-24). The cell itself is
+    /// hidden all the while, so the solid card is only ever seen carried.
+    var flat = false
 
     private static let shown = 4
     static let inset: CGFloat = 8
@@ -156,7 +162,14 @@ struct GroupFolder: View {
                 // can be taller than the cell; without it the folder grows
                 // past its cell instead of the top being squeezed.
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-                .background { FirnGlass(shape: shape) }
+                .background {
+                    if flat {
+                        shape.fill(Theme.tileSolid)
+                            .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
+                    } else {
+                        FirnGlass(shape: shape)
+                    }
+                }
                 .contentShape(shape)
             }
             .buttonStyle(UndimmedPress())

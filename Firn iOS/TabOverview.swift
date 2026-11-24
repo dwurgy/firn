@@ -126,9 +126,6 @@ struct TabOverview: View {
     /// The grid on iOS 27: what iOS's drag is carrying, so its X hides
     /// (the lift is only the picture, as the menu's).
     @State private var systemDragged: Set<UUID> = []
-    /// The open group being moved by its name line, folded while it's
-    /// carried (`foldForCarry`).
-    @State private var carriedGroup: UUID?
     /// A group folding into its cell or opening out of it (the grid on
     /// iOS 27), drawn over the list until it's done (`GroupGlideView`),
     /// and how far open it's drawn (0 folded, 1 open).
@@ -995,11 +992,16 @@ struct TabOverview: View {
                           guard let tab = loose[id]?.tab, let group = loose[groupID]?.group else { return }
                           store.move(tab, toGroup: group, at: store.tabs(in: group).count)
                       },
+                      folderPicture: { id in
+                          guard let group = open[id]?.group else { return AnyView(EmptyView()) }
+                          return AnyView(GroupFolder(group: group, tabs: store.tabs(in: group), pictures: pictures,
+                                                     cardHeight: metrics.cardHeight, naming: store.isNaming(group),
+                                                     open: {}, flat: true))
+                      },
                       carry: { id in
                           if let group = open[id]?.group { foldForCarry(group) }
                       },
                       landed: { id in
-                          carriedGroup = nil
                           if let group = store.tabGroups.first(where: { $0.id == id }), group.folded { fold(group) }
                       },
                       fold: glide?.token,
@@ -1108,8 +1110,7 @@ struct TabOverview: View {
     /// group's menu as actions.
     private func folder(_ group: TabGroup, at index: Int, of count: Int) -> some View {
         GroupFolder(group: group, tabs: store.tabs(in: group), pictures: pictures,
-                    cardHeight: cardHeight, naming: store.isNaming(group), open: { fold(group) },
-                    flat: carriedGroup == group.id)
+                    cardHeight: cardHeight, naming: store.isNaming(group), open: { fold(group) })
             .modifier(groupMenu(group).actions)
             // Drawn over the list while it folds or opens (`glideDrawing`).
             .opacity(glide?.hidden.contains(group.id) == true ? 0 : 1)
@@ -1322,7 +1323,6 @@ struct TabOverview: View {
     /// where it lands (`fold`, from `GridCards.landed`).
     private func foldForCarry(_ group: TabGroup) {
         guard !group.folded else { return }
-        carriedGroup = group.id
         if let scroll = spots.scroll {
             scrollPosition.scrollTo(point: CGPoint(x: 0, y: scroll.contentOffset.y + scroll.contentInsets.top))
         }

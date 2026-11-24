@@ -109,10 +109,9 @@ struct GroupFolder: View {
     let naming: Bool
     let open: () -> Void
     /// A solid card in place of the glass: for the picture iOS carries when
-    /// an open group is moved by its name line. That picture is taken apart
-    /// from the screen, where glass has nothing behind it and came out a
-    /// flat dark grey (the Simulator, 2026-11-24). The cell itself is
-    /// hidden all the while, so the solid card is only ever seen carried.
+    /// an open group is moved by its name line (`GridCards.carryFolder`).
+    /// That picture is drawn apart from the screen, where glass has nothing
+    /// behind it and came out a flat dark grey (the Simulator, 2026-11-24).
     var flat = false
 
     private static let shown = 4
@@ -164,7 +163,7 @@ struct GroupFolder: View {
                 .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                 .background {
                     if flat {
-                        shape.fill(Theme.tileSolid)
+                        shape.fill(Theme.folderCarried)
                             .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
                     } else {
                         FirnGlass(shape: shape)

@@ -84,6 +84,11 @@ enum Theme {
     /// With Reduce Transparency: the same tile, solid. Neutral, not warm
     /// (David, 2026-11-15: cards read brown in dark).
     static let tileSolid = Color(light: 0xF5F5F5, dark: 0x2E2E30)
+    /// A folded group's card as iOS carries it when an open group is moved
+    /// by its name line (`GroupFolder.flat`): solid, in the grey its glass
+    /// reads as over the overview. `tileSolid` was all but invisible there
+    /// in dark (David's recording, 2026-11-24).
+    static let folderCarried = Color(light: 0xF2F2F2, dark: 0x4A4A4C)
     /// Under anything lifted on the iPhone (a tab, a group, a Basecamp
     /// tile), held or dragged: the solid tile, see-through, one level the
     /// whole way (David, 2026-11-09: 85% read too dark; 60%).

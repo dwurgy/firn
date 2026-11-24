@@ -1,6 +1,7 @@
 import UIKit
 
-// Where everything in the grid sits, worked out in one place: the runs of
+// Where everything in the grid sits, worked out in one place: Basecamp's
+// tiles on top, the runs of
 // loose cards (and folded groups), and each open group as a section of its
 // own, its name line on top and its tabs in columns on its glass card
 // (step 3 of "Plan: the drag polish", docs/IOS-PLAN.md). The collection
@@ -9,6 +10,8 @@ import UIKit
 
 /// A section of the grid, as the collection view's data source names it.
 enum GridSectionID: Hashable, Sendable {
+    /// Basecamp's tiles, on top (step 4 of "Plan: the drag polish").
+    case basecamp
     /// A run of loose cards, keyed by the open group just before it.
     case loose(after: UUID?)
     /// An open group.
@@ -17,6 +20,8 @@ enum GridSectionID: Hashable, Sendable {
 
 /// What a cell of the grid is.
 enum GridCellKind {
+    /// A Basecamp tile.
+    case tile
     /// A tab's card, loose or in an open group.
     case card
     /// A folded group, one card's size among the loose cards.
@@ -33,8 +38,11 @@ struct GridPlan: Equatable {
         let after: UUID?
         /// A run's cards, or a group's tabs (not its name line).
         var ids: [UUID]
+        /// Basecamp: its tiles, in balanced rows (`BasecampTiles.frames`).
+        /// Nothing is carried into or out of it yet (step 5).
+        var basecamp = false
 
-        var id: GridSectionID { group.map { .group($0) } ?? .loose(after: after) }
+        var id: GridSectionID { basecamp ? .basecamp : group.map { .group($0) } ?? .loose(after: after) }
         /// The cells, in order: a group's name line (the group's own id)
         /// comes first.
         var items: [UUID] { group.map { [$0] + ids } ?? ids }
@@ -60,13 +68,20 @@ struct GridPlan: Equatable {
             if index > 0 {
                 // Safari's room around an open group: 16pt under it, 10pt
                 // over it under a row of titles (`GroupCard`).
-                if sections[index - 1].group != nil {
+                if sections[index - 1].basecamp {
+                    y += BasecampTiles.below
+                } else if sections[index - 1].group != nil {
                     y += GroupCard.gapBelow
                 } else {
                     y += section.group != nil ? GroupCard.gapAbove : OverviewGridMetrics.rowSpacing
                 }
             }
-            if section.group != nil {
+            if section.basecamp {
+                let cells = BasecampTiles.frames(count: section.ids.count, width: width)
+                frames.append(cells.map { $0.offsetBy(dx: 0, dy: y) })
+                cards.append(nil)
+                y += cells.map(\.maxY).max() ?? 0
+            } else if section.group != nil {
                 let height = Self.groupHeight(tabs: section.ids.count, columns: columns,
                                               groupCardHeight: groupCardHeight)
                 var cells = [CGRect(x: 0, y: y, width: width, height: GroupCard.headerHeight)]

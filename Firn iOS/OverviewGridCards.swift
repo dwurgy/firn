@@ -8,8 +8,8 @@ import UIKit
 // `.reorderable()` shrank the dragged card to about half and had no way to
 // ask for full size; UIKit's drop proposal does (`prefersFullSizePreview`).
 // Each cell still draws Firn's own card (`OverviewRow`, through
-// `UIHostingConfiguration`). Runs of loose cards and folded groups, and
-// each open group, are sections laid out by `GridPlan`.
+// `UIHostingConfiguration`). Basecamp's tiles, runs of loose cards and
+// folded groups, and each open group, are sections laid out by `GridPlan`.
 // For now the collection view doesn't scroll: it sits in the overview's
 // SwiftUI scroll view, as tall as everything in it.
 
@@ -39,6 +39,13 @@ final class GridCardCell: UICollectionViewCell {
     /// open group's name line, which was hidden and shown again, flashing
     /// for as long as the drag went on (David's recording, 2026-11-24).
     var item: UUID?
+    /// The card the grid's drag is carrying, if one is (`dragStateDidChange`).
+    var carried: (() -> UUID?)?
+    /// A Basecamp tile let go, until its carried picture has landed: it
+    /// stays hidden. UIKit takes its drag for over as the landing starts,
+    /// and the tile showed in its place under the picture still coming
+    /// down, two of it for a few frames (the Simulator, dark, 2026-11-24).
+    var landing = false
     /// The swiped card easing home, so a new swipe can catch it mid-way.
     var settle: UIViewPropertyAnimator?
     /// Where a swipe has moved the card. The cell itself moves, not its
@@ -110,6 +117,7 @@ final class GridCardCell: UICollectionViewCell {
         layer.removeAnimation(forKey: "shrink")
         layer.sublayerTransform = CATransform3DIdentity
         contentView.alpha = 1
+        landing = false
         raised = false
         raises = true
     }
@@ -138,6 +146,13 @@ final class GridCardCell: UICollectionViewCell {
         // pale ghost, fainter or stronger by chance (David's recording,
         // 2026-11-23). While it lifts, iOS's picture covers the card.
         guard state != .lifting else { return }
+        // Only the carried card's own cell hides. On a quick drag UIKit
+        // marks the dragged cell late and by its place, where a neighbor
+        // that made room may already sit: it blinked out (a Basecamp tile,
+        // the Simulator, 2026-11-24; `hideOnlyCarried` puts right the rest).
+        if state != .none, let carried = carried?(), carried != item { return }
+        // Its carried picture is still on its way down (`landing`).
+        if state == .none, landing { return }
         UIView.performWithoutAnimation { contentView.alpha = state == .none ? 1 : 0 }
         contentView.layer.removeAnimation(forKey: "opacity")
     }
@@ -177,6 +192,9 @@ struct GridCards: UIViewRepresentable {
     let close: (UUID) -> Void
     /// What a cell is. Only a card swipes to close; a carried tab can be
     /// put into a folder (step 4 of "a folded group is one tab's size").
+    /// A Basecamp tile let go at a new place among the tiles (counted
+    /// without it).
+    var moveTile: (UUID, Int) -> Void = { _, _ in }
     var kind: (UUID) -> GridCellKind = { _ in .card }
     /// A tab let go on a folded group: it goes into the group, at its end.
     var join: (UUID, UUID) -> Void = { _, _ in }
@@ -521,6 +539,7 @@ struct GridCards: UIViewRepresentable {
             cell.backgroundConfiguration = .clear()
             cell.clipsToBounds = false
             (cell as? GridCardCell)?.item = id
+            (cell as? GridCardCell)?.carried = { [weak self] in self?.carried }
             (cell as? GridCardCell)?.raises = parent.kind(id) != .line
             cell.contentConfiguration = UIHostingConfiguration {
                 parent.card(id)
@@ -658,11 +677,20 @@ struct GridCards: UIViewRepresentable {
         /// As the carried card changed sections, UIKit took another cell
         /// for the dragged one: the tab left behind in a group vanished
         /// until the drop (the Simulator's recording, 2026-11-24).
-        private func hideOnlyCarried(in view: UICollectionView) {
+        private func hideOnlyCarried(in view: UICollectionView, showing landed: UUID? = nil) {
+            if let landed {
+                UIView.performWithoutAnimation {
+                    cell(for: landed, in: view)?.contentView.alpha = 1
+                    cell(for: landed, in: view)?.alpha = 1
+                }
+            }
             guard let carried else { return }
             UIView.performWithoutAnimation {
                 for case let cell as GridCardCell in view.visibleCells {
-                    cell.contentView.alpha = cell.item == carried ? 0 : 1
+                    let alpha: CGFloat = cell.item == carried ? 0 : 1
+                    if cell.contentView.alpha != alpha { cell.contentView.alpha = alpha }
+                    // UIKit's own dim of the cell it takes for the dragged one.
+                    if cell.item != carried, cell.alpha != 1 { cell.alpha = 1 }
                 }
             }
         }
@@ -673,7 +701,11 @@ struct GridCards: UIViewRepresentable {
             guard let cell = view.cellForItem(at: path) else { return nil }
             let bounds = cell.bounds
             let parameters = UIPreviewParameters()
-            if let id = dataSource?.itemIdentifier(for: path), parent?.kind(id) == .line {
+            let kind = dataSource?.itemIdentifier(for: path).flatMap { parent?.kind($0) }
+            if kind == .tile {
+                // A Basecamp tile lifts whole.
+                parameters.visiblePath = UIBezierPath(roundedRect: bounds, cornerRadius: BasecampTiles.cornerRadius)
+            } else if kind == .line {
                 // A group's name line lifts whole, rounded as its card.
                 parameters.visiblePath = UIBezierPath(roundedRect: bounds,
                                                       cornerRadius: min(GroupCard.cornerRadius, bounds.height / 2))
@@ -950,10 +982,12 @@ struct GridCards: UIViewRepresentable {
             guard let view = followedView, let session = followedDrag, let carried else { return }
             // The carried card's own cell stays hidden: the hold menu going
             // away showed it again, a second folder beside the carried one
-            // (the Simulator, 2026-11-24).
-            if let cell = cell(for: carried, in: view), cell.contentView.alpha != 0 {
-                UIView.performWithoutAnimation { cell.contentView.alpha = 0 }
-            }
+            // (the Simulator, 2026-11-24). And every other cell stays shown,
+            // every frame: on a quick drag UIKit marks the cell as dragged
+            // only after the cards have already made room, by its place, so
+            // the neighbor now in that place was dimmed and hidden until
+            // the drop (a Basecamp tile, the Simulator's log, 2026-11-24).
+            hideOnlyCarried(in: view)
             folderWait += 1
             if folderWait % 10 == 0 { carryFolderAgain() }
             let finger = session.location(in: view)
@@ -1007,6 +1041,9 @@ struct GridCards: UIViewRepresentable {
         private func cross(_ id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
             guard let layout = view.collectionViewLayout as? GridPlanLayout, let plan = layout.plan,
                   plan.sections == shown, let from = spot(of: id) else { return false }
+            // A tile stays among the tiles, and no card comes in, until
+            // step 5 of "Plan: the drag polish".
+            guard !shown[from.section].basecamp else { return false }
             let tab = parent?.kind(id) == .card
             // An existing section, or a run to make before section `gap`.
             var target: Int?
@@ -1019,14 +1056,16 @@ struct GridCards: UIViewRepresentable {
                     // A folded group over an open one stays where it is.
                     guard tab else { return false }
                     target = s
-                } else if s > 0, shown[s - 1].group == nil {
+                } else if s > 0, shown[s - 1].group == nil, !shown[s - 1].basecamp {
                     target = s - 1
                 } else {
                     gap = s
                 }
                 break
             }
-            if !found, let last = shown.indices.last, shown[last].group == nil { target = last }
+            if !found, let last = shown.indices.last, shown[last].group == nil, !shown[last].basecamp {
+                target = last
+            }
             guard target != from.section else {
                 stay = nil
                 return false
@@ -1169,6 +1208,10 @@ struct GridCards: UIViewRepresentable {
             guard let (section, at) = spot(of: id), shown != parent?.sections else { return }
             landed = true
             let ids = shown[section].ids
+            if shown[section].basecamp {
+                parent?.moveTile(id, at)
+                return
+            }
             parent?.move(id, at + 1 < ids.count ? ids[at + 1] : nil, shown[section].group, shown[section].after)
         }
 
@@ -1188,6 +1231,34 @@ struct GridCards: UIViewRepresentable {
                 carried = nil
                 parent?.held(id, false)
                 parent?.join(id, folder)
+                return
+            }
+            if parent?.kind(id) == .tile, let spot = view.layoutAttributesForItem(at: home) {
+                // A tile lands as the picture it was carried as, then its
+                // cell shows at once. Landed "to its cell", iOS turns the
+                // carried picture into a picture of the cell on the way
+                // down, and the cell is hidden glass: the tile faded away
+                // over 0.4s, its place stood empty, then it popped in (the
+                // Simulator, 2026-11-24).
+                let target = UIDragPreviewTarget(container: view, center: spot.center)
+                cell(for: id, in: view)?.landing = true
+                let flight = coordinator.drop(item.dragItem, to: target)
+                settle(id)
+                flight.addCompletion { [weak self, weak view] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, let view else { return }
+                        for case let cell as GridCardCell in view.visibleCells { cell.landing = false }
+                        guard self.carried == id else {
+                            self.hideOnlyCarried(in: view, showing: id)
+                            return
+                        }
+                        // Shown now, and no longer the carried one, so
+                        // nothing hides it again before the drag's end.
+                        self.carried = nil
+                        self.hideOnlyCarried(in: view, showing: id)
+                        self.parent?.held(id, false)
+                    }
+                }
                 return
             }
             let flight = coordinator.drop(item.dragItem, toItemAt: home)

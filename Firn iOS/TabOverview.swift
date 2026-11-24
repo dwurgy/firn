@@ -229,21 +229,25 @@ struct TabOverview: View {
                     // Basecamp first, scrolling away with the list (hidden
                     // while empty); 24pt below it (its own 12pt plus this
                     // stack's 12pt).
-                    BasecampTiles(store: store, spots: spots, landing: landing,
-                                  onScreen: heldCard ?? store.activeTab?.id,
-                                  order: tileOrder,
-                                  held: drag?.tile == true ? drag?.id : nil,
-                                  pressed: finger.pressed,
-                                  incoming: drag?.basecamp == true ? drag?.id : nil,
-                                  blank: blankSpot,
-                                  away: drag?.tile == true && drag?.tabs == true ? drag?.id : nil,
-                                  open: openCard,
-                                  menu: { tileMenu(for: $0) },
-                                  move: { tab, to in
-                                      withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
-                                          store.move(tab, to: to)
-                                      }
-                                  })
+                    // On iOS 27 the tiles are the grid's first section
+                    // (`systemGrid`), their menu and drag iOS's.
+                    if !systemDrag {
+                        BasecampTiles(store: store, spots: spots, landing: landing,
+                                      onScreen: heldCard ?? store.activeTab?.id,
+                                      order: tileOrder,
+                                      held: drag?.tile == true ? drag?.id : nil,
+                                      pressed: finger.pressed,
+                                      incoming: drag?.basecamp == true ? drag?.id : nil,
+                                      blank: blankSpot,
+                                      away: drag?.tile == true && drag?.tabs == true ? drag?.id : nil,
+                                      open: openCard,
+                                      menu: { tileMenu(for: $0) },
+                                      move: { tab, to in
+                                          withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                                              store.move(tab, to: to)
+                                          }
+                                      })
+                    }
                     gridTiles(shownItems)
                 }
                 // Where the list's contents start on screen, to place a
@@ -680,15 +684,15 @@ struct TabOverview: View {
     /// cell out of view has no spot of its own: the last of many tabs was
     /// never scrolled to, so the overview opened at the top with no card
     /// for its page to land in (Simulator, 2026-11-19). Nil for a tab in a
-    /// folded group, a tile, and the SwiftUI grid, whose cards the list
-    /// knows.
+    /// folded group and the SwiftUI grid, whose cards the list knows.
     private func looseSpot(of id: UUID) -> (run: String, top: CGFloat, height: CGFloat)? {
         guard systemDrag else { return nil }
         let metrics = gridMetrics
         let plan = GridPlan(sections: gridSections(shownItems),
                             width: laidSize.width - 2 * OverviewGridMetrics.margin, columns: metrics.columns,
                             cardHeight: metrics.cardHeight, groupCardHeight: metrics.groupCardHeight)
-        guard store.openTabs.contains(where: { $0.id == id }), let frame = plan.frame(of: id) else { return nil }
+        guard store.openTabs.contains(where: { $0.id == id }) || store.basecampTabs.contains(where: { $0.id == id }),
+              let frame = plan.frame(of: id) else { return nil }
         return (Self.gridID, frame.minY, frame.height)
     }
 
@@ -893,10 +897,12 @@ struct TabOverview: View {
     /// scrolling to it, and for where it's laid out (`spots.runs`).
     private static let gridID = "grid"
 
-    /// The grid's sections: each run of loose cards and folded groups, and
-    /// each open group with the tabs it shows.
+    /// The grid's sections: Basecamp's tiles, each run of loose cards and
+    /// folded groups, and each open group with the tabs it shows.
     private func gridSections(_ items: [TabListItem]) -> [GridPlan.Section] {
-        OverviewGridRun.runs(items, inRun: { folderCell($0) }).map { run in
+        let tiles = store.basecampTabs.map(\.id)
+        let basecamp = tiles.isEmpty ? [] : [GridPlan.Section(group: nil, after: nil, ids: tiles, basecamp: true)]
+        return basecamp + OverviewGridRun.runs(items, inRun: { folderCell($0) }).map { run in
             switch run {
             case let .tabs(after, entries): GridPlan.Section(group: nil, after: after, ids: entries.map(\.id))
             case let .group(_, group): GridPlan.Section(group: group.id, after: nil, ids: shownTabs(in: group).map(\.id))
@@ -928,6 +934,10 @@ struct TabOverview: View {
             open.values.flatMap { entry in
                 entry.tabs.enumerated().map { ($0.element.id, (tab: $0.element, place: $0.offset, group: entry.group.id)) }
             }) { a, _ in a }
+        let basecamp = store.basecampTabs
+        let tiles: [UUID: (tab: FirnCore.Tab, place: Int)] = Dictionary(
+            basecamp.enumerated().map { ($0.element.id, (tab: $0.element, place: $0.offset)) }) { a, _ in a }
+        let tileGlide: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
         if !sections.isEmpty {
             GridCards(sections: sections, columns: metrics.columns, cardHeight: metrics.cardHeight,
                       groupCardHeight: metrics.groupCardHeight,
@@ -936,6 +946,18 @@ struct TabOverview: View {
                           return AnyView(groupGlass(entry.group, tabs: entry.tabs))
                       },
                       card: { id in
+                          if let entry = tiles[id] {
+                              let tab = entry.tab, place = entry.place
+                              return AnyView(BasecampCell(
+                                  tab: tab, space: space, spots: spots, landing: landing,
+                                  onScreen: heldCard ?? store.activeTab?.id,
+                                  open: { openCard(tab) },
+                                  menu: tileMenu(for: tab),
+                                  moveLeft: place > 0
+                                      ? { withAnimation(tileGlide) { store.move(tab, to: place - 1) } } : nil,
+                                  moveRight: place < basecamp.count - 1
+                                      ? { withAnimation(tileGlide) { store.move(tab, to: place + 1) } } : nil))
+                          }
                           if let entry = open[id] {
                               return AnyView(groupLine(entry.group, tabs: entry.tabs, at: entry.index, of: items.count))
                           }
@@ -951,6 +973,7 @@ struct TabOverview: View {
                           return AnyView(gridCell(tab, at: entry.index, of: items.count))
                       },
                       menu: { id in
+                          if let entry = tiles[id] { return tileMenu(for: entry.tab) }
                           if let entry = open[id] { return groupMenu(entry.group).sections }
                           if let entry = grouped[id] { return menu(for: entry.tab) }
                           guard let entry = loose[id] else { return [] }
@@ -981,7 +1004,11 @@ struct TabOverview: View {
                       close: { id in
                           if !busy, let tab = loose[id]?.tab ?? grouped[id]?.tab { close(tab) }
                       },
+                      moveTile: { id, place in
+                          if let tab = tiles[id]?.tab { store.move(tab, to: place) }
+                      },
                       kind: { id in
+                          if tiles[id] != nil { return .tile }
                           if open[id] != nil { return .line }
                           return loose[id]?.group != nil ? .folder : .card
                       },
@@ -1610,8 +1637,9 @@ struct TabOverview: View {
     }
 
     /// A Basecamp tile's menu: the Mac's, less what the iPhone has no
-    /// place for (split view, sound). Close becomes Remove from Basecamp,
-    /// plainer words for the same thing. Firn's own menu (`openMenu`).
+    /// place for (split view, sound), in the Mac's words: Move to Tabs
+    /// keeps it as a tab, Close removes it (David, 2026-11-19). iOS's own
+    /// menu from the grid on iOS 27; Firn's (`openMenu`) before.
     private func tileMenu(for tab: FirnCore.Tab) -> [[HoldMenuItem]] {
         var first: [HoldMenuItem] = []
         if tab.isAwayFromHome {
@@ -1629,11 +1657,11 @@ struct TabOverview: View {
             HoldMenuItem(title: "Move to Tabs", systemImage: "arrow.down.to.line") {
                 withAnimation(glide) { store.removeFromBasecamp(tab) }
             },
-            HoldMenuItem(title: "Remove from Basecamp", systemImage: "xmark", closes: true) { removeTile(tab) },
+            HoldMenuItem(title: "Close", systemImage: "xmark", closes: true) { removeTile(tab) },
         ]]
     }
 
-    /// Remove from Basecamp: the tile goes altogether, and a shake brings it
+    /// Close: the tile goes altogether, and a shake brings it
     /// back to its place among the tiles (as ⇧⌘T does on the Mac).
     private func removeTile(_ tab: FirnCore.Tab) {
         let id = tab.id
@@ -1648,7 +1676,7 @@ struct TabOverview: View {
                 withAnimation(glide) { store.reopen(entry) }
             }
         }
-        undoManager?.setActionName("Remove from Basecamp")
+        undoManager?.setActionName("Close")
         closes += 1
     }
 
@@ -1709,14 +1737,11 @@ struct TabOverview: View {
         return firnHolds(liftable(at: point))
     }
 
-    /// What Firn's own hold and drag may take: anything, except in the
-    /// grid on iOS 27, where cards and folders are iOS's (`systemDrag`)
-    /// and only Basecamp tiles are still Firn's (until step 2 of
-    /// "Plan: iOS's own menus and drag").
+    /// What Firn's own hold and drag may take: anything before iOS 27,
+    /// nothing from then on, where cards, folders, and Basecamp's tiles
+    /// are all iOS's (`systemDrag`).
     private func firnHolds(_ target: Liftable?) -> Liftable? {
-        guard systemDrag, let target else { return target }
-        if case .tile = target { return target }
-        return nil
+        systemDrag ? nil : target
     }
 
     /// Held still: the tab, group, or tile lifts where it is, on its solid

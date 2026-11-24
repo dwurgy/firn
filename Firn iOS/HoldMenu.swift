@@ -8,7 +8,7 @@ struct HoldMenuItem {
     let systemImage: String?
     let action: @MainActor () -> Void
     let children: [HoldMenuItem]
-    /// Closes something (Close Tab, Close Group, Remove from Basecamp):
+    /// Closes something (Close Tab, Close Group, a tile's Close):
     /// Firn's menu shows it in muted terracotta.
     var closes = false
     /// A space in the space menu: a dot in its color instead of a symbol.

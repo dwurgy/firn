@@ -161,6 +161,33 @@ struct BasecampTiles: View {
         return CGSize(width: max((width - (columns - 1) * gap) / columns, 0), height: tileHeight)
     }
 
+    /// Between the tiles and the first tab: more than the list's 12pt
+    /// between items (David, 2026-11-18).
+    static let below: CGFloat = 24
+
+    /// Every tile's frame with `count` tiles across `width`, from the top
+    /// left of Basecamp: balanced rows, a shorter row centered under the
+    /// longer one. For UIKit's grid (`GridPlan`), the same places as here.
+    static func frames(count: Int, width: CGFloat) -> [CGRect] {
+        guard count > 0, width > 0 else { return [] }
+        let layout = BasecampLayout.make(count: count, width: width,
+                                         maximumColumns: maximumColumns, minimumWidth: minimumWidth)
+        let tile = tileSize(count: count, width: width)
+        let rows = layout.rows.isEmpty ? [count] : layout.rows
+        var frames: [CGRect] = []
+        for (row, inRow) in rows.enumerated() {
+            let rowWidth = CGFloat(inRow) * tile.width + CGFloat(inRow - 1) * gap
+            let left = (width - rowWidth) / 2
+            for column in 0..<inRow {
+                frames.append(CGRect(x: left + CGFloat(column) * (tile.width + gap),
+                                     y: CGFloat(row) * (tileHeight + gap), width: tile.width, height: tileHeight))
+            }
+        }
+        // Never fewer spots than tiles, whatever the layout says.
+        while frames.count < count { frames.append(frames.last ?? CGRect(origin: .zero, size: tile)) }
+        return Array(frames.prefix(count))
+    }
+
     private func height(rows: Int) -> CGFloat {
         CGFloat(rows) * Self.tileHeight + CGFloat(rows - 1) * Self.gap
     }
@@ -260,6 +287,52 @@ struct BasecampTiles: View {
     }
 }
 
+/// A tile as a cell of UIKit's grid (iOS 27; step 4 of "Plan: the drag
+/// polish"): the same tile, its hold menu and its drag iOS's, from the
+/// collection view. A view of its own so the landing's changes run it (a
+/// cell's drawing made by the overview isn't run again by them).
+struct BasecampCell: View {
+    let tab: FirnCore.Tab
+    let space: String
+    let spots: OverviewSpots
+    let landing: Landing
+    let onScreen: UUID?
+    let open: () -> Void
+    /// Its menu's choices, for VoiceOver's actions.
+    let menu: [[HoldMenuItem]]
+    /// VoiceOver's Move Left and Move Right; nil at the ends.
+    let moveLeft: (() -> Void)?
+    let moveRight: (() -> Void)?
+
+    var body: some View {
+        let gliding = landing.gliding == tab.id
+        BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen, pressLights: false, open: open)
+            // Dragging can't be found by VoiceOver: the same moves as actions.
+            .accessibilityAction(named: "Move Left") { moveLeft?() }
+            .accessibilityAction(named: "Move Right") { moveRight?() }
+            .accessibilityActions {
+                ForEach(Array(menu.joined().enumerated()), id: \.offset) { _, item in
+                    Button(item.title, action: item.action)
+                }
+            }
+            // The set-down, as `BasecampTiles.tile`'s.
+            .background {
+                if gliding {
+                    SetDownShadow(radius: BasecampTiles.cornerRadius,
+                                  lift: Double((landing.settle - 1) / (BasecampTiles.settleLift - 1)))
+                }
+            }
+            .modifier(ArrivalBand(arrival: gliding ? landing.tileReveal : 1, range: BasecampTiles.glideSwap,
+                                  fadesIn: true))
+            .scaleEffect(gliding ? landing.settle : 1)
+            // Where it is, so the page can glide into it as the overview opens.
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                spots.frames[tab.id] = frame
+                spots.cards.remove(tab.id)
+            }
+    }
+}
+
 /// One tile, after the Mac's (`Firn/Basecamp.swift`: `BasecampTile`,
 /// `TileButtonStyle`, `SiteMark`), at the iPhone's size, on iOS's own glass
 /// instead of the Mac's frosted ice: the tile on screen tinted in its icon's
@@ -270,6 +343,7 @@ private struct BasecampTile: View {
     let space: String
     let isOnScreen: Bool
     var cornerRadius: CGFloat = BasecampTiles.cornerRadius
+    var pressLights = true
     let open: () -> Void
 
     private var site: String { WebAddress.site(of: tab.homeURL ?? tab.url) }
@@ -280,7 +354,7 @@ private struct BasecampTile: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(TileButtonStyle(isActive: isOnScreen, accent: Theme.tileAccent(site: site, icon: tab.icon),
-                                     cornerRadius: cornerRadius))
+                                     cornerRadius: cornerRadius, pressLights: pressLights))
         .accessibilityLabel("\(site.isEmpty ? tab.title : site), Basecamp")
         .accessibilityValue(isOnScreen ? "On screen" : "")
         .accessibilityAddTraits(isOnScreen ? .isSelected : [])
@@ -328,6 +402,8 @@ private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let accent: Theme.TileAccent
     var cornerRadius: CGFloat = BasecampTiles.cornerRadius
+    /// Whether the glass lights up under the finger (iOS's press).
+    var pressLights = true
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -363,7 +439,12 @@ private struct TileButtonStyle: ButtonStyle {
 
     /// Regular glass, the tile on screen's tinted in its icon's main color.
     private var glass: Glass {
-        let base = Glass.regular.interactive()
+        // Held for iOS's menu or drag (UIKit's grid), glass that answers
+        // the finger lit up white, the icon washed out, for as long as the
+        // hold lasted: the tile's "white flash" (David's recording,
+        // 2026-11-23; the Simulator, frame by frame, 2026-11-24). There the
+        // tile takes no press of its own, as a tab's card takes none.
+        let base = pressLights ? Glass.regular.interactive() : Glass.regular
         return isActive ? base.tint(accent.main.opacity(dark ? 0.24 : 0.22)) : base
     }
 

@@ -595,8 +595,15 @@ struct GridCards: UIViewRepresentable {
         }
 
         func collectionView(_ view: UICollectionView, dragSessionWillBegin session: any UIDragSession) {
-            carried = lifting
+            // The card is read from the drag itself, not from `lifting`: on
+            // a quick hold and drag, iOS's menu press ends just before the
+            // drag begins, and tidying up after it forgot the card being
+            // lifted. Nothing was carried then, so no card made room for
+            // the whole drag and the card flew back to where it came from
+            // (the Simulator's log, 2026-11-23).
+            carried = session.items.first?.localObject as? UUID ?? lifting
             lifting = nil
+            if let carried { parent?.held(carried, true) }
         }
 
         /// A hold that never became a drag: its card shows its X again, and
@@ -680,8 +687,17 @@ struct GridCards: UIViewRepresentable {
         }
 
         /// The carried card's place moves to the spot under the finger, the
-        /// others gliding aside (0.2s, no bounce, as quick as Safari's; none
+        /// others gliding aside (`roomSpring`, as quick as Safari's; none
         /// with Reduce Motion).
+        /// The glide of cards making room: a spring with no bounce that runs
+        /// until it has settled, most of the way in 0.1s and there by about
+        /// 0.25s. It was a 0.2s spring animator, which stopped at 0.2s
+        /// whether or not its spring had arrived: cards glided 175 of
+        /// their 189pt, then jumped the last 14pt in one frame (David's
+        /// recording, 2026-11-17; the same in the Simulator, 2026-11-23).
+        private static let roomSpring = UISpringTimingParameters(mass: 1, stiffness: 900, damping: 60,
+                                                                 initialVelocity: .zero)
+
         private func makeRoom(for id: UUID, at spot: Int, in view: UICollectionView) {
             guard let from = shown.firstIndex(of: id) else { return }
             let to = min(max(spot, 0), shown.count - 1)
@@ -692,9 +708,9 @@ struct GridCards: UIViewRepresentable {
             snapshot.appendSections([0])
             snapshot.appendItems(shown)
             let reduce = parent?.reduceMotion ?? false
-            UIViewPropertyAnimator(duration: reduce ? 0 : 0.2, dampingRatio: 1) {
-                self.dataSource?.apply(snapshot, animatingDifferences: !reduce)
-            }.startAnimation()
+            let glide = UIViewPropertyAnimator(duration: 0, timingParameters: Self.roomSpring)
+            glide.addAnimations { self.dataSource?.apply(snapshot, animatingDifferences: !reduce) }
+            glide.startAnimation()
         }
 
         /// The spot whose middle is nearest a point. A spot changes only

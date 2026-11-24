@@ -39,7 +39,8 @@ struct GridPlan: Equatable {
         /// A run's cards, or a group's tabs (not its name line).
         var ids: [UUID]
         /// Basecamp: its tiles, in balanced rows (`BasecampTiles.frames`).
-        /// Nothing is carried into or out of it yet (step 5).
+        /// A tab carried up into it becomes a tile, a tile carried down a
+        /// tab (`GridCards`' `cross`).
         var basecamp = false
 
         var id: GridSectionID { basecamp ? .basecamp : group.map { .group($0) } ?? .loose(after: after) }
@@ -80,7 +81,10 @@ struct GridPlan: Equatable {
                 let cells = BasecampTiles.frames(count: section.ids.count, width: width)
                 frames.append(cells.map { $0.offsetBy(dx: 0, dy: y) })
                 cards.append(nil)
-                y += cells.map(\.maxY).max() ?? 0
+                // Empty only while its last tile is carried down among the
+                // tabs: it keeps a row's room until the tile is down, so
+                // the list doesn't jump up under the finger.
+                y += cells.map(\.maxY).max() ?? BasecampTiles.tileHeight
             } else if section.group != nil {
                 let height = Self.groupHeight(tabs: section.ids.count, columns: columns,
                                               groupCardHeight: groupCardHeight)

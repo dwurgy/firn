@@ -193,8 +193,13 @@ struct GridCards: UIViewRepresentable {
     /// What a cell is. Only a card swipes to close; a carried tab can be
     /// put into a folder (step 4 of "a folded group is one tab's size").
     /// A Basecamp tile let go at a new place among the tiles (counted
-    /// without it).
+    /// without it), or a tab let go there: it becomes a tile.
     var moveTile: (UUID, Int) -> Void = { _, _ in }
+    /// Whether a tab may become a tile: Basecamp has room, and the tab has
+    /// an address to call home.
+    var fitsBasecamp: (UUID) -> Bool = { _ in false }
+    /// A tab let go over a Basecamp that wouldn't take it.
+    var basecampRefused: () -> Void = {}
     var kind: (UUID) -> GridCellKind = { _ in .card }
     /// A tab let go on a folded group: it goes into the group, at its end.
     var join: (UUID, UUID) -> Void = { _, _ in }
@@ -575,7 +580,7 @@ struct GridCards: UIViewRepresentable {
                 for tab in shown[section].ids { cell(for: tab, in: view)?.contentView.alpha = 0 }
             }
             if folded { awaiting = nil }
-            if new.sections != shown, carried == nil || folded {
+            if new.sections != shown, (carried == nil && settling == nil) || folded {
                 // Another space's cards (none shared with these) take their
                 // place at once: animated, UIKit faded the new ones in over
                 // a quarter second, a dim flash after a swipe between spaces
@@ -686,7 +691,7 @@ struct GridCards: UIViewRepresentable {
             }
             guard let carried else { return }
             UIView.performWithoutAnimation {
-                for case let cell as GridCardCell in view.visibleCells {
+                for case let cell as GridCardCell in view.visibleCells where cell.item != revealed {
                     let alpha: CGFloat = cell.item == carried ? 0 : 1
                     if cell.contentView.alpha != alpha { cell.contentView.alpha = alpha }
                     // UIKit's own dim of the cell it takes for the dragged one.
@@ -787,11 +792,16 @@ struct GridCards: UIViewRepresentable {
             let line = parent.kind(id) == .line
             guard line || spot(of: id) != nil else { return [] }
             lifting = id
+            grabbedAt = session.location(in: view).y
             if let cell = view.cellForItem(at: path) {
                 let finger = session.location(in: view)
                 grabOffset = CGVector(dx: cell.center.x - finger.x, dy: cell.center.y - finger.y)
+                carriedSize = parent.kind(id) == .tile ? cell.bounds.size
+                    : CGSize(width: cell.bounds.width,
+                             height: max(cell.bounds.height - OverviewRow.gridTitleHeight, 1))
             } else {
                 grabOffset = .zero
+                carriedSize = .zero
             }
             parent.held(id, true)
             // Firn's own: never to another app (no address handed over).
@@ -823,6 +833,7 @@ struct GridCards: UIViewRepresentable {
             lifting = nil
             landed = false
             stay = nil
+            refused = false
             floor = view.bounds.height
             if let carried { parent?.held(carried, true) }
             if let carried, parent?.kind(carried) == .line {
@@ -866,6 +877,8 @@ struct GridCards: UIViewRepresentable {
             // Let go outside the grid: it stays where it was last moved to.
             let down = carried
             if let id = down, !landed { settle(id) }
+            if refused { parent?.basecampRefused() }
+            refused = false
             carried = nil
             lifting = nil
             // After `carried` is cleared: the overview's redraw then takes
@@ -877,6 +890,8 @@ struct GridCards: UIViewRepresentable {
             // opened where it landed.
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak view] in
                 guard let self, carried == nil else { return }
+                settling = nil
+                revealed = nil
                 floor = 0
                 view?.invalidateIntrinsicContentSize()
             }
@@ -945,13 +960,21 @@ struct GridCards: UIViewRepresentable {
         /// under it is aimed at.
         private func follow(_ finger: CGPoint, in view: UICollectionView) {
             guard let id = carried else { return }
-            let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
-            if cross(id, middle: middle, in: view) {
+            // A card among the tiles, or a tile among the cards, goes by the
+            // finger: a card's middle can be a row or two of tiles from
+            // where it's held, a wide tile's half the screen away.
+            let foreign = { [self] in
+                (spot(of: id).map { shown[$0.section].basecamp } ?? false) != (parent?.kind(id) == .tile)
+            }
+            let middle = foreign() ? finger
+                : CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
+            if cross(id, middle: middle, finger: finger, in: view) {
                 aim(at: nil, in: view)
                 return
             }
+            let point = foreign() ? finger : middle
             if !aimAtFolder(carrying: id, middle: middle, in: view),
-               let spot = nearestSpot(to: middle, in: view) {
+               let spot = nearestSpot(to: point, in: view) {
                 makeRoom(for: id, at: spot, in: view)
             }
         }
@@ -1020,6 +1043,19 @@ struct GridCards: UIViewRepresentable {
 
         private func glide(to sections: [GridPlan.Section], in view: UICollectionView) {
             let reduce = parent?.reduceMotion ?? false
+            // The grid grows with the drag's own order (a new row under the
+            // last, Basecamp made at the top): the overview sizes it by the
+            // store's, and a card let go in a row past the grid's end had
+            // no cell until the store caught up, so it popped in late (a
+            // tile carried down to a new row, the Simulator, 2026-11-24).
+            if let layout = view.collectionViewLayout as? GridPlanLayout {
+                let height = GridPlan(sections: sections, width: view.bounds.width, columns: layout.columns,
+                                      cardHeight: layout.cardHeight, groupCardHeight: layout.groupCardHeight).height
+                if height > floor {
+                    floor = height
+                    view.invalidateIntrinsicContentSize()
+                }
+            }
             let glide = UIViewPropertyAnimator(duration: 0, timingParameters: Self.roomSpring)
             glide.addAnimations { self.show(sections, in: view, animated: !reduce) }
             glide.startAnimation()
@@ -1038,18 +1074,42 @@ struct GridCards: UIViewRepresentable {
         /// A group's glass counts from the middle of its name line down, so
         /// the room between two groups with nothing between them (16pt)
         /// isn't all there is to aim at.
-        private func cross(_ id: UUID, middle: CGPoint, in view: UICollectionView) -> Bool {
+        private func cross(_ id: UUID, middle: CGPoint, finger: CGPoint, in view: UICollectionView) -> Bool {
             guard let layout = view.collectionViewLayout as? GridPlanLayout, let plan = layout.plan,
                   plan.sections == shown, let from = spot(of: id) else { return false }
-            // A tile stays among the tiles, and no card comes in, until
-            // step 5 of "Plan: the drag polish".
-            guard !shown[from.section].basecamp else { return false }
-            let tab = parent?.kind(id) == .card
+            // What it was when picked up: a tile stays a tile to the store
+            // until it's down among the tabs, a tab a tab.
+            let kind = parent?.kind(id)
+            let tile = kind == .tile
+            let tab = kind == .card || tile
             // An existing section, or a run to make before section `gap`.
             var target: Int?
             var gap = shown.count
             var found = false
-            for (s, card) in plan.cards.enumerated() {
+            // Basecamp, by the finger (a card's middle can't reach the
+            // tiles when it's held near its top): on the tiles to join
+            // them, halfway down the room under them to leave. With no
+            // tiles yet, a tab carried up to the grid's top makes it.
+            var makeBasecamp = false
+            let top = shown.firstIndex(where: \.basecamp)
+            let among = shown[from.section].basecamp
+            let bottom = top.map { plan.frames[$0].map(\.maxY).max() ?? BasecampTiles.tileHeight }
+            let over = tab && (bottom.map { finger.y < $0 + (among ? BasecampTiles.below / 2 : 0) }
+                ?? (finger.y < 30 && finger.y < grabbedAt - 20))
+            refused = false
+            if over, among {
+                stay = nil
+                return false
+            } else if over, tile || parent?.fitsBasecamp(id) == true {
+                target = top
+                makeBasecamp = top == nil
+                found = true
+            } else if over {
+                // A full Basecamp takes nothing: the tiles stay as they are.
+                refused = true
+                return false
+            }
+            for (s, card) in plan.cards.enumerated() where !found {
                 guard let card, middle.y <= card.maxY else { continue }
                 found = true
                 if middle.y >= card.minY + GroupCard.headerHeight / 2 {
@@ -1058,6 +1118,12 @@ struct GridCards: UIViewRepresentable {
                     target = s
                 } else if s > 0, shown[s - 1].group == nil, !shown[s - 1].basecamp {
                     target = s - 1
+                } else if among, tab {
+                    // Out of Basecamp over an open group: straight into the
+                    // group. A row made for it over the group pushed the
+                    // group a card's height down, out from under the
+                    // finger (the Simulator, 2026-11-24).
+                    target = s
                 } else {
                     gap = s
                 }
@@ -1088,7 +1154,11 @@ struct GridCards: UIViewRepresentable {
             sections[from.section].ids.remove(at: from.place)
             var home = from.section
             var to: Int
-            if let target {
+            if makeBasecamp {
+                sections.insert(GridPlan.Section(group: nil, after: nil, ids: [], basecamp: true), at: 0)
+                to = 0
+                home += 1
+            } else if let target {
                 to = target
             } else {
                 let after = gap > 0 ? sections[gap - 1].group : nil
@@ -1096,7 +1166,9 @@ struct GridCards: UIViewRepresentable {
                 to = gap
                 if gap <= home { home += 1 }
             }
-            if sections[home].group == nil, sections[home].ids.isEmpty {
+            // A Basecamp its last tile leaves keeps its room until the tile
+            // is down; one made for a carried tab goes as the tab leaves.
+            if sections[home].group == nil, sections[home].ids.isEmpty, !(sections[home].basecamp && tile) {
                 sections.remove(at: home)
                 if home < to { to -= 1 }
             }
@@ -1104,10 +1176,11 @@ struct GridCards: UIViewRepresentable {
             sections[to].ids.append(id)
             let trial = GridPlan(sections: sections, width: view.bounds.width, columns: layout.columns,
                                  cardHeight: layout.cardHeight, groupCardHeight: layout.groupCardHeight)
+            let near = sections[to].basecamp != tile ? finger : middle
             let place = sections[to].ids.indices.min { a, b in
                 let fa = trial.frames[to][path(to, a, in: sections).item]
                 let fb = trial.frames[to][path(to, b, in: sections).item]
-                return hypot(fa.midX - middle.x, fa.midY - middle.y) < hypot(fb.midX - middle.x, fb.midY - middle.y)
+                return hypot(fa.midX - near.x, fa.midY - near.y) < hypot(fb.midX - near.x, fb.midY - near.y)
             } ?? 0
             sections[to].ids.removeLast()
             sections[to].ids.insert(id, at: place)
@@ -1126,6 +1199,20 @@ struct GridCards: UIViewRepresentable {
         /// it crossed into until its middle is inside it (the usual rules
         /// from then on), or has gone a card's height further away.
         private var stay: CGFloat?
+        /// The carried tab is over a Basecamp that won't take it (full, or
+        /// the tab has no address): let go there, the overview says why.
+        private var refused = false
+        /// The carried picture's size, as it was lifted: a card's picture
+        /// (without its title) or a whole tile.
+        private var carriedSize = CGSize.zero
+        /// The carried card, once its cell shows again under its picture
+        /// still coming down (a tab landing as a tile, a tile as a tab).
+        private var revealed: UUID?
+        /// A card whose picture is still coming down after it changed
+        /// kind: the grid keeps the drag's order until it's down.
+        private var settling: UUID?
+        /// How far down the grid the finger was as the card was lifted.
+        private var grabbedAt: CGFloat = 0
 
         /// The spot whose middle is nearest a point. A spot changes only
         /// once the carried card's middle passes halfway to the next, so it
@@ -1233,21 +1320,73 @@ struct GridCards: UIViewRepresentable {
                 parent?.join(id, folder)
                 return
             }
-            if parent?.kind(id) == .tile, let spot = view.layoutAttributesForItem(at: home) {
+            let wasTile = parent?.kind(id) == .tile
+            let isTile = spot(of: id).map { shown[$0.section].basecamp } ?? wasTile
+            if wasTile || isTile, let spot = view.layoutAttributesForItem(at: home) {
                 // A tile lands as the picture it was carried as, then its
                 // cell shows at once. Landed "to its cell", iOS turns the
                 // carried picture into a picture of the cell on the way
                 // down, and the cell is hidden glass: the tile faded away
                 // over 0.4s, its place stood empty, then it popped in (the
                 // Simulator, 2026-11-24).
-                let target = UIDragPreviewTarget(container: view, center: spot.center)
+                // A tab that lands as a tile, or a tile as a tab, lands the
+                // same way, its carried picture shrinking or growing to fit
+                // its new place on the way down (a card's picture sits over
+                // its title).
+                var center = spot.center
+                var size = spot.size
+                if !isTile {
+                    size.height = max(size.height - OverviewRow.gridTitleHeight, 1)
+                    center.y = spot.frame.minY + size.height / 2
+                }
+                var fit = CGAffineTransform.identity
+                if wasTile != isTile, carriedSize.width > 0, carriedSize.height > 0 {
+                    // A card ends well inside its tile: fitted exactly,
+                    // iOS's carried picture (a little larger than the card)
+                    // stuck out over and under the tile as it faded.
+                    let scale = min(size.width / carriedSize.width, size.height / carriedSize.height)
+                        * (isTile ? 0.8 : 1)
+                    fit = CGAffineTransform(scaleX: scale, y: scale)
+                }
+                let target = UIDragPreviewTarget(container: view, center: center, transform: fit)
                 cell(for: id, in: view)?.landing = true
                 let flight = coordinator.drop(item.dragItem, to: target)
                 settle(id)
+                if wasTile != isTile {
+                    // Its new self is there under the picture coming down,
+                    // once the overview has drawn it (a turn after the
+                    // store's change): the tile at once (glass fading in
+                    // goes grey), the card fading in. Waiting for the
+                    // picture to land first, a small card sat alone in the
+                    // tile's place for a third of a second (the Simulator,
+                    // 2026-11-24).
+                    // The grid keeps the drag's order until the picture is
+                    // down (`settling`; a Basecamp left empty goes only
+                    // then): given the store's at once, the list closed up
+                    // under the landing and the card showed late.
+                    settling = id
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak view] in
+                        guard let self, let view, settling == id, let cell = cell(for: id, in: view) else { return }
+                        revealed = id
+                        cell.alpha = 1
+                        if isTile || parent?.reduceMotion == true {
+                            UIView.performWithoutAnimation { cell.contentView.alpha = 1 }
+                        } else {
+                            UIView.animate(withDuration: 0.25) { cell.contentView.alpha = 1 }
+                        }
+                    }
+                }
                 flight.addCompletion { [weak self, weak view] _ in
                     MainActor.assumeIsolated {
                         guard let self, let view else { return }
                         for case let cell as GridCardCell in view.visibleCells { cell.landing = false }
+                        if self.revealed == id { self.revealed = nil }
+                        if self.settling == id {
+                            self.settling = nil
+                            if let parent = self.parent, parent.sections != self.shown, self.carried == nil {
+                                self.show(parent.sections, in: view, animated: !parent.reduceMotion)
+                            }
+                        }
                         guard self.carried == id else {
                             self.hideOnlyCarried(in: view, showing: id)
                             return

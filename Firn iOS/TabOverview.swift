@@ -1005,7 +1005,18 @@ struct TabOverview: View {
                           if !busy, let tab = loose[id]?.tab ?? grouped[id]?.tab { close(tab) }
                       },
                       moveTile: { id, place in
-                          if let tab = tiles[id]?.tab { store.move(tab, to: place) }
+                          if let tab = tiles[id]?.tab {
+                              store.move(tab, to: place)
+                          } else if let tab = loose[id]?.tab ?? grouped[id]?.tab {
+                              // A tab let go among the tiles: a tile there.
+                              _ = store.addToBasecamp(tab, at: place)
+                          }
+                      },
+                      fitsBasecamp: { id in
+                          store.canAddToBasecamp && (loose[id]?.tab ?? grouped[id]?.tab)?.url != nil
+                      },
+                      basecampRefused: {
+                          if !store.canAddToBasecamp { basecampFull = true }
                       },
                       kind: { id in
                           if tiles[id] != nil { return .tile }

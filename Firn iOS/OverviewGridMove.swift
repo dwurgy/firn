@@ -33,7 +33,22 @@ struct GridMove {
                 move(group, in: store)
             } else if let tab = store.openTabs.first(where: { $0.id == id }) {
                 move(tab, in: store)
+            } else if let tile = store.basecampTabs.first(where: { $0.id == id }) {
+                moveOut(tile, in: store)
             }
+        }
+    }
+
+    /// A Basecamp tile let go among the tabs: an everyday tab right there,
+    /// in the list or in an open group.
+    @MainActor private func moveOut(_ tile: FirnCore.Tab, in store: BrowserStore) {
+        if case let .tabs(groupID) = collection {
+            guard let group = store.tabGroups.first(where: { $0.id == groupID }) else { return }
+            let members = store.tabs(in: group).map(\.id)
+            store.removeFromBasecamp(tile, toGroup: group,
+                                     at: before.flatMap { members.firstIndex(of: $0) } ?? members.count)
+        } else if let at = listPosition(without: tile.id, in: store) {
+            store.removeFromBasecamp(tile, toGroup: nil, at: at)
         }
     }
 

@@ -1319,21 +1319,18 @@ private struct PageMenuPanel: View {
         }
     }
 
-    static let width: CGFloat = 250
-    static let cornerRadius: CGFloat = 22
-    private static let rowHeight: CGFloat = 48
-    private static let inset: CGFloat = 6
-    /// A section's line: a hairline with 4pt above and below.
-    private static let lineHeight: CGFloat = 9
+    static let width = GrownMenu.width
+    static let cornerRadius = GrownMenu.cornerRadius
     /// A list longer than this scrolls (a space with many groups).
     private static let longList = 8
 
     static func height(sections: [[Entry]], turned: String?) -> CGFloat {
+        let insets = GrownMenu.topInset * 2
         if let parent = parent(in: sections, turned: turned) {
-            return rowHeight * CGFloat(min(parent.children.count, longList) + 1) + lineHeight + inset * 2
+            return GrownMenu.rowHeight * CGFloat(min(parent.children.count, longList) + 1) + GrownMenu.lineHeight + insets
         }
-        let rows = sections.reduce(0) { $0 + $1.count }
-        return rowHeight * CGFloat(rows) + lineHeight * CGFloat(max(sections.count - 1, 0)) + inset * 2
+        let rows = sections.joined().reduce(0) { $0 + GrownMenu.rowHeight(tall: $1.detail != nil) }
+        return rows + GrownMenu.lineHeight * CGFloat(max(sections.count - 1, 0)) + insets
     }
 
     var body: some View {
@@ -1384,7 +1381,8 @@ private struct PageMenuPanel: View {
             guard let key = key(at: liftPoint), let entry = visible.first(where: { $0.key == key }) else { return }
             run(entry)
         }
-        .padding(Self.inset)
+        .padding(.horizontal, GrownMenu.sideInset)
+        .padding(.vertical, GrownMenu.topInset)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape) { if turned != nil { turned = nil } else { close() } }
@@ -1400,81 +1398,30 @@ private struct PageMenuPanel: View {
         }
     }
 
-    private var line: some View {
-        Theme.holdMenuHairline
-            .frame(height: 1)
-            .padding(.horizontal, 14)
-            .padding(.vertical, (Self.lineHeight - 1) / 2)
-            .accessibilityHidden(true)
-    }
+    private var line: some View { GrownMenuLine() }
 
     /// A row: its symbol, Reader's book, or a group's dot; lit while the
     /// sliding finger is on it. The way back is smaller and muted.
     private func row(_ entry: Entry, lit: String?) -> some View {
         let back = entry.key == Self.backKey
         let ink = entry.closes ? Theme.systemDestructive : back ? Theme.muted : Theme.ink
-        return Button { run(entry) } label: {
-            HStack(spacing: 14) {
-                Group {
-                    switch entry.icon {
-                    case let .symbol(name):
-                        Image(systemName: name).font(back ? .footnote.weight(.semibold) : BarButton.symbolFont)
-                    case .book:
-                        ReaderBookShape()
-                            .stroke(style: StrokeStyle(lineWidth: 1.9, lineJoin: .round))
-                            .frame(width: 19, height: 19)
-                    case .dot:
-                        Circle().fill(Theme.spaceColor(space)).frame(width: 8, height: 8)
-                    }
-                }
-                .frame(width: 24)
-                .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.title)
-                        .font(back ? .footnote.weight(.semibold) : .body)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    if let detail = entry.detail {
-                        // A long site's name loses its middle, keeping both ends.
-                        Text(detail)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.muted)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-                Spacer(minLength: 0)
-                if !entry.children.isEmpty {
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.muted)
-                        .accessibilityHidden(true)
-                }
+        return GrownMenuRow(title: entry.title, detail: entry.detail, ink: ink, small: back,
+                            more: !entry.children.isEmpty, lit: lit == entry.key, highlight: highlight) {
+            run(entry)
+        } mark: {
+            switch entry.icon {
+            case let .symbol(name):
+                Image(systemName: name).font(back ? .footnote.weight(.semibold) : BarButton.symbolFont)
+            case .book:
+                ReaderBookShape()
+                    .stroke(style: StrokeStyle(lineWidth: 1.9, lineJoin: .round))
+                    .frame(width: 19, height: 19)
+            case .dot:
+                Circle().fill(Theme.spaceColor(space)).frame(width: 8, height: 8)
             }
-            .foregroundStyle(ink)
-            .padding(.horizontal, 14)
-            .frame(height: Self.rowHeight)
-            .contentShape(.rect)
         }
-        .buttonStyle(MenuRowStyle())
         .accessibilityFocused($focused, equals: entry.key)
-        .background {
-            if lit == entry.key {
-                RoundedRectangle(cornerRadius: Self.cornerRadius - 6, style: .continuous)
-                    .fill(Theme.press)
-                    .matchedGeometryEffect(id: "lit", in: highlight)
-            }
-        }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[entry.key] = $0 }
-    }
-}
-
-/// A row pressed: Firn's warm wash, in the row's rounded shape.
-private struct MenuRowStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Theme.press : .clear,
-                        in: .rect(cornerRadius: PageMenuPanel.cornerRadius - 6, style: .continuous))
     }
 }
 

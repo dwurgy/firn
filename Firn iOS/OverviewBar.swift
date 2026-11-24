@@ -549,15 +549,11 @@ private struct SpaceMenuPanel: View {
         }
     }
 
-    static let width: CGFloat = 250
-    static let cornerRadius: CGFloat = 22
-    private static let rowHeight: CGFloat = 48
-    private static let inset: CGFloat = 6
-    /// The hairline between the spaces and the two rows under them.
-    private static let ruleHeight: CGFloat = 9
+    static let width = GrownMenu.width
+    static let cornerRadius = GrownMenu.cornerRadius
 
     static func height(spaces: Int, more: Int) -> CGFloat {
-        rowHeight * CGFloat(spaces + more) + (more > 0 ? ruleHeight : 0) + inset * 2
+        GrownMenu.rowHeight * CGFloat(spaces + more) + (more > 0 ? GrownMenu.lineHeight : 0) + GrownMenu.topInset * 2
     }
 
     var body: some View {
@@ -573,12 +569,7 @@ private struct SpaceMenuPanel: View {
                     .accessibilityAddTraits(space.id == current ? .isSelected : [])
             }
             if newSpace != nil || spaceSettings != nil {
-                Rectangle()
-                    .fill(Theme.ink.opacity(0.12))
-                    .frame(height: 1)
-                    .padding(.horizontal, 14)
-                    .frame(height: Self.ruleHeight)
-                    .accessibilityHidden(true)
+                GrownMenuLine()
             }
             if newSpace != nil {
                 row(Self.newKey, "New Space…", checked: false, lit: lit) {
@@ -600,7 +591,8 @@ private struct SpaceMenuPanel: View {
         .onChange(of: lift) {
             if let key = key(at: liftPoint) { run(key) }
         }
-        .padding(Self.inset)
+        .padding(.horizontal, GrownMenu.sideInset)
+        .padding(.vertical, GrownMenu.topInset)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, close)
@@ -609,46 +601,12 @@ private struct SpaceMenuPanel: View {
 
     /// A row; lit while the sliding finger is on it.
     private func row(_ key: String, _ title: String, checked: Bool, lit: String?,
-                     @ViewBuilder mark: () -> some View) -> some View {
-        Button { run(key) } label: {
-            HStack(spacing: 14) {
-                mark()
-                    .frame(width: 24)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.body)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 0)
-                if checked {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .accessibilityHidden(true)
-                }
-            }
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 14)
-            .frame(height: Self.rowHeight)
-            .contentShape(.rect)
-        }
-        .buttonStyle(SpaceRowPress())
-        .background {
-            if lit == key {
-                RoundedRectangle(cornerRadius: Self.cornerRadius - 6, style: .continuous)
-                    .fill(Theme.press)
-                    .matchedGeometryEffect(id: "lit", in: highlight)
-            }
+                     @ViewBuilder mark: @escaping () -> some View) -> some View {
+        GrownMenuRow(title: title, checked: checked, lit: lit == key, highlight: highlight) {
+            run(key)
+        } mark: {
+            mark()
         }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames[key] = $0 }
-    }
-}
-
-/// A row pressed: Firn's warm wash, in the row's rounded shape, as the page
-/// menu's rows.
-private struct SpaceRowPress: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Theme.press : .clear,
-                        in: .rect(cornerRadius: SpaceMenuPanel.cornerRadius - 6, style: .continuous))
     }
 }

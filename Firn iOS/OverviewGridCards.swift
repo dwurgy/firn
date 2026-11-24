@@ -249,6 +249,10 @@ struct GridCards: UIViewRepresentable {
         private var lifting: UUID?
         /// From the finger to the carried card's middle, as it was grabbed.
         private var grabOffset = CGVector.zero
+        /// Follows the carried card every frame (`watch`, `followed`).
+        private var following: CADisplayLink?
+        private weak var followedView: UICollectionView?
+        private var followedDrag: (any UIDragSession)?
         /// When the finger last came down, for telling a swipe from a hold.
         private var touchedAt: TimeInterval = 0
         /// How long after the finger comes down a move sideways may still be
@@ -604,6 +608,7 @@ struct GridCards: UIViewRepresentable {
             carried = session.items.first?.localObject as? UUID ?? lifting
             lifting = nil
             if let carried { parent?.held(carried, true) }
+            watch(session, in: view)
         }
 
         /// A hold that never became a drag: its card shows its X again, and
@@ -635,6 +640,7 @@ struct GridCards: UIViewRepresentable {
         }
 
         func collectionView(_ view: UICollectionView, dragSessionDidEnd session: any UIDragSession) {
+            unwatch()
             // Let go outside the grid: it stays where it was last moved to.
             if let id = carried { settle(id); parent?.held(id, false) }
             carried = nil
@@ -671,19 +677,53 @@ struct GridCards: UIViewRepresentable {
             // not the finger: a card grabbed near an edge had to go almost
             // a whole card before the finger reached the next, and between
             // cards nothing moved (David, 2026-11-17).
-            if let id = carried {
-                let finger = session.location(in: view)
-                let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
-                if !aimAtFolder(carrying: id, middle: middle, in: view),
-                   let spot = nearestSpot(to: middle, in: view) {
-                    makeRoom(for: id, at: spot, in: view)
-                }
-            }
+            follow(session.location(in: view), in: view)
             let proposal = UICollectionViewDropProposal(operation: .move, intent: .unspecified)
             // The card stays its own size as it's carried, as Safari's: the
             // one thing SwiftUI's reorder couldn't ask for.
             proposal.prefersFullSizePreview = true
             return proposal
+        }
+
+        /// Room is made where the carried card now is, or a folded group
+        /// under it is aimed at.
+        private func follow(_ finger: CGPoint, in view: UICollectionView) {
+            guard let id = carried else { return }
+            let middle = CGPoint(x: finger.x + grabOffset.dx, y: finger.y + grabOffset.dy)
+            if !aimAtFolder(carrying: id, middle: middle, in: view),
+               let spot = nearestSpot(to: middle, in: view) {
+                makeRoom(for: id, at: spot, in: view)
+            }
+        }
+
+        /// Firn asks where the carried card is every frame, itself. The
+        /// collection view says where a drag is (`dropSessionDidUpdate`)
+        /// only once the finger slows: while it moved, nothing was heard,
+        /// so a card sat right over its neighbor for about 0.4s before the
+        /// neighbor moved aside, where Safari's move as it arrives (David's
+        /// recording of both, 2026-11-24, frame by frame; the Simulator's
+        /// log showed the same gap).
+        private func watch(_ session: any UIDragSession, in view: UICollectionView) {
+            unwatch()
+            followedDrag = session
+            followedView = view
+            let link = CADisplayLink(target: self, selector: #selector(followed))
+            link.add(to: .main, forMode: .common)
+            following = link
+        }
+
+        private func unwatch() {
+            following?.invalidate()
+            following = nil
+            followedDrag = nil
+        }
+
+        @objc private func followed() {
+            guard let view = followedView, let session = followedDrag, carried != nil else { return }
+            let finger = session.location(in: view)
+            // Outside the grid, the cards stay as they are.
+            guard view.bounds.insetBy(dx: -40, dy: -40).contains(finger) else { return }
+            follow(finger, in: view)
         }
 
         /// The carried card's place moves to the spot under the finger, the
@@ -794,6 +834,7 @@ struct GridCards: UIViewRepresentable {
         }
 
         func collectionView(_ view: UICollectionView, performDropWith coordinator: any UICollectionViewDropCoordinator) {
+            unwatch()
             guard let item = coordinator.items.first, let id = item.dragItem.localObject as? UUID,
                   let at = shown.firstIndex(of: id) else { return }
             if let folder = aimed, let path = dataSource?.indexPath(for: folder),

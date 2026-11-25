@@ -97,16 +97,17 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 
 **Logo and icons:** use only the final files from the brand kit (`brand/`). Never redraw or re-type the logo or wordmark. The app icon is the glacier tile; on macOS 26 it's the `Firn.icon` from Icon Composer.
 
-### Sunrise (the welcome and the empty page)
+### Frost (the welcome and the "no tabs" screen)
 
-Firn's brand moments use the "Sunrise" look, the same as firnbrowser.com: sunrise at a snowy cabin near Sisters, Oregon, coffee in hand. A blue-hour sky warming to dawn at the horizon, the sun just peeking over textured snow, and a few drifting flakes. **Every value lives in `brand/BRAND.md`** (a copy from `dwurgy/firn-site`; the site's CSS wins); don't copy numbers here. It replaced "First light" (2026-11-13; `docs/SUNRISE-PLAN.md`, all six steps built; the Mac welcome on Sunrise not yet checked by David).
+Firn's brand moments use "Frost" (David, 2026-11-24; it replaced Sunrise): a frosted window on a snowy morning, everything outside soft and out of focus. The approved designs are in `docs/design/frost` (start with its README; its BRAND.md has every value), the scene is `Shared/Frost.swift`, and the plan is in `docs/HISTORY.md` ("Plan: Frost"). Built on the Mac; the iPhone's empty page is still Sunrise (`Shared/Sunrise.swift`) until its own session, and the iPhone has no welcome yet.
 
-- **Where:** only the full-window welcome and the empty page (no open tabs). Never everyday browsing, Settings, Lookout, the command bar, menus, downloads, or scam warnings. Everyday screens are plain warm paper.
-- The tab switcher uses a space wash (space-tinted frame gradient plus a soft space-color glow), the iOS match to the Mac's tinted frame.
-- **Only the snow and the mark take the space's color.** The sky and the sun are always Firn's own.
-- **Dark is "blue hour":** the sun never clears the snow, only a cap and a faint glow.
-- **The welcome's finish** ("Welcome in."): about 2.4s, unhurried; the words hold a moment, the browser rises over them (about 1.1s), then the scene fades to the real browser. Reduce Motion: a plain 300ms fade.
-- **Performance (required):** gradients and shapes, not heavy filters; textures are static images; nothing animates or redraws while idle (no `TimelineView` running in the background); motion uses transforms and opacity; everything moving is off with Reduce Motion.
+- **Where:** only the welcome and "no tabs." Never everyday browsing, Settings, Lookout, the command bar, menus, downloads, or scam warnings. Everyday screens are plain warm paper.
+- **The sky:** one plain gradient, with a faint warm horizon along the bottom in light mode only. Dark is "blue hour," and the logo on it is always cream.
+- **Hello** is the logo out of focus; **the steps** are the plain sky, a question on the left and its choices on the right, with one glass pill; **"Welcome in."** is the logo in focus. **No lens in the apps:** it's the website's landing page's alone (David).
+- **"No tabs"** is one very large blurred flake in the space's color, the one place the logo takes it. No words.
+- **The finish** runs about 3.4s, unhurried: the fog lifts, the words hold a moment, the window glides up over them (David's speeds, 2026-11-25). Reduce Motion: a plain 300ms fade.
+- The tab switcher's space wash (the iPhone's overview) is its own thing, unchanged.
+- **Performance (required):** the blur is always a ready-made picture, never a live blur; nothing moves or redraws while idle; no snow in the app; everything moving is off with Reduce Motion.
 
 ---
 
@@ -227,7 +228,7 @@ Don't add these without David asking again.
 
 - **Small on-device AI touches:** quiet, optional helpers that use Apple's on-device model (the Foundation Models framework, macOS 26 and later with Apple Intelligence), such as a "Summarize" in Lookout or reader, and automatic names for groups (decided and planned, David, 2026-11-06: always on, see Groups). Everything runs on the Mac: no cloud service, no account, no network traffic, so "your data stays on your device" stays literally true. They must be optional and simply absent on macOS 14 and 15 or when Apple Intelligence is off. No chat panel and no sidebar assistant; if it isn't quiet, it doesn't fit. If David decides to try one, it's its own step with a plan first, on Opus.
 - **iCloud sync: decided** (David, 2026-11-13); see "Where we are" and `docs/SYNC-PLAN.md`.
-- **Dark mode a little darker: decided** (David, 2026-11-15): frame #28241F, page #1C1916, held tile #332E29 (option B in `docs/dark-mode-design.html`); the old frame let a space's tint grey it out. Then on the iPhone, in dark: the card pills #4E4843, the bars' frost the frame at 40%, the hold menu #38332E, and the hold menu's corners 22pt (rows 18pt); David checked it on his iPhone (2026-11-15). The Mac not yet checked. The brand moments (Sunrise) and `brand/` keep the site's values.
+- **Dark mode a little darker: decided** (David, 2026-11-15): frame #28241F, page #1C1916, held tile #332E29 (option B in `docs/dark-mode-design.html`); the old frame let a space's tint grey it out. Then on the iPhone, in dark: the card pills #4E4843, the bars' frost the frame at 40%, the hold menu #38332E, and the hold menu's corners 22pt (rows 18pt); David checked it on his iPhone (2026-11-15). The Mac not yet checked. The brand moments and `brand/` keep the site's values.
 
 ---
 
@@ -261,7 +262,7 @@ Only what's open lives here. The full step-by-step log up to 2026-11-23 is in `d
   - **Waiting on Apple:** passkeys (entitlement requested 2026-10-26; then a new provisioning profile).
   - **Open bugs:** page corners vs. the window's on macOS 26 (Noah; `docs/HISTORY.md`, "Bug reports after 1.0"). Swipe back/forward never tested on a trackpad.
   - **For the next release's notes:** thank Noah (the first Lookout's one-time hint) and David (downloaded apps that "can't be opened").
-  - **Built, not yet checked by David on the Mac:** the welcome on Sunrise, link-made groups ending at one tab, group names updating as tabs join, Reader and Summarize, native glass on tiles, group cards, and `FrostGlass` (fine from demo shots), the darker dark mode, http-only sites ("Not Secure", Continue Without a Secure Connection), Settings › Sync, Send to My iPhone, and Help › Send Feedback….
+  - **Built, not yet checked by David on the Mac:** the welcome's steps and "no tabs" on Frost (the finish's speed is David's pick; VoiceOver, keyboard, Reduce Motion, and macOS 14 and 15 not checked), link-made groups ending at one tab, group names updating as tabs join, Reader and Summarize, native glass on tiles, group cards, and `FrostGlass` (fine from demo shots), the darker dark mode, http-only sites ("Not Secure", Continue Without a Secure Connection), Settings › Sync, Send to My iPhone, and Help › Send Feedback….
 - **iCloud sync** (`docs/SYNC-PLAN.md`, on `ios`): spaces sync (step 3 done, two-device test passed). Groups and tabs don't sync (step 4 dropped, David, 2026-11-16). Step 5 ("On your Mac" in the command bar) and step 6 (Send to My Mac / Send to My iPhone) are built, untried against iCloud. Step 6 part 3(b), the three menus rearranged, is built (2026-11-23; on David's iPhone, Paste and Go works; the rest not yet judged). Next: (c), David deploys `Device` and `SentTab` to Production and runs the two-device test. Later: step 8, Basecamp Mac to Mac. Held until the iPhone app is out: an iCloud sync step in the welcome (David, 2026-11-24).
 - **The iPhone (branch `ios`, `docs/IOS-PLAN.md`): heading for 1.0, iPhone and iPad together** (David, 2026-11-24, replacing 2026-11-23's "iPhone only": a quick look over of the iPad and the iPhone Duo's open screen before submitting, refined later; Apple doesn't let an app drop iPad support once released with it). Device family switched and a quick look over done in the Simulator (2026-11-24; `docs/IOS-PLAN.md`, "The iPad and Duo look over"): nothing broken; Phase 7 (the iPad's sidebar and split view) isn't built, so the iPad ships as the iPhone's layout, wider. Raw iPad captures (2064 × 2752) are in `docs/app-store/ipad/plain` (git-ignored).
   - **Before submitting:** `Device` and `SentTab` deployed to Production; the default-browser switch turned on for the app ID in the developer portal (this makes the Mac's "Firn Developer ID" profile invalid until it's saved again; section 5; until then device builds won't sign); a real iPad or Duo has never run it (Simulator only). The privacy manifest is built (`Firn iOS/PrivacyInfo.xcprivacy`): code that starts reading file dates or free disk space adds its reason there first.

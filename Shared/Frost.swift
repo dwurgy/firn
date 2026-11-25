@@ -59,6 +59,43 @@ struct FrostSky: View {
     }
 }
 
+/// The "no tabs" screen: the sky, the horizon, and one very large flake, out
+/// of focus, running off the right edge in the space's color. No words.
+struct FrostNoTabs: View {
+    /// The space's color name (`Space.color`).
+    let spaceColor: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            // About as wide as the page is tall; less on a narrow page, so
+            // its left side still shows.
+            let flake = min(size.height * 760 / 744, size.width * 1.2)
+            // The picture's clear margin, for its blur: 204 of its 1928
+            // pixels on each side.
+            let picture = flake * 1928 / 1520
+            ZStack(alignment: .topLeading) {
+                FrostSky()
+                Image("FrostMarkBlurred")
+                    .resizable()
+                    .foregroundStyle(Theme.spaceColor(spaceColor))
+                    .opacity(Theme.Frost.flakeOpacity(dark: colorScheme == .dark))
+                    .frame(width: picture, height: picture)
+                    .position(x: size.width - flake * (0.5 - 150 / 760), y: size.height / 2 - flake * 20 / 760)
+                    // Another space's color comes up slowly.
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.6), value: spaceColor)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .clipped()
+        .compositingGroup()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// Where the logo sits in a scene this size (BRAND.md, "The blurred logo").
 struct FrostLogoLayout {
     /// The logo file's frame, before any blur spreads past it.

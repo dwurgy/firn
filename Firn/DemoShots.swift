@@ -122,6 +122,10 @@ enum DemoShot: String, CaseIterable {
             if let history = await appWindow("history") { captured = history }
         case .empty:
             show("Home")
+            // `--color=sage`: the same screen in another space's color.
+            if let color = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--color=") }) {
+                store.updateSpace(store.activeSpace, name: store.activeSpace.name, color: String(color.dropFirst("--color=".count)))
+            }
             // An empty window opens the command bar; the shot is the scene.
             try? await Task.sleep(for: .milliseconds(500))
             window.closeCommandBar(focusingPage: false)

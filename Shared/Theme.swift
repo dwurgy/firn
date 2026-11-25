@@ -275,6 +275,8 @@ enum Theme {
         static let glassSolid = Color(light: 0xF6F7F6, dark: 0x2C354C)
 
         static let logoOpacity = 0.85
+        /// The "no tabs" flake's, in the space's color.
+        static func flakeOpacity(dark: Bool) -> Double { dark ? 0.5 : 0.62 }
     }
 
     // MARK: Sunrise

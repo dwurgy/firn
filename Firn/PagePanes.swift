@@ -114,7 +114,7 @@ struct PagePane: View {
     let store: BrowserStore
     let tab: FirnCore.Tab?
     /// The space's color, when this is the empty page (no tab open).
-    var sunrise: String? = nil
+    var emptyColor: String? = nil
     var onPointerDown: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -126,8 +126,8 @@ struct PagePane: View {
             shape
                 .fill(Theme.page)
                 .shadow(color: Theme.shadowPageFar, radius: 12, x: 4, y: 8)
-            if tab == nil, let sunrise {
-                SunriseScene(spaceColor: sunrise)
+            if tab == nil, let emptyColor {
+                FrostNoTabs(spaceColor: emptyColor)
                     .clipShape(shape)
                     .transition(.opacity)
             }

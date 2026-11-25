@@ -10,6 +10,7 @@ struct BrowserScreen: View {
     let pictures: PagePictures
     let sync: ICloudSync
     let sending: Sending
+    let welcome: WelcomePresenter
     /// A link from another app, opened as a new tab once it arrives.
     @Binding var incoming: URL?
     @FocusState private var editing: Bool
@@ -430,6 +431,8 @@ struct BrowserScreen: View {
         .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.25), value: editing)
         .onChange(of: editing) { if !editing { typingNewTab = false } }
         .onChange(of: incoming, initial: true) { openIncoming() }
+        // The welcome's finish, where sites were picked.
+        .onChange(of: welcome.overviewRequests) { showTabsAtOnce() }
         // The bar's buttons wake once the pull's landing is over, not on a
         // timer: waking them redraws the whole bar, and 150ms after the
         // finger lifted that fell mid-landing and froze a frame (David's
@@ -1365,6 +1368,23 @@ struct BrowserScreen: View {
         withTransaction(Transaction(animation: nil)) {
             landing.barLate = false
             landing.barIn = 0
+        }
+    }
+
+    /// The overview, there with no motion of its own: the welcome's finish
+    /// brings it up whole.
+    private func showTabsAtOnce() {
+        guard !showingTabs else { return }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            showingTabs = true
+            arrival = 1
+            listIn = 1
+            forward = 1
+            focus = 1
+            pageHidden = true
+            lineShown = true
         }
     }
 

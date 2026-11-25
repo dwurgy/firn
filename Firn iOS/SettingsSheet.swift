@@ -30,6 +30,7 @@ struct SettingsSheet: View {
     @Environment(TipJar.self) private var tipJar
     @Environment(\.purchase) private var purchase
     @Environment(\.openURL) private var openURL
+    @Environment(\.showWelcome) private var showWelcome
     /// Send Feedback found no mail app to open its draft in.
     @State private var noMailApp = false
     @State private var clearingHistory = false
@@ -43,6 +44,7 @@ struct SettingsSheet: View {
                 syncSection
                 defaultBrowserSection
                 feedbackSection
+                welcomeSection
                 tipJarSection
             }
             .listStyle(.insetGrouped)
@@ -230,6 +232,18 @@ struct SettingsSheet: View {
             } else {
                 Text("Opens an email to \(FeedbackEmail.address) for bugs, ideas, or anything else. Firn fills in its version, the iOS version, and the \(Self.device) model; nothing is sent until you send it.")
             }
+        }
+    }
+
+    /// The welcome again, as the Mac's Help › Show Welcome Again: it comes
+    /// over Settings, which goes under it.
+    private var welcomeSection: some View {
+        Section {
+            Button("Show Welcome Again") {
+                showWelcome?()
+                dismiss()
+            }
+            .foregroundStyle(Theme.ink)
         }
     }
 

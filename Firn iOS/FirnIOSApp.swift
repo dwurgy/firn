@@ -36,9 +36,15 @@ struct FirnIOSApp: App {
             Group {
                 if let browser {
                     BrowserScreen(store: browser.store, pictures: browser.pictures, sync: browser.sync,
-                                  sending: browser.sending, incoming: $incoming)
+                                  sending: browser.sending, welcome: browser.welcome, incoming: $incoming)
                         // Send to My Mac's rows, in the bar's and the overview's menus.
                         .environment(browser.sending)
+                        // Settings › Show Welcome.
+                        .environment(\.showWelcome, SheetAction { browser.welcome.showAgain() })
+                        .background { WelcomeAnchor(presenter: browser.welcome) }
+                        .overlay {
+                            if browser.welcome.covers { FrostSky().ignoresSafeArea() }
+                        }
                 } else {
                     Theme.page.ignoresSafeArea()
                 }
@@ -69,6 +75,8 @@ final class Browser {
     let sync: ICloudSync
     /// Send to My Mac: the devices to send to, and the note (step 6).
     let sending: Sending
+    /// The welcome, the first time Firn opens (and from Settings).
+    let welcome: WelcomePresenter
 
     /// Picks up where the last session left off, then saves as things change
     /// and whenever Firn leaves the screen (iOS may end it after that without
@@ -104,6 +112,7 @@ final class Browser {
         // within the first seconds doesn't leave it nameless and forgotten.
         if session == nil { try? file.save(snapshot()) }
         self.store = store
+        welcome = WelcomePresenter(store: store, firstRun: session == nil)
         // Each tab's back history goes with the session, and whenever Firn
         // leaves the screen; closed tabs' pictures go after each save.
         let pictureStore = PagePictureStore.standard

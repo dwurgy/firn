@@ -48,6 +48,12 @@ enum BrandFont {
         return .system(size: size, weight: emphasis ? .semibold : .regular, design: .serif)
     }
 
+    /// The same, by the Mac's name, for the welcome's shared pieces
+    /// (`FrostTitle`).
+    static func gooper(_ size: CGFloat, emphasis: Bool = false) -> Font {
+        font(size: size, emphasis: emphasis)
+    }
+
     /// The text style whose default size is nearest `size`, so the font grows
     /// and shrinks with Dynamic Type the way that style does.
     static func textStyle(near size: CGFloat) -> Font.TextStyle {

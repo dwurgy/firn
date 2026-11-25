@@ -84,6 +84,9 @@ final class Tidying {
     /// Cut short (the overview hides, another space): what was going goes
     /// at once, unseen, and the pill is its name again.
     func stop() {
+        #if TIDY_TEST
+        Self.testedThisTime = false
+        #endif
         task?.cancel()
         task = nil
         for card in air?.subviews ?? [] { card.removeFromSuperview() }
@@ -108,11 +111,18 @@ final class Tidying {
         }
     }
 
+    #if TIDY_TEST
+    /// Once each time the overview opens: the pill's thaw is a new rest,
+    /// and the next four tabs went, and the next.
+    private static var testedThisTime = false
+    #endif
+
     private static func idle(_ store: BrowserStore) -> [FirnCore.Tab] {
         #if TIDY_TEST
         // For trying the moment without waiting a week; never in a build
         // that ships (docs/IOS-PLAN.md).
         if store.driftAfter != .never {
+            if testedThisTime { return [] }
             return Array(store.looseTabs.filter { $0.id != store.activeTabID }.prefix(4))
         }
         #endif
@@ -128,6 +138,9 @@ final class Tidying {
     }
 
     private func tidy(_ idle: [FirnCore.Tab], _ scene: Scene) async {
+        #if TIDY_TEST
+        Self.testedThisTime = true
+        #endif
         store = scene.store
         pending = idle
         let space = scene.store.activeSpaceID

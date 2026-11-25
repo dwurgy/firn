@@ -17,6 +17,7 @@ Everything built but not yet seen by David, gathered from the brief on 2026-11-1
 
 ### Overview and tabs (the newest work)
 
+- [ ] **Tidying away** (2026-11-25): the test build, with the iPhone connected and unlocked (David said yes to it). It replaces the App Store copy, and each opening of the overview tidies up to four real loose tabs; Restore All brings them back. Build Release for the iPhone with `SWIFT_ACTIVE_COMPILATION_CONDITIONS='TIDY_TEST'`. Look at: the cards sinking (smooth?), the pill's frost and words, the grid closing up, opening a tab mid-moment, Tidied Away in the space menu, light and dark. Afterward, a normal build or the App Store copy again.
 - [ ] **The space wash** behind the overview (Glacier, Sage, Heather), with "No open tabs" muted, a little above the middle.
 - [ ] **Only the tab on screen is a tall card** (240pt) each time the overview opens; a pinch apart opens all of them for that visit only.
 - [ ] **Tall cards on warm paper:** the slim row's line, the page in a window below with a clear mat inside the ring, the picture starting below the page's header.

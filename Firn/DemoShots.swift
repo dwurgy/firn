@@ -8,7 +8,7 @@ import SwiftUI
 /// window to capture by writing its number to a hidden file in Downloads. `scripts/demo-shots.sh` captures it and removes the file, and
 /// Firn quits. Nothing here runs outside a demo.
 enum DemoShot: String, CaseIterable {
-    case hero, work, trip, command, lookout, split, tidied, history, empty, peek, welcome
+    case hero, work, command, lookout, split, reader, summary, tidied, history, empty, peek, welcome
 
     static let current: DemoShot? = {
         // One word, `--shot=hero`: AppKit opens a bare word at launch as a
@@ -21,9 +21,9 @@ enum DemoShot: String, CaseIterable {
 
     static let isDark = ProcessInfo.processInfo.arguments.contains("--dark")
 
-    /// What the command bar shot has typed: it finds Work's two guidelines
-    /// pages, open and in its history.
-    static var typed: String? { current == .command ? "guide" : nil }
+    /// What the command bar shot has typed: it finds Norse Projects, open
+    /// in Personal and in its history.
+    static var typed: String? { current == .command ? "nor" : nil }
 
     /// Every shot's browser window is this size, so the set matches.
     private static let windowSize = CGSize(width: 1440, height: 900)
@@ -53,15 +53,22 @@ enum DemoShot: String, CaseIterable {
         }
         var captured: NSWindow = browser
 
+        // Snow Peak has no fixed icon address (`DemoSession`): its tab loads
+        // once, so its row shows the icon, not a letter.
+        if let bare = tabs(in: "Personal").first(where: { $0.place == .open && $0.url?.host() == "www.snowpeak.com" }),
+           let front = store.activeTab {
+            store.select(bare)
+            for _ in 0..<60 where bare.icon == nil { try? await Task.sleep(for: .milliseconds(250)) }
+            store.select(front)
+        }
+
         switch shot {
         case .hero:
             show("Personal")
         case .work:
             show("Work")
-        case .trip:
-            show("Trip")
         case .command:
-            show("Work")
+            show("Personal")
             window.openCommandBar()
         case .lookout:
             show("Personal")
@@ -70,9 +77,18 @@ enum DemoShot: String, CaseIterable {
             }
         case .split:
             show("Personal")
-            // The two in "Weekend cooking" (a tidied-away recipe is there too).
-            let recipes = tabs(in: "Personal").filter { $0.place == .open && $0.url?.host() == "smittenkitchen.com" }
-            if recipes.count == 2 { window.openSplit(recipes[1], beside: recipes[0]) }
+            // The story beside Snow Peak (the Nordic shops open with
+            // popups of their own: a currency picker, a mailing list).
+            let open = tabs(in: "Personal").filter { $0.place == .open }
+            if let story = open.first(where: { $0.url?.host() == "www.kinfolk.com" }),
+               let snowPeak = open.first(where: { $0.url?.host() == "www.snowpeak.com" }) {
+                window.openSplit(snowPeak, beside: story)
+            }
+        case .reader, .summary:
+            show("Personal")
+            if let article = tabs(in: "Personal").first(where: { $0.place == .open && $0.url?.host() == "en.wikipedia.org" }) {
+                store.select(article)
+            }
         case .tidied:
             show("Personal")
             window.showsOverflow = true
@@ -81,10 +97,7 @@ enum DemoShot: String, CaseIterable {
             openWindow(id: "history")
             if let history = await appWindow("history") { captured = history }
         case .empty:
-            show("Trip")
-            let trip = store.activeSpace.id
-            for group in store.groups where group.spaceID == trip { store.close(group) }
-            window.closeAllTabs()
+            show("Home")
             // An empty window opens the command bar; the shot is the scene.
             try? await Task.sleep(for: .milliseconds(500))
             window.closeCommandBar(focusingPage: false)
@@ -100,8 +113,23 @@ enum DemoShot: String, CaseIterable {
         }
 
         await waitForPages(of: store)
-        // Snow Peak's cookie banner would cover the hero's page.
-        await store.activeTab?.page?.declineCookieBanner(waiting: 5)
+        if shot == .reader || shot == .summary {
+            // The page counts as an article a moment after it loads.
+            for _ in 0..<40 where !window.canToggleReader { try? await Task.sleep(for: .milliseconds(250)) }
+            window.toggleReader()
+            for _ in 0..<40 where !window.isReading { try? await Task.sleep(for: .milliseconds(250)) }
+            if shot == .summary {
+                window.summarizeArticle()
+                // The summary is written on the Mac, a few seconds.
+                try? await Task.sleep(for: .seconds(12))
+            }
+        }
+        // A cookie banner (or Wikipedia's donation banner) would cover the
+        // page: the tab on screen's, its split partner's, and a Lookout's.
+        var shown: [any PageController] = []
+        if let tab = store.activeTab { shown += [tab.page, store.splitPartner(of: tab)?.page].compactMap { $0 } }
+        if let lookout = store.lookout?.page { shown.append(lookout) }
+        for page in shown { await page.declineCookieBanner(waiting: 4) }
         // Icons, fonts, and the motion settle.
         try? await Task.sleep(for: .seconds(2.5))
         NSApp.activate(ignoringOtherApps: true)

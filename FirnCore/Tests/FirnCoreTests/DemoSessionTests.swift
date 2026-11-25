@@ -17,8 +17,8 @@ struct DemoSessionTests {
     @Test func threeSeparateSpacesWithNewDataStoresEachTime() {
         let first = DemoSession.make(now: now).session
         let second = DemoSession.make(now: now).session
-        #expect(first.spaces.map(\.name) == ["Personal", "Work", "Trip"])
-        #expect(first.spaces.map(\.color) == ["sage", "glacier", "ochre"])
+        #expect(first.spaces.map(\.name) == ["Personal", "Work", "Home"])
+        #expect(first.spaces.map(\.color) == ["glacier", "sage", "heather"])
         #expect(Set(first.spaces.map(\.dataStoreID)).count == 3)
         #expect(Set(first.spaces.map(\.dataStoreID)).isDisjoint(with: second.spaces.map(\.dataStoreID)))
     }
@@ -26,16 +26,16 @@ struct DemoSessionTests {
     @Test func restoresWhole() {
         let (session, store) = restored()
         #expect(store.tabs.count == session.tabs.count)
-        #expect(store.groups.map(\.name) == ["Weekend cooking", "Launch", "Sisters"])
+        #expect(store.groups.map(\.name) == ["Nordic Style"])
         let personal = session.spaces[0].id
         let basecamp = { (space: UUID) in store.tabs.filter { $0.spaceID == space && $0.place == .basecamp }.map(\.title) }
-        #expect(basecamp(personal) == ["Gmail", "GitHub", "YouTube", "Apple Music"])
-        #expect(basecamp(session.spaces[1].id) == ["Google Calendar", "Slack", "Notion"])
-        #expect(basecamp(session.spaces[2].id).isEmpty)
+        #expect(basecamp(personal) == ["Utu Weather", "David Wurgler"])
+        #expect(basecamp(session.spaces[1].id).isEmpty)
+        #expect(store.tabs.filter { $0.spaceID == session.spaces[2].id }.isEmpty)
         #expect(store.tabs.filter { $0.place == .drifted }.allSatisfy { $0.spaceID == personal })
         #expect(store.tabs.count { $0.place == .drifted } == 3)
         #expect(store.activeSpaceID == personal)
-        #expect(store.activeTab?.url?.host() == "www.snowpeak.com")
+        #expect(store.activeTab?.url?.host() == "www.kinfolk.com")
     }
 
     @Test func nothingDriftsOrExpiresAtLaunch() {
@@ -54,7 +54,8 @@ struct DemoSessionTests {
         for page in DemoSession.allPages {
             #expect(page.url.scheme == "https", "\(page.url)")
             let host = page.url.host() ?? ""
-            #expect(onScreen.contains(host) || !DemoSession.iconAddresses(for: host).isEmpty, "\(host)")
+            // Snow Peak has no fixed icon address: a demo shot loads it once.
+            #expect(onScreen.contains(host) || host == "www.snowpeak.com" || !DemoSession.iconAddresses(for: host).isEmpty, "\(host)")
             #expect(DemoSession.iconAddresses(for: host).allSatisfy { $0.scheme == "https" })
         }
     }
@@ -63,7 +64,7 @@ struct DemoSessionTests {
         let (session, visits) = DemoSession.make(now: now)
         let stores = Set(session.spaces.map(\.dataStoreID))
         let twoWeeksAgo = Calendar.current.date(byAdding: .day, value: -14, to: now)!
-        #expect(visits.count > 100)
+        #expect(visits.count > 50)
         #expect(visits.allSatisfy { $0.time < now && $0.time > twoWeeksAgo })
         #expect(visits.allSatisfy { stores.contains($0.dataStoreID) })
         // Each space's history holds only its own pages.

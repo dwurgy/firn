@@ -2,8 +2,8 @@ import Foundation
 
 /// The demo's ready-made session (`--demo`, for the website's screenshots
 /// and videos), as planned with David (docs/HISTORY.md, "Demo mode"): three
-/// spaces of well-known sites, a few tidied-away tabs, and two weeks of
-/// history. Every space gets a new data store each time, so a demo always
+/// spaces with the same sites as the iPhone's screenshots, a few
+/// tidied-away tabs, and two weeks of history. Every space gets a new data store each time, so a demo always
 /// starts signed out of everything. Nothing here runs outside a demo.
 public enum DemoSession {
     /// A visit to put in the demo's history.
@@ -31,9 +31,9 @@ public enum DemoSession {
 
     /// The session and its history, for a demo starting at `now`.
     public static func make(now: Date = .now) -> (session: Session, visits: [Visit]) {
-        let personal = Space(name: "Personal", color: "sage", order: 0, dataStoreID: UUID(), lastChangedAt: now)
-        let work = Space(name: "Work", color: "glacier", order: 1, dataStoreID: UUID(), lastChangedAt: now)
-        let trip = Space(name: "Trip", color: "ochre", order: 2, dataStoreID: UUID(), lastChangedAt: now)
+        let personal = Space(name: "Personal", color: "glacier", order: 0, dataStoreID: UUID(), lastChangedAt: now)
+        let work = Space(name: "Work", color: "sage", order: 1, dataStoreID: UUID(), lastChangedAt: now)
+        let home = Space(name: "Home", color: "heather", order: 2, dataStoreID: UUID(), lastChangedAt: now)
 
         var tabs: [TabRecord] = []
         var groups: [GroupRecord] = []
@@ -57,45 +57,38 @@ public enum DemoSession {
             return record
         }
 
-        // Personal: everyday sites, weekend cooking, and a little reading.
-        for (index, page) in [gmail, github, youtube, appleMusic].enumerated() {
+        // Personal: David's own sites in Basecamp, a story on screen, and
+        // a group of Nordic shops.
+        for (index, page) in [utuWeather, davidWurgler].enumerated() {
             add(page, to: personal, place: .basecamp, lastActiveAt: minutesAgo(Double(90 + index * 30)))
         }
-        let cooking = group("Weekend cooking", in: personal)
-        add(pumpkinBread, to: personal, group: cooking, lastActiveAt: minutesAgo(40))
-        add(galette, to: personal, group: cooking, lastActiveAt: minutesAgo(35))
-        add(firnArticle, to: personal, lastActiveAt: minutesAgo(20))
-        add(craterLake, to: personal, lastActiveAt: minutesAgo(10))
-        let personalTab = add(snowPeak, to: personal, lastActiveAt: now)
-        for (index, page) in [glacierArticle, mountHood, ciderCaramels].enumerated() {
+        let personalTab = add(blunkHouse, to: personal, lastActiveAt: now)
+        let nordic = group("Nordic Style", in: personal)
+        add(audo, to: personal, group: nordic, lastActiveAt: minutesAgo(40))
+        add(norseProjects, to: personal, group: nordic, lastActiveAt: minutesAgo(35))
+        add(ourLegacy, to: personal, group: nordic, lastActiveAt: minutesAgo(30))
+        add(snowPeak, to: personal, lastActiveAt: minutesAgo(20))
+        add(firnArticle, to: personal, lastActiveAt: minutesAgo(15))
+        add(bookOfRuth, to: personal, lastActiveAt: minutesAgo(10))
+        for (index, page) in [glacierArticle, mountHood, kinfolk].enumerated() {
             add(page, to: personal, place: .drifted, lastActiveAt: daysAgo(12 + index), driftedAt: daysAgo(2 + index))
         }
 
-        // Work: a launch, and Firn's own site.
-        for (index, page) in [calendar, slack, notion].enumerated() {
-            add(page, to: work, place: .basecamp, lastActiveAt: minutesAgo(Double(120 + index * 30)))
-        }
-        let launch = group("Launch", in: work)
-        add(guidelines, to: work, group: launch, lastActiveAt: minutesAgo(70))
-        add(reviewGuidelines, to: work, group: launch, lastActiveAt: minutesAgo(65))
-        add(materials, to: work, lastActiveAt: minutesAgo(60))
-        let workTab = add(firnSite, to: work, lastActiveAt: minutesAgo(55))
+        // Work: three loose tabs.
+        let workTab = add(davidWurgler, to: work, lastActiveAt: minutesAgo(55))
+        add(utuWeather, to: work, lastActiveAt: minutesAgo(60))
+        add(kinfolk, to: work, lastActiveAt: minutesAgo(70))
 
-        // Trip: a nod to Sunrise (Sisters, Oregon).
-        let sistersGroup = group("Sisters", in: trip)
-        add(smithRock, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(48))
-        let tripTab = add(sistersCoffee, to: trip, group: sistersGroup, lastActiveAt: minutesAgo(46))
-        add(map, to: trip, lastActiveAt: minutesAgo(45))
-        add(weather, to: trip, lastActiveAt: minutesAgo(44))
+        // Home: empty, for the empty page's Sunrise.
 
         // Firn was used each of the last two weeks' days.
         let usedDays = (0..<14).map { day(of: daysAgo($0)) }.sorted()
 
         let session = Session(
-            spaces: [personal, work, trip], groups: groups, tabs: tabs,
+            spaces: [personal, work, home], groups: groups, tabs: tabs,
             window: WindowRecord(
                 id: UUID(), activeSpaceID: personal.id, activeTabID: personalTab,
-                spaceTabIDs: [work.id: workTab, trip.id: tripTab],
+                spaceTabIDs: [work.id: workTab],
                 sidebarWidth: 260, sidebarCollapsed: false
             ),
             usedDays: usedDays, unseenTidiedSpaceIDs: [personal.id]
@@ -104,9 +97,9 @@ public enum DemoSession {
         // History: the space's pages, visited on a believable rhythm over
         // the last 14 days (everyday sites most days, the rest now and then).
         let pages: [(Space, [Page], [Page])] = [
-            (personal, [gmail, youtube, github, appleMusic], [pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood, ciderCaramels]),
-            (work, [calendar, slack, notion], [guidelines, reviewGuidelines, materials, firnSite]),
-            (trip, [], [smithRock, sistersCoffee, map, weather]),
+            (personal, [utuWeather, davidWurgler],
+             [blunkHouse, audo, norseProjects, ourLegacy, snowPeak, firnArticle, bookOfRuth, glacierArticle, mountHood, kinfolk]),
+            (work, [davidWurgler, utuWeather, kinfolk], []),
         ]
         var visits: [Visit] = []
         for (space, everyday, others) in pages {
@@ -163,70 +156,43 @@ public enum DemoSession {
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 
-    // MARK: The pages (checked signed out, 2026-10-26)
+    // MARK: The pages (the iPhone screenshots' sites, without Firn's own, which is
+    // about to be rebranded; checked 2026-11-24)
 
-    static let gmail = Page("Gmail", "https://mail.google.com/", icons: [])
-    static let github = Page("GitHub", "https://github.com/", icons: ["https://github.com/apple-touch-icon.png", "https://github.com/favicon.ico"])
-    static let youtube = Page("YouTube", "https://www.youtube.com/", icons: [])
-    static let appleMusic = Page("Apple Music", "https://music.apple.com/", icons: ["https://music.apple.com/apple-touch-icon.png", "https://music.apple.com/favicon.ico"])
-    static let pumpkinBread = Page(
-        "pumpkin bread – smitten kitchen", "https://smittenkitchen.com/2016/10/pumpkin-bread/",
-        icons: ["https://smittenkitchen.com/apple-touch-icon.png", "https://smittenkitchen.com/favicon.ico"])
-    static let galette = Page(
-        "butternut squash and caramelized onion galette – smitten kitchen",
-        "https://smittenkitchen.com/2007/10/butternut-squash-and-caramelized-onion-galette/", icons: pumpkinBread.icons.map(\.absoluteString))
+    static let utuWeather = Page("Utu Weather", "https://utuweather.com/", icons: ["https://utuweather.com/apple-touch-icon.png"])
+    static let davidWurgler = Page(
+        "David Wurgler", "https://davidwurgler.com/",
+        icons: ["https://davidwurgler.com/apple-touch-icon.png", "https://davidwurgler.com/favicon.ico"])
+    // The hero shot.
+    static let blunkHouse = Page(
+        "Blunk House - Kinfolk", "https://www.kinfolk.com/stories/blunk-house/",
+        icons: ["https://ik.imagekit.io/kinfolk/wp-content/themes/kinfolk/src/img/favicon/apple-touch-icon.png"])
+    static let kinfolk = Page("Home - Kinfolk", "https://www.kinfolk.com/", icons: blunkHouse.icons.map(\.absoluteString))
+    static let audo = Page(
+        "Kitchen & Dining Room - Audo Copenhagen", "https://audocph.com/pages/kitchen-dining-room",
+        icons: ["https://audocph.com/cdn/shop/files/Audo-Cph_Favicon_House_new_1b2ff315-3dff-4170-b4d9-066a2e757620.png?crop=center&height=180&v=1685541411&width=180"])
+    static let norseProjects = Page(
+        "Norse Projects", "https://norseprojects.com/",
+        icons: ["https://norseprojects.com/cdn/shop/files/NPA_FAVICON-01_2bc60fed-c64f-4cdf-85b5-5dbbd4d726f5.png?v=1786091740&width=180"])
+    static let ourLegacy = Page(
+        "Our Legacy - Official Online Shop", "https://www.ourlegacy.com/",
+        icons: ["https://www.ourlegacy.com/favicons/apple-touch-icon.png", "https://www.ourlegacy.com/favicons/favicon-32x32.png"])
+    // Its only icon is a versioned theme file and the site refuses
+    // non-browser requests, so none here: a demo shot loads the tab once
+    // for its icon (`DemoShot`).
+    static let snowPeak = Page(
+        "Snow Peak USA - Japanese-Designed Camping Gear & Apparel | Snow Peak", "https://www.snowpeak.com/", icons: [])
     static let firnArticle = Page(
         "Firn - Wikipedia", "https://en.wikipedia.org/wiki/Firn",
         icons: ["https://en.wikipedia.org/apple-touch-icon.png", "https://en.wikipedia.org/favicon.ico"])
-    static let craterLake = Page(
-        "Crater Lake National Park (U.S. National Park Service)", "https://www.nps.gov/crla/index.htm",
-        icons: ["https://www.nps.gov/favicon.ico"])
-    // The hero shot (David's pick). Its only icon is a versioned theme file,
-    // so none here: it's the tab on screen and gets its icon as it loads.
-    static let snowPeak = Page(
-        "Snow Peak USA - Japanese-Designed Camping Gear & Apparel | Snow Peak", "https://www.snowpeak.com/", icons: [])
+    static let bookOfRuth = Page(
+        "The Book of Ruth | Bible Translation | Alabaster Co", "https://alabasterco.com/products/book-of-ruth",
+        icons: ["https://alabasterco.com/cdn/shop/files/Alabaster_black_logo_jar_with_perfume_1-color.png?v=1751068595&width=180"])
     static let glacierArticle = Page("Glacier - Wikipedia", "https://en.wikipedia.org/wiki/Glacier", icons: firnArticle.icons.map(\.absoluteString))
     static let mountHood = Page("Mount Hood - Wikipedia", "https://en.wikipedia.org/wiki/Mount_Hood", icons: firnArticle.icons.map(\.absoluteString))
-    static let ciderCaramels = Page(
-        "apple cider caramels – smitten kitchen", "https://smittenkitchen.com/2012/10/apple-cider-caramels/",
-        icons: pumpkinBread.icons.map(\.absoluteString))
-
-    static let calendar = Page("Google Calendar", "https://calendar.google.com/", icons: [])
-    static let slack = Page(
-        "Slack", "https://app.slack.com/",
-        icons: ["https://a.slack-edge.com/9cc0056/img/icons/favicon-32.png", "https://slack.com/favicon.ico"])
-    static let notion = Page(
-        "Notion", "https://www.notion.so/",
-        icons: ["https://www.notion.so/front-static/logo-ios.png", "https://www.notion.so/front-static/favicon.ico"])
-    static let guidelines = Page(
-        "Human Interface Guidelines | Apple Developer Documentation", "https://developer.apple.com/design/human-interface-guidelines/",
-        icons: ["https://developer.apple.com/apple-touch-icon.png", "https://developer.apple.com/favicon.ico"])
-    static let reviewGuidelines = Page(
-        "App Review Guidelines - Apple Developer", "https://developer.apple.com/app-store/review/guidelines/",
-        icons: guidelines.icons.map(\.absoluteString))
-    static let materials = Page(
-        "Materials | Apple Developer Documentation", "https://developer.apple.com/design/human-interface-guidelines/materials",
-        icons: guidelines.icons.map(\.absoluteString))
-    static let firnSite = Page(
-        "Firn | A calm browser, made for Mac", "https://firnbrowser.com/",
-        icons: ["https://firnbrowser.com/assets/favicon/firn-favicon-180.png", "https://firnbrowser.com/assets/favicon/favicon.ico"])
-
-    static let smithRock = Page(
-        "Smith Rock State Park - Oregon State Parks", "https://stateparks.oregon.gov/index.cfm?do=park.profile&parkId=36",
-        icons: ["https://stateparks.oregon.gov/favicon.ico"])
-    static let sistersCoffee = Page(
-        "Sisters Coffee Company", "https://sisterscoffee.com/",
-        icons: ["https://sisterscoffee.com/cdn/shop/files/PRIMARY-context-needed_BLACK_5_32x32.png?v=1744130133"])
-    static let map = Page(
-        "Sisters, Oregon - Apple Maps", "https://maps.apple.com/place?coordinate=44.291%2C-121.549&name=Sisters%2C%20Oregon",
-        icons: ["https://maps.apple.com/favicon.ico"])
-    static let weather = Page(
-        "7-Day Forecast for Sisters, OR", "https://forecast.weather.gov/MapClick.php?lat=44.291&lon=-121.549",
-        icons: ["https://forecast.weather.gov/favicon.ico"])
 
     static let allPages = [
-        gmail, github, youtube, appleMusic, pumpkinBread, galette, firnArticle, craterLake, snowPeak, glacierArticle, mountHood,
-        ciderCaramels, calendar, slack, notion, guidelines, reviewGuidelines, materials, firnSite,
-        smithRock, sistersCoffee, map, weather,
+        utuWeather, davidWurgler, blunkHouse, kinfolk, audo, norseProjects, ourLegacy, snowPeak, firnArticle,
+        bookOfRuth, glacierArticle, mountHood,
     ]
 }

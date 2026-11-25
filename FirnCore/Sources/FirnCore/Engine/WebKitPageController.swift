@@ -298,19 +298,23 @@ final class WebKitPageController: NSObject, PageController {
             Self.declineCookieBannerScript, arguments: ["seconds": seconds], in: nil, contentWorld: Self.firnWorld)
     }
 
-    /// Clicks the banner's own "Deny" (Osano's, as on snowpeak.com), then
-    /// hides it in case it lingers.
+    /// Clicks the banner's own "Deny" (Osano's, as on snowpeak.com, or
+    /// Cookiebot's, as on audocph.com), then hides it in case it lingers.
+    /// Wikipedia's donation banner is hidden too.
     private static let declineCookieBannerScript = """
+        const banners = '.osano-cm-window, #CybotCookiebotDialog, #centralNotice, #frb-inline, .frb';
         const deadline = Date.now() + seconds * 1000;
-        let banner = document.querySelector('.osano-cm-window');
+        let banner = document.querySelector(banners);
         while (!banner && Date.now() < deadline) {
             await new Promise(done => setTimeout(done, 200));
-            banner = document.querySelector('.osano-cm-window');
+            banner = document.querySelector(banners);
         }
         if (!banner) return false;
-        banner.querySelector('.osano-cm-deny')?.click();
+        document.querySelector('.osano-cm-deny, #CybotCookiebotDialogBodyButtonDecline')?.click();
         await new Promise(done => setTimeout(done, 600));
-        banner.style.setProperty('display', 'none', 'important');
+        for (const left of document.querySelectorAll(banners + ', #CybotCookiebotDialogBodyUnderlay')) {
+            left.style.setProperty('display', 'none', 'important');
+        }
         return true;
         """
 

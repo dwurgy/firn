@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Firn: No tabs, Mac</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+:root{--frame:#E9E3DA;--sky-top:#D3DBDF;--sky-low:#E9ECEA;--ink:#241F1B;--muted:#5E564E;--pill:rgba(255,255,255,.55);--page-shade:rgba(70,55,40,.16);--wash:.16;--flake:.62;--glow-1:rgba(242,196,160,.2);--glow-2:rgba(236,206,186,.11);--glow-0:rgba(236,206,186,0)}
+@media (prefers-color-scheme: dark){:root{--frame:#3A3734;--sky-top:#151A27;--sky-low:#232B3F;--ink:#F5F1EC;--muted:#D4CDC5;--pill:rgba(255,255,255,.08);--page-shade:rgba(0,0,0,.4);--wash:.14;--flake:.5;--glow-1:rgba(0,0,0,0);--glow-2:rgba(0,0,0,0);--glow-0:rgba(0,0,0,0)}}
+.firn-mark{-webkit-mask:url(/_blob/0d156ee255bb6f25ef854666ed1bd4b1) center/contain no-repeat;mask:url(/_blob/0d156ee255bb6f25ef854666ed1bd4b1) center/contain no-repeat}
+</style>
+</helmet>
+<div style="position: relative; width: 1200px; height: 760px; box-sizing: border-box; display: flex; overflow: hidden; background: var(--frame); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: {{tint}}; opacity: var(--wash)"></div>
+<div style="position: relative; flex: 0 0 260px; box-sizing: border-box; padding: 52px 12px 14px; display: flex; flex-direction: column; justify-content: space-between">
+<div style="height: 36px; border-radius: 10px; background: var(--pill)"></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 0 4px; color: var(--muted)">
+<span style="width: 10px; height: 10px; border-radius: 50%; background: {{tint}}"></span>
+<span>Personal</span>
+</div>
+</div>
+<div style="position: relative; flex: 1; margin: 8px 8px 8px 0; border-radius: 12px; overflow: hidden; background: linear-gradient(0deg, var(--glow-1) 0%, var(--glow-2) 24%, var(--glow-0) 58%), linear-gradient(180deg, var(--sky-top), var(--sky-low)); box-shadow: 0 2px 14px var(--page-shade)">
+<div style="position: absolute; right: -150px; top: 50%; width: 760px; height: 760px; margin-top: -400px; filter: blur(34px); opacity: var(--flake)">
+<div class="firn-mark" role="img" aria-label="Firn" style="width: 100%; height: 100%; background: {{tint}}"></div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;space&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Glacier&quot;,&quot;Sand&quot;,&quot;Sage&quot;,&quot;Heather&quot;,&quot;Ochre&quot;,&quot;Dusk&quot;,&quot;Clay&quot;,&quot;Lagoon&quot;],&quot;default&quot;:&quot;Glacier&quot;},&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:760}}">
+class Component extends DCLogic {
+renderVals() {
+const hex = { Glacier: '#7F9CB0', Sand: '#C9A27E', Sage: '#8FAE8B', Heather: '#B88A9E', Ochre: '#C4A95B', Dusk: '#8E8FB8', Clay: '#B07F6A', Lagoon: '#6FA3A0' };
+return { tint: hex[this.props.space ?? 'Glacier'] || hex.Glacier };
+}
+}
+</script>
+</body>
+</html>

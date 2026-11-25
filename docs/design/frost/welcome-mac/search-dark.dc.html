@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Firn welcome, Mac: Search, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,100&amp;display=swap">
+<style>
+body{margin:0}
+:root{--sky-top:#D3DBDF;--sky-low:#E9ECEA;--ink:#241F1B;--muted:#5E564E;--frosty:rgba(255,255,255,.5);--rim-hi:rgba(255,255,255,.95);--rim-lo:rgba(255,255,255,.4);--rim-line:rgba(255,255,255,.35);--glass-shade:rgba(36,31,27,.14);--dot:rgba(36,31,27,.24);--track:rgba(36,31,27,.22)}
+:root{--sky-top:#151A27;--sky-low:#232B3F;--ink:#E9E3DA;--muted:#B9B2AA;--frosty:rgba(44,53,76,.5);--rim-hi:rgba(233,227,218,.6);--rim-lo:rgba(233,227,218,.18);--rim-line:rgba(233,227,218,.16);--glass-shade:rgba(0,0,0,.4);--dot:rgba(233,227,218,.28);--track:rgba(233,227,218,.26)}
+button{font:inherit;color:inherit}
+button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+:root{--glow-1:rgba(242,196,160,.2);--glow-2:rgba(236,206,186,.11);--glow-0:rgba(236,206,186,0);--rim-hi:rgba(255,238,220,.98);--rim-warm:rgba(242,188,146,.4);--lens-rim:inset 0 -3.5px 2px -1px var(--rim-hi),inset 0 2.5px 2px -1px var(--rim-lo);--pill-rim:inset 0 -1.5px 1px -0.5px var(--rim-hi),inset 0 1px 1px -0.5px var(--rim-lo)}
+:root{--glow-1:rgba(0,0,0,0);--glow-2:rgba(0,0,0,0);--glow-0:rgba(0,0,0,0);--rim-hi:rgba(233,227,218,.6);--rim-warm:rgba(0,0,0,0);--lens-rim:inset 3px 3px 2px -1px var(--rim-hi),inset -2px -2px 2px -1px var(--rim-lo);--pill-rim:inset 1.5px 1.5px 1px -0.5px var(--rim-hi),inset -1px -1px 1px -0.5px var(--rim-lo)}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 56px 72px 56px; display: flex; flex-direction: column; background: linear-gradient(0deg, var(--glow-1) 0%, var(--glow-2) 24%, var(--glow-0) 58%), linear-gradient(180deg, var(--sky-top), var(--sky-low)); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.45">
+<picture>
+<img src="/_blob/4d75049b0dda273f6e68df364e897e82" alt="Firn" style="display: block; width: 34px; height: 34px; margin-left: -4px">
+</picture>
+<div style="flex: 1; display: flex; align-items: center; gap: 72px">
+<div style="flex: 0 0 380px">
+<h1 style="margin: 0 0 12px; font-family: 'Fraunces', ui-serif, Georgia, serif; font-variation-settings: 'SOFT' 100; font-size: 42px; line-height: 1.08; font-weight: 300">Which search <span style="font-weight: 500">do you like?</span></h1>
+<p style="margin: 0; color: var(--muted)">What you type in the address bar searches here. More choices are in Settings.</p>
+</div>
+<div style="flex: 1; max-width: 480px">
+<div role="group" aria-label="Search engine" style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" aria-pressed="false" style="display: flex; flex-direction: column; padding: 13px 18px; text-align: left; cursor: pointer; border-radius: 16px; background: var(--frosty); border: 1px solid var(--rim-line); box-shadow: var(--pill-rim)"><span style="font-weight: 600">Google</span><span style="font-size: 14px; color: var(--muted)">The search most people know.</span></button>
+<button type="button" aria-pressed="true" style="position: relative; display: flex; flex-direction: column; padding: 13px 18px; text-align: left; cursor: pointer; border-radius: 16px; background: var(--frosty); border: 1px solid var(--rim-line); outline: 1.5px solid var(--ink); outline-offset: -1px; box-shadow: var(--pill-rim)"><span style="font-weight: 600">DuckDuckGo</span><span style="font-size: 14px; color: var(--muted)">Doesn't keep track of your searches.</span><svg aria-hidden="true" width="22" height="22" viewBox="0 0 22 22" style="position: absolute; top: 50%; right: 16px; margin-top: -11px"><circle cx="11" cy="11" r="11" fill="currentColor"></circle><path d="M6.5 11.2l3 3 6-6.2" fill="none" stroke="var(--sky-low)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<button type="button" aria-pressed="false" style="display: flex; flex-direction: column; padding: 13px 18px; text-align: left; cursor: pointer; border-radius: 16px; background: var(--frosty); border: 1px solid var(--rim-line); box-shadow: var(--pill-rim)"><span style="font-weight: 600">Bing</span><span style="font-size: 14px; color: var(--muted)">Microsoft's search.</span></button>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 28px; padding: 0 4px">
+<div>
+<div id="suggest-label">Show suggestions as you type</div>
+<div style="font-size: 14px; color: var(--muted)">Your search engine sees what you type.</div>
+</div>
+<button type="button" role="switch" aria-checked="false" aria-labelledby="suggest-label" style="flex: none; width: 44px; height: 44px; padding: 10px 0; background: none; border: 0; cursor: pointer"><span style="display: block; width: 44px; height: 24px; box-sizing: border-box; padding: 2px; border-radius: 12px; background: var(--track)"><span style="display: block; width: 20px; height: 20px; border-radius: 50%; background: #FBFAF8; box-shadow: 0 1px 3px rgba(36,31,27,.3)"></span></span></button>
+</div>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 28px">
+<div role="img" aria-label="Step 1 of 6" style="display: flex; gap: 7px">
+<span style="width: 7px; height: 7px; border-radius: 50%; background: var(--ink)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span>
+</div>
+<button type="button" style="padding: 12px 0; background: none; border: 0; cursor: pointer; color: var(--muted)">Skip setup</button>
+</div>
+<div style="display: flex; align-items: center; gap: 24px">
+<button type="button" style="padding: 12px 0; background: none; border: 0; cursor: pointer">Back</button>
+<button type="button" style="padding: 13px 28px; border-radius: 999px; cursor: pointer; background: var(--frosty); border: 1px solid var(--rim-line); box-shadow: var(--pill-rim), 0 8px 28px var(--glass-shade)">Continue</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

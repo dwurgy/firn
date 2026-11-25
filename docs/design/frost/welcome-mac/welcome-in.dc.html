@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Firn welcome, Mac: Welcome in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,100&amp;display=swap">
+<style>
+body{margin:0}
+:root{--sky-top:#D3DBDF;--sky-low:#E9ECEA;--ink:#241F1B}
+@media (prefers-color-scheme: dark){:root{--sky-top:#151A27;--sky-low:#232B3F;--ink:#E9E3DA}}
+:root{--glow-1:rgba(242,196,160,.2);--glow-2:rgba(236,206,186,.11);--glow-0:rgba(236,206,186,0);--rim-hi:rgba(255,238,220,.98);--rim-warm:rgba(242,188,146,.4);--lens-rim:inset 0 -3.5px 2px -1px var(--rim-hi),inset 0 2.5px 2px -1px var(--rim-lo);--pill-rim:inset 0 -1.5px 1px -0.5px var(--rim-hi),inset 0 1px 1px -0.5px var(--rim-lo)}
+@media (prefers-color-scheme: dark){:root{--glow-1:rgba(0,0,0,0);--glow-2:rgba(0,0,0,0);--glow-0:rgba(0,0,0,0);--rim-hi:rgba(233,227,218,.6);--rim-warm:rgba(0,0,0,0);--lens-rim:inset 3px 3px 2px -1px var(--rim-hi),inset -2px -2px 2px -1px var(--rim-lo);--pill-rim:inset 1.5px 1.5px 1px -0.5px var(--rim-hi),inset -1px -1px 1px -0.5px var(--rim-lo)}}
+</style>
+</helmet>
+<div style="position: relative; width: 1200px; height: 760px; box-sizing: border-box; overflow: hidden; background: linear-gradient(0deg, var(--glow-1) 0%, var(--glow-2) 24%, var(--glow-0) 58%), linear-gradient(180deg, var(--sky-top), var(--sky-low)); color: var(--ink); font-family: 'Fraunces', ui-serif, Georgia, serif; font-variation-settings: 'SOFT' 100">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="/_blob/496d69a1add44227891bb3a27f4531ad">
+<img src="/_blob/e3257822c0cdfdb203c0d94f102011b7" alt="Firn" style="position: absolute; left: -56px; top: -30px; width: 1250px; height: auto">
+</picture>
+<h1 style="position: absolute; left: 72px; bottom: 64px; margin: 0; font-size: 38px; line-height: 1.1; font-weight: 300">Welcome <span style="font-weight: 500">in.</span></h1>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

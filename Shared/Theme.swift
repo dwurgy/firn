@@ -245,6 +245,32 @@ enum Theme {
         }
     }
 
+    // MARK: Frost
+
+    /// Frost, Firn's look for the welcome and the "no tabs" screen: a frosted
+    /// window on a snowy morning, blue hour in dark (docs/design/frost,
+    /// BRAND.md; every value is the drawings').
+    enum Frost {
+        static let skyTop = Color(light: 0xD3DBDF, dark: 0x151A27)
+        static let skyLow = Color(light: 0xE9ECEA, dark: 0x232B3F)
+        /// The warm band along the bottom, from the bottom up. Light only.
+        static let horizonLow = Color(light: 0xF2C4A0, lightOpacity: 0.20, dark: 0xF2C4A0, darkOpacity: 0)
+        static let horizonMid = Color(light: 0xECCEBA, lightOpacity: 0.11, dark: 0xECCEBA, darkOpacity: 0)
+        static let horizonClear = Color(light: 0xECCEBA, lightOpacity: 0, dark: 0xECCEBA, darkOpacity: 0)
+        static let ink = Color(light: 0x241F1B, dark: 0xE9E3DA)
+        static let muted = Color(light: 0x5E564E, dark: 0xB9B2AA)
+
+        // The pill before macOS 26: a hairline, a line outside it, and its shadow.
+        static let rimLine = Color(light: 0xFFFFFF, lightOpacity: 0.35, dark: 0xE9E3DA, darkOpacity: 0.16)
+        static let rimOuter = Color(light: 0x241F1B, lightOpacity: 0.09, dark: 0x000000, darkOpacity: 0.3)
+        static let shadow = Color(light: 0x241F1B, lightOpacity: 0.16, dark: 0x000000, darkOpacity: 0.4)
+        /// Glass before macOS 26, and solid with Reduce Transparency.
+        static let glass = Color(light: 0xFFFFFF, lightOpacity: 0.5, dark: 0x2C354C, darkOpacity: 0.5)
+        static let glassSolid = Color(light: 0xF6F7F6, dark: 0x2C354C)
+
+        static let logoOpacity = 0.85
+    }
+
     // MARK: Sunrise
 
     /// The welcome's and the empty page's scene, "Sunrise" (BRAND.md;

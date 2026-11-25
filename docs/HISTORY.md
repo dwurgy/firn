@@ -587,3 +587,17 @@ Moved out of `CLAUDE.md` on 2026-11-23, word for word, so that file stays short.
 ### The Sunrise paragraph's progress note, as it stood
 
 It replaces "First light"; the move is planned in `docs/SUNRISE-PLAN.md` (progress is marked there; step 1, the tiles and edges, and step 2, the snow colors, done 2026-11-13; step 3, the new snow, and step 4, the blue-hour sky and the sun on the empty page, done 2026-11-13, David checked them; step 5, the Mac welcome on Sunrise, built 2026-11-13, its headlines in Gooper Deck (David), not yet checked by David; step 6, the rename, done 2026-11-13: `Shared/Sunrise.swift`, `SunriseScene`, `Theme.Sunrise`, and `PaperGrain`; the plan is finished once David checks step 5).
+
+## Plan: Frost (agreed with David, 2026-11-24)
+
+Frost replaces Sunrise for the welcome and the "no tabs" screen. Designs: `docs/design/frost` (start with its README). The Mac first, then the iPhone and iPad, all on `ios`. The design's wording everywhere it differs (Hello, Space). **No lens in the apps** (David, 2026-11-24): only the blur; the lens is the website landing page's alone.
+
+The Mac:
+
+1. **The scene and Hello:** `Shared/Frost.swift` (sky, horizon, blurred logo; written for the iPhone too) and its pictures in the assets. Built 2026-11-24. Hello has no "Skip setup" button, as drawn; Esc still skips. `--size=700x500` beside `--shot=` checks a screen at other sizes.
+2. **The steps:** plain sky, question left, choices right, one bottom row; stacked and scrolling in a small window. Search, Arc, Space, Basecamp, default browser. **The tips step goes** (David, 2026-11-24). Choice cards are real glass; "Start Fresh" and "Make Firn Default" are plain buttons, so each step keeps one pill. The hidden address bar step stays as it is (David decides; removing it touches `Welcome.swift`, `Preference.addressBar`, `AddressBarPlace`, and CLAUDE.md's "two looks").
+3. **The finish:** the blurred logo turns sharp with "Welcome in." at the bottom left; same timing, Reduce Motion's plain fade. No snow to hide behind, so the rising window starts just below the bottom edge.
+4. **"No tabs":** the sky, the horizon, and the blurred flake in the space's color.
+5. **CLAUDE.md:** "Sunrise" becomes "Frost"; `Shared/Sunrise.swift` stays for the iPhone until its own session.
+
+The iPhone and iPad (after the Mac): there's no welcome there yet, so it's new (Phase 8; the drawing's four steps fit search, space, Basecamp, default browser). The scene shows only on the empty page (`BrowserScreen`); the overview has its own backdrop (`SpaceWash`). Open: whether the Basecamp step may fetch site icons there (a new request on the iPhone), "Skip setup" on the iPhone, and the overview's backdrop.

@@ -25,8 +25,14 @@ enum DemoShot: String, CaseIterable {
     /// in Personal and in its history.
     static var typed: String? { current == .command ? "nor" : nil }
 
-    /// Every shot's browser window is this size, so the set matches.
-    private static let windowSize = CGSize(width: 1440, height: 900)
+    /// Every shot's browser window is this size, so the set matches;
+    /// `--size=700x500` to check a screen at another.
+    private static let windowSize: CGSize = {
+        let argument = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--size=") }
+        let sides = argument?.dropFirst("--size=".count).split(separator: "x").compactMap { Double($0) } ?? []
+        guard sides.count == 2 else { return CGSize(width: 1440, height: 900) }
+        return CGSize(width: sides[0], height: sides[1])
+    }()
 
     /// Sets up the shot, once the browser window is on screen.
     @MainActor static func stage(_ window: WindowModel, openWindow: OpenWindowAction) async {
@@ -107,7 +113,7 @@ enum DemoShot: String, CaseIterable {
             try? await Task.sleep(for: .milliseconds(600))
             window.pointerMoved(toX: 0)
         case .welcome:
-            // Hello, over the Sunrise scene.
+            // Hello.
             show("Personal")
             window.showWelcome()
         }

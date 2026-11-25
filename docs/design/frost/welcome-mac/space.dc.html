@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Firn welcome, Mac: Space</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,100&amp;display=swap">
+<style>
+body{margin:0}
+:root{--sky-top:#D3DBDF;--sky-low:#E9ECEA;--ink:#241F1B;--muted:#5E564E;--frosty:rgba(255,255,255,.5);--rim-hi:rgba(255,255,255,.95);--rim-lo:rgba(255,255,255,.4);--rim-line:rgba(255,255,255,.35);--glass-shade:rgba(36,31,27,.14);--dot:rgba(36,31,27,.24);--field:rgba(255,255,255,.62);--field-line:rgba(36,31,27,.28)}
+@media (prefers-color-scheme: dark){:root{--sky-top:#151A27;--sky-low:#232B3F;--ink:#E9E3DA;--muted:#B9B2AA;--frosty:rgba(44,53,76,.5);--rim-hi:rgba(233,227,218,.6);--rim-lo:rgba(233,227,218,.18);--rim-line:rgba(233,227,218,.16);--glass-shade:rgba(0,0,0,.4);--dot:rgba(233,227,218,.28);--field:rgba(20,25,38,.5);--field-line:rgba(233,227,218,.32)}}
+button,input{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+:root{--glow-1:rgba(242,196,160,.2);--glow-2:rgba(236,206,186,.11);--glow-0:rgba(236,206,186,0);--rim-hi:rgba(255,238,220,.98);--rim-warm:rgba(242,188,146,.4);--lens-rim:inset 0 -3.5px 2px -1px var(--rim-hi),inset 0 2.5px 2px -1px var(--rim-lo);--pill-rim:inset 0 -1.5px 1px -0.5px var(--rim-hi),inset 0 1px 1px -0.5px var(--rim-lo)}
+@media (prefers-color-scheme: dark){:root{--glow-1:rgba(0,0,0,0);--glow-2:rgba(0,0,0,0);--glow-0:rgba(0,0,0,0);--rim-hi:rgba(233,227,218,.6);--rim-warm:rgba(0,0,0,0);--lens-rim:inset 3px 3px 2px -1px var(--rim-hi),inset -2px -2px 2px -1px var(--rim-lo);--pill-rim:inset 1.5px 1.5px 1px -0.5px var(--rim-hi),inset -1px -1px 1px -0.5px var(--rim-lo)}}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 56px 72px 56px; display: flex; flex-direction: column; background: linear-gradient(0deg, var(--glow-1) 0%, var(--glow-2) 24%, var(--glow-0) 58%), linear-gradient(180deg, var(--sky-top), var(--sky-low)); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.5">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="/_blob/4d75049b0dda273f6e68df364e897e82">
+<img src="/_blob/0d156ee255bb6f25ef854666ed1bd4b1" alt="Firn" style="display: block; width: 34px; height: 34px; margin-left: -4px">
+</picture>
+<div style="flex: 1; display: flex; align-items: center; gap: 72px">
+<div style="flex: 0 0 380px">
+<h1 style="margin: 0 0 12px; font-family: 'Fraunces', ui-serif, Georgia, serif; font-variation-settings: 'SOFT' 100; font-size: 42px; line-height: 1.08; font-weight: 300">Name your <span style="font-weight: 500">first space.</span></h1>
+<p style="margin: 0; color: var(--muted)">A space is its own browser, with its own tabs, sign-ins, and history. You can add more later.</p>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 28px; max-width: 440px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="space-name" style="font-size: 14px; color: var(--muted)">Name</label>
+<input id="space-name" type="text" value="Personal" style="box-sizing: border-box; width: 100%; height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--field-line); background: var(--field); font-size: 17px">
+</div>
+<div role="group" aria-label="Color" style="display: flex; flex-direction: column; gap: 10px">
+<div aria-hidden="true" style="font-size: 14px; color: var(--muted)">Color</div>
+<div style="display: flex; gap: 8px">
+<button type="button" aria-label="Glacier" aria-pressed="true" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #7F9CB0; border: 3px solid var(--sky-low); outline: 1.5px solid var(--ink)"></button>
+<button type="button" aria-label="Sand" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #C9A27E; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Sage" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #8FAE8B; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Heather" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #B88A9E; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Ochre" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #C4A95B; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Dusk" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #8E8FB8; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Clay" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #B07F6A; border: 3px solid transparent; background-clip: padding-box"></button>
+<button type="button" aria-label="Lagoon" aria-pressed="false" style="width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; background: #6FA3A0; border: 3px solid transparent; background-clip: padding-box"></button>
+</div>
+<div style="font-size: 14px">Glacier</div>
+</div>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 28px">
+<div role="img" aria-label="Step 3 of 6" style="display: flex; gap: 7px">
+<span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--ink)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--dot)"></span>
+</div>
+<button type="button" style="padding: 12px 0; background: none; border: 0; cursor: pointer; color: var(--muted)">Skip setup</button>
+</div>
+<div style="display: flex; align-items: center; gap: 24px">
+<button type="button" style="padding: 12px 0; background: none; border: 0; cursor: pointer">Back</button>
+<button type="button" style="padding: 13px 28px; border-radius: 999px; cursor: pointer; background: var(--frosty); border: 1px solid var(--rim-line); box-shadow: var(--pill-rim), 0 8px 28px var(--glass-shade)">Continue</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

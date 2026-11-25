@@ -95,6 +95,8 @@ private struct Welcome: View {
     @State private var importedArc = false
     /// The suggested sites' icons, fetched while the welcome is open.
     @State private var siteIcons: [URL: Data] = [:]
+    /// How much of the window's bottom Hello's words take.
+    @State private var helloFooter: CGFloat = 164
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: BrowserStore { window.store }
@@ -126,41 +128,49 @@ private struct Welcome: View {
             // snow stays here, in front of the rising window; the sky is
             // behind it (`WelcomeBackdrop`).
             SunriseScene(spaceColor: colorName, part: finish == nil ? .whole : .front)
+            if step == .hello && finish == nil {
+                FrostScene(focus: .blurred, footer: helloFooter)
+                    .transition(.opacity)
+            }
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             GeometryReader { proxy in
                 VStack(spacing: 0) {
-                    if step == .hello {
-                        HelloScreen(next: next)
-                            .modifier(StepEntrance(duration: 0.3))
-                    } else {
+                    if step != .hello {
                         StepDots(count: steps.count - 1, current: index - 1)
                             .padding(.bottom, 18)
                         card
                     }
                 }
-                // Hello hangs high, on the cool part of the sky: its light
-                // words need 4.5:1, and the sky warms (and lightens) as it
-                // nears the snow. The cards hang from one fixed line, so the
+                // The cards hang from one fixed line, so the
                 // dots and titles stay put while each step's card grows or
                 // shrinks below them.
-                .padding(EdgeInsets(top: max(24, proxy.size.height * (step == .hello ? 0.06 : 0.18)),
+                .padding(EdgeInsets(top: max(24, proxy.size.height * 0.18),
                                     leading: 24, bottom: 134, trailing: 24))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .modifier(FinishFade(finishing: finish != nil))
             // Faded, it isn't there for VoiceOver either.
             .accessibilityHidden(finish != nil)
+            if step == .hello {
+                HelloScreen(next: next)
+                    .modifier(StepEntrance(duration: 0.3))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { helloFooter = $0 }
+                    .modifier(FinishFade(finishing: finish != nil))
+                    .accessibilityHidden(finish != nil)
+            }
             // On the snow, not the sky: the ordinary glass button reads on
-            // snow in both looks.
+            // snow in both looks. On Hello, only Esc (the drawing has no button).
             Button("Skip setup", action: finishWelcome)
                 .modifier(WelcomeButton(prominent: false))
                 .controlSize(.large)
                 .keyboardShortcut(.cancelAction)
                 .padding(.leading, 24)
                 .padding(.bottom, 24)
+                .opacity(step == .hello ? 0 : 1)
+                .allowsHitTesting(step != .hello)
                 .modifier(FinishFade(finishing: finish != nil))
-                .accessibilityHidden(finish != nil)
+                .accessibilityHidden(finish != nil || step == .hello)
         }
         .foregroundStyle(Theme.ink)
         // Last, the snow fades away to the browser.
@@ -304,46 +314,47 @@ private enum WelcomeStep: CaseIterable {
 
 // MARK: - Steps
 
-/// Hello: no card, just the mark and the words, light on the sky.
+/// Hello: the words and the one pill along the bottom, under the blurred
+/// logo (docs/design/frost, welcome-mac/hello). In a narrow
+/// window the pill goes below the words.
 private struct HelloScreen: View {
     let next: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            LinearGradient(
-                colors: [Theme.Welcome.markTop, Theme.Welcome.markBottom],
-                // CSS's 160deg: down, leaning a little right.
-                startPoint: UnitPoint(x: 0.33, y: 0.03), endPoint: UnitPoint(x: 0.67, y: 0.97)
-            )
-            .mask { Image("FirnMark").resizable().scaledToFit() }
-            .frame(width: 80, height: 80)
-            .shadow(color: Theme.Welcome.markShadow, radius: 12, y: 10)
-            .padding(.bottom, 24)
-            .accessibilityHidden(true)
-            Text("Welcome to Firn")
-                .font(BrandFont.gooper(64))
-                .tracking(-0.9)
-                .foregroundStyle(Theme.Welcome.skyInk)
-                .accessibilityAddTraits(.isHeader)
-            Text("A calm place for the web. Ads and trackers are blocked, and Firn never tracks you. Let’s set up a few things; it takes a minute, and you can change any of it later.")
-                .font(.system(size: 17))
-                .lineSpacing(4)
-                // Not the muted grey: low on the light-mode sky it falls
-                // under 4.5:1 (BRAND.md swapped its faintest grey for the same reason).
-                .foregroundStyle(Theme.Welcome.skyInk)
-                .frame(maxWidth: 480)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
-                .padding(.bottom, 32)
-            Button(action: next) {
-                // Wide enough to answer the big heading above it.
-                Text("Let’s Begin").frame(minWidth: 130)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 48) {
+                words.frame(width: 520, alignment: .leading)
+                Spacer(minLength: 0)
+                pill
             }
-                .modifier(SkyButton(prominent: true))
-                .controlSize(.extraLarge)
-                .keyboardShortcut(.defaultAction)
+            .padding(.horizontal, 72)
+            .padding(.bottom, 64)
+            VStack(alignment: .leading, spacing: 24) {
+                words
+                pill
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .multilineTextAlignment(.center)
+    }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FrostTitle("A calm place", "for the web.", size: 38)
+            Text("Ads and trackers are blocked, and Firn never tracks you. Setup takes a minute, and you can change any of it later.")
+                .font(.system(size: 16))
+                .lineSpacing(4)
+                .foregroundStyle(Theme.Frost.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var pill: some View {
+        Button("Let’s Begin", action: next)
+            .buttonStyle(FrostPillStyle())
+            .focusEffectDisabled()
+            .keyboardShortcut(.defaultAction)
     }
 }
 
@@ -897,6 +908,78 @@ private enum DefaultBrowser {
 
 // MARK: - Pieces
 
+/// A Frost headline: Gooper Deck, its second half in SemiBold (emphasis is
+/// weight, never color).
+private struct FrostTitle: View {
+    let words: AttributedString
+
+    init(_ plain: String, _ strong: String, size: CGFloat) {
+        var start = AttributedString(plain + " ")
+        start.font = BrandFont.gooper(size)
+        var end = AttributedString(strong)
+        end.font = BrandFont.gooper(size, emphasis: true)
+        words = start + end
+    }
+
+    var body: some View {
+        Text(words)
+            .foregroundStyle(Theme.Frost.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The one glass pill on each of the welcome's screens: "Frosty, no tint"
+/// (native glass over the thinnest blur) on macOS 26, a frosted material
+/// before, solid with Reduce Transparency.
+private struct FrostPillStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        FrostPill(configuration: configuration)
+    }
+}
+
+private struct FrostPill: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var hovering = false
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        let shape = Capsule()
+        configuration.label
+            .font(.system(size: 16))
+            .foregroundStyle(Theme.Frost.ink)
+            .padding(.horizontal, 28)
+            .frame(height: 50)
+            .background { shape.fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear) }
+            .background { glass(shape) }
+            .overlay {
+                if isFocused { shape.strokeBorder(Theme.Frost.ink, lineWidth: 2).padding(-5) }
+            }
+            .contentShape(shape)
+            .fixedSize()
+            .onHover { hovering = $0 }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovering)
+    }
+
+    @ViewBuilder private func glass(_ shape: Capsule) -> some View {
+        if reduceTransparency {
+            shape.fill(Theme.Frost.glassSolid)
+                .overlay { shape.strokeBorder(Theme.Frost.rimOuter, lineWidth: 1) }
+        } else if #available(macOS 26, *) {
+            shape.fill(.clear)
+                .glassEffect(.regular, in: shape)
+                .background { shape.fill(.ultraThinMaterial) }
+        } else {
+            shape.fill(.ultraThinMaterial)
+                .overlay { shape.fill(Theme.Frost.glass) }
+                .overlay { shape.strokeBorder(Theme.Frost.rimLine, lineWidth: 1) }
+                .shadow(color: Theme.Frost.shadow, radius: 14, y: 8)
+        }
+    }
+}
+
 /// A step's title (Gooper Deck) and its few words.
 private struct StepHeading: View {
     let title: String
@@ -1113,68 +1196,3 @@ private struct CapsuleButton: View {
             .animation(.easeOut(duration: 0.15), value: hovering)
     }
 }
-
-/// Buttons on the blue-hour sky, the same in both looks (BRAND.md, "Buttons,
-/// links and focus"): the main one a light pill with dark words, weight 600;
-/// the rest the site's small pill (a faint light fill and edge, light
-/// words). Not the system's glass: over the dark sky in light mode it would
-/// keep dark words. The focus ring is the brand's light frost, 3pt.
-private struct SkyButton: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .buttonStyle(SkyButtonStyle(prominent: prominent))
-            .focusEffectDisabled()
-    }
-}
-
-private struct SkyButtonStyle: ButtonStyle {
-    let prominent: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        SkyButtonLabel(configuration: configuration, prominent: prominent)
-    }
-}
-
-private struct SkyButtonLabel: View {
-    let configuration: ButtonStyleConfiguration
-    let prominent: Bool
-    @State private var hovering = false
-    @Environment(\.controlSize) private var controlSize
-    @Environment(\.isFocused) private var isFocused
-
-    private var height: CGFloat {
-        switch controlSize {
-        case .extraLarge: 44
-        case .large: 32
-        default: 26
-        }
-    }
-
-    var body: some View {
-        let shape = Capsule()
-        configuration.label
-            .font(.system(size: controlSize == .extraLarge ? 15 : 13, weight: prominent ? .semibold : .medium))
-            .foregroundStyle(prominent ? Theme.Welcome.skyButtonText : Theme.Welcome.skyInk)
-            .padding(.horizontal, height * 0.55)
-            .frame(height: height)
-            .background {
-                if prominent {
-                    shape.fill(Theme.Welcome.skyButton.opacity(configuration.isPressed ? 0.82 : hovering ? 0.92 : 1))
-                } else {
-                    shape.fill(configuration.isPressed ? Theme.Welcome.skyPillPress : hovering ? Theme.Welcome.skyPillHover : Theme.Welcome.skyPill)
-                        .overlay { shape.strokeBorder(Theme.Welcome.skyPillEdge, lineWidth: 1) }
-                }
-            }
-            .overlay {
-                if isFocused {
-                    shape.strokeBorder(Theme.Welcome.skyFocus, lineWidth: 3).padding(-5)
-                }
-            }
-            .contentShape(shape)
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.2), value: hovering)
-    }
-}
-

@@ -96,6 +96,7 @@ public final class PageHolder: UIViewController {
 
     public override func loadView() {
         let frame = PageFrame(webView: webView)
+        frame.page = page
         // Through the page's own reload, which also retries a failed address.
         frame.onRefresh = { [weak page] in page?.reload() }
         view = frame
@@ -693,25 +694,57 @@ private final class PageFrame: UIView {
         guard held == nil else { return }
         applyInsets(to: webView)
         if let reader { applyInsets(to: reader) }
+        checkFit()
     }
 
-    /// A column the screen keeps down one side: the iPhone Duo's camera and
-    /// clock. The page keeps clear of it, its own color filling it, as
-    /// Safari's does on the front screen; under it, a site's menu at the
-    /// top right couldn't be reached (kinfolk.com, 2026-11-25). An iPhone
-    /// on its side has the same room on both sides, and keeps its whole width.
-    private var coveredSides: (left: CGFloat, right: CGFloat) {
+    /// What the screen keeps down its sides, which the page keeps clear of,
+    /// its own color filling them, as Safari's: the iPhone Duo's camera and
+    /// clock on one side (a site's menu at the top right couldn't be
+    /// reached under them; kinfolk.com, 2026-11-25), and the room on both
+    /// sides of an iPhone lying down, for the Dynamic Island. A page that
+    /// asks for the whole screen (`viewport-fit=cover`) has the second, and
+    /// looks after it itself (`env(safe-area-inset-left)`), as in Safari;
+    /// never the Duo's column, as in Safari too.
+    private func coveredSides(of webView: WKWebView) -> (left: CGFloat, right: CGFloat) {
         let left = safeAreaInsets.left, right = safeAreaInsets.right
-        let sides = (left: max(left - right, 0), right: max(right - left, 0))
+        let both = webView === self.webView && page?.asksForWholeScreen == true ? min(left, right) : 0
+        let sides = (left: left - both, right: right - both)
         // Never most of a sliver of a view (WebKit refuses insets that leave no page).
         return sides.left + sides.right < bounds.width / 2 ? sides : (0, 0)
+    }
+
+    /// Whether the page asks for the whole screen, found out only once it
+    /// matters: an iPhone lying down. Until then it's taken not to, as most.
+    private func checkFit() {
+        guard min(safeAreaInsets.left, safeAreaInsets.right) > 0, let page, page.asksForWholeScreen == nil,
+              page.url != nil, fitCheck == nil else { return }
+        fitCheck = Task { @MainActor [weak self, weak page] in
+            let asks = await page?.checkWholeScreen()
+            guard !Task.isCancelled, let self else { return }
+            fitCheck = nil
+            if asks == true, held == nil { setNeedsLayout() }
+        }
+    }
+
+    private var fitCheck: Task<Void, Never>?
+
+    /// The page whose web view this is. A new page coming in is asked again.
+    weak var page: WebKitPageController? {
+        didSet {
+            page?.onCommit = { [weak self] in
+                guard let self else { return }
+                fitCheck?.cancel()
+                fitCheck = nil
+                setNeedsLayout()
+            }
+        }
     }
 
     /// Tells a web view (the page, or Reader's) what the status bar, Firn's
     /// bar, and a column down the side cover.
     private func applyInsets(to webView: WKWebView) {
         let top = min(safeAreaInsets.top, bounds.height)
-        let sides = coveredSides
+        let sides = coveredSides(of: webView)
         let covered = UIEdgeInsets(top: top, left: sides.left, bottom: barRoom, right: sides.right)
         if webView.obscuredContentInsets != covered {
             webView.obscuredContentInsets = covered
@@ -741,7 +774,12 @@ private final class PageFrame: UIView {
         if scroller.contentInset != covered {
             let grew = covered.bottom - scroller.contentInset.bottom
             let wasAtEnd = scroller.contentOffset.y >= endOffset(webView) - 1
+            // Turned or unfolded while at its top: it stays at its top. Left
+            // alone, a page turned upright kept its first line under the clock.
+            let taller = scroller.contentInset != .zero && covered.top > scroller.contentInset.top
+            let wasAtTop = scroller.contentOffset.y <= 1 - scroller.contentInset.top
             scroller.contentInset = covered
+            if taller, wasAtTop, !scroller.isTracking { scroller.contentOffset.y = -covered.top }
             scroller.verticalScrollIndicatorInsets = covered
             if grew > 0, wasAtEnd { keepEndInView(webView) }
         }

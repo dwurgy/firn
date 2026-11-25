@@ -36,6 +36,14 @@ final class WebKitPageController: NSObject, PageController {
     @ObservationIgnored var offersSplitView = false
     @ObservationIgnored var blocksContent: (@MainActor (URL) -> Bool)?
 
+    #if os(iOS)
+    /// Whether the page asks for the whole screen (`viewport-fit=cover`);
+    /// nil until asked (`checkWholeScreen`).
+    @ObservationIgnored var asksForWholeScreen: Bool?
+    /// A new page came in (`PageFrame` asks it again).
+    @ObservationIgnored var onCommit: (@MainActor () -> Void)?
+    #endif
+
     @ObservationIgnored let webView: WKWebView
     /// Only pages a site opened as popups may close themselves.
     @ObservationIgnored private let isPopup: Bool
@@ -543,6 +551,10 @@ extension WebKitPageController: WKNavigationDelegate {
         isProvisional = false
         provisionalURL = nil
         loadError = nil
+        #if os(iOS)
+        asksForWholeScreen = nil
+        onCommit?()
+        #endif
         // A new page starts with a clean slate for alerts.
         dialogsShown = 0
         dialogsBlocked = false

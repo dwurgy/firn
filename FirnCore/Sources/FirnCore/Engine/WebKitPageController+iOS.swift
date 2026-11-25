@@ -40,6 +40,25 @@ extension WebKitPageController {
         return image?.cgImage
     }
 
+    /// Whether the page's own viewport tag asks for the whole screen, read
+    /// in Firn's own world (the page never sees it) once its tags are all
+    /// in. What the page says is only a yes or no. Nil if a new page came in
+    /// meanwhile.
+    func checkWholeScreen() async -> Bool? {
+        let script = """
+            if (document.readyState === 'loading') {
+                await new Promise(done => document.addEventListener('DOMContentLoaded', done, { once: true }));
+            }
+            const tags = document.querySelectorAll('meta[name="viewport" i]');
+            const last = tags[tags.length - 1];
+            return !!last && /viewport-fit\\s*=\\s*cover/i.test(last.content);
+            """
+        guard let asks = try? await webView.callAsyncJavaScript(
+            script, arguments: [:], in: nil, contentWorld: Self.firnWorld) as? Bool else { return nil }
+        if !Task.isCancelled { asksForWholeScreen = asks }
+        return Task.isCancelled ? nil : asks
+    }
+
     /// Where the header ends, measured in Firn's own world (the page never
     /// sees it): from the top of the screen down, each band that's pinned
     /// there (fixed or sticky) or is the site's banner (a header, a nav, or

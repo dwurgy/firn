@@ -854,6 +854,16 @@ The items below are kept for the reasoning; 1, 2, 3, 4, 6, 7, 8, 9, and 10 are a
 - Tidying uses days of using Firn, 7 by default, as on the Mac.
 - Lookout, tidy away, First light, and split view (roomy layout only) carry over as the brief says.
 
+## The iPad and Duo look over (2026-11-24)
+
+David (2026-11-24): 1.0 ships on iPhone and iPad together; a quick look over now, refined later. The device family is back to iPhone and iPad (`TARGETED_DEVICE_FAMILY = "1,2"`, three configurations). Simulator only: iPad Pro 13-inch (M5) and the iPhone Duo, with the screenshot session copied from the "Firn Shots" simulator.
+
+- **Works on the iPad:** pages, the bar (centered, about 510pt wide), the overview (four columns in portrait, five in landscape), Basecamp, a group open and folded, the space menu, the command bar with the keyboard, the page menu, Reader, Summarize ("Made on this iPad"), Settings, the empty page on Sunrise, light and dark, and a turn to landscape and back.
+- **Works on the Duo:** closed, half open, and open; no black bars; the overview keeps clear of the status column on the right.
+- **Fixed:** a card's picture stopped short of the card's bottom wherever the screen is less tall for its width than Safari's 1.41 (an iPad, an iPhone on its side, the Duo open). Now such a screen gives its cards its own shape (`OverviewGridMetrics`, floor 0.6); the header skip never takes more than the picture can spare (`PagePictures.headerDepth`), so none on an iPad; and a picture taken on a wider screen (an iPad turned, a Duo folded) fills its card's height, centered, until it's retaken (`OverviewRow`, the folder's squares too). An iPhone upright is unchanged by the arithmetic; not run on David's iPhone.
+- **Seen, left for later:** Basecamp's tiles are three very wide bars (the plan says up to six across on an iPad); an open group takes a whole row, leaving the cards before it alone in theirs; Settings is a short centered sheet that scrolls; on Wikipedia the Reader book didn't take •••'s place (Show Reader in the menu works); iPadOS's window-resize corner sits over the tabs and Done buttons' corner; `UIDevice.current.userInterfaceIdiom` in `Hold.swift` (corner radius), `SettingsSheet.swift`, and `WebKitReader.swift` (the words "iPad"/"iPhone"). Not tried: Stage Manager resizing, Split View beside another app, a keyboard and trackpad, drags, the open and close glides frame by frame, VoiceOver, a real iPad.
+- **Captures:** 17 raw screens at 2064 × 2752 in `docs/app-store/ipad/plain` (git-ignored): hero, grid, group, space-work, command, reader, summary, empty, and one per site.
+
 ## 6. Later: iPhone Duo and Xcode 27.2 (notes only, nothing decided)
 
 Found 2026-11-10. David: finish the normal iPhone version first, then the Duo. None of this is planned or approved yet.

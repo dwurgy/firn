@@ -33,12 +33,16 @@ struct OverviewGridMetrics: Equatable {
         columns = min(max(fit, 2), Self.maxColumns)
         let column = (room - Self.spacing * CGFloat(columns - 1)) / CGFloat(columns)
         // The picture is the card (as Safari's), its title under it.
-        let picture = column * Self.pictureShape
+        // A screen less tall for its width than Safari's shape (an iPad,
+        // an iPhone on its side) gives its cards its own shape, so a
+        // page's picture still fills its card (2026-11-24).
+        let shape = height > 0 ? min(Self.pictureShape, max(height / max(width, 1), 0.6)) : Self.pictureShape
+        let picture = column * shape
         var card = picture + OverviewRow.gridTitleHeight
         if height > 0 { card = min(card, max(height * 0.62, OverviewRow.cardHeight)) }
         cardHeight = card.rounded()
         let inner = (room - 2 * GroupCard.side - GroupCard.columnGap * CGFloat(columns - 1)) / CGFloat(columns)
-        groupCardHeight = min(max(inner, 1) * Self.pictureShape + OverviewRow.gridTitleHeight, card).rounded()
+        groupCardHeight = min(max(inner, 1) * shape + OverviewRow.gridTitleHeight, card).rounded()
     }
 
     var gridItems: [GridItem] {
@@ -199,11 +203,15 @@ private struct FolderThumb: View {
             .overlay(alignment: .top) {
                 if let picture = pictures.cachedImage(for: tab.id), picture.size.width > 0 {
                     GeometryReader { box in
-                        let scale = box.size.width / picture.size.width
+                        // As wide as its box; a picture too short for that (taken
+                        // on a wider screen: an iPad turned, a Duo folded) fills
+                        // the box's height instead, centered.
+                        let scale = max(box.size.width / picture.size.width, box.size.height / max(picture.size.height, 1))
                         Image(uiImage: picture)
                             .resizable()
-                            .frame(width: box.size.width, height: picture.size.height * scale)
-                            .offset(y: -pictures.headerDepth(for: tab.id) * scale)
+                            .frame(width: picture.size.width * scale, height: picture.size.height * scale)
+                            .offset(x: (box.size.width - picture.size.width * scale) / 2,
+                                    y: -pictures.headerDepth(for: tab.id) * scale)
                     }
                 } else {
                     SiteIconView(icon: tab.icon, size: 20) {

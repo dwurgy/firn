@@ -218,11 +218,15 @@ struct OverviewRow: View {
             // it shows what was being read (2j): exactly where the glide
             // lands, so swapping one for the other shows nothing.
             GeometryReader { box in
-                let scale = box.size.width / picture.size.width
+                // As wide as its box; a picture too short for that (taken
+                // on a wider screen: an iPad turned, a Duo folded) fills
+                // the box's height instead, centered.
+                let scale = max(box.size.width / picture.size.width, box.size.height / max(picture.size.height, 1))
                 Image(uiImage: picture)
                     .resizable()
-                    .frame(width: box.size.width, height: picture.size.height * scale)
-                    .offset(y: -pictures.headerDepth(for: tab.id) * scale)
+                    .frame(width: picture.size.width * scale, height: picture.size.height * scale)
+                    .offset(x: (box.size.width - picture.size.width * scale) / 2,
+                            y: -pictures.headerDepth(for: tab.id) * scale)
             }
             .accessibilityHidden(true)
         } else {

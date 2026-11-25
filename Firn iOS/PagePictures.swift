@@ -93,8 +93,12 @@ final class PagePictures {
     /// the page's own size: the card starts its picture there, so it shows
     /// what was being read (`docs/IOS-PLAN.md` 2j). 0 for a picture read
     /// back from disk (not saved with it) and when there's no header.
+    /// Never more than the picture can spare below a card of Safari's
+    /// shape: an iPad's page is no taller than its card, so none there.
     func headerDepth(for tabID: UUID) -> CGFloat {
-        slots[tabID]?.depth ?? 0
+        guard let slot = slots[tabID], slot.depth > 0 else { return 0 }
+        guard let image = slot.image else { return slot.depth }
+        return min(slot.depth, max(image.size.height - image.size.width * OverviewGridMetrics.pictureShape, 0))
     }
 
     /// Reads the tab's picture from disk and decodes it off the main thread

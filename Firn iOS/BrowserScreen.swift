@@ -416,7 +416,14 @@ struct BrowserScreen: View {
             if sheets.newSpace || sheets.settings || sheets.downloads || sheets.history { editing = false }
         }
         .sheet(isPresented: $sheets.newSpace) { NewSpaceSheet(store: store) }
-        .sheet(isPresented: $sheets.settings) { SettingsSheet(store: store, sync: sync) }
+        .sheet(isPresented: $sheets.settings) {
+            // Privacy Policy opens as History's visits do.
+            SettingsSheet(store: store, sync: sync) { url in
+                sheets.settings = false
+                store.openTab(url)
+                if showingTabs { hideTabs() }
+            }
+        }
         .sheet(isPresented: $sheets.downloads) { DownloadsSheet(store: store) }
         .sheet(isPresented: $sheets.history) {
             // A visit opens as a new tab, where new tabs go, over the

@@ -10,13 +10,15 @@ import SwiftUI
 /// - Spaces: every space in its order (hold and drag to reorder); a tap opens
 ///   its page (name, color, sign-ins, and Delete, in the Mac's words,
 ///   `Firn/SpacesSettings.swift`).
-/// - Privacy: blocking's switch, and Clear History…. iCloud: sync's switch (docs/SYNC-PLAN.md).
+/// - Privacy: blocking's switch, Clear History…, and Privacy Policy. iCloud: sync's switch (docs/SYNC-PLAN.md).
 /// - Tip Jar, last: the family's shared jar, its words unchanged.
 ///
 /// Changes apply as they're made; only Stop Sharing and Delete ask first.
 struct SettingsSheet: View {
     let store: BrowserStore
     let sync: ICloudSync
+    /// Opens a page of Firn's own as a new tab and puts Settings away.
+    let open: (URL) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var path: [UUID] = []
@@ -150,8 +152,14 @@ struct SettingsSheet: View {
             Button("Clear History…") { clearingHistory = true }
                 .foregroundStyle(Theme.ink)
                 .clearHistoryDialog(isPresented: $clearingHistory, store: store)
+            // The App Store asks for it inside the app too.
+            Button("Privacy Policy") { open(Self.privacyPolicy) }
+                .foregroundStyle(Theme.ink)
+                .accessibilityHint("Opens in a new tab")
         }
     }
+
+    private static let privacyPolicy = URL(string: "https://firnbrowser.com/privacy")!
 
     /// "Sync with iCloud", the Mac's switch in the Mac's words. Only the
     /// one switch until passwords sync (step 9).

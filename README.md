@@ -4,7 +4,7 @@
 
 ---
 
-Firn is a quiet, minimalist web browser built natively for the Mac in Swift, SwiftUI, and WebKit. It takes the best ideas from browsers like Arc, Dia, and Zen and brings them to everyone, not just power users, without the clutter.
+Firn is a quiet, minimalist web browser built natively for the Mac, iPhone, and iPad in Swift, SwiftUI, and WebKit. It takes the best ideas from browsers like Arc, Dia, and Zen and brings them to everyone, not just power users, without the clutter.
 
 The name comes from firn: the settled, compacted snow high on alpine glaciers. Quiet, clean, and still.
 

@@ -214,8 +214,8 @@ final class WindowModel {
     }
 
     /// "Start Browsing", Skip, or Esc: "Welcome in.", and the real window
-    /// (your sidebar, color, and tiles) rises out of the scene, about 2.4s
-    /// as in the approved source (docs/electron-welcome, styles.css). With
+    /// (your sidebar, color, and tiles) rises over the scene, about 2.8s:
+    /// the fog lifts unhurried (David, 2026-11-25). With
     /// Reduce Motion, the welcome simply fades (300ms).
     func finishWelcome(reduceMotion: Bool) {
         guard showsWelcome, welcomeFinish == nil else { return }
@@ -223,7 +223,7 @@ final class WindowModel {
         welcomeFinish = .begun
         AccessibilityNotification.Announcement("Welcome in.").post()
         welcomeFinishTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(900))
+            try? await Task.sleep(for: .milliseconds(1300))
             guard !Task.isCancelled else { return }
             withAnimation(.timingCurve(0.25, 0.7, 0.3, 1, duration: 1.1)) { welcomeFinish = .rising }
             try? await Task.sleep(for: .milliseconds(1000))

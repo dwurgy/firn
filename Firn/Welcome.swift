@@ -53,7 +53,7 @@ struct WelcomeBackdrop: View {
                     // place over them: they'd show through its glass.
                     let covered = window.welcomeFinish == .fading
                     FrostScene(focus: covered ? .sky : finishing ? .sharp : .blurred, footer: window.welcomeFooter)
-                        .animation(finishing && !covered ? .easeInOut(duration: 0.5).delay(0.25) : nil, value: finishing)
+                        .animation(finishing && !covered ? .easeInOut(duration: 0.85).delay(0.25) : nil, value: finishing)
                         .animation(nil, value: covered)
                     FrostTitle("Welcome", "in.", size: 38)
                         .padding(.leading, wide ? 72 : 32)

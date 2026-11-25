@@ -1325,9 +1325,9 @@ struct GridCards: UIViewRepresentable {
             // A tab's card and a folder land the same way (2026-11-24):
             // landed "to its cell", the card's carried picture came down,
             // faded to an empty place over about 0.3s, and the card popped
-            // in half a second later (David's recording). Only a group
-            // carried by its name line still lands to its cell.
-            if reopen != id, let spot = view.layoutAttributesForItem(at: home) {
+            // in half a second later (David's recording). A group carried by
+            // its name line did the same, and lands this way too.
+            if let spot = view.layoutAttributesForItem(at: home) {
                 // A tile lands as the picture it was carried as, then its
                 // cell shows at once. Landed "to its cell", iOS turns the
                 // carried picture into a picture of the cell on the way
@@ -1357,6 +1357,7 @@ struct GridCards: UIViewRepresentable {
                 cell(for: id, in: view)?.landing = true
                 let flight = coordinator.drop(item.dragItem, to: target)
                 settle(id)
+                if reopen == id { landing = true }
                 if wasTile != isTile {
                     // Its new self is there under the picture coming down,
                     // once the overview has drawn it (a turn after the
@@ -1384,6 +1385,14 @@ struct GridCards: UIViewRepresentable {
                 flight.addCompletion { [weak self, weak view] _ in
                     MainActor.assumeIsolated {
                         guard let self, let view else { return }
+                        // The group opens only once its carried picture is
+                        // down, and a moment after, once iOS has faded that
+                        // picture out over the folder.
+                        if self.reopen == id {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.landedPause) { [weak self] in
+                                self?.reopenNow()
+                            }
+                        }
                         for case let cell as GridCardCell in view.visibleCells { cell.landing = false }
                         if self.revealed == id { self.revealed = nil }
                         if self.settling == id {
@@ -1405,20 +1414,14 @@ struct GridCards: UIViewRepresentable {
                 }
                 return
             }
-            let flight = coordinator.drop(item.dragItem, toItemAt: home)
+            // No place in the layout (never seen): iOS lands it, and a group
+            // opens as the drag ends.
+            coordinator.drop(item.dragItem, toItemAt: home)
             settle(id)
-            if reopen == id {
-                // The group opens only once iOS's carried picture is down.
-                // Opened while it was still on its way, the picture's last
-                // frames were of the cell it was landing on, by then the
-                // name line again: a scrap of the name hung over the opened
-                // group (the Simulator, 2026-11-24).
-                landing = true
-                flight.addCompletion { [weak self] _ in
-                    MainActor.assumeIsolated { self?.reopenNow() }
-                }
-            }
         }
+
+        /// From a carried group's picture being down to the group opening.
+        private static let landedPause: TimeInterval = 0.2
 
         /// iOS's picture of a carried group is on its way down.
         private var landing = false

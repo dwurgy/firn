@@ -22,10 +22,14 @@ struct FrostScene: View {
     /// How much of the bottom the words take: the logo sits in the open
     /// space above them.
     var footer: CGFloat = 164
+    /// Room the logo leaves at its right (the iPhone Duo's clock and camera,
+    /// down the side of its outer screen).
+    var trailingRoom: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
-            let logo = FrostLogoLayout(size: proxy.size, footer: footer)
+            let logo = FrostLogoLayout(size: CGSize(width: proxy.size.width - trailingRoom, height: proxy.size.height),
+                                       footer: footer)
             ZStack(alignment: .topLeading) {
                 FrostSky()
                 // Both always there, so one can come up through the other.

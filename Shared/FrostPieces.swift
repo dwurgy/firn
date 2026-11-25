@@ -381,7 +381,9 @@ private struct FrostSwatch: View {
         .onHover { hovering = $0 }
         .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: isSelected)
         .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: hovering)
+        #if os(macOS)
         .help(name.capitalized)
+        #endif
         .accessibilityLabel(name.capitalized)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

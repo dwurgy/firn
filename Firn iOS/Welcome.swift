@@ -28,7 +28,8 @@ struct Welcome: View {
             let layout = WelcomeLayout(size: proxy.size, bottomInset: proxy.safeAreaInsets.bottom)
             ZStack(alignment: .bottomLeading) {
                 FrostScene(focus: clear ? .sharp : finishing || step == .hello ? .blurred : .sky,
-                           footer: presenter.footer)
+                           footer: presenter.footer,
+                           trailingRoom: max(proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading, 0))
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: step == .hello)
                     .animation(.easeOut(duration: 0.25), value: finishing)
                     .animation(.easeInOut(duration: 0.85), value: clear)
@@ -40,6 +41,8 @@ struct Welcome: View {
                             .modifier(StepEntrance(duration: 0.3))
                     } else {
                         stepScreen(layout)
+                            // VoiceOver's two-finger scrub.
+                            .accessibilityAction(.escape, back)
                     }
                 }
                 .opacity(finishing ? 0 : 1)
@@ -58,7 +61,6 @@ struct Welcome: View {
         }
         .foregroundStyle(Theme.Frost.ink)
         .tint(Theme.Frost.ink)
-        .onAppear { name = space.name }
         // Fetched from the start, so they're there by the Basecamp step; the
         // fetch stops if the welcome closes first. A site with none keeps its
         // letter. The Mac welcome's same fixed addresses, with no cookies.
@@ -129,13 +131,14 @@ struct Welcome: View {
             }
             ScrollView(.vertical) {
                 columns(layout)
-                    // Room for the glass's edge and the checks.
-                    .padding(8)
-                    .padding(.vertical, layout.roomy ? 0 : 12)
+                    // Room for the glass's edge, its shadow (wide on iOS
+                    // 26), and the checks.
+                    .padding(.horizontal, layout.side)
+                    .padding(.vertical, layout.roomy ? 8 : 20)
                     .frame(minHeight: layout.roomy ? layout.middleHeight : 0)
             }
             // No soft edge: a mask breaks the glass inside it.
-            .padding(.horizontal, -8)
+            .padding(.horizontal, -layout.side)
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
             // Each step is new, so it glides in; the last one simply goes.
@@ -226,17 +229,26 @@ struct Welcome: View {
     // MARK: Moving
 
     private func next() {
-        if step == .space { saveName() }
+        saveName()
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        if let following = WelcomeStep(rawValue: step.rawValue + 1) { step = following } else { finishWelcome() }
+        if let following = WelcomeStep(rawValue: step.rawValue + 1) { go(to: following) } else { finishWelcome() }
     }
 
     private func back() {
-        if step == .space { saveName() }
-        step = WelcomeStep(rawValue: step.rawValue - 1) ?? .hello
+        saveName()
+        go(to: WelcomeStep(rawValue: step.rawValue - 1) ?? .hello)
     }
 
+    private func go(to next: WelcomeStep) {
+        // The name as it is now: it may have changed since (sync).
+        if next == .space { name = space.name }
+        step = next
+    }
+
+    /// Only from the space step: anywhere else, a name read earlier could
+    /// undo one that has synced since.
     private func saveName() {
+        guard step == .space else { return }
         store.updateSpace(space, name: name, color: space.color)
     }
 
@@ -260,7 +272,8 @@ private struct WelcomeLayout {
     var twoColumns: Bool { size.width >= 940 || (short && roomy) }
     var side: CGFloat { !roomy ? 24 : short ? 24 : twoColumns ? 72 : 56 }
     var top: CGFloat { !roomy ? 4 : short ? 12 : 40 }
-    var bottom: CGFloat { !roomy ? 14 : short ? 8 : 44 }
+    /// An iPhone with no home bar has only this.
+    var bottom: CGFloat { !roomy ? (bottomInset > 0 ? 14 : 24) : short ? 8 : 44 }
     var titleSize: CGFloat { roomy && !short ? 38 : 32 }
     var questionSize: CGFloat { twoColumns && !short ? 42 : 32 }
     var questionWidth: CGFloat {
@@ -304,8 +317,10 @@ private struct WelcomePill: View {
         self.action = action
     }
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     var body: some View {
-        Button(action: action) {
+        let button = Button(action: action) {
             Text(title)
                 .frostFont(17)
                 .foregroundStyle(Theme.Frost.ink)
@@ -314,9 +329,26 @@ private struct WelcomePill: View {
                 .frame(minHeight: GlassButton.label(52))
                 .frame(maxWidth: fills ? .infinity : nil)
         }
-        .firnGlassButton(.capsule)
+        Group {
+            // Solid, in the cards' own color (iOS's glass button would be
+            // the bars' warm one).
+            if reduceTransparency {
+                button.buttonStyle(SolidPill())
+            } else {
+                button.firnGlassButton(.capsule)
+            }
+        }
         .keyboardShortcut(.defaultAction)
         .fixedSize(horizontal: !fills, vertical: true)
+    }
+}
+
+private struct SolidPill: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(GlassButton.padding)
+            .background { FrostSurface(shape: Capsule(), pressed: configuration.isPressed) }
+            .contentShape(Capsule())
     }
 }
 
@@ -328,22 +360,36 @@ private struct SitesStep: View {
     let accent: Color
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 64), spacing: 8), count: 4), spacing: 18) {
-            ForEach(WelcomeSite.suggestions) { site in
-                let tile = store.basecampTile(for: site.url)
-                SiteChoice(name: site.name, icon: icons[site.url] ?? tile?.icon, accent: accent,
-                           isOn: tile != nil, canPick: store.canAddToBasecamp) {
-                    if let tile {
-                        store.closeTile(tile)
-                    } else {
-                        store.addBasecampTile(site.url, title: site.name, icon: icons[site.url])
+        // Two rows, flush with the question on the left and the pill on the right.
+        VStack(spacing: 18) {
+            ForEach(Self.rows.indices, id: \.self) { row in
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Self.rows[row]) { site in
+                        if site.id != Self.rows[row].first?.id { Spacer(minLength: 4) }
+                        choice(site).frame(width: 64)
                     }
                 }
             }
         }
-        .frame(maxWidth: 400)
+        .frame(maxWidth: 360)
         // Four names side by side have only so much room.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    private static let rows = stride(from: 0, to: WelcomeSite.suggestions.count, by: 4).map {
+        Array(WelcomeSite.suggestions[$0..<min($0 + 4, WelcomeSite.suggestions.count)])
+    }
+
+    private func choice(_ site: WelcomeSite) -> some View {
+        let tile = store.basecampTile(for: site.url)
+        return SiteChoice(name: site.name, icon: icons[site.url] ?? tile?.icon, accent: accent,
+                          isOn: tile != nil, canPick: store.canAddToBasecamp) {
+            if let tile {
+                store.closeTile(tile)
+            } else {
+                store.addBasecampTile(site.url, title: site.name, icon: icons[site.url])
+            }
+        }
     }
 }
 

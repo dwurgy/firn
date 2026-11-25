@@ -99,7 +99,7 @@ Glow    glacier #9DB7C8 · apricot #F2C4A0 · peach #ECCEBA · sage #B9CDB5
 
 ### Frost (the welcome and the "no tabs" screen)
 
-Firn's brand moments use "Frost" (David, 2026-11-24; it replaced Sunrise): a frosted window on a snowy morning, everything outside soft and out of focus. The approved designs are in `docs/design/frost` (start with its README; its BRAND.md has every value), the scene is `Shared/Frost.swift`, and the plan is in `docs/HISTORY.md` ("Plan: Frost"). Built on the Mac; on the iPhone and iPad "no tabs" is built (2026-11-25; not yet on David's iPhone), and the welcome too (steps 2 to 4; step 5, the look over, is left). Sunrise's code is gone.
+Firn's brand moments use "Frost" (David, 2026-11-24; it replaced Sunrise): a frosted window on a snowy morning, everything outside soft and out of focus. The approved designs are in `docs/design/frost` (start with its README; its BRAND.md has every value), the scene is `Shared/Frost.swift`, and the plan is in `docs/HISTORY.md` ("Plan: Frost"). Built on the Mac; on the iPhone and iPad "no tabs" is built (2026-11-25; not yet on David's iPhone), and the welcome too (steps 1 to 5 done; David hasn't judged it yet). Sunrise's code is gone.
 
 - **Where:** only the welcome and "no tabs." Never everyday browsing, Settings, Lookout, the command bar, menus, downloads, or scam warnings. Everyday screens are plain warm paper.
 - **The sky:** one plain gradient, with a faint warm horizon along the bottom in light mode only. Dark is "blue hour," and the logo on it is always cream.

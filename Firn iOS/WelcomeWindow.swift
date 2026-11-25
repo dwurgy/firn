@@ -61,8 +61,9 @@ import UIKit
         let host = UIHostingController(rootView: Welcome(presenter: self, store: store))
         host.view.backgroundColor = .clear
         window.rootViewController = host
-        // VoiceOver stays in it.
+        // VoiceOver stays in it: modal alone left Firn's own bar in the tree.
         window.accessibilityViewIsModal = true
+        firn.accessibilityElementsHidden = true
         window.makeKeyAndVisible()
         self.window = window
         if fading {
@@ -155,13 +156,12 @@ import UIKit
 
     private func close() {
         finishTask = nil
+        firn?.accessibilityElementsHidden = false
         firn?.makeKey()
         window?.isHidden = true
         window?.rootViewController = nil
         window = nil
-        if let firn {
-            UIAccessibility.post(notification: .screenChanged, argument: firn)
-        }
+        UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
 }
 

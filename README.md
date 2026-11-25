@@ -10,10 +10,7 @@
 
 ---
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/01-hero-dark.png">
-  <img src="docs/screenshots/01-hero-light.png" alt="Firn's window: the sidebar with Basecamp, groups, and tabs beside a web page">
-</picture>
+<img src="docs/screenshots/firn-icloud.png" alt="Firn on a Mac and an iPhone: your spaces, synced with iCloud." width="100%">
 
 Firn is a quiet, minimalist web browser built natively for the Mac in Swift, SwiftUI, and WebKit. It takes the best ideas from browsers like Arc, Dia, and Zen and brings them to everyone, not just power users, without the clutter.
 

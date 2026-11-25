@@ -259,6 +259,12 @@ enum Theme {
         static let horizonClear = Color(light: 0xECCEBA, lightOpacity: 0, dark: 0xECCEBA, darkOpacity: 0)
         static let ink = Color(light: 0x241F1B, dark: 0xE9E3DA)
         static let muted = Color(light: 0x5E564E, dark: 0xB9B2AA)
+        /// The small mark: its own Glacier by day, cream on blue hour.
+        static let mark = Color(light: 0x6E98B2, dark: 0xE9E3DA)
+        /// The other steps' dots.
+        static let dot = Color(light: 0x241F1B, lightOpacity: 0.24, dark: 0xE9E3DA, darkOpacity: 0.28)
+        static let field = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0x141926, darkOpacity: 0.5)
+        static let fieldLine = Color(light: 0x241F1B, lightOpacity: 0.28, dark: 0xE9E3DA, darkOpacity: 0.32)
 
         // The pill before macOS 26: a hairline, a line outside it, and its shadow.
         static let rimLine = Color(light: 0xFFFFFF, lightOpacity: 0.35, dark: 0xE9E3DA, darkOpacity: 0.16)

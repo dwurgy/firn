@@ -25,6 +25,24 @@ enum DemoShot: String, CaseIterable {
     /// in Personal and in its history.
     static var typed: String? { current == .command ? "nor" : nil }
 
+    /// The welcome's step to show (`--step=search`, arc, arrived, space,
+    /// basecamp, or default), and made-up Arc spaces for its Arc step.
+    static let welcomeStep: String? = {
+        guard current == .welcome else { return nil }
+        return ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--step=") }.map { String($0.dropFirst("--step=".count)) }
+    }()
+    static var arcPlan: ArcImportPlan? {
+        func space(_ name: String, _ count: Int) -> (items: [Any], spaces: [Any]) {
+            let tabs = (0..<count).map { "\(name)\($0)" }
+            var items: [Any] = tabs.flatMap { [$0, ["id": $0, "childrenIds": [String](), "data": ["tab": ["savedURL": "https://example.com/\($0)", "savedTitle": $0]]]] as [Any] }
+            items += [name, ["id": name, "childrenIds": tabs, "data": ["itemContainer": [String: String]()]]] as [Any]
+            return (items, [name, ["id": name, "title": name, "containerIDs": ["pinned", name]]])
+        }
+        let all = [space("Personal", 6), space("Work", 9), space("Reading", 3), space("Trips", 2), space("Recipes", 4)]
+        let root: [String: Any] = ["sidebar": ["containers": [["spaces": all.flatMap(\.spaces), "items": all.flatMap(\.items)]]]]
+        return (try? JSONSerialization.data(withJSONObject: root)).flatMap { try? ArcImportPlan($0) }
+    }
+
     /// Every shot's browser window is this size, so the set matches;
     /// `--size=700x500` to check a screen at another.
     private static let windowSize: CGSize = {

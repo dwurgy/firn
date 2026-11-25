@@ -33,6 +33,7 @@ struct FrostScene: View {
                     EmptyView()
                 case .blurred:
                     FrostBlurredLogo(logo: logo)
+                        .transition(.opacity)
                 case .sharp:
                     FrostSharpLogo(logo: logo)
                 }

@@ -1,20 +1,14 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/svg/firn-lockup-on-dark.svg">
-    <img src="brand/svg/firn-lockup.svg" alt="Firn" width="220">
-  </picture>
-</p>
+<img src="docs/screenshots/firn-hero.jpg" alt="Firn on a Mac: a calm browser for Mac, iPhone, and iPad." width="100%">
 
-<p align="center"><strong>A calm browser, made for Mac.</strong><br>
-<a href="https://firnbrowser.com">firnbrowser.com</a></p>
+<p align="center"><a href="https://firnbrowser.com">firnbrowser.com</a></p>
 
 ---
-
-<img src="docs/screenshots/firn-icloud.png" alt="Firn on a Mac and an iPhone: your spaces, synced with iCloud." width="100%">
 
 Firn is a quiet, minimalist web browser built natively for the Mac in Swift, SwiftUI, and WebKit. It takes the best ideas from browsers like Arc, Dia, and Zen and brings them to everyone, not just power users, without the clutter.
 
 The name comes from firn: the settled, compacted snow high on alpine glaciers. Quiet, clean, and still.
+
+<img src="docs/screenshots/firn-icloud.png" alt="Firn on a Mac and an iPhone: your spaces, synced with iCloud." width="100%">
 
 ## What makes it different
 

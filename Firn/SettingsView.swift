@@ -66,6 +66,7 @@ struct SettingsView: View {
                 case .general: GeneralSettings(window: window)
                 case .tabs: TabsSettings()
                 case .spaces: SpacesSettings(window: window)
+                case .keyboard: KeyboardSettings()
                 case .privacy: PrivacySettings()
                 case .passwords: PasswordsSettings(store: window.store)
                 case .sync: SyncSettings(sync: sync)
@@ -96,7 +97,7 @@ struct SettingsView: View {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, tabs, spaces, privacy, passwords, sync
+    case general, tabs, spaces, keyboard, privacy, passwords, sync
 
     var id: Self { self }
 
@@ -105,6 +106,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "General"
         case .tabs: "Tabs"
         case .spaces: "Spaces"
+        case .keyboard: "Keyboard"
         case .privacy: "Privacy"
         case .passwords: "Passwords"
         case .sync: "Sync"
@@ -116,6 +118,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .tabs: "square.on.square"
         case .spaces: "square.stack"
+        case .keyboard: "keyboard"
         case .privacy: "hand.raised"
         case .passwords: "key"
         case .sync: "icloud"

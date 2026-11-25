@@ -3,7 +3,8 @@ import FirnCore
 import SwiftUI
 
 /// The row at the bottom of the sidebar: the space on screen's name,
-/// centered, in its color, with a dot for each space under it; the
+/// centered, in ink, with a dot for each space under it (this one's in its
+/// color); the
 /// overflow on the left and, while there are any, the space's downloads on
 /// the right. The name opens the list of spaces. No space icons: a name
 /// says where you are, and stays calm however many spaces there are
@@ -112,7 +113,8 @@ struct SpaceRow: View {
     }
 }
 
-/// The space on screen's name, in its color. A click opens the list of
+/// The space on screen's name, in ink, as on the iPhone (David, 2026-11-25):
+/// only the dots have color. A click opens the list of
 /// spaces; so does a right-click.
 private struct SpaceNameButton: View {
     let store: BrowserStore
@@ -126,8 +128,7 @@ private struct SpaceNameButton: View {
         Button { showMenu() } label: {
             Text(space.name)
                 .font(.system(size: 13, weight: .semibold))
-                // The space's color, deepened toward ink so it reads on the tint.
-                .foregroundStyle(Theme.spaceInk(space.color))
+                .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
             // Cross-fades with the frame's tint when the space changes.

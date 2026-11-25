@@ -169,8 +169,7 @@ enum Theme {
 
     /// The space row's one color: the active space's color, deepened toward
     /// ink so it reads clearly on the tinted frame (half ink in light, a
-    /// third in dark). The name and every dot use it, so the row never
-    /// turns rainbow.
+    /// third in dark). Its dot uses it; the name is ink (David, 2026-11-25).
     static func spaceInk(_ name: String) -> Color {
         let hex = spaceHex(name)
         return Color(light: mix(hex, 0x241F1B, 0.5), dark: mix(hex, 0xF5F1EC, 0.35))

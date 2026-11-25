@@ -8,7 +8,7 @@ import SwiftUI
 /// window to capture by writing its number to a hidden file in Downloads. `scripts/demo-shots.sh` captures it and removes the file, and
 /// Firn quits. Nothing here runs outside a demo.
 enum DemoShot: String, CaseIterable {
-    case hero, work, command, lookout, split, reader, summary, tidied, history, empty, peek, welcome
+    case hero, work, command, lookout, split, reader, summary, tidied, history, empty, peek, welcome, settings
 
     static let current: DemoShot? = {
         // One word, `--shot=hero`: AppKit opens a bare word at launch as a
@@ -134,6 +134,13 @@ enum DemoShot: String, CaseIterable {
             window.setSidebarCollapsed(true)
             try? await Task.sleep(for: .milliseconds(600))
             window.pointerMoved(toX: 0)
+        case .settings:
+            // Which pane: `--pane=keyboard`.
+            if let pane = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--pane=") }) {
+                UserDefaults.standard.set(String(pane.dropFirst("--pane=".count)), forKey: "settingsPane")
+            }
+            openWindow(id: "settings")
+            if let settings = await appWindow("settings") { captured = settings }
         case .welcome:
             // Hello.
             show("Personal")

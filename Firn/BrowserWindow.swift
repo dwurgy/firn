@@ -68,8 +68,7 @@ struct BrowserWindow: View {
             .ignoresSafeArea()
         }
         .ignoresSafeArea()
-        // At the welcome's finish, the sky is behind the window and the snow
-        // in front (see `WelcomeLayer`).
+        // At the welcome's finish, its sky is behind the window, which rises over it.
         .background { WelcomeBackdrop(window: window) }
         .overlay { WelcomeLayer(window: window) }
         .environment(\.spaceColorName, store.activeSpace.color)

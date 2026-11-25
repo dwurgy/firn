@@ -191,14 +191,18 @@ final class WindowModel {
     private var welcomeFinishTask: Task<Void, Never>?
 
     enum WelcomeFinish {
-        /// The step fades, the sun rises, "Welcome in.", and the real window
-        /// waits low behind the snow, a little smaller.
+        /// The step fades, the logo comes into focus, "Welcome in.", and the
+        /// real window waits just below the bottom edge, a little smaller.
         case begun
         /// The window rises over the words into its place.
         case rising
-        /// The snow fades away, leaving the browser.
+        /// The window's own frame glass takes over.
         case fading
     }
+
+    /// How much of the window's bottom Hello's words take: the logo sits
+    /// above them, in front of the window and behind it alike.
+    var welcomeFooter: CGFloat = 164
 
     /// Opens the welcome: the first time Firn opens, or Help › Show Welcome Again.
     func showWelcome() {

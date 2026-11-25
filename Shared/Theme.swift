@@ -407,38 +407,9 @@ enum Theme {
         }
     }
 
-    /// The welcome's own colors over Sunrise; its card is the command
-    /// bar's glass (`CommandBarGlass`).
+    /// The welcome's little window drawings.
     enum Welcome {
-        /// The little window drawings' bars.
         static let pill = Color(light: 0xFFFFFF, lightOpacity: 0.6, dark: 0xFFFAF5, darkOpacity: 0.12)
-        /// The Hello screen's mark: the on-dark lockup's sand (BRAND.md,
-        /// "Logo"), a touch lighter at the top.
-        static let markTop = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
-        static let markBottom = Color(light: 0xE9E3DA, dark: 0xE9E3DA)
-        static let markShadow = Color(light: 0x0B0F18, lightOpacity: 0.35, dark: 0x000000, darkOpacity: 0.35)
-
-        // Words and buttons on the blue-hour sky: light in both looks
-        // (BRAND.md, "Text on the dark sky" and "Buttons, links and focus").
-        /// Headlines and words on the sky: 15:1 at the top, at least 4.5:1
-        /// where the welcome's words sit. No muted grey: low on the
-        /// light-mode sky it fails 4.5:1.
-        static let skyInk = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
-        /// The main button on the sky: a light pill, dark words.
-        static let skyButton = Color(light: 0xF5F1EC, dark: 0xF5F1EC)
-        static let skyButtonText = Color(light: 0x2B2826, dark: 0x2B2826)
-        /// The small pill on the sky (the site's eyebrow): a faint light
-        /// fill, a slightly stronger edge, light words.
-        static let skyPill = Color(light: 0xF5F1EC, lightOpacity: 0.1, dark: 0xF5F1EC, darkOpacity: 0.1)
-        static let skyPillHover = Color(light: 0xF5F1EC, lightOpacity: 0.16, dark: 0xF5F1EC, darkOpacity: 0.16)
-        static let skyPillPress = Color(light: 0xF5F1EC, lightOpacity: 0.22, dark: 0xF5F1EC, darkOpacity: 0.22)
-        static let skyPillEdge = Color(light: 0xF5F1EC, lightOpacity: 0.18, dark: 0xF5F1EC, darkOpacity: 0.18)
-        /// The keyboard focus ring on the sky (3pt).
-        static let skyFocus = Color(light: 0xCFE3EF, dark: 0xCFE3EF)
-        /// Paper under the steps' card, so its glass reads as paper over the
-        /// dark sky instead of taking the navy in (the glass alone lets about
-        /// 40% through).
-        static let cardBase = Color(light: 0xFBFAF8, lightOpacity: 0.55, dark: 0x2B2826, darkOpacity: 0.5)
     }
 
     // MARK: Sizes

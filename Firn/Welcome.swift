@@ -16,27 +16,30 @@ struct WelcomeLayer: View {
     }
 }
 
-/// The welcome's finish: the sidebar and the page wait low behind the snow,
-/// at 86% of their size, then rise into place (the approved source's
-/// `fl-browser-rise`). Transforms only, from the top's middle; at rest
-/// they're plain identities.
+/// The welcome's finish: the sidebar and the page wait just below the
+/// window's bottom edge, at 86% of their size, then rise into place.
+/// Transforms only, from the top's middle; at rest they're plain identities.
 struct WelcomeLift: ViewModifier {
     let finish: WindowModel.WelcomeFinish?
     @State private var height: CGFloat = 0
+
+    /// Past the edge by this much, so the rising window's shadow is too.
+    private static let below: CGFloat = 30
 
     func body(content: Content) -> some View {
         let low = finish == .begun
         content
             .scaleEffect(low ? 0.86 : 1, anchor: .top)
-            .offset(y: low ? height * 0.96 : 0)
+            .offset(y: low ? height + Self.below : 0)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
     }
 }
 
-/// Behind the real window while the welcome is open: Sunrise's sky, sun,
-/// and flakes, "Welcome in.", and the warm shadow the window casts as it
-/// rises. All of it stays under the window until the finish lowers it;
-/// the snow stays in front, in the welcome (`SunriseScene.Part`).
+/// Behind the real window while the welcome is open: Frost with the logo
+/// out of focus, coming into focus at the finish beside "Welcome in."
+/// (docs/design/frost, welcome-mac/welcome-in), and the warm shadow the
+/// window casts as it rises over them. All of it stays under the window
+/// until the finish lowers it.
 struct WelcomeBackdrop: View {
     let window: WindowModel
 
@@ -44,18 +47,24 @@ struct WelcomeBackdrop: View {
         if window.showsWelcome {
             let finishing = window.welcomeFinish != nil
             GeometryReader { proxy in
-                ZStack(alignment: .top) {
-                    SunriseScene(spaceColor: "glacier", part: .back)
-                    // "Welcome in." sits in the sky; the window rises over it.
-                    Text("Welcome in.")
-                        .font(BrandFont.gooper(44))
-                        .foregroundStyle(Theme.Welcome.skyInk)
-                        .padding(.top, proxy.size.height * 0.15)
+                let wide = proxy.size.width >= 760
+                ZStack(alignment: .bottomLeading) {
+                    // The logo and the words go at once when the window is in
+                    // place over them: they'd show through its glass.
+                    let covered = window.welcomeFinish == .fading
+                    FrostScene(focus: covered ? .sky : finishing ? .sharp : .blurred, footer: window.welcomeFooter)
+                        .animation(finishing && !covered ? .easeInOut(duration: 0.5).delay(0.25) : nil, value: finishing)
+                        .animation(nil, value: covered)
+                    FrostTitle("Welcome", "in.", size: 38)
+                        .padding(.leading, wide ? 72 : 32)
+                        .padding(.bottom, wide ? 64 : 32)
                         .opacity(finishing ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.2), value: finishing)
+                        .opacity(covered ? 0 : 1)
+                        .animation(nil, value: covered)
                     // The rising window's frame: Firn's frame color in the
                     // space's tint, with a panel's corners; it gives way to
-                    // the real glass as the snow fades.
+                    // the real glass once it's in place.
                     let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
                     shape.fill(Theme.frame)
                         .overlay { SpaceTint(color: window.store.activeSpace.color).clipShape(shape) }
@@ -93,8 +102,6 @@ private struct Welcome: View {
     @State private var importedArc = false
     /// The suggested sites' icons, fetched while the welcome is open.
     @State private var siteIcons: [URL: Data] = [:]
-    /// How much of the window's bottom Hello's words take.
-    @State private var helloFooter: CGFloat = 164
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: BrowserStore { window.store }
@@ -121,20 +128,18 @@ private struct Welcome: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            if finish == nil {
-                FrostScene(focus: step == .hello ? .blurred : .sky, footer: helloFooter)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: step == .hello)
-            } else {
-                // Until the finish is Frost too (docs/HISTORY.md, "Plan: Frost", 3).
-                SunriseScene(spaceColor: colorName, part: .front)
-            }
+            // At the finish it gives way to the same sky behind the window,
+            // with the logo (`WelcomeBackdrop`).
+            FrostScene(focus: step == .hello ? .blurred : .sky, footer: window.welcomeFooter)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: step == .hello)
+                .modifier(FinishFade(finishing: finish != nil))
             // The scene's empty sky moves the window, like a title bar.
             WindowDragArea()
             Group {
                 if step == .hello {
                     HelloScreen(next: next)
                         .modifier(StepEntrance(duration: 0.3))
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { helloFooter = $0 }
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { window.welcomeFooter = $0 }
                     // As drawn, Hello has no Skip button: only Esc.
                     Button("Skip setup", action: finishWelcome)
                         .keyboardShortcut(.cancelAction)
@@ -153,8 +158,6 @@ private struct Welcome: View {
             .accessibilityHidden(finish != nil)
         }
         .foregroundStyle(Theme.Frost.ink)
-        // Last, the snow fades away to the browser.
-        .opacity(finish == .fading ? 0 : 1)
         .ignoresSafeArea()
         .onAppear {
             name = space.name
@@ -342,6 +345,15 @@ private struct Welcome: View {
         offersDefault = true
         importedArc = named == "arrived"
         switch named {
+        case "finish":
+            step = .basecamp
+            Task {
+                while !FileManager.default.fileExists(atPath: DemoMode.shotReadyFile.path(percentEncoded: false)) {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                try? await Task.sleep(for: .seconds(1))
+                finishWelcome()
+            }
         case "search": step = .search
         case "arc", "arrived": step = .arc
         case "space": step = .space
@@ -387,7 +399,7 @@ private struct Welcome: View {
     }
 }
 
-/// At the finish, the step and "Skip setup" fade first (250ms).
+/// At the finish, the sky in front and the step on it fade first (250ms).
 private struct FinishFade: ViewModifier {
     let finishing: Bool
 

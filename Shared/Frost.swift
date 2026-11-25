@@ -28,15 +28,11 @@ struct FrostScene: View {
             let logo = FrostLogoLayout(size: proxy.size, footer: footer)
             ZStack(alignment: .topLeading) {
                 FrostSky()
-                switch focus {
-                case .sky:
-                    EmptyView()
-                case .blurred:
-                    FrostBlurredLogo(logo: logo)
-                        .transition(.opacity)
-                case .sharp:
-                    FrostSharpLogo(logo: logo)
-                }
+                // Both always there, so one can come up through the other.
+                FrostBlurredLogo(logo: logo)
+                    .opacity(focus == .blurred ? Theme.Frost.logoOpacity : 0)
+                FrostSharpLogo(logo: logo)
+                    .opacity(focus == .sharp ? 1 : 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
@@ -93,7 +89,6 @@ private struct FrostBlurredLogo: View {
         Image("FrostLockupBlurred")
             .resizable()
             .frame(width: frame.width, height: frame.height)
-            .opacity(Theme.Frost.logoOpacity)
             .offset(x: frame.minX, y: frame.minY)
     }
 }

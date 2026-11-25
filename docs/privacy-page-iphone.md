@@ -47,3 +47,9 @@ Update checks, saved passwords, the Arc import, ⇧⌘T, the View menu (the iPho
 > **Feedback** opens a draft in your mail app with Firn's version, your iOS version, and your device model. Nothing is sent until you send it.
 
 > **Crash reports.** Firn sends none. If you've chosen to share analytics with app developers in your device's settings, Apple may share crash reports with me.
+
+## For the Mac's 1.1.1: staying signed in
+
+Post it before 1.1.1 goes out (the page promises to say so first). Under "What stays on your Mac", after the saved passwords' line:
+
+> **Staying signed in.** Some sites sign you in only until your browser closes. Firn brings your tabs back when you reopen it, so on your Mac it keeps those sign-ins too, for each space on its own. They're encrypted, the key is in your Mac's Keychain, and they're left out of backups and never uploaded. They go when you sign out of the site, when you delete the space, or when the space hasn't been opened for 30 days.

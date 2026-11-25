@@ -14,6 +14,9 @@ struct FirnApp: App {
     init() {
         DemoMode.prepare()
         BrowserEngine.startBlocking(enabled: Preference.blocksContentAtLaunch)
+        // Sign-ins that last "until the browser closes" come back with the
+        // tabs. A demo starts signed out, always.
+        if !DemoMode.isOn { BrowserEngine.keepSignIns() }
         let file = DemoMode.sessionFile
         let session = file.load()
         let placesFile = DemoMode.pagePlacesFile
@@ -73,7 +76,10 @@ struct FirnApp: App {
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [saver] _ in
-            MainActor.assumeIsolated { saver.saveNow() }
+            MainActor.assumeIsolated {
+                saver.saveNow()
+                BrowserEngine.saveSignIns()
+            }
         }
     }
 

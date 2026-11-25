@@ -20,6 +20,7 @@ extension BrowserEngine {
     /// erases it at the next launch.
     public static func removeData(for dataStoreID: UUID) {
         Task { @MainActor in
+            SessionCookies.shared?.erase(dataStoreID)
             try? await Task.sleep(for: .seconds(2))
             wakeWebKit()
             do {
@@ -36,6 +37,7 @@ extension BrowserEngine {
     /// after a damaged file, or it would erase spaces that still exist.
     public static func removeUnusedData(keeping: Set<UUID>) {
         Task { @MainActor in
+            SessionCookies.shared?.removeUnused(keeping: keeping)
             wakeWebKit()
             let unused = await WKWebsiteDataStore.allDataStoreIdentifiers.filter { !keeping.contains($0) }
             for id in unused {

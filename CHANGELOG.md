@@ -2,10 +2,11 @@
 
 ## Firn 1.1.1
 
-**Smoother tiles, groups, and Reader.**
+**Stay signed in, and a smoother Reader.**
 
 ### Better
 
+- **You stay signed in** when you quit and reopen Firn. Your sign-ins are encrypted and stay on your Mac.
 - **Reader scrolls down** as it opens, and back up as it closes.
 
 ### Fixed

@@ -101,6 +101,8 @@ final class WebKitPageController: NSObject, PageController {
         let configuration = WKWebViewConfiguration()
         // Every page uses its space's own store, never .default().
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: dataStoreID)
+        // The space's session cookies come back before its first page loads.
+        SessionCookies.shared?.willUse(configuration.websiteDataStore)
         // Without a Safari-style version, some sites (Google sign-in among them)
         // treat WKWebView as an embedded app view and serve a lesser page.
         configuration.applicationNameForUserAgent = Self.safariUserAgentSuffix
@@ -138,8 +140,21 @@ final class WebKitPageController: NSObject, PageController {
         #endif
     }
 
+    /// Now, or once the space's session cookies are back (`SessionCookies`),
+    /// so a page brought back at launch is asked for already signed in.
+    private func whenSignedIn(_ load: @escaping (WebKitPageController) -> Void) {
+        guard let cookies = SessionCookies.shared else { return load(self) }
+        cookies.whenReady(webView.configuration.websiteDataStore) { [weak self] in
+            if let self { load(self) }
+        }
+    }
+
     func load(_ url: URL) {
         closeReader()
+        whenSignedIn { $0.loadNow(url) }
+    }
+
+    private func loadNow(_ url: URL) {
         if OpenedFiles.contains(url) {
             // Read access to that one file only, not the folder around it.
             webView.loadFileURL(url, allowingReadAccessTo: url)
@@ -176,7 +191,7 @@ final class WebKitPageController: NSObject, PageController {
     /// one it reopens still goes through the navigation delegate; the
     /// address bar waits for its commit, as with any load.
     func resume(from memory: PageMemory) {
-        webView.interactionState = memory.state
+        whenSignedIn { $0.webView.interactionState = memory.state }
     }
 
     func isInUse() async -> Bool {

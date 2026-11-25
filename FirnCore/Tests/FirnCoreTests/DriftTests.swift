@@ -49,6 +49,49 @@ struct DriftTests {
         #expect(a.title == "a.example")
     }
 
+    /// The iPhone's way: a day counts as Firn comes to the front, and only
+    /// the space on screen is asked about.
+    @Test func oneSpacesIdleTabsLeaveTheOthersAlone() {
+        let clock = Clock()
+        let work = Space(name: "Work", color: "sage", order: 1, dataStoreID: UUID())
+        let store = BrowserStore(restoring: nil, defaultSpaces: [space, work],
+                                 makePage: { FakePage(dataStoreID: $0) }, now: { clock.date })
+        store.openTab(url("a"))
+        store.openTab(url("b"))
+        store.selectSpace(work)
+        store.openTab(url("c"))
+        store.openTab(url("d"))
+        store.countDayOfUse()
+        for _ in 0 ..< 7 {
+            clock.advance(days: 1)
+            store.countDayOfUse()
+            // Twice in a day counts once.
+            store.countDayOfUse()
+        }
+        #expect(hosts(store.idleTabs(in: work.id)) == ["c.example"])
+        for tab in store.idleTabs(in: work.id) { store.drift(tab) }
+        #expect(hosts(store.driftedTabs) == ["c.example"])
+        store.selectSpace(space)
+        #expect(store.driftedTabs.isEmpty)
+        #expect(hosts(store.idleTabs(in: space.id)) == ["a.example"])
+        store.driftAfter = .never
+        #expect(store.idleTabs(in: space.id).isEmpty)
+    }
+
+    @Test func countingADayDeletesWhatExpired() {
+        let clock = Clock()
+        let store = makeStore(clock)
+        let a = store.openTab(url("a"))
+        store.openTab(url("b"))
+        store.drift(a)
+        clock.advance(days: 29)
+        store.countDayOfUse()
+        #expect(hosts(store.driftedTabs) == ["a.example"])
+        clock.advance(days: 1)
+        store.countDayOfUse()
+        #expect(store.driftedTabs.isEmpty)
+    }
+
     @Test func aTabPlayingSoundNeverDrifts() throws {
         let clock = Clock()
         let store = makeStore(clock)

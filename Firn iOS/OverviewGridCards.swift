@@ -117,9 +117,29 @@ final class GridCardCell: UICollectionViewCell {
         layer.removeAnimation(forKey: "shrink")
         layer.sublayerTransform = CATransform3DIdentity
         contentView.alpha = 1
+        contentView.mask = nil
+        isUserInteractionEnabled = true
         landing = false
         raised = false
         raises = true
+    }
+
+    /// Tidied away (`Tidying`): its picture is gone at once, as the copy
+    /// that sinks takes its place, and the title under it fades.
+    func sink() {
+        isUserInteractionEnabled = false
+        let title = UIView(frame: CGRect(x: 0, y: bounds.height - OverviewRow.gridTitleHeight,
+                                         width: bounds.width, height: OverviewRow.gridTitleHeight))
+        title.backgroundColor = .black
+        contentView.mask = title
+        UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) { self.contentView.alpha = 0 }
+    }
+
+    /// Not tidied after all.
+    func unsink() {
+        contentView.mask = nil
+        isUserInteractionEnabled = true
+        contentView.alpha = 1
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -215,6 +235,8 @@ struct GridCards: UIViewRepresentable {
     /// grids at once, with no fade or slide of the collection view's own,
     /// since the glide is drawn over the list (`GroupGlideView`).
     var fold: UUID?
+    /// Cards are going unseen (`Tidying`): nothing glides.
+    var still = false
 
     /// A group's fold and unfold: Safari's, a little over 0.4s with a soft
     /// end, no bounce (David's recording, 2026-11-18).
@@ -237,6 +259,17 @@ struct GridCards: UIViewRepresentable {
             }
         }
         return frames
+    }
+
+    /// The cells showing these cards, in every run.
+    @MainActor static func cells(_ ids: Set<UUID>) -> [UUID: GridCardCell] {
+        var cells: [UUID: GridCardCell] = [:]
+        for view in live.allObjects where view.window != nil {
+            for case let cell as GridCardCell in view.visibleCells {
+                if let id = cell.item, ids.contains(id) { cells[id] = cell }
+            }
+        }
+        return cells
     }
 
     func makeUIView(context: Context) -> UICollectionView {
@@ -590,7 +623,7 @@ struct GridCards: UIViewRepresentable {
                 // A card closed: the next slides into its place (0.25s, as
                 // the list). A fold or unfold lands at once: its glide is
                 // drawn over the list.
-                show(new.sections, in: view, animated: new.fold == nil && !new.reduceMotion
+                show(new.sections, in: view, animated: new.fold == nil && !new.still && !new.reduceMotion
                      && view.window != nil && related)
             }
             // Cards show what's new (the X hiding, a new title, a picture),

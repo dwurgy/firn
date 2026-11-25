@@ -331,6 +331,7 @@ struct BrowserScreen: View {
                             typing: editing)
                     .environment(\.newSpace, SheetAction { [sheets] in sheets.newSpace = true })
                     .environment(\.spaceSettings, SheetAction { [sheets] in sheets.settings = true })
+                    .environment(\.showTidied, SheetAction { [sheets] in sheets.tidied = true })
                     .environment(sending)
             }
                 .ignoresSafeArea()
@@ -431,6 +432,13 @@ struct BrowserScreen: View {
             HistorySheet(store: store) { url in
                 sheets.history = false
                 store.openTab(url)
+                if showingTabs { hideTabs() }
+            }
+        }
+        .sheet(isPresented: $sheets.tidied) {
+            TidiedSheet(store: store) { tab in
+                sheets.tidied = false
+                store.select(tab)
                 if showingTabs { hideTabs() }
             }
         }

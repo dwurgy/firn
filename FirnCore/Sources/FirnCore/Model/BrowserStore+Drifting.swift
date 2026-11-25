@@ -12,14 +12,33 @@ extension BrowserStore {
     /// (muted or not). The app drifts them with `drift(_:)`, one by one, so
     /// it can show each go.
     public func idleTabs() -> [Tab] {
+        countDayOfUse()
+        return idle { _ in true }
+    }
+
+    /// The same for one space, when it's the only one looked at: the iPhone
+    /// tidies the space on screen as its overview shows, so it's always
+    /// seen (David, 2026-11-25).
+    public func idleTabs(in spaceID: UUID) -> [Tab] {
+        countDayOfUse()
+        return idle { $0.spaceID == spaceID }
+    }
+
+    /// Counts today as a day Firn was used, and deletes drifted tabs past
+    /// the 30-day cutoff. The iPhone calls this as Firn comes to the front,
+    /// since its overview may not open that day.
+    public func countDayOfUse() {
         let today = Self.day(of: now())
         if !usedDays.contains(today) {
             usedDays = Array((usedDays + [today]).sorted().suffix(Self.usedDaysKept))
         }
         deleteExpiredDriftedTabs()
+    }
+
+    private func idle(where included: (Tab) -> Bool) -> [Tab] {
         guard let limit = driftAfter.days else { return [] }
         return tabs.filter { tab in
-            guard tab.place == .open, mayTidy(tab), tab.splitID == nil, tab.id != activeTabID,
+            guard included(tab), tab.place == .open, mayTidy(tab), tab.splitID == nil, tab.id != activeTabID,
                   tab.sound == .silent else { return false }
             let lastSeen = Self.day(of: tab.lastActiveAt)
             return usedDays.count { $0 > lastSeen } >= limit

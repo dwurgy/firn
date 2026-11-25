@@ -56,6 +56,8 @@ struct FirnIOSApp: App {
             .environment(tipJar)
         }
         .onChange(of: scenePhase) {
+            // A day of using Firn, for tidying away (`Tidying`).
+            if scenePhase == .active { browser?.store.countDayOfUse() }
             guard scenePhase != .active, let browser else { return }
             // A fresh picture of the page on screen, for the overview
             // after a restart (taken before iOS dims the app away).
@@ -100,6 +102,9 @@ final class Browser {
         // New groups name themselves on this iPhone (iOS 26 with Apple
         // Intelligence; otherwise "New Group"). Always on (David, 2026-11-06).
         store.groupNamer = GroupNaming.onDevice
+        // Tidying away: this device's own choice, and today as a day of use.
+        store.driftAfter = TidySetting.saved
+        store.countDayOfUse()
         // Erase history left by deleted spaces (only after a session really
         // loaded, so a damaged file erases nothing), and keep a year.
         if let session, !session.spaces.isEmpty {

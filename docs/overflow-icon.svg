@@ -1,6 +1,6 @@
 <!-- Firn's overflow button icon: a plain archive box, approved by David on 2026-10-21
      (it replaces the snow-drift lid, "D3", which read as a toupee). Where tidied tabs are kept.
-     Source of truth for ArchiveBoxIcon in Firn/Overflow.swift; keep the two in step.
+     Source of truth for ArchiveBoxIcon in Shared/ArchiveBoxIcon.swift; keep the two in step.
      The lid lifts 20° on its right corner while tabs go in or come out (timing "B", 2026-10-21). -->
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#5E564E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
   <path d="M5.5 4.5h13a1.5 1.5 0 0 1 1.5 1.5v3.5H4V6a1.5 1.5 0 0 1 1.5-1.5Z"/>

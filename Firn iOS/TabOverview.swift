@@ -92,6 +92,9 @@ struct TabOverview: View {
     @State private var basecampFull = false
     @Environment(\.newSpace) private var newSpace
     @Environment(\.spaceSettings) private var spaceSettings
+    @Environment(\.showTidied) private var showTidied
+    /// Idle tabs sinking into the space's pill.
+    @State private var tidying = Tidying()
     /// The group being renamed (Rename from its menu).
     @State private var naming: TabGroup?
     @State private var name = ""
@@ -151,6 +154,8 @@ struct TabOverview: View {
         // on screen's card stayed in the picture unless something else
         // happened to run the body in time (David's iPhone, 2026-11-20).
         let _ = landing.posed
+        // The same for the cards about to be tidied away.
+        let _ = tidying.leaving
         ScrollViewReader { scroller in
             // A plain stack, not a List: List's own swipe can't follow the
             // finger and slide the row away the way Safari's does.
@@ -241,6 +246,9 @@ struct TabOverview: View {
             // The other cards wait behind a dim that lifts as the page
             // shrinks into its card.
             .overlay { LandingDim(landing: landing) }
+            // Over the cards and under the bar, so a tidied card sinks
+            // behind the pill's glass.
+            .overlay { if !isPeek { TidyAir(tidying: tidying).allowsHitTesting(false).accessibilityHidden(true) } }
             .overlay {
                 if store.openTabs.isEmpty {
                     // Muted, centered across and a little above the middle
@@ -269,7 +277,10 @@ struct TabOverview: View {
                     Color.clear.frame(height: peeking.barHeight)
                 } else {
                 OverviewBar(space: store.activeSpace, spaces: store.spaces, newTab: newTab, done: finish,
-                            select: showSpace(_:), newSpace: newSpace, spaceSettings: spaceSettings,
+                            select: showSpace(_:), tidying: tidying,
+                            showTidied: store.driftedTabs.isEmpty ? nil : showTidied,
+                            unseenTidied: store.hasUnseenTidied,
+                            newSpace: newSpace, spaceSettings: spaceSettings,
                             slide: ownSlide, aim: aim(at:), ready: readySpaces(_:))
                     .onGeometryChange(for: CGFloat.self, of: \.size.height) { ownSlide.barHeight = $0 }
                     // In over the glide's second half, once the page's bar
@@ -298,7 +309,10 @@ struct TabOverview: View {
             // Hidden again: a picture from behind the page, once it's still.
             .background {
                 LandingWatch(landing: landing, shownChanged: { now in
-                    if !now { forgetOpening() }
+                    if !now {
+                        tidying.stop()
+                        forgetOpening()
+                    }
                     if !now, !isPeek {
                         copying?.cancel()
                         slide.clear()
@@ -314,6 +328,10 @@ struct TabOverview: View {
                 // Changed some other way (the menu, the command bar) while
                 // a swipe's copy was up.
                 if !isPeek, !slide.settling { slide.clear() }
+                if !isPeek {
+                    tidying.stop()
+                    if shown { tidySoon() }
+                }
             }
         }
         // As a tab lands, the overview's picture covers the list and bar,
@@ -326,11 +344,18 @@ struct TabOverview: View {
             }
         }
         .background {
-            LandingRest(landing: landing, still: !typing && !scrolling,
+            // While the pill speaks it isn't still: a picture taken then
+            // would show it at the next landing.
+            LandingRest(landing: landing, still: !typing && !scrolling && tidying.pill == .rest,
                         rested: {
                             freezeSoon()
                             copySoon()
+                            tidySoon()
                         })
+        }
+        // Back in front with the overview up.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            if shown { tidySoon() }
         }
         .onChange(of: look(scroll: 0)) { freezeSoon() }
         .background {
@@ -371,7 +396,64 @@ struct TabOverview: View {
     /// Settled on screen: nothing moving, held, or open over it.
     private var atRest: Bool {
         shown && gliding == nil && landing.arrival >= 1 && landing.focus >= 1 && heldCard == nil
-            && !typing && !scrolling
+            && !typing && !scrolling && tidying.pill == .rest && tidying.leaving.isEmpty
+    }
+
+    /// Idle tabs are tidied away once the overview has come to rest, after a
+    /// beat, and only while nothing else is going on.
+    private func tidySoon() {
+        guard !isPeek else { return }
+        tidying.soon(Tidying.Scene(
+            store: store, pictures: pictures, reduceMotion: reduceMotion,
+            ready: {
+                let window = canvas.view?.window
+                return atRest && !busy && systemDragged.isEmpty && gridSwipes.isEmpty && naming == nil
+                    && glide == nil && slide.progress == 0 && !slide.settling && !tidying.menuOpen
+                    && UIApplication.shared.applicationState == .active
+                    && window?.rootViewController?.presentedViewController == nil
+            },
+            shown: { shown },
+            view: {
+                let top = spots.scrollTop ?? spots.viewport.minY
+                return CGRect(x: spots.viewport.minX, y: top, width: spots.viewport.width,
+                              height: max((canvas.view?.window?.bounds.height ?? spots.viewport.maxY) - top, 0))
+            },
+            holds: { gone in
+                guard let scroll = spots.scroll else { return false }
+                let metrics = gridMetrics
+                let sections = gridSections(shownItems)
+                @MainActor func plan(_ sections: [GridPlan.Section]) -> GridPlan {
+                    GridPlan(sections: sections, width: laidSize.width - 2 * OverviewGridMetrics.margin,
+                             columns: metrics.columns, cardHeight: metrics.cardHeight,
+                             groupCardHeight: metrics.groupCardHeight)
+                }
+                let before = plan(sections)
+                let after = plan(sections.compactMap { section in
+                    var section = section
+                    section.ids.removeAll(where: gone.contains)
+                    return section.ids.isEmpty && section.group == nil ? nil : section
+                })
+                // Where the grid is in view, in its own points.
+                let top = (spots.scrollTop ?? 0) - (spots.runs[Self.gridID]?.minY ?? 0)
+                let moves = sections.flatMap(\.items).compactMap { id -> CGSize? in
+                    guard !gone.contains(id), let old = before.frame(of: id),
+                          old.maxY > top, old.minY < top + scroll.containerSize.height else { return nil }
+                    guard let new = after.frame(of: id) else { return CGSize(width: 1000, height: 0) }
+                    return CGSize(width: new.minX - old.minX, height: old.minY - new.minY)
+                }
+                guard let first = moves.first,
+                      moves.allSatisfy({ abs($0.width) < 1 && abs($0.height - first.height) < 1 }) else { return false }
+                return scroll.contentOffset.y - first.height >= -scroll.contentInsets.top - 1
+            },
+            scrollBy: { amount in
+                guard let scroll = spots.scroll else { return }
+                let lowest = -scroll.contentInsets.top
+                let highest = max(lowest, scroll.contentSize.height - scroll.containerSize.height - scroll.contentInsets.top)
+                let y = min(max(scroll.contentOffset.y + amount, lowest), highest)
+                var quiet = Transaction()
+                quiet.disablesAnimations = true
+                withTransaction(quiet) { scrollPosition.scrollTo(point: Self.pin(y, in: scroll)) }
+            }))
     }
 
     /// What the overview shows now, for `FrozenOverview` (its scroll from
@@ -657,7 +739,7 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: height ?? cardHeight,
-            carried: systemDragged.contains(tab.id),
+            carried: systemDragged.contains(tab.id) || tidying.leaving.contains(tab.id),
             bare: bare,
             titled: titled,
             swipesItself: !inCollection,
@@ -814,6 +896,7 @@ struct TabOverview: View {
                           if let group = store.tabGroups.first(where: { $0.id == id }), group.folded { fold(group) }
                       },
                       fold: glide?.token,
+                      still: tidying.quiet,
                       reduceMotion: reduceMotion)
                 .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.runs[Self.gridID] = $0 }
                 .id(Self.gridID)

@@ -63,6 +63,9 @@ struct LiftBacking: View {
 extension EnvironmentValues {
     /// The active space's color, for what's drawn over the frame (`LiftBacking`).
     @Entry var spaceColorName = "glacier"
+    /// Something is being dragged in the sidebar: what it passes over
+    /// doesn't light up or show its X.
+    @Entry var hoverPaused = false
 }
 
 
@@ -122,6 +125,7 @@ struct GroupCard<Rows: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var hovering = false
+    @Environment(\.hoverPaused) private var hoverPaused
     @State private var draft = ""
     @FocusState private var nameFocused: Bool
 
@@ -142,9 +146,16 @@ struct GroupCard<Rows: View>: View {
                 .clipped()
                 .padding(.bottom, thawed || group.folded ? 0 : Theme.rowSpacing)
             // A folded group's tabs come out as it thaws.
-            if !group.folded || thawed {
-                VStack(spacing: Theme.rowSpacing) { rows }
+            // Folding or unfolding, they show only within the card: rows on
+            // their way out keep their places while the card closes over them.
+            ZStack(alignment: .top) {
+                if !group.folded || thawed {
+                    VStack(spacing: Theme.rowSpacing) { rows }
+                }
             }
+            // Its full width even as it empties, so only its height moves.
+            .frame(maxWidth: .infinity)
+            .clipShape(FoldClip(below: thawed ? Theme.rowHeight : group.folded ? 0 : inset))
         }
         // Rows sit 4pt inside the card, so their 10pt corners nest in its 14pt.
         .padding(.horizontal, inset)
@@ -207,7 +218,7 @@ struct GroupCard<Rows: View>: View {
                     .accessibilityHidden(true)
             }
             Spacer(minLength: 0)
-            if hovering, !isRenaming {
+            if hovering, !hoverPaused, !isRenaming {
                 Button("Close group", systemImage: "xmark", action: close)
                     .labelStyle(.iconOnly)
                     .buttonStyle(CloseButtonStyle())
@@ -276,6 +287,25 @@ struct GroupCard<Rows: View>: View {
     }
 }
 
+/// A group's rows, clipped to the card's bottom edge, where a fold moves
+/// them, with room on the other sides for the tab on screen's shadow and a
+/// drop spot's frost.
+private struct FoldClip: Shape {
+    /// From the rows' end to the card's edge; it moves with the fold.
+    var below: CGFloat
+
+    var animatableData: CGFloat {
+        get { below }
+        set { below = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let side = Theme.rowHeight
+        return Path(CGRect(x: rect.minX - side, y: rect.minY - side,
+                           width: rect.width + side * 2, height: rect.height + side + below))
+    }
+}
+
 /// Icon and title, as every sidebar row shows them.
 struct RowLabelStyle: LabelStyle {
     let color: Color
@@ -298,6 +328,7 @@ struct RowLabelStyle: LabelStyle {
 struct RowButtonStyle: ButtonStyle {
     let isActive: Bool
     @State private var hovering = false
+    @Environment(\.hoverPaused) private var hoverPaused
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -308,7 +339,7 @@ struct RowButtonStyle: ButtonStyle {
                     ActiveTabBackground()
                 } else {
                     RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous)
-                        .fill(configuration.isPressed ? Theme.press : hovering ? Theme.hover : .clear)
+                        .fill(configuration.isPressed ? Theme.press : hovering && !hoverPaused ? Theme.hover : .clear)
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: Theme.tabRadius, style: .continuous))

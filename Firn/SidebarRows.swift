@@ -85,7 +85,9 @@ struct TabRow<MenuItems: View>: View {
     let select: () -> Void
     let close: () -> Void
     @ViewBuilder let menu: MenuItems
-    @State private var hovering = false
+    @State private var pointerOver = false
+    @Environment(\.hoverPaused) private var hoverPaused
+    private var hovering: Bool { pointerOver && !hoverPaused }
 
     var body: some View {
         Button(action: select) {
@@ -114,7 +116,7 @@ struct TabRow<MenuItems: View>: View {
             }
             .padding(.trailing, 8)
         }
-        .onHover { hovering = $0 }
+        .onHover { pointerOver = $0 }
         // Icons beside the words: SwiftUI's Mac menus leave them out otherwise.
         .contextMenu { menu.labelStyle(.titleAndIcon) }
         .accessibilityAddTraits(isActive ? .isSelected : [])
@@ -194,6 +196,7 @@ struct SplitRow<MenuItems: View>: View {
     /// The right half, while it's forming.
     @State private var faded: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hoverPaused) private var hoverPaused
 
     init(left: FirnCore.Tab, right: FirnCore.Tab, fraction: Double, inUseID: UUID?, forming: Bool = false,
          select: @escaping (FirnCore.Tab) -> Void, close: @escaping (FirnCore.Tab) -> Void,
@@ -223,7 +226,7 @@ struct SplitRow<MenuItems: View>: View {
         }
         .frame(height: Theme.rowHeight)
         .background {
-            if isOnScreen { ActiveTabBackground() } else { shape.fill(rowHovered ? Theme.hover : .clear) }
+            if isOnScreen { ActiveTabBackground() } else { shape.fill(rowHovered && !hoverPaused ? Theme.hover : .clear) }
         }
         .contentShape(shape)
         .onHover { rowHovered = $0 }
@@ -233,7 +236,7 @@ struct SplitRow<MenuItems: View>: View {
     }
 
     private func half(_ tab: FirnCore.Tab) -> some View {
-        let hovering = rowHovered
+        let hovering = rowHovered && !hoverPaused
         return Button { select(tab) } label: {
             HStack(spacing: 8) {
                 SiteIconView(icon: tab.icon, size: 16) { Image(systemName: "globe") }

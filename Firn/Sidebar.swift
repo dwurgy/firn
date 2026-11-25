@@ -26,6 +26,7 @@ struct Sidebar: View {
             SpaceRow(store: store, window: window)
                 .padding(.bottom, Theme.pageInset)
         }
+        .environment(\.hoverPaused, window.isDraggingTab)
         // Site icons drifting down from their rows to the overflow button.
         .overlay { TidyFlights(window: window) }
         .coordinateSpace(.named(Self.space))
@@ -148,6 +149,8 @@ struct TabList: View {
                 }
             }
         }
+        // Until what's dragged has settled.
+        .environment(\.hoverPaused, drag != nil || groupDrag != nil || window.isDraggingTab)
         // Where the list shows in the sidebar, so brought-back tabs out of
         // view don't get a flight.
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Sidebar.space)) } action: {

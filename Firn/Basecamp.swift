@@ -54,7 +54,9 @@ struct BasecampGrid: View {
                     if drag?.incoming == true, drag?.tab.id == tab.id {
                         // A tab arriving from the list: its slot waits open. In an
                         // empty Basecamp, it's a blank spot of frost (no words).
-                        TileGlass().opacity(store.basecampTabs.isEmpty ? 1 : 0)
+                        // Otherwise nothing at all: the glass container draws
+                        // glass inside it even at no opacity.
+                        if store.basecampTabs.isEmpty { TileGlass() } else { Color.clear }
                     } else {
                         tile(tab)
                     }
@@ -94,7 +96,13 @@ struct BasecampGrid: View {
     }
 
     private func tile(_ tab: FirnCore.Tab) -> some View {
-        BasecampTile(tab: tab, isActive: tab.id == store.activeTabID) {
+        // While dragged, a tile holds its slot open; the lifted copy is
+        // what shows (as a row, over the tab list, until it lands there).
+        // Out over the page, the tile stays where it is.
+        let away = (drag?.tab.id == tab.id && drag?.place != .page)
+            || window.tileInList?.tab.id == tab.id
+            || window.tileArrival.map { $0.tab.id == tab.id && !$0.handedOver } == true
+        return BasecampTile(tab: tab, isActive: tab.id == store.activeTabID, away: away) {
             store.select(tab)
             window.focusPage()
         } goHome: {
@@ -109,12 +117,7 @@ struct BasecampGrid: View {
         } close: {
             window.closeTile(tab)
         }
-        // While dragged, a tile holds its slot open; the lifted copy is
-        // what shows (as a row, over the tab list, until it lands there).
-        // Out over the page, the tile stays where it is.
-        .opacity((drag?.tab.id == tab.id && drag?.place != .page)
-                 || window.tileInList?.tab.id == tab.id
-                 || window.tileArrival.map { $0.tab.id == tab.id && !$0.handedOver } == true ? 0 : 1)
+        .opacity(away ? 0 : 1)
     }
 
     /// A tab added from its menu (see `TabList.addToBasecamp`): its chip
@@ -530,6 +533,9 @@ private struct BasecampTile: View {
     let isActive: Bool
     /// Picked up by a drag: solid, not glass, so it never turns see-through.
     var lifted = false
+    /// Its slot waits open (dragged, say): it lets go of its glass, which
+    /// Basecamp's glass container would draw even at no opacity.
+    var away = false
     let select: () -> Void
     let goHome: () -> Void
     let split: () -> Void
@@ -546,7 +552,7 @@ private struct BasecampTile: View {
             SiteMark(site: site, icon: tab.icon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TileButtonStyle(isActive: isActive, lifted: lifted, accent: Theme.tileAccent(site: site, icon: tab.icon)))
+        .buttonStyle(TileButtonStyle(isActive: isActive, lifted: lifted, away: away, accent: Theme.tileAccent(site: site, icon: tab.icon)))
         .help(tab.title)
         // Its speaker, while it makes sound, tucked in the corner.
         .overlay(alignment: .topTrailing) {
@@ -724,8 +730,10 @@ struct SiteMark: View {
 private struct TileButtonStyle: ButtonStyle {
     let isActive: Bool
     let lifted: Bool
+    let away: Bool
     let accent: Theme.TileAccent
     @State private var hovering = false
+    @Environment(\.hoverPaused) private var hoverPaused
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -756,8 +764,10 @@ private struct TileButtonStyle: ButtonStyle {
     @available(macOS 26, *)
     private func native(_ configuration: Configuration) -> some View {
         configuration.label
-            .background { if hovering && !lifted { shape.fill(Theme.hover) } }
+            .background { if hovering && !hoverPaused && !lifted { shape.fill(Theme.hover) } }
             .overlay { if isActive { ring } }
+            // Here, not only outside: the container draws its glass's content too.
+            .opacity(away ? 0 : 1)
             .glassEffect(glass, in: shape)
             // The thinnest blur under the glass, as `FrostGlass` and the iPhone.
             .background { shape.fill(.ultraThinMaterial).allowsHitTesting(false) }
@@ -773,6 +783,7 @@ private struct TileButtonStyle: ButtonStyle {
 
     @available(macOS 26, *)
     private var glass: Glass {
+        if away { return .identity }
         let base = Glass.regular.interactive()
         return isActive ? base.tint(accent.main.opacity(dark ? 0.24 : 0.22)) : base
     }
@@ -817,7 +828,7 @@ private struct TileButtonStyle: ButtonStyle {
                 .background { LiftBacking(shape: shape) }
                 .shadow(color: Theme.shadowPageFar, radius: 9, y: 4)
         } else {
-            TileGlass(hovering: hovering)
+            TileGlass(hovering: hovering && !hoverPaused)
         }
     }
 }

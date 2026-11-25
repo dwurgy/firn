@@ -1,5 +1,15 @@
 # What's new in Firn
 
+## Firn 1.1.1
+
+**Smoother tiles and groups.**
+
+### Fixed
+
+- **A dragged Basecamp tile** no longer leaves a copy behind.
+- **Tabs under what you're dragging** no longer light up.
+- **A folding group's tabs** stay inside its card.
+
 ## Firn 1.1.0
 
 **A quieter way to read, and groups that name themselves.**

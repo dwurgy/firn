@@ -1322,7 +1322,12 @@ struct GridCards: UIViewRepresentable {
             }
             let wasTile = parent?.kind(id) == .tile
             let isTile = spot(of: id).map { shown[$0.section].basecamp } ?? wasTile
-            if wasTile || isTile, let spot = view.layoutAttributesForItem(at: home) {
+            // A tab's card and a folder land the same way (2026-11-24):
+            // landed "to its cell", the card's carried picture came down,
+            // faded to an empty place over about 0.3s, and the card popped
+            // in half a second later (David's recording). Only a group
+            // carried by its name line still lands to its cell.
+            if reopen != id, let spot = view.layoutAttributesForItem(at: home) {
                 // A tile lands as the picture it was carried as, then its
                 // cell shows at once. Landed "to its cell", iOS turns the
                 // carried picture into a picture of the cell on the way

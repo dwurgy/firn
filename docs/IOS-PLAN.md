@@ -854,6 +854,10 @@ The items below are kept for the reasoning; 1, 2, 3, 4, 6, 7, 8, 9, and 10 are a
 - Tidying uses days of using Firn, 7 by default, as on the Mac.
 - Lookout, tidy away, First light, and split view (roomy layout only) carry over as the brief says.
 
+## A dropped tab's card faded out, then popped in (2026-11-24)
+
+David's recording from his iPhone (steps 4 and 5's build, read frame by frame): a tab let go in the grid came down into its place, faded to an empty place over about 0.3s, and popped back about half a second later, both times he dropped one. Likely cause (reasoned, not reproduced in the Simulator): landed "to its cell" (`drop(_:toItemAt:)`), iOS turns the carried picture into a picture of the cell, and `hideOnlyCarried`, called more often since step 4, hides that cell again while the card still counts as carried. A tab's card and a folder now land as tiles do: to a fixed place, as the picture they were carried as, the cell shown when the picture is down (`performDropWith`). Only a group carried by its name line still lands to its cell. Simulator (iPhone 18 Pro), recorded at 30 frames a second: the card glides in and stays. Installed on David's iPhone (Release), not yet checked. Also in the recording, not looked into: after the first drop the list seems to scroll (maybe David's finger), and iOS's menu shows "Ask Siri" under Close Tab.
+
 ## The iPad and Duo look over (2026-11-24)
 
 David (2026-11-24): 1.0 ships on iPhone and iPad together; a quick look over now, refined later. The device family is back to iPhone and iPad (`TARGETED_DEVICE_FAMILY = "1,2"`, three configurations). Simulator only: iPad Pro 13-inch (M5) and the iPhone Duo, with the screenshot session copied from the "Firn Shots" simulator.

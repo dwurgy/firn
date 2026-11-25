@@ -2,7 +2,11 @@
 
 ## Firn 1.1.1
 
-**Smoother tiles and groups.**
+**Smoother tiles, groups, and Reader.**
+
+### Better
+
+- **Reader scrolls down** as it opens, and back up as it closes.
 
 ### Fixed
 

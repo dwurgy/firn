@@ -47,9 +47,8 @@ public struct PageView: UIViewControllerRepresentable {
         guard let frame = holder.view as? PageFrame else { return }
         frame.onScroll = onScroll
         frame.held = held
-        // In and out of Reader, an edge sweeping down from the top, as
-        // Safari's ("Plan: Reader comes down from the top", `docs/HISTORY.md`).
-        // Reduce Motion: cross-fades.
+        // In and out of Reader, an edge scrolling down, then back up
+        // (`ReaderSweep`). Reduce Motion: cross-fades.
         frame.show(reader: reader, motion: context.environment.accessibilityReduceMotion ? .fade : .sweep)
     }
 
@@ -253,20 +252,11 @@ private final class PageFrame: UIView {
         case instant
         /// A 0.2s cross-fade (Reduce Motion).
         case fade
-        /// An edge sweeping down from the top, as Safari's: into Reader it
-        /// uncovers the reader, out of it the page.
+        /// An edge scrolling down from the top into Reader, and back up out
+        /// of it (`ReaderSweep`).
         case sweep
     }
 
-    /// Into Reader: how long the edge takes to cross the screen, and how
-    /// long it waits at most for the reader's first drawn frame.
-    private static let sweepDuration: CFTimeInterval = 0.2
-    /// Longer than the plan's 0.5s: in the Simulator's Debug build the
-    /// reader took 0.5 to 0.65s to lay out, and sweeping in an empty page
-    /// is the very cut this replaces.
-    private static let sweepWait: TimeInterval = 0.8
-    /// Fast at first, easing out, as Safari's edge.
-    private static let sweepCurve = CAMediaTimingFunction(controlPoints: 0.2, 0.75, 0.3, 1)
     /// Uncovers Reader's view from the top while it sweeps in.
     private let sweepMask: CALayer = {
         let mask = CALayer()
@@ -274,18 +264,12 @@ private final class PageFrame: UIView {
         mask.anchorPoint = .zero
         return mask
     }()
-    /// Out of Reader (step 2): quicker, the page uncovered as the reader
-    /// is cut away from the top, the page coming in a quarter darker and
-    /// clearing just behind the edge.
-    private static let leaveDuration: CFTimeInterval = 0.12
-    private static let leaveDimDelay: TimeInterval = 0.04
-    private static let leaveDimDuration: TimeInterval = 0.1
-    /// Keeps the reader's part below the edge while it sweeps out. Its own
+    /// Keeps the reader's part above the edge while it sweeps out. Its own
     /// layer, so Reader opened again mid-sweep has `sweepMask` to itself.
     private let leaveMask: CALayer = {
         let mask = CALayer()
         mask.backgroundColor = UIColor.black.cgColor
-        mask.anchorPoint = CGPoint(x: 0, y: 1)
+        mask.anchorPoint = .zero
         return mask
     }()
     /// The page's quarter-dark as it comes back: ink at 25%, warm, never
@@ -300,7 +284,7 @@ private final class PageFrame: UIView {
     /// The layer `sweepMask` was last put on.
     private weak var sweepMaskOwner: CALayer?
     /// Waits for the reader's first drawn frame before the sweep.
-    private var sweepWatcher: NSKeyValueObservation?
+    private var sweepWatcher: Task<Void, Never>?
     private var sweepTimeout: DispatchWorkItem?
 
     /// Shows Reader's view over the page, or takes it away. It sits in the
@@ -316,11 +300,11 @@ private final class PageFrame: UIView {
     /// at first: shown straight away, the empty view and then its first
     /// frame made a cut). Then a straight edge uncovers it from the top of
     /// the screen to the bottom. Nothing moves or dims; only the mask does,
-    /// on Core Animation. If it hasn't drawn within 0.8s, it sweeps anyway.
+    /// on Core Animation. If it hasn't drawn in time, it sweeps anyway.
     ///
-    /// Out of Reader (step 2): the same direction, quicker: an edge cuts
-    /// the reader away from the top down, uncovering the page, which comes
-    /// in a quarter darker and clears just behind the edge.
+    /// Out of Reader: the edge goes back up, uncovering the page from the
+    /// bottom, a touch darker and clearing behind the edge. Out again while
+    /// it's still sweeping in, the edge turns back from where it is.
     func show(reader newReader: WKWebView?, motion: ReaderMotion) {
         guard newReader !== reader else { return }
         let old = reader
@@ -328,20 +312,17 @@ private final class PageFrame: UIView {
         lastOffset = nil
         say(follow.stopped())
         // Out of a reader still sweeping in: one never seen just goes; one
-        // half uncovered fades from where its edge is, rather than jumping
-        // whole and sweeping again.
+        // half uncovered goes back up from where its edge is.
         var motion = motion
+        var edge: CGFloat?
         if old != nil, newReader == nil, motion != .instant {
             if sweepDone != nil {
                 motion = .instant
-            } else if sweepRunning != nil, let shown = sweepMask.presentation()?.bounds {
-                sweepMask.removeAllAnimations()
-                sweepMask.bounds = shown
-                sweepRunning = nil
-                motion = .fade
+            } else if sweepRunning != nil {
+                edge = sweepMask.presentation()?.bounds.height
             }
         }
-        cancelSweep(old, keepingMask: motion == .fade)
+        cancelSweep(old)
         readerWatcher = newReader?.scrollView.observe(\.contentOffset) { [weak self] scroller, _ in
             MainActor.assumeIsolated { self?.scrolled(scroller) }
         }
@@ -371,7 +352,7 @@ private final class PageFrame: UIView {
             return
         }
         if motion == .sweep, newReader == nil, let old {
-            sweep(out: old, then: done)
+            sweep(out: old, from: edge ?? old.bounds.height, then: done)
             return
         }
         UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
@@ -388,7 +369,7 @@ private final class PageFrame: UIView {
         CATransaction.setDisableActions(true)
         sweepMask.removeAllAnimations()
         sweepMask.frame = CGRect(x: 0, y: 0, width: reader.bounds.width, height: 0)
-        // A reader that faded out half uncovered may still hold it.
+        // Another reader may still hold it.
         if let owner = sweepMaskOwner, owner.mask === sweepMask { owner.mask = nil }
         reader.layer.mask = sweepMask
         sweepMaskOwner = reader.layer
@@ -398,38 +379,26 @@ private final class PageFrame: UIView {
         reader.accessibilityElementsHidden = true
         sweepDone = done
 
-        // Drawn: the reader's first layout reaching the screen, which is
-        // when its content size first arrives (WebKit sends both with the
-        // same commit), then a frame. Not its load's end: that waits for
-        // every picture, often past the timeout, and swept in an empty
-        // page (Simulator, 2026-11-18).
-        sweepWatcher = reader.scrollView.observe(\.contentSize) { [weak self] scroller, _ in
-            MainActor.assumeIsolated {
-                guard scroller.contentSize.height > 0 else { return }
-                self?.startSweepSoon()
-            }
+        sweepWatcher = Task { [weak self, weak reader] in
+            guard let reader else { return }
+            await ReaderSweep.waitUntilDrawn(reader)
+            if !Task.isCancelled { self?.startSweep() }
         }
         let timeout = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.startSweep() }
         }
         sweepTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.sweepWait, execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReaderSweep.wait, execute: timeout)
     }
 
     /// What the sweep does once it starts; set only while one is waiting.
     private var sweepDone: (() -> Void)?
 
-    private func startSweepSoon() {
-        sweepWatcher = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) { [weak self] in
-            MainActor.assumeIsolated { self?.startSweep() }
-        }
-    }
-
     /// Once only, and only for the reader still on screen.
     private func startSweep() {
         guard let done = sweepDone, let reader else { return }
         sweepDone = nil
+        sweepWatcher?.cancel()
         sweepWatcher = nil
         sweepTimeout?.cancel()
         sweepTimeout = nil
@@ -452,32 +421,28 @@ private final class PageFrame: UIView {
                 done()
             }
         }
-        let grow = CABasicAnimation(keyPath: "bounds.size.height")
-        grow.fromValue = 0
-        grow.toValue = full.height
-        grow.duration = Self.sweepDuration
-        grow.timingFunction = Self.sweepCurve
-        sweepMask.bounds = CGRect(x: 0, y: 0, width: full.width, height: full.height)
-        sweepMask.add(grow, forKey: "sweep")
+        CATransaction.setDisableActions(true)
+        sweepMask.bounds = CGRect(x: 0, y: 0, width: full.width, height: 0)
+        ReaderSweep.move(sweepMask, from: 0, to: full.height)
         CATransaction.commit()
     }
 
-    /// Cuts the leaving reader away from the top, the page under it coming
-    /// in dimmed and clearing behind the edge. The reader can't be touched
-    /// as it goes; the page can at once.
-    private func sweep(out reader: WKWebView, then done: @escaping () -> Void) {
+    /// Takes the leaving reader's edge back up, the page under it coming in
+    /// dimmed and clearing behind the edge. The reader can't be touched as
+    /// it goes; the page can at once.
+    private func sweep(out reader: WKWebView, from edge: CGFloat, then done: @escaping () -> Void) {
         let full = reader.bounds
         reader.isUserInteractionEnabled = false
         reader.accessibilityElementsHidden = true
         leaveDim.layer.removeAllAnimations()
         leaveDim.frame = mover.bounds
-        leaveDim.alpha = 0.25
+        leaveDim.alpha = ReaderSweep.dim
         mover.insertSubview(leaveDim, belowSubview: reader)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         leaveMask.removeAllAnimations()
-        leaveMask.bounds = CGRect(x: 0, y: 0, width: full.width, height: 0)
-        leaveMask.position = CGPoint(x: 0, y: full.height)
+        leaveMask.bounds = CGRect(x: 0, y: 0, width: full.width, height: edge)
+        leaveMask.position = .zero
         reader.layer.mask = leaveMask
         CATransaction.commit()
 
@@ -492,15 +457,11 @@ private final class PageFrame: UIView {
                 done?()
             }
         }
-        let shrink = CABasicAnimation(keyPath: "bounds.size.height")
-        shrink.fromValue = full.height
-        shrink.toValue = 0
-        shrink.duration = Self.leaveDuration
-        shrink.timingFunction = Self.sweepCurve
-        leaveMask.add(shrink, forKey: "sweep")
+        CATransaction.setDisableActions(true)
+        ReaderSweep.move(leaveMask, from: edge, to: 0)
         CATransaction.commit()
 
-        UIView.animate(withDuration: Self.leaveDimDuration, delay: Self.leaveDimDelay,
+        UIView.animate(withDuration: ReaderSweep.dimDuration, delay: ReaderSweep.dimDelay,
                        options: [.curveEaseOut, .allowUserInteraction]) {
             self.leaveDim.alpha = 0
         } completion: { _ in
@@ -513,8 +474,8 @@ private final class PageFrame: UIView {
     /// What the sweep out does when it ends.
     private var leaveDone: (() -> Void)?
 
-    private func finishSweep(_ reader: WKWebView, keepingMask: Bool = false) {
-        if !keepingMask, reader.layer.mask === sweepMask { reader.layer.mask = nil }
+    private func finishSweep(_ reader: WKWebView) {
+        if reader.layer.mask === sweepMask { reader.layer.mask = nil }
         sweepMask.removeAllAnimations()
         reader.isUserInteractionEnabled = true
         reader.accessibilityElementsHidden = false
@@ -522,13 +483,14 @@ private final class PageFrame: UIView {
 
     /// A sweep still waiting or running when Reader closes (or is swapped):
     /// it stops, and the old reader is left as it was otherwise.
-    private func cancelSweep(_ old: WKWebView?, keepingMask: Bool = false) {
+    private func cancelSweep(_ old: WKWebView?) {
         sweepDone = nil
         sweepRunning = nil
+        sweepWatcher?.cancel()
         sweepWatcher = nil
         sweepTimeout?.cancel()
         sweepTimeout = nil
-        if let old { finishSweep(old, keepingMask: keepingMask) }
+        if let old { finishSweep(old) }
     }
 
     /// iOS's own pull-to-refresh. The spinner tucks away as soon as the

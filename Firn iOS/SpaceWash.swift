@@ -119,7 +119,7 @@ struct SpaceWash: View {
                 .opacity(slide?.mix ?? 0)
             Image("PaperGrain")
                 .resizable(resizingMode: .tile)
-                .opacity(Theme.Sunrise.grainOpacity(dark: dark))
+                .opacity(Theme.grainOpacity(dark: dark))
                 .blendMode(dark ? .softLight : .multiply)
             // One noise pixel per screen pixel, never smoothed, or it can't
             // dither. A static image: nothing redraws.

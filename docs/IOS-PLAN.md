@@ -344,9 +344,9 @@ In small steps: Lookout (iOS's long-press link preview with "Open as tab"), tidy
 The two-column overview, the roomy sidebar when the window is wide enough (drag to resize, swipe to hide), split view in that layout only, layouts chosen by window width (Stage Manager, split screen, and Slide Over included), keyboard shortcuts with a hardware keyboard.
 **Done:** on an iPad (or the iPad Simulator if you don't have one): rotate, resize the window in Stage Manager, and watch it move between one column, two columns, and the sidebar without losing your place; open a split view.
 
-### Phase 8: Sunrise, and being the default browser
+### Phase 8: Frost (was Sunrise), and being the default browser
 
-The welcome (iOS version of the Mac's steps, without Arc and Mac-only tips), the empty page, and "Set as default browser" (needs Apple's default-browser entitlement; see section 5).
+Frost's steps are in `docs/HISTORY.md` ("Plan: Frost"). The welcome (iOS version of the Mac's steps, without Arc and Mac-only tips), the empty page, and "Set as default browser" (needs Apple's default-browser entitlement; see section 5).
 **Done:** delete and reinstall Firn: the welcome plays in light, dark, and with Reduce Motion; after setting Firn as default, a link tapped in Mail opens in Firn, in the space you used last.
 
 ### Phase 9: Sync (its own plan, its own approval)

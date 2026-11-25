@@ -79,7 +79,7 @@ public enum DemoSession {
         add(utuWeather, to: work, lastActiveAt: minutesAgo(60))
         add(kinfolk, to: work, lastActiveAt: minutesAgo(70))
 
-        // Home: empty, for the empty page's Sunrise.
+        // Home: empty, for the empty page's Frost.
 
         // Firn was used each of the last two weeks' days.
         let usedDays = (0..<14).map { day(of: daysAgo($0)) }.sorted()

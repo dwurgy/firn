@@ -722,12 +722,8 @@ struct BrowserScreen: View {
                     if page.isReading { page.setReaderLook(ReaderStyle.shared.look) }
                 }
         } else if store.openTabs.isEmpty {
-            // A space with no tabs: Sunrise, exactly as the Mac's empty
-            // page (no words, no centered mark; only the snow takes the
-            // space's color).
-            SunriseScene(spaceColor: store.activeSpace.color)
-                // The clock goes light over the blue-hour sky, in both looks.
-                .background(LightStatusBar(on: !showingTabs && !pageHidden))
+            // A space with no tabs: Frost, exactly as the Mac's.
+            FrostNoTabs(spaceColor: store.activeSpace.color)
                 .transition(.opacity)
         } else {
             Theme.page

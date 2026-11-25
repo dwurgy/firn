@@ -1,6 +1,6 @@
 cask "firn" do
-  version "1.0.1"
-  sha256 "47d84ef1b3e7ab529299719f5b75ef30e5a36dae183f7575e3fca1dfe40b3da2"
+  version "1.1.0"
+  sha256 "d6ca1d991f6c9720e33ff56e8da49f68db39eb75d3c0bda6f0361bea6305b51b"
 
   url "https://github.com/dwurgy/firn/releases/download/v#{version}/Firn-#{version}.dmg"
   name "Firn"

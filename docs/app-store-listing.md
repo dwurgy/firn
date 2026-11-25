@@ -41,7 +41,7 @@ Drafted 2026-11-25 for David to paste into App Store Connect. Every claim is che
 >
 > Firn is open source, and made by one person. If it makes your day a little calmer, there's a tip jar in Settings.
 
-**What's New:** not asked for on a first version.
+**What's New:** not asked for on a first version. Later ones come from `CHANGELOG-iOS.md`.
 
 **URLs:** privacy https://firnbrowser.com/privacy, support https://firnbrowser.com/support, marketing https://firnbrowser.com
 

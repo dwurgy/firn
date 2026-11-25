@@ -89,10 +89,6 @@ enum Theme {
     /// reads as over the overview. `tileSolid` was all but invisible there
     /// in dark (David's recording, 2026-11-24).
     static let folderCarried = Color(light: 0xF2F2F2, dark: 0x4A4A4C)
-    /// Under anything lifted on the iPhone (a tab, a group, a Basecamp
-    /// tile), held or dragged: the solid tile, see-through, one level the
-    /// whole way (David, 2026-11-09: 85% read too dark; 60%).
-    static let heldRowBase = Color(light: 0xF5F5F5, lightOpacity: 0.6, dark: 0x2E2E30, darkOpacity: 0.6)
     /// A tile's edge: lit along the top, a warm hairline around.
     static let tileRimTop = Color(light: 0xFFFFFF, lightOpacity: 0.85, dark: 0xFFFFFF, darkOpacity: 0.16)
     static let tileRimBottom = Color(light: 0xFFFFFF, lightOpacity: 0.15, dark: 0xFFFFFF, darkOpacity: 0.03)
@@ -213,20 +209,7 @@ enum Theme {
     /// space, so they sit beside Apple's own (David, 2026-11-15). The space's
     /// color stays on the overview's tint, the ring, the check, the loading
     /// frost, and the Mac's sidebar.
-    ///
-    /// Firn's hold menu (iOS, docs/hold-menu-design.html): the dim over the
-    /// overview while it's open, and the card's veil over a real blur of
-    /// what's behind it (the pills' recipe: one fixed level, page white in
-    /// light, the pills' warm gray in dark), its frosted edge, and its shadow.
-    static let holdDim = Color(light: 0x000000, lightOpacity: 0.18, dark: 0x000000, darkOpacity: 0.40)
-    /// Thicker than the mockup's 44% (David, 2026-11-09: words got hard to
-    /// read over a bright page), still one level for every screen.
-    static let holdMenuVeil = Color(light: 0xFFFFFF, lightOpacity: 0.62, dark: 0x2C2C2E, darkOpacity: 0.66)
-    static let holdMenuEdge = Color(light: 0xFFFFFF, lightOpacity: 0.60, dark: 0xFFFFFF, darkOpacity: 0.14)
-    static let holdMenuShadow = Color(light: 0x000000, lightOpacity: 0.20, dark: 0x000000, darkOpacity: 0.50)
-    /// The hold menu with no picture behind it, or Reduce Transparency:
-    /// solid, close to Apple's own menus.
-    static let menuSolid = Color(light: 0xF6F6F6, dark: 0x2C2C2E)
+    /// A hairline in Firn's own menus (the bar's, the space's name).
     static let holdMenuHairline = Color(light: 0x000000, lightOpacity: 0.07, dark: 0xFFFFFF, darkOpacity: 0.10)
     /// Muted terracotta for closing things, never alarm red (Danger).
     static let danger = Color(light: 0xB0503A, dark: 0xE3907A)

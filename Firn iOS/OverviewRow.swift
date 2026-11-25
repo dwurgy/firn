@@ -41,7 +41,7 @@ struct OverviewRow: View {
     /// A card's height, which grows with its column so the picture stays
     /// portrait (`OverviewGridMetrics`).
     var cardHeight: CGFloat = OverviewRow.cardHeight
-    /// Held by iOS, for its menu or its drag (the grid on iOS 27): its X
+    /// Held by iOS, for its menu or its drag (the grid): its X
     /// hides, so only the picture lifts.
     var carried = false
     /// Drawn as a group folds or opens (`GroupGlideView`): only the

@@ -5,26 +5,9 @@ import SwiftUI
 /// the top of the overview, scrolling away with the list. Hidden while
 /// empty. Icon only (the menu and VoiceOver name the site), 56pt tall so a
 /// tile is easy to tap, rows balanced up to 4 across (`BasecampLayout`).
-/// Shows only this space's own tiles. Holding a tile opens its menu, which
-/// the overview gives (it owns the glides and the shake's undo).
-struct BasecampTiles: View {
-    let store: BrowserStore
-    let spots: OverviewSpots
-    /// What a swipe up or a tab opening moves (`Landing`), read here so
-    /// its changes run only the tiles.
-    let landing: Landing
-    /// The tile the page is gliding into or out of: hidden, so the page is
-    /// the only one of it on screen.
-    private var gliding: UUID? { landing.gliding }
-    /// The tab on screen (or still held as it while a picked tab grows).
-    let onScreen: UUID?
-    /// How far the gliding tile shows: it fades in as the page's picture
-    /// lands in it, and out as the picture grows from it.
-    private var reveal: Double { landing.tileReveal }
-    /// The set-down (`BrowserScreen.settle`): the gliding tile takes the
-    /// same scale as the page's picture over it, so the two settle
-    /// together through the swap. 1 at rest.
-    private var settle: CGFloat { landing.settle }
+/// The tiles are cells of the overview's grid (`BasecampCell`, `GridPlan`);
+/// here are their measures and places.
+@MainActor enum BasecampTiles {
     /// How far above its spot a tile arrives: 4%, about 2pt (a card's
     /// 1.5% is under a point on a tile), for David to judge.
     static let settleLift: CGFloat = 1.04
@@ -34,31 +17,6 @@ struct BasecampTiles: View {
     /// apart, the picture faded out in mid-air, still 40% too big, and the
     /// tile was just there (David's recording, 2026-11-09).
     static let glideSwap: ClosedRange<CGFloat> = 0.92...1
-    /// The tiles' order while one is dragged (the others glide aside);
-    /// nil: the store's.
-    var order: [UUID]? = nil
-    /// The tile lifted and following the finger: its spot stays empty.
-    var held: UUID? = nil
-    /// The tile held still, sinking a little as its menu comes.
-    var pressed: UUID? = nil
-    /// A tab carried up into Basecamp: its id is in `order`, where an
-    /// empty spot opens for it (`OverviewSpots.incoming`).
-    var incoming: UUID? = nil
-    /// A tab being dragged while Basecamp is empty: one blank tile of
-    /// frost shows where it could go (as on the Mac), the tab's own spot.
-    var blank: UUID? = nil
-    /// A tile carried down into the tabs: its spot closes (the others
-    /// close up); if it was the only one, a blank tile stays to carry it back.
-    var away: UUID? = nil
-    let open: (FirnCore.Tab) -> Void
-    /// The tile's hold menu (Firn's own, opened by the overview), here
-    /// for VoiceOver's actions.
-    let menu: @MainActor (FirnCore.Tab) -> [[HoldMenuItem]]
-    /// VoiceOver's Move Left and Move Right: the tile to a new spot
-    /// (counted without it, as the store counts).
-    let move: (FirnCore.Tab, Int) -> Void
-
-    @State private var width: CGFloat = 0
 
     static let tileHeight: CGFloat = 56
     static let gap: CGFloat = 8
@@ -70,87 +28,6 @@ struct BasecampTiles: View {
     static let cornerRadius: CGFloat = 14
     /// Thicker than the Mac's 2.5pt: the iPhone's tile is much bigger.
     static let ringWidth: CGFloat = 3.5
-
-    private var space: String { store.activeSpace.color }
-
-    var body: some View {
-        let items = shownSpots
-        if !items.isEmpty {
-            let layout = BasecampLayout.make(count: items.count, width: width,
-                                             maximumColumns: Self.maximumColumns,
-                                             minimumWidth: Self.minimumWidth)
-            let tileWidth = tileWidth(for: layout)
-            let centers = places(count: items.count, layout, tileWidth: tileWidth)
-            // One stack with every tile placed by its spot, not a stack per
-            // row: a tile moving to another row while one is dragged glides
-            // there instead of fading out of one row and into the next.
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, spot in
-                    Group {
-                        switch spot {
-                        case let .tile(tab): tile(tab, at: index, of: items.count)
-                        case .incoming: incomingSpot
-                        }
-                    }
-                    .frame(width: tileWidth, height: Self.tileHeight)
-                    .position(centers[index])
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .frame(height: height(rows: max(layout.rows.count, 1)))
-            // iOS draws every tile's glass together (cheaper), spacing 0 so
-            // neighbors never melt.
-            .glassContainer(spacing: 0)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            // Where Basecamp is, so a tab carried over it can become a tile.
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.basecamp = $0 }
-            .onDisappear { spots.basecamp = nil }
-            // More room between the tiles and the first tab than the list's
-            // 12pt between items: 24pt in all (David, 2026-11-18). Outside
-            // the frame above, so only the tiles count as Basecamp's spot.
-            .padding(.bottom, 12)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Basecamp")
-        }
-    }
-
-    /// A spot in the grid: a tile, or the empty place a tab carried up
-    /// from the list will land in.
-    private enum Spot {
-        case tile(FirnCore.Tab)
-        case incoming(UUID)
-
-        @MainActor var id: UUID {
-            switch self {
-            case let .tile(tab): tab.id
-            case let .incoming(id): id
-            }
-        }
-    }
-
-    /// The spots in the order shown: the drag's while one moves.
-    private var shownSpots: [Spot] {
-        let tiles = store.basecampTabs.filter { $0.id != away }
-        if tiles.isEmpty, let blank, order?.contains(blank) != true { return [.incoming(blank)] }
-        guard let order else { return tiles.map(Spot.tile) }
-        let byID = Dictionary(tiles.map { ($0.id, $0) }) { a, _ in a }
-        let ordered: [Spot] = order.compactMap { id in
-            if let tab = byID[id] { return .tile(tab) }
-            return id == incoming ? .incoming(id) : nil
-        }
-        // A tile added mid-drag (never, but nothing goes missing) at the end.
-        return ordered + tiles.filter { !order.contains($0.id) }.map(Spot.tile)
-    }
-
-    /// The empty place a carried tab will land in: nothing shows, only
-    /// where it is; in an empty Basecamp, a blank tile of frost.
-    private var incomingSpot: some View {
-        Group {
-            if store.basecampTabs.allSatisfy({ $0.id == away }) { FirnGlass(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)) } else { Color.clear }
-        }
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { spots.incoming = $0 }
-            .accessibilityHidden(true)
-    }
 
     /// A tile's size with `count` tiles across `width` (the list's width):
     /// a tab carried up becomes this size as the grid makes room for it.
@@ -188,44 +65,6 @@ struct BasecampTiles: View {
         return Array(frames.prefix(count))
     }
 
-    private func height(rows: Int) -> CGFloat {
-        CGFloat(rows) * Self.tileHeight + CGFloat(rows - 1) * Self.gap
-    }
-
-    /// Each tile's middle, in the layout's rows top to bottom; a shorter
-    /// row sits centered under the longer one.
-    private func places(count: Int, _ layout: BasecampLayout, tileWidth: CGFloat) -> [CGPoint] {
-        let rows = layout.rows.isEmpty ? [count] : layout.rows
-        var places: [CGPoint] = []
-        for (row, inRow) in rows.enumerated() {
-            let rowWidth = CGFloat(inRow) * tileWidth + CGFloat(inRow - 1) * Self.gap
-            let left = (width - rowWidth) / 2
-            let y = CGFloat(row) * (Self.tileHeight + Self.gap) + Self.tileHeight / 2
-            for column in 0..<inRow {
-                places.append(CGPoint(x: left + CGFloat(column) * (tileWidth + Self.gap) + tileWidth / 2, y: y))
-            }
-        }
-        // Never fewer spots than tiles, whatever the layout says.
-        while places.count < count { places.append(places.last ?? CGPoint(x: width / 2, y: Self.tileHeight / 2)) }
-        return places
-    }
-
-    /// A tile as it lifts out of the grid to follow the finger: the same
-    /// tile, on the solid base (as while its menu is open), so the list
-    /// doesn't show through the glass as it passes over it. `solid` goes
-    /// false as it's let go, and the base fades over the glide home, so it
-    /// lands as the glass tile it was (it stayed solid in its spot for half
-    /// a second, then switched; David's recording, 2026-11-08).
-    static func lifted(_ tab: FirnCore.Tab, space: String, onScreen: Bool, solid: Bool) -> some View {
-        BasecampTile(tab: tab, space: space, isOnScreen: onScreen, open: {})
-            .background {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Theme.heldRowBase)
-                    .opacity(solid ? 1 : 0)
-                    .animation(.easeOut(duration: 0.2), value: solid)
-            }
-    }
-
     /// The tile as a picture, for a page landing in it to turn into on the
     /// way (`BrowserScreen`'s stand-in, as iOS's app icon forms inside a
     /// closing app): the same glass and mark, at `size`, with corners of
@@ -236,58 +75,9 @@ struct BasecampTiles: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
-
-    /// Every tile the same width: the longest row fills the list's width.
-    private func tileWidth(for layout: BasecampLayout) -> CGFloat {
-        Self.tileSize(count: layout.rows.reduce(0, +), width: width).width
-    }
-
-    private func tile(_ tab: FirnCore.Tab, at index: Int, of count: Int) -> some View {
-        BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen) {
-            open(tab)
-        }
-        // Dragging can't be found by VoiceOver: the same moves as actions.
-        .accessibilityAction(named: "Move Left") { if index > 0 { move(tab, index - 1) } }
-        .accessibilityAction(named: "Move Right") { if index < count - 1 { move(tab, index + 1) } }
-        // Its menu's items, for VoiceOver (holding still opens Firn's own
-        // menu, from the overview's HoldToDrag).
-        .accessibilityActions {
-            ForEach(Array(menu(tab).joined().enumerated()), id: \.offset) { _, item in
-                Button(item.title, action: item.action)
-            }
-        }
-        // Held still, it sinks a little over the rest of the hold, so the
-        // finger feels the menu coming; let go early, it springs back.
-        .scaleEffect(pressed == tab.id ? pressedScale : 1)
-        .animation(pressed == tab.id ? .easeIn(duration: HoldThenMove.menuHold - HoldThenMove.hold)
-                                     : .smooth(duration: 0.2), value: pressed == tab.id)
-        // The set-down's shadow, its own (the page's stand-in is over the
-        // overview, and would cover the glass after the swap): as strong as
-        // the lift, and inside the swap's fade, so it comes with the glass
-        // and sinks in as the tile settles.
-        .background {
-            if gliding == tab.id {
-                SetDownShadow(radius: Self.cornerRadius,
-                              lift: Double((settle - 1) / (Self.settleLift - 1)))
-            }
-        }
-        .modifier(ArrivalBand(arrival: gliding == tab.id ? reveal : 1, range: Self.glideSwap, fadesIn: true))
-        // Set down around its own middle, as the picture is around the box's.
-        .scaleEffect(gliding == tab.id ? settle : 1)
-        // Lifted, its spot stays empty, at once (never faded).
-        .opacity(held == tab.id ? 0 : 1)
-        .animation(nil, value: held)
-        // Where it is, so the page can glide into it as the overview opens.
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
-            spots.frames[tab.id] = frame
-            spots.cards.remove(tab.id)
-        }
-        .id(tab.id)
-        .transition(.opacity)
-    }
 }
 
-/// A tile as a cell of UIKit's grid (iOS 27; step 4 of "Plan: the drag
+/// A tile as a cell of UIKit's grid (step 4 of "Plan: the drag
 /// polish"): the same tile, its hold menu and its drag iOS's, from the
 /// collection view. A view of its own so the landing's changes run it (a
 /// cell's drawing made by the overview isn't run again by them).
@@ -315,7 +105,7 @@ struct BasecampCell: View {
                     Button(item.title, action: item.action)
                 }
             }
-            // The set-down, as `BasecampTiles.tile`'s.
+            // The set-down: the same scale as the page's picture over it.
             .background {
                 if gliding {
                     SetDownShadow(radius: BasecampTiles.cornerRadius,

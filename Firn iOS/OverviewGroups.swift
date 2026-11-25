@@ -161,9 +161,6 @@ struct GroupCard: View {
     static let gapAbove: CGFloat = 10
     static let gapBelow: CGFloat = 16
 
-    /// The shadow's spread: wider than the Mac's 1pt, to lift the card off the haze.
-    static let shadowRadius: CGFloat = 8
-    static let shadowY: CGFloat = 2
     /// The header's height at the default text size (it grows with it).
     static let headerHeight: CGFloat = 44
     /// A folded group's height at the default text size (it grows too):
@@ -174,21 +171,5 @@ struct GroupCard: View {
         // iOS's glass, frosty with no tint, as every glass on the iPhone
         // (David, 2026-11-18); Reduce Transparency: Firn's solid frost.
         FirnGlass(shape: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-    }
-}
-
-/// Nothing shows below a group's tint while it changes size: a card
-/// folding away is cut off by the tint closing over it, not left fading
-/// under the row below (David's recording, 2026-11-06). Open at the sides
-/// and top, and a little below, so the ring around the tab on screen keeps
-/// its glow.
-struct FoldMask: ViewModifier {
-    func body(content: Content) -> some View {
-        content.mask {
-            Rectangle()
-                .padding(.horizontal, -24)
-                .padding(.top, -24)
-                .padding(.bottom, -2)
-        }
     }
 }

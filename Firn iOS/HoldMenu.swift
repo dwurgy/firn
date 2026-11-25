@@ -1,8 +1,8 @@
 import FirnCore
 import SwiftUI
 
-/// One choice in a hold menu (Firn's own, `FrostMenu`): plain words and an
-/// SF Symbol, or a list of choices opened in the same card (Move to Group).
+/// One choice in a hold menu (iOS's own, made from these by the overview's
+/// grid): plain words and an SF Symbol, or a list of choices (Move to Group).
 struct HoldMenuItem {
     let title: String
     let systemImage: String?

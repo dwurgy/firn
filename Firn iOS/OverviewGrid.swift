@@ -45,9 +45,6 @@ struct OverviewGridMetrics: Equatable {
         groupCardHeight = min(max(inner, 1) * shape + OverviewRow.gridTitleHeight, card).rounded()
     }
 
-    var gridItems: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: Self.spacing, alignment: .top), count: columns)
-    }
 }
 
 /// One cell in a run of the grid: a loose tab, or a folded group, which

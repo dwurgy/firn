@@ -8,6 +8,40 @@
 		<language>en</language>
 		<!-- New releases go below this line. -->
 		<item>
+			<title>Firn 1.1.1</title>
+			<pubDate>Wed, 25 Nov 2026 17:53:20 +0000</pubDate>
+			<sparkle:version>6</sparkle:version>
+			<sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+			<sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+			<description><![CDATA[
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.5 -apple-system, system-ui, sans-serif; color: #241F1B; margin: 4px 2px; }
+h3 { font-size: 12px; font-weight: 600; color: #5E564E; margin: 16px 0 4px; }
+p { margin: 0 0 10px; }
+ul { margin: 0; padding-left: 18px; }
+li { margin: 0 0 6px; }
+@media (prefers-color-scheme: dark) {
+  body { color: #F5F1EC; }
+  h3 { color: #D4CDC5; }
+}
+</style>
+<p><strong>Stay signed in, and a smoother Reader.</strong></p>
+<h3>Better</h3>
+<ul>
+<li><strong>You stay signed in</strong> when you quit and reopen Firn. Your sign-ins are encrypted and stay on your Mac.</li>
+<li><strong>Reader scrolls down</strong> as it opens, and back up as it closes.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>A dragged Basecamp tile</strong> no longer leaves a copy behind.</li>
+<li><strong>Tabs under what you're dragging</strong> no longer light up.</li>
+<li><strong>A folding group's tabs</strong> stay inside its card.</li>
+</ul>
+			]]></description>
+			<enclosure url="https://github.com/dwurgy/firn/releases/download/v1.1.1/Firn-1.1.1.dmg" type="application/octet-stream" sparkle:edSignature="Ea9JdFp+kTr6/jK3U0O3EPi/wWcuSRUbe8lqCm4Se+oJbYBP6ZCnESCpdi/5WXU84pZO53Kgpopmh6TxvJmGCA==" length="12907916"/>
+		</item>
+		<item>
 			<title>Firn 1.1.0</title>
 			<pubDate>Wed, 25 Nov 2026 09:57:19 +0000</pubDate>
 			<sparkle:version>5</sparkle:version>

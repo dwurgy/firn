@@ -888,6 +888,14 @@ David (2026-11-24): 1.0 ships on iPhone and iPad together; a quick look over now
 - **Seen, left for later:** Basecamp's tiles are three very wide bars (the plan says up to six across on an iPad); an open group takes a whole row, leaving the cards before it alone in theirs; Settings is a short centered sheet that scrolls; on Wikipedia the Reader book didn't take •••'s place (Show Reader in the menu works); iPadOS's window-resize corner sits over the tabs and Done buttons' corner; `UIDevice.current.userInterfaceIdiom` in `Hold.swift` (corner radius), `SettingsSheet.swift`, and `WebKitReader.swift` (the words "iPad"/"iPhone"). Not tried: Stage Manager resizing, Split View beside another app, a keyboard and trackpad, drags, the open and close glides frame by frame, VoiceOver, a real iPad.
 - **Captures:** 17 raw screens at 2064 × 2752 in `docs/app-store/ipad/plain` (git-ignored): hero, grid, group, space-work, command, reader, summary, empty, and one per site.
 
+## Next: the Duo pass (asked for by David, 2026-11-25; not started, after Frost is judged)
+
+A pass to make sure nothing is broken on the Duo for 1.0. Making Firn the best browser on the Duo is a later project of its own (section 6).
+
+- **The rule:** no button or anything essential under the camera cutout or the status column (the clock and Wi-Fi down the right of the outer screen, and at the top right of the open one). If needed, the page is cropped in on the outer screen so it keeps clear of them.
+- **Go through:** closed, half open, and open, and folding and unfolding in each place; a page (fixed headers and sites' own buttons at the right edge too), the bar full and shrunk, the page menu, the command bar with the keyboard, the overview (grid, group, Basecamp, the space menu, a drag), Reader, Find on Page, the sheets (Settings, New Space, Downloads, History), site alerts, a video full screen, and the open and close glides. Frost and the welcome were checked there on 2026-11-25.
+- **How:** the Simulator's hinge can be moved from the iOS Simulator tool now (`set_posture`; the notes below predate it). The app-resizability skill covers the Duo.
+
 ## 6. Later: iPhone Duo and Xcode 27.2 (notes only, nothing decided)
 
 Found 2026-11-10. David: finish the normal iPhone version first, then the Duo. None of this is planned or approved yet.

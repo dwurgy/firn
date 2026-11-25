@@ -29,7 +29,7 @@ li { margin: 0 0 6px; }
 <p><strong>Stay signed in, and a smoother Reader.</strong></p>
 <h3>Better</h3>
 <ul>
-<li><strong>You stay signed in</strong> when you quit and reopen Firn. Your sign-ins are encrypted and stay on your Mac.</li>
+<li><strong>You stay signed in</strong> when you quit and reopen Firn. Sign-ins meant to end at quit are kept encrypted on your Mac.</li>
 <li><strong>Reader scrolls down</strong> as it opens, and back up as it closes.</li>
 </ul>
 <h3>Fixed</h3>

@@ -6,7 +6,7 @@
 
 ### Better
 
-- **You stay signed in** when you quit and reopen Firn. Your sign-ins are encrypted and stay on your Mac.
+- **You stay signed in** when you quit and reopen Firn. Sign-ins meant to end at quit are kept encrypted on your Mac.
 - **Reader scrolls down** as it opens, and back up as it closes.
 
 ### Fixed

@@ -52,4 +52,12 @@ Update checks, saved passwords, the Arc import, ⇧⌘T, the View menu (the iPho
 
 Post it before 1.1.1 goes out (the page promises to say so first). Under "What stays on your Mac", after the saved passwords' line:
 
-> **Staying signed in.** Some sites sign you in only until your browser closes. Firn brings your tabs back when you reopen it, so on your Mac it keeps those sign-ins too, for each space on its own. They're encrypted, the key is in your Mac's Keychain, and they're left out of backups and never uploaded. They go when you sign out of the site, when you delete the space, or when the space hasn't been opened for 30 days.
+> **Staying signed in.** Some sites sign you in only until your browser closes. Firn brings your tabs back when you reopen it, so on your Mac it keeps those sign-ins too, separately for each space unless spaces share sign-ins. They're encrypted, the key is in your Mac's Keychain, and Firn marks them to be left out of backups and never uploads them. They go when you sign out of the site, when you delete the last space that uses them, or when no space that uses them has been opened for 30 days.
+
+Two more lines, corrected 2026-11-25 (the site session's review; the first version of the paragraph above was wrong for spaces that share sign-ins):
+
+> its own place in your Keychain, for saved passwords, the key that protects your sign-ins, and, if you turn on iCloud sync, the key that protects what you sync
+
+> Firn doesn't upload any of it, unless you turn on iCloud sync. If you back up your Mac, with Time Machine for example, the backup can include it.
+
+What's true in the code: only page pictures (iPhone and iPad) and the kept session sign-ins (Mac) are marked to be left out of backups. Tabs, history, settings, lasting cookies, and site data aren't.

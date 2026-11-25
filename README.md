@@ -31,38 +31,23 @@ The name comes from firn: the settled, compacted snow high on alpine glaciers. Q
 
 **Spaces.** Each with its own color, tabs, and sign-ins.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/02-work-dark.png">
-  <img src="docs/screenshots/02-work-light.png" alt="A Work space in Firn">
-</picture>
+<img src="docs/screenshots/02-work-light.png" alt="A Work space in Firn">
 
 **Command bar.** ⌘T to go anywhere.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/04-command-dark.png">
-  <img src="docs/screenshots/04-command-light.png" alt="The command bar over a page">
-</picture>
+<img src="docs/screenshots/04-command-light.png" alt="The command bar over a page">
 
 **Lookout.** A glance at a link before you keep it.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/05-lookout-dark.png">
-  <img src="docs/screenshots/05-lookout-light.png" alt="A link previewed in a Lookout panel">
-</picture>
+<img src="docs/screenshots/05-lookout-light.png" alt="A link previewed in a Lookout panel">
 
 **Split view.** Two pages side by side.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/06-split-dark.png">
-  <img src="docs/screenshots/06-split-light.png" alt="Two pages side by side in split view">
-</picture>
+<img src="docs/screenshots/06-split-light.png" alt="Two pages side by side in split view">
 
 **Tidied away.** Old tabs drift into one small button.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/07-tidied-dark.png">
-  <img src="docs/screenshots/07-tidied-light.png" alt="The Tidied away popover in the sidebar's bottom row">
-</picture>
+<img src="docs/screenshots/07-tidied-light.png" alt="The Tidied away popover in the sidebar's bottom row">
 
 ## On iPhone
 
@@ -129,7 +114,7 @@ cd FirnCore && swift test --scratch-path ~/Library/Caches/FirnCore-build
 - `FirnCore/Tests/`: the tests.
 - `brand/`: Firn's logo, wordmark, and app icons.
 - `docs/`: design drafts and `HISTORY.md`, the story of how each part was built and why.
-- `docs/screenshots/`: the pictures in this README, taken in demo mode by `scripts/demo-shots.sh` (light and dark). The iPhone pictures (`iphone-*.png`) are taken in the Simulator, scaled to 600px with rounded corners.
+- `docs/screenshots/`: the pictures in this README, taken in demo mode by `scripts/demo-shots.sh` (light only). The iPhone pictures (`iphone-*.png`) are taken in the Simulator, scaled to 600px with rounded corners.
 
 Your data lives in Firn's sandbox container, `~/Library/Containers/` on your Mac.
 

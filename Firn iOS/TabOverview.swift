@@ -57,7 +57,7 @@ struct TabOverview: View {
     private var isPeek: Bool { peeking != nil }
     private var slides: SlidesWithSpace {
         SlidesWithSpace(slide: slide, copyOf: isPeek ? store.activeSpace.id : nil, side: peekSide,
-                        laidOut: !isPeek || copyLaidOut, width: laidSize.width)
+                        laidOut: !isPeek || copyLaidOut, width: laidSize.width + laidSideRoom)
     }
     /// A copy has had its first few frames (`SlidesWithSpace.laidOut`).
     @State private var copyLaidOut = false
@@ -66,6 +66,11 @@ struct TabOverview: View {
     /// The overview's size; a copy's first layout borrows the real one's,
     /// so it's right from its first frame.
     private var laidSize: CGSize { size == .zero ? (peeking?.size ?? .zero) : size }
+    /// The room the screen keeps down its sides (the Duo's camera and clock,
+    /// a Dynamic Island on its side): a space waiting beside this one waits
+    /// past it, or its cards show in it, under the camera.
+    @State private var sideRoom: CGFloat?
+    private var laidSideRoom: CGFloat { sideRoom ?? peeking?.sideRoom ?? 0 }
     /// A swipe between spaces on the name (the real overview's own).
     @State private var ownSlide = SpaceSlide()
     private var slide: SpaceSlide { peeking ?? ownSlide }
@@ -204,6 +209,10 @@ struct TabOverview: View {
             .onGeometryChange(for: CGSize.self, of: \.size) {
                 size = $0
                 if !isPeek { ownSlide.size = $0 }
+            }
+            .onGeometryChange(for: CGFloat.self, of: { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) }) {
+                sideRoom = $0
+                if !isPeek { ownSlide.sideRoom = $0 }
             }
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, now in

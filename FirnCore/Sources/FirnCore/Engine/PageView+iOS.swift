@@ -695,11 +695,24 @@ private final class PageFrame: UIView {
         if let reader { applyInsets(to: reader) }
     }
 
-    /// Tells a web view (the page, or Reader's) what the status bar and
-    /// Firn's bar cover.
+    /// A column the screen keeps down one side: the iPhone Duo's camera and
+    /// clock. The page keeps clear of it, its own color filling it, as
+    /// Safari's does on the front screen; under it, a site's menu at the
+    /// top right couldn't be reached (kinfolk.com, 2026-11-25). An iPhone
+    /// on its side has the same room on both sides, and keeps its whole width.
+    private var coveredSides: (left: CGFloat, right: CGFloat) {
+        let left = safeAreaInsets.left, right = safeAreaInsets.right
+        let sides = (left: max(left - right, 0), right: max(right - left, 0))
+        // Never most of a sliver of a view (WebKit refuses insets that leave no page).
+        return sides.left + sides.right < bounds.width / 2 ? sides : (0, 0)
+    }
+
+    /// Tells a web view (the page, or Reader's) what the status bar, Firn's
+    /// bar, and a column down the side cover.
     private func applyInsets(to webView: WKWebView) {
         let top = min(safeAreaInsets.top, bounds.height)
-        let covered = UIEdgeInsets(top: top, left: 0, bottom: barRoom, right: 0)
+        let sides = coveredSides
+        let covered = UIEdgeInsets(top: top, left: sides.left, bottom: barRoom, right: sides.right)
         if webView.obscuredContentInsets != covered {
             webView.obscuredContentInsets = covered
         }
@@ -712,8 +725,8 @@ private final class PageFrame: UIView {
         // refuses insets that leave no page, so a sliver of a view is left
         // alone.
         let rooms = barRoomSpan ?? barRoom...barRoom
-        let least = UIEdgeInsets(top: top, left: 0, bottom: rooms.lowerBound, right: 0)
-        let most = UIEdgeInsets(top: top, left: 0, bottom: rooms.upperBound, right: 0)
+        let least = UIEdgeInsets(top: top, left: sides.left, bottom: rooms.lowerBound, right: sides.right)
+        let most = UIEdgeInsets(top: top, left: sides.left, bottom: rooms.upperBound, right: sides.right)
         if top + rooms.upperBound < bounds.height,
            webView.minimumViewportInset != least || webView.maximumViewportInset != most {
             webView.setMinimumViewportInset(least, maximumViewportInset: most)

@@ -57,8 +57,10 @@ extension WebKitPageController {
               let numbers = result as? [Any], numbers.count == 2,
               let depth = (numbers[0] as? NSNumber)?.doubleValue, let width = (numbers[1] as? NSNumber)?.doubleValue,
               depth.isFinite, width.isFinite, depth > 0, width > 0 else { return 0 }
-        // CSS pixels to points: the shown width is the screen's.
-        let points = CGFloat(depth) * webView.bounds.width / CGFloat(width)
+        // CSS pixels to points: the shown width is the screen's, less a
+        // covered column (the Duo).
+        let covered = webView.obscuredContentInsets
+        let points = CGFloat(depth) * max(webView.bounds.width - covered.left - covered.right, 0) / CGFloat(width)
         return points <= shown / 3 ? points : 0
     }
 

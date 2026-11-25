@@ -30,6 +30,8 @@ final class SpaceSlide {
     /// The real overview's size, for the copies' first layout, and its
     /// bar's height, whose room each copy keeps.
     @ObservationIgnored var size: CGSize = .zero
+    /// The screen's room down its sides (`TabOverview.sideRoom`).
+    @ObservationIgnored var sideRoom: CGFloat = 0
     var barHeight: CGFloat = 0
     /// What the copies were made from (`TabOverview.copyStamp`).
     @ObservationIgnored var stamp = 0
@@ -93,7 +95,7 @@ struct SlidesWithSpace: ViewModifier {
     /// every fade of them is: around the scroll view, a fade cut the cards
     /// under the bar on David's iPhone (`TabOverview`).
     var laidOut = true
-    /// The overview's width.
+    /// The overview's width, and the screen's room down its sides.
     let width: CGFloat
 
     func body(content: Content) -> some View {

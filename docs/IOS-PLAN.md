@@ -888,13 +888,17 @@ David (2026-11-24): 1.0 ships on iPhone and iPad together; a quick look over now
 - **Seen, left for later:** Basecamp's tiles are three very wide bars (the plan says up to six across on an iPad); an open group takes a whole row, leaving the cards before it alone in theirs; Settings is a short centered sheet that scrolls; on Wikipedia the Reader book didn't take •••'s place (Show Reader in the menu works); iPadOS's window-resize corner sits over the tabs and Done buttons' corner; `UIDevice.current.userInterfaceIdiom` in `Hold.swift` (corner radius), `SettingsSheet.swift`, and `WebKitReader.swift` (the words "iPad"/"iPhone"). Not tried: Stage Manager resizing, Split View beside another app, a keyboard and trackpad, drags, the open and close glides frame by frame, VoiceOver, a real iPad.
 - **Captures:** 17 raw screens at 2064 × 2752 in `docs/app-store/ipad/plain` (git-ignored): hero, grid, group, space-work, command, reader, summary, empty, and one per site.
 
-## Next: the Duo pass (asked for by David, 2026-11-25; not started, after Frost is judged)
+## The Duo pass (2026-11-25)
 
-A pass to make sure nothing is broken on the Duo for 1.0. Making Firn the best browser on the Duo is a later project of its own (section 6).
+David: make sure nothing is broken on the Duo for 1.0; nothing essential under the camera cutout or the status column; crop the page in on the front screen if needed. Making Firn the best browser on the Duo is a later project of its own (section 6). Simulator only (iOS 27.2).
 
-- **The rule:** no button or anything essential under the camera cutout or the status column (the clock and Wi-Fi down the right of the outer screen, and at the top right of the open one). If needed, the page is cropped in on the outer screen so it keeps clear of them.
-- **Go through:** closed, half open, and open, and folding and unfolding in each place; a page (fixed headers and sites' own buttons at the right edge too), the bar full and shrunk, the page menu, the command bar with the keyboard, the overview (grid, group, Basecamp, the space menu, a drag), Reader, Find on Page, the sheets (Settings, New Space, Downloads, History), site alerts, a video full screen, and the open and close glides. Frost and the welcome were checked there on 2026-11-25.
-- **How:** the Simulator's hinge can be moved from the iOS Simulator tool now (`set_posture`; the notes below predate it). The app-resizability skill covers the Duo.
+- **Fixed: pages ran under the camera and the clock.** A site's menu at the top right (kinfolk.com) couldn't be reached, closed or open. The page now keeps clear of a column the screen keeps down one side (`coveredSides` in `PageView+iOS.swift`: WebKit's obscured and content insets), its own color filling the column, exactly as Safari's does on the front screen. Reader too; the error page stays centered on the whole screen (nothing of it meets the clock). An iPhone on its side has the same room on both sides and is unchanged.
+- **Fixed: the next space's cards showed in the column,** under the camera, with the overview up (an iPhone on its side too). A waiting space waits past the column now (`TabOverview.sideRoom`).
+- **Fine as they are:** closed upright and on its side, open both ways, and half open: the bar, the page menu, the command bar with the keyboard, the overview (grid, Basecamp, groups, the hold menu, the space menu, the swipe between spaces), the swipe up, Reader and Aa, Find on Page, Settings (iOS moves its check to the column), alerts, the error page, full-screen video, the welcome. Folding and unfolding while typing, with the page menu, an alert, Settings, and the overview up.
+- **Apple's:** a full-screen video left playing as the phone unfolds stays small in the corner (Safari's too).
+- **Seen, left for the later project:** the bar is centered beside the column, not on the screen; open, the page could have the whole width with the clock across the top, as Safari's (`preferredVerticalBarBehavior`, UIKit only, iOS 27.1); open, the page menu is as wide as the bar; half open, the crease runs through the space's name and the middle cards; a card's picture keeps the blank column, or is cropped to the wrong shape until retaken after a fold.
+- **An ordinary iPhone on its side** still runs a page under the Dynamic Island (Safari insets most pages). Not the Duo's; asked David.
+- Not tried: Split View on the open screen, drags, VoiceOver, dark mode beyond the welcome, a real Duo.
 
 ## 6. Later: iPhone Duo and Xcode 27.2 (notes only, nothing decided)
 

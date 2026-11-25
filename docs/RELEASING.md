@@ -182,6 +182,6 @@ App Store Connect lets a build that's already in TestFlight be submitted for App
 
     xcodebuild archive -scheme "Firn iOS" -configuration Release -destination 'generic/platform=iOS' -archivePath Firn-iOS.xcarchive
 
-Give it a build number the TestFlight builds haven't used. To check a build, search its binary for the row's words; a Release build has none:
+In the Organizer, choose **App Store Connect**, never TestFlight Internal Only (Add Build greys those out, and their number is used up). Give it a build number the TestFlight builds haven't used. To check a build, search its binary for the row's words; a Release build has none:
 
     strings - "Firn iOS.app/Firn iOS" | grep -c "Try the tabs as a grid"

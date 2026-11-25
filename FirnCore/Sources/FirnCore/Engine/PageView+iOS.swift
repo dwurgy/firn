@@ -328,6 +328,11 @@ private final class PageFrame: UIView {
         }
         if let newReader {
             newReader.frame = mover.bounds
+            // Shown again elsewhere (another tab and back) before its sweep
+            // ended, it may still be masked away and untouchable.
+            newReader.layer.mask = nil
+            newReader.isUserInteractionEnabled = true
+            newReader.accessibilityElementsHidden = false
             newReader.alpha = 0
             newReader.scrollView.contentInsetAdjustmentBehavior = .never
             mover.insertSubview(newReader, aboveSubview: old ?? webView)

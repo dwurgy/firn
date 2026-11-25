@@ -113,8 +113,8 @@ public final class PageHolder: NSView {
     private var sweepTurn = 0
     /// The reader in front is fully there, and takes the clicks.
     private var readerIsIn = false
-    /// What takes the clicks and VoiceOver: the reader once it's there, or the page.
-    private var front: WKWebView { reader.flatMap { readerIsIn ? $0 : nil } ?? webView }
+    /// The reader on its way out, until its edge is all the way up.
+    private weak var leaving: WKWebView?
     /// The page's touch of dark as it comes back: warm ink, never grey.
     private let leaveDim: NSView = {
         let dim = NSView()
@@ -145,6 +145,7 @@ public final class PageHolder: NSView {
         readerIsIn = false
         let edge = sweepMask?.presentation()?.bounds.height
         sweepMask = nil
+        leaving = newReader == nil ? old : nil
         old?.setAccessibilityHidden(newReader == nil)
         if motion == .sweep, window != nil, (old == nil) != (newReader == nil) {
             if let newReader {
@@ -191,6 +192,11 @@ public final class PageHolder: NSView {
         reader.layer?.cornerCurve = .continuous
         reader.layer?.cornerRadius = cornerRadius
         reader.frame = bounds
+        // Shown again elsewhere (another tab and back) before its sweep
+        // ended, it may still be masked away.
+        reader.layer?.mask = nil
+        reader.setAccessibilityHidden(false)
+        leaveDim.removeFromSuperview()
     }
 
     /// Masks the reader down to `height` from its top.
@@ -282,10 +288,13 @@ public final class PageHolder: NSView {
     }
 
     /// A reader still on its way in or out lets clicks through to the page.
+    /// Only those: WebKit's own views beside the page (the docked Web
+    /// Inspector) keep theirs.
     public override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hit = super.hitTest(point) else { return nil }
-        guard !hit.isDescendant(of: front), hit !== self else { return hit }
-        return front.hitTest(convert(point, from: superview))
+        let passing = [readerIsIn ? nil : reader, leaving, leaveDim].compactMap { $0 as NSView? }
+        guard passing.contains(where: { hit.isDescendant(of: $0) }) else { return hit }
+        return webView.hitTest(convert(point, from: superview))
     }
 
     private func hasFocus(in view: NSView) -> Bool {

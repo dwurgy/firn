@@ -1,5 +1,33 @@
 # What's new in Firn
 
+## Firn 1.1.0
+
+**A quieter way to read, and groups that name themselves.**
+
+### New
+
+- **Reader.** Just the article. Press ⇧⌘R.
+- **Summarize.** The article in a few sentences, made on your Mac.
+- **Groups name themselves,** on your Mac. Rename one and your name stays.
+- **Links stay together.** Open a link in a new tab, and the two become a group.
+- **iCloud sync** keeps your spaces the same on your Macs. It's off until you turn it on in Settings.
+- **Send Feedback** is in the Help menu, and shortcuts are in Settings › Keyboard.
+
+Summarize and group names need macOS 26 or later with Apple Intelligence.
+
+### Better
+
+- **The welcome and empty windows** have a new, frosted look.
+- **Back still works** after you quit and reopen Firn.
+- **Basecamp and groups are real glass** on macOS 26 and later.
+- **Dark mode** is deeper and warmer.
+- **Lookout explains itself** the first time. (thanks Noah)
+
+### Fixed
+
+- **Apps you download** can be opened. (thanks David)
+- **Sites without https** can load, marked Not Secure.
+
 ## Firn 1.0.1
 
 **A calmer full screen, and corners that fit.**

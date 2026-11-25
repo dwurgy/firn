@@ -9,8 +9,10 @@ How a new version of Firn gets from this repo to people's Macs. The reasoning be
   number (`CURRENT_PROJECT_VERSION`, a whole number) is what Sparkle compares, so every release needs a higher one
   than the last. 1.0.0 is build 3 (builds 1 and 2 were the test update's 0.99.0 and 0.99.1).
 - **`CHANGELOG.md`.** One section per version, in the notes' usual format: `## Firn x.y.z`, a bold one-line
-  summary, a short paragraph, then `### New`, `### Better`, and `### Fixed`. The update window shows it, and so
-  does the GitHub release.
+  summary, then `### New`, `### Better`, and `### Fixed` (only the ones that apply). Short (David, 2026-11-25): the
+  right facts, in plain English, in as few words as possible. A bullet is a bold lead and one short sentence; an
+  intro only when people need to know something before updating. 1.1.0 is the model. The update window shows it,
+  and so does the GitHub release.
 - **`scripts/release.sh`.** Builds, checks, notarizes, and staples the app and a DMG, signs the DMG for Sparkle,
   and adds the release to `appcast.xml`. It publishes nothing.
 - **A GitHub release** in `dwurgy/firn`, named `v<version>`, with the DMG attached. Updates and the website's
@@ -50,7 +52,8 @@ missing.
 2. **Raise the version and build number** in Xcode (the Firn target › General › Identity: Version and Build),
    which sets both the Debug and Release values. The build number goes up by one each release.
 3. **Write the notes** in `CHANGELOG.md`, newest at the top, in plain words. Each fixed bug thanks whoever
-   reported it, by the name they gave ("Thanks to Noah", "Thanks to u/name on Reddit"; David, 2026-11-01). Every version opens with its own
+   reported it, by the name or handle they gave, at the very end: "(thanks Noah)", "(thanks u/name)" (David,
+   2026-11-01; shortened 2026-11-25). Every version opens with its own
    one-line title in bold, a short sentence ("Firn, made for the Mac."). Preview how the update window shows
    them:
 

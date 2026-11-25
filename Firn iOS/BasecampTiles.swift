@@ -98,12 +98,10 @@ struct BasecampCell: View {
         let gliding = landing.gliding == tab.id
         BasecampTile(tab: tab, space: space, isOnScreen: tab.id == onScreen, pressLights: false, open: open)
             // Dragging can't be found by VoiceOver: the same moves as actions.
-            .accessibilityAction(named: "Move Left") { moveLeft?() }
-            .accessibilityAction(named: "Move Right") { moveRight?() }
             .accessibilityActions {
-                ForEach(Array(menu.joined().enumerated()), id: \.offset) { _, item in
-                    Button(item.title, action: item.action)
-                }
+                HoldMenuActions(menu: { menu })
+                if let moveLeft { Button("Move Left", action: moveLeft) }
+                if let moveRight { Button("Move Right", action: moveRight) }
             }
             // The set-down: the same scale as the page's picture over it.
             .background {

@@ -183,6 +183,7 @@ struct GroupFolder: View {
         .accessibilityValue("Folded, \(tabs.count) \(tabs.count == 1 ? "tab" : "tabs")")
         .accessibilityHint("Shows the group's tabs")
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open() }
     }
 }
 

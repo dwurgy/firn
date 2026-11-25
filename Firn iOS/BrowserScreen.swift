@@ -395,7 +395,7 @@ struct BrowserScreen: View {
                 // one bar at a time.
                 .opacity(finding ? 0 : 1)
                 .allowsHitTesting(!finding)
-                .accessibilityHidden(finding)
+                .hiddenFromVoiceOver(finding)
                 .animation(.easeOut(duration: 0.2), value: finding)
         }
         .onChange(of: finding) { _, now in findingPage = now ? store.activeTab?.page : nil }

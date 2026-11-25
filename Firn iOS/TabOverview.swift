@@ -642,6 +642,7 @@ struct TabOverview: View {
             spot: spot,
             moveUp: moveUp,
             moveDown: moveDown,
+            menu: { menu(for: tab) },
             // From every group directly: `tabGroups` walks the whole tab
             // list, and this runs for every tile on every redraw.
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
@@ -906,7 +907,7 @@ struct TabOverview: View {
 
     /// Folds or unfolds a group: the card glides to its new size (0.25s, no
     /// bounce) and its tabs fade over the second half (`FoldFade`); with
-    /// Reduce Motion the size changes at once and the tabs cross-fade.
+    /// Reduce Motion everything changes at once.
     /// Folded tabs forget their spots, so nothing glides to a place that's
     /// gone; folding the tab on screen's group is fine, since `finish`
     /// opens it again before the page grows back.
@@ -954,8 +955,11 @@ struct TabOverview: View {
             }
             return
         }
-        // Reduce Motion, or nowhere to draw it from: a cross-fade.
-        withAnimation(.easeOut(duration: 0.2)) { store.setFolded(group, folding) }
+        // Reduce Motion, or nowhere to draw it from. With Reduce Motion it
+        // changes at once: the collection view's cards never faded, and the
+        // grid still growing over 0.2s showed the opened group's tabs piece
+        // by piece as it reached them (the Simulator, 2026-11-24).
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { store.setFolded(group, folding) }
         if !folding { center(group) }
     }
 

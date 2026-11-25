@@ -681,7 +681,7 @@ struct BarHost<Content: View>: View {
                                   floor: !editing && landing.gliding != nil ? 0.002 : 0))
             .modifier(BarReturn(landing: landing, off: editing))
             .allowsHitTesting(shown)
-            .accessibilityHidden(!shown)
+            .hiddenFromVoiceOver(!shown)
     }
 }
 

@@ -31,6 +31,9 @@ struct OverviewRow: View {
     /// VoiceOver's way to reorder (a drag can't be found by it); nil at an end.
     var moveUp: (() -> Void)?
     var moveDown: (() -> Void)?
+    /// Its hold menu's choices, for VoiceOver's actions: nothing of a hold
+    /// can be found by it.
+    var menu: () -> [[HoldMenuItem]] = { [] }
     /// The group it's in, for VoiceOver ("<title>, in <group>"); nil when loose.
     var groupName: String?
     /// What the actions above were made from that the rest doesn't show
@@ -69,6 +72,7 @@ struct OverviewRow: View {
     @State private var swiped = false
 
     private var site: String { WebAddress.site(of: tab.url) }
+    private var name: String { tab.title.isEmpty ? site : tab.title }
     /// The corners a group card and a lifted tab are built on.
     static let cornerRadius: CGFloat = 14
     /// The shortest a grid card is (`OverviewGridMetrics`).
@@ -172,11 +176,17 @@ struct OverviewRow: View {
                 .onTapGesture(perform: open)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: reportSpot)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(groupName.map { "\(tab.title), in \($0)" } ?? tab.title)
+        // One thing to VoiceOver, its name first: its X and its menu are
+        // actions. As separate pieces, the card's button had no name (its
+        // picture and title are hidden) and only "Close" was ever heard
+        // (found 2026-11-24).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(groupName.map { "\(name), in \($0)" } ?? name)
         .accessibilityValue(isOnScreen ? "On screen" : "")
-        .accessibilityAddTraits(isOnScreen ? .isSelected : [])
+        .accessibilityAddTraits(isOnScreen ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { open() }
         .accessibilityActions {
+            HoldMenuActions(menu: menu)
             if let moveUp { Button("Move Left", action: moveUp) }
             if let moveDown { Button("Move Right", action: moveDown) }
         }

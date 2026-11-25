@@ -145,6 +145,8 @@ struct OverviewBar: View {
                 // Mid-swipe, on its way to the coming space's.
                 .firnGlassButton(tint: checkTint)
                 .accessibilityLabel("Done")
+                // iOS reads a checkmark as "selected".
+                .accessibilityRemoveTraits(.isSelected)
                 }
             }
         }
@@ -246,7 +248,7 @@ struct OverviewBar: View {
             .sensoryFeedback(.impact(weight: .medium), trigger: holdOpenings)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { menuOpen = true }
-            .accessibilityHidden(menuOpen)
+            .hiddenFromVoiceOver(menuOpen)
             // After the pill's own tap shape (its capsule), so the rows,
             // which reach above it, take their taps.
             .overlay { GeometryReader { menuPanel(pill: $0.size) } }
@@ -331,7 +333,7 @@ struct OverviewBar: View {
             .scaleEffect(menuOpen && !reduceMotion ? 0.01 : 1, anchor: anchor)
             .opacity(menuOpen ? 0 : 1)
             .allowsHitTesting(!menuOpen)
-            .accessibilityHidden(menuOpen)
+            .hiddenFromVoiceOver(menuOpen)
     }
 
     /// The two names mid-swipe: this space's slides off with the finger

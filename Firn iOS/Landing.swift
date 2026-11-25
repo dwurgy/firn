@@ -339,7 +339,7 @@ struct OverviewVisible: ViewModifier {
         content
             .opacity(shown ? 1 : landing.warm ? 0.002 : 0)
             .allowsHitTesting(shown && !editing && landing.gliding == nil)
-            .accessibilityHidden(!shown || editing)
+            .hiddenFromVoiceOver(!shown || editing)
     }
 }
 
@@ -351,7 +351,7 @@ struct PageBehindOverview: ViewModifier {
         let shown = landing.shown
         content
             .allowsHitTesting(!shown)
-            .accessibilityHidden(shown)
+            .hiddenFromVoiceOver(shown)
     }
 }
 

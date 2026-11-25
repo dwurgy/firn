@@ -717,7 +717,7 @@ struct AddressBar: View {
             .scaleEffect(scale, anchor: anchor)
             .offset(y: riding ? Self.compactTopDrop + (Self.compactHeight - BarButton.glassSize) / 2 : 0)
             .allowsHitTesting(!hidden)
-            .accessibilityHidden(hidden)
+            .hiddenFromVoiceOver(hidden)
     }
 
     /// How far the bar's round buttons sit from the screen's edges, at rest.
@@ -772,7 +772,7 @@ private struct NavigationPill: View {
             BarButton(symbol: "chevron.forward", label: "Forward", action: page.goForward)
                 .opacity(wide ? 1 : 0)
                 .disabled(!wide)
-                .accessibilityHidden(!wide)
+                .hiddenFromVoiceOver(!wide)
         }
         .padding(.horizontal, Self.padding)
         .frame(width: wide ? Self.wideWidth : Self.roundWidth,
@@ -890,7 +890,7 @@ private struct AddressField: View {
                 // editing (below), so the finger never drops a cursor into
                 // the middle of the address.
                 .allowsHitTesting(isEditing)
-                .accessibilityHidden(!isEditing)
+                .hiddenFromVoiceOver(!isEditing)
                 .overlay {
                     if !isEditing, !compact {
                         // Not after a hold opened the menu: the finger lifting isn't a tap.
@@ -953,7 +953,7 @@ private struct AddressField: View {
         // The field's glass is the bar's (`AddressBar.glassShape`), so it
         // can grow into the page menu.
         .allowsHitTesting(!menuOpen)
-        .accessibilityHidden(menuOpen)
+        .hiddenFromVoiceOver(menuOpen)
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onChange(of: articleSighting, sawArticle)
@@ -1181,7 +1181,7 @@ private struct AddressField: View {
                 // it wasn't, so it showed straight at its spot (Simulator).
                 .animation(.easeOut(duration: 0.2)) { $0.opacity(clearShown ? 1 : 0.002) }
                 .allowsHitTesting(clearShown)
-                .accessibilityHidden(!clearShown)
+                .hiddenFromVoiceOver(!clearShown)
             if !isEditing, let page {
                 if page.isLoading {
                     // Neither runs as the finger lifts from a hold that opened the menu.
@@ -1601,7 +1601,7 @@ private struct RidesThePill: ViewModifier {
             .scaleEffect(compact ? AddressBar.compactTextScale : 1)
             .offset(y: compact ? drop : 0)
             .allowsHitTesting(!compact)
-            .accessibilityHidden(compact)
+            .hiddenFromVoiceOver(compact)
     }
 }
 

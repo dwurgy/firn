@@ -25,7 +25,7 @@ Summarize and group names need macOS 26 or later with Apple Intelligence.
 
 ### Fixed
 
-- **Apps you download** can be opened. (thanks David)
+- **Apps you download** can be opened.
 - **Sites without https** can load, marked Not Secure.
 
 ## Firn 1.0.1

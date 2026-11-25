@@ -47,7 +47,7 @@ li { margin: 0 0 6px; }
 </ul>
 <h3>Fixed</h3>
 <ul>
-<li><strong>Apps you download</strong> can be opened. (thanks David)</li>
+<li><strong>Apps you download</strong> can be opened.</li>
 <li><strong>Sites without https</strong> can load, marked Not Secure.</li>
 </ul>
 			]]></description>

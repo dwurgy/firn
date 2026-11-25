@@ -868,7 +868,7 @@ David (2026-11-24): tiles "all feel good"; go ahead with step 6. The fork on the
 
 David's recording from his iPhone (steps 4 and 5's build, read frame by frame): a tab let go in the grid came down into its place, faded to an empty place over about 0.3s, and popped back about half a second later, both times he dropped one. Likely cause (reasoned, not reproduced in the Simulator): landed "to its cell" (`drop(_:toItemAt:)`), iOS turns the carried picture into a picture of the cell, and `hideOnlyCarried`, called more often since step 4, hides that cell again while the card still counts as carried. A tab's card and a folder now land as tiles do: to a fixed place, as the picture they were carried as, the cell shown when the picture is down (`performDropWith`). Only a group carried by its name line still lands to its cell. Simulator (iPhone 18 Pro), recorded at 30 frames a second: the card glides in and stays. Installed on David's iPhone (Release); David (2026-11-24): "the drop is fixed, feels good now". Also in the recording, not looked into: after the first drop the list seems to scroll (maybe David's finger), and iOS's menu shows "Ask Siri" under Close Tab.
 
-## Open bug: a page sometimes sits a little zoomed in (David, 2026-11-25)
+## Open bug: a page sometimes sits a little zoomed in (David, 2026-11-24)
 
 David, on his iPhone (firnbrowser.com, dark, 10:57, Firn beside what looks like Safari; noted so it isn't forgotten, not looked into): "This does not happen universally but it does happen. The page is misaligned in Firn. It's like zoomed in or almost."
 

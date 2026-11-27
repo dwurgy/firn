@@ -80,6 +80,8 @@ struct BrowserWindow: View {
             // Launching may bring Firn to the front before this window listens.
             driftIdleTabs(afterABeat: true)
         }
+        // The system's sheet to download a translation's languages.
+        .translationDownloads(for: window.frontTranslator)
         // A demo's screenshot (`--shot`); nothing otherwise.
         .task { await DemoShot.stage(window, openWindow: openWindow) }
         .onChange(of: newTabPlacement, initial: true) { store.newTabPlacement = newTabPlacement }

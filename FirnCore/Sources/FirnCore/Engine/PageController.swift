@@ -75,6 +75,9 @@ public protocol PageController: AnyObject, Observable, PageTextAccess {
     /// nil if it isn't one, or the page moved on while reading.
     func readArticle() async -> ReaderArticle?
     // Translating: `PageTextAccess` (PageTranslation.swift).
+    /// This tab's translating: the offer, and the translation while it's
+    /// on (`PageTranslator`); nil where pages can't be translated.
+    var translator: PageTranslator? { get }
     /// Whether Reader is showing this page's article. Never saved: a page
     /// always opens with Reader off, and leaving the page leaves Reader.
     var isReading: Bool { get }
@@ -240,6 +243,7 @@ public extension PageController {
     func readMorePageText() async -> PageText.More? { nil }
     func writePageText(_ translations: [PageText.Translation], language: String, title: String?) async -> Int { 0 }
     func restorePageText() async {}
+    var translator: PageTranslator? { nil }
     var isReading: Bool { false }
     var isFinding: Bool { false }
     func showFind() {}

@@ -193,9 +193,16 @@ struct AddressBar: View {
     /// The book, on pages that read as articles (and while Reader is on).
     private var showsBook: Bool { !focused && window.canToggleReader }
 
-    /// Room kept clear at the right for the book, zoom, and reload buttons.
+    /// The translate mark, on pages offered for translating (never while
+    /// Reader is on: `frontTranslator` is nil then).
+    private var markTranslator: PageTranslator? {
+        guard !focused, let translator = window.frontTranslator, translator.state != .none else { return nil }
+        return translator
+    }
+
+    /// Room kept clear at the right for the book, mark, zoom, and reload buttons.
     private var trailingRoom: CGFloat {
-        let book: CGFloat = showsBook ? 28 : 0
+        let book: CGFloat = (showsBook ? 28 : 0) + (markTranslator == nil ? 0 : 28)
         let reload: CGFloat = reloadablePage == nil ? 0 : 24
         let zoom: CGFloat = zoomLabel == nil ? 0 : 40
         return Theme.rowPadding + book + reload + zoom
@@ -261,6 +268,14 @@ struct AddressBar: View {
                         .padding(.trailing, 2)
                         .transition(.opacity)
                     }
+                    if let translator = markTranslator {
+                        TranslateMarkButton(translator: translator, space: store.activeSpace.color) {
+                            window.toggleTranslation()
+                            window.focusPage()
+                        }
+                        .padding(.trailing, 2)
+                        .transition(.opacity)
+                    }
                     if let zoomLabel {
                         ZoomLabel(text: zoomLabel) { window.zoomFront(.actualSize) }
                     }
@@ -274,6 +289,7 @@ struct AddressBar: View {
                 }
                 .padding(.trailing, 4)
                 .animation(.easeOut(duration: 0.2), value: showsBook)
+                .animation(.easeOut(duration: 0.2), value: markTranslator == nil)
             }
             .onHover { hovering = $0 }
             .onChange(of: window.addressRequest) {

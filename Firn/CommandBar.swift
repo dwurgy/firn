@@ -316,6 +316,15 @@ private struct CommandBar: View {
             window.summarizeArticle()
             window.focusPage()
         }
+        if let name = window.translateName, let translator = window.frontTranslator {
+            // Found by "translate", or either language's name, in yours or its own.
+            let languages = [translator.source, translator.target].compactMap { $0 }
+            let names = languages.map(PageTranslator.name) + languages.compactMap(PageTranslator.ownName)
+            add("translate", name, ["translate", "translation", "language", "original"] + names) {
+                window.toggleTranslation()
+                window.focusPage()
+            }
+        }
         if let name = window.frontBlockingName(enabled: blocksContent) {
             add("blocking", name, ["ads", "trackers", "blocker", "allow", "site"]) {
                 window.toggleFrontBlocking()

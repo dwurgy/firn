@@ -45,6 +45,8 @@ final class WebKitPageController: NSObject, PageController {
     #endif
     /// A translated page added text (`PageTranslation`).
     @ObservationIgnored var onPageTextChange: (@MainActor () -> Void)?
+    /// This tab's translating (`PageTranslator`); made with the page.
+    @ObservationIgnored private(set) lazy var translator: PageTranslator? = PageTranslator(page: self)
 
     @ObservationIgnored let webView: WKWebView
     /// Only pages a site opened as popups may close themselves.
@@ -399,6 +401,10 @@ final class WebKitPageController: NSObject, PageController {
             articleCheck?.cancel()
             isArticle = false
             checkArticle(after: 1)
+            // Another article, maybe in another language: the old one's
+            // translation goes, and the new one is checked once drawn.
+            translator?.showOriginal()
+            checkLanguage(after: 1)
         }
     }
 
@@ -583,6 +589,7 @@ extension WebKitPageController: WKNavigationDelegate {
         closeReader()
         articleCheck?.cancel()
         isArticle = false
+        translator?.pageChanged()
         // The title may still be the old page's until the new one says.
         if let url { onVisit?(url, "") }
         // The old page's frames are gone, and their sound with them.
@@ -607,6 +614,7 @@ extension WebKitPageController: WKNavigationDelegate {
         reportTitle()
         findIcon()
         checkArticle()
+        checkLanguage()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
@@ -702,6 +710,19 @@ extension WebKitPageController {
         guard let url, WebAddress.isWebURL(url), origin.protocol == url.scheme?.lowercased(),
               origin.host.lowercased() == url.host()?.lowercased() else { return }
         onPageTextChange?()
+    }
+
+    /// Whether to offer translating the page (`PageTranslator`): its
+    /// language, read in Firn's world on the main frame, after `delay`.
+    fileprivate func checkLanguage(after delay: Double = 0) {
+        guard loadError == nil, let script = PageText.script("language") else { return }
+        translator?.pageLoaded(after: delay) { [weak self] in
+            guard let self, let pageURL = self.url, self.loadError == nil else { return nil }
+            let result = try? await self.webView.callAsyncJavaScript(
+                script, arguments: ["input": NSNull()], in: nil, contentWorld: Self.firnWorld)
+            guard self.url == pageURL, self.loadError == nil else { return nil }
+            return PageText.language(from: result)
+        }
     }
 
     /// Show Original: every translated unit and the title back as they were.

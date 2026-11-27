@@ -225,6 +225,7 @@ if (!globalThis.firnPageText) {
             for (const n of made) u.parent.insertBefore(n, u.after);
             u.current = made;
             for (const n of made) known.add(n);
+            fade(u.parent);
             state.written.add(u.id);
             if (lang && !langs.has(u.block) && u.block !== document.body) {
                 langs.set(u.block, u.block.getAttribute('lang'));
@@ -239,6 +240,42 @@ if (!globalThis.firnPageText) {
             state.titleWritten = document.title;
         }
         return count;
+    }
+
+    // Each translated stretch eases in over 150ms (as in the design), with
+    // the Web Animations API: nothing is written to the page's own styles,
+    // so there's nothing to put back. Reduce Motion: it just changes.
+    const quiet = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    function fade(el) {
+        if ((quiet && quiet.matches) || !el || !el.animate || el === document.body) return;
+        try {
+            el.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
+        } catch (e) {}
+    }
+
+    // The page's declared language and a sample of its text, to decide
+    // whether to offer translating it; reads only, and changes nothing.
+    function language() {
+        let sample = '';
+        if (document.body) {
+            // A skipped or kept element (script, code, translate="no") is passed
+            // over whole; only text with letters counts.
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+                acceptNode: (n) => {
+                    if (n.nodeType === Node.ELEMENT_NODE) return isSkipped(n) || isKept(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+                    return LETTER.test(n.data) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+                }
+            });
+            let looked = 0;
+            for (let n = walker.nextNode(); n && sample.length < 3000 && looked < 20000; n = walker.nextNode()) {
+                looked += 1;
+                sample += n.data.replace(/\s+/g, ' ') + ' ';
+            }
+        }
+        return {
+            lang: String(document.documentElement.getAttribute('lang') || ''),
+            sample: sample.slice(0, 3000)
+        };
     }
 
     function read() {
@@ -273,5 +310,5 @@ if (!globalThis.firnPageText) {
         return { view: view(), units: state.units.slice(from).map((u) => u.out) };
     }
 
-    globalThis.firnPageText = { read: read, more: more, write: write, restore: restore };
+    globalThis.firnPageText = { language: language, read: read, more: more, write: write, restore: restore };
 }

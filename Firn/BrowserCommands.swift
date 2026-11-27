@@ -143,6 +143,14 @@ struct BrowserCommands: Commands {
                 }
                 .disabled(!window.canSummarize)
             }
+            // Only on pages in a language you don't read; simply absent
+            // otherwise, and before macOS 26.4.
+            if let name = window.translateName {
+                Button(name) {
+                    window.toggleTranslation()
+                    window.focusPage()
+                }
+            }
             Divider()
             // The page in front, as with Print. ⌘= also zooms in (TabShortcuts).
             Button("Zoom In") { window.zoomFront(.larger) }

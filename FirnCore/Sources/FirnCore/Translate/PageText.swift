@@ -126,6 +126,13 @@ public enum PageText {
                         view: view(from: fields["view"]))
     }
 
+    /// Reads the script's `language()` answer: the page's declared
+    /// language and a sample of its text; nil if it isn't that shape.
+    static func language(from result: Any?) -> (declared: String?, sample: String)? {
+        guard let fields = result as? [String: Any], let sample = fields["sample"] as? String else { return nil }
+        return ((fields["lang"] as? String).flatMap(languageTag), String(sample.prefix(3000)))
+    }
+
     /// Reads the script's `more()` answer, or nil if it isn't the shape
     /// expected.
     static func more(from result: Any?) -> More? {

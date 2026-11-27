@@ -76,7 +76,11 @@ public final class PageTranslation {
     /// Failures in a row, with nothing written yet, before giving up.
     static let failureLimit = 3
 
-    @ObservationIgnored private let page: any PageTextAccess
+    /// Held weakly: the page's controller holds this (through its
+    /// `PageTranslator`), so a closed tab's page goes; once it has, this
+    /// sees a page that's gone (no address), and stops.
+    @ObservationIgnored private weak var heldPage: (any PageTextAccess)?
+    private var page: any PageTextAccess { heldPage ?? GonePage.shared }
     @ObservationIgnored private let makeTranslator: @MainActor (Locale.Language) -> (any RunTranslating)?
     /// Made so far, by source language code; nil once one couldn't work.
     @ObservationIgnored private var translators: [String: (any RunTranslating)?] = [:]
@@ -97,7 +101,7 @@ public final class PageTranslation {
         page: any PageTextAccess, source: Locale.Language, target: Locale.Language,
         translator: @escaping @MainActor (Locale.Language) -> (any RunTranslating)?
     ) {
-        self.page = page
+        self.heldPage = page
         self.source = source
         self.target = target
         self.makeTranslator = translator
@@ -383,6 +387,21 @@ public final class PageTranslation {
         guard let runs = await translation(of: unit) else { return nil }
         let out = runs.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
         return out.isEmpty || out.count > 1000 ? nil : out
+    }
+}
+
+/// A page that has closed: no address, nothing to read or write.
+@MainActor
+private final class GonePage: PageTextAccess {
+    static let shared = GonePage()
+    var url: URL? { nil }
+    func readPageText() async -> PageText.Snapshot? { nil }
+    func readMorePageText() async -> PageText.More? { nil }
+    func writePageText(_ translations: [PageText.Translation], language: String, title: String?) async -> Int { 0 }
+    func restorePageText() async {}
+    var onPageTextChange: (@MainActor () -> Void)? {
+        get { nil }
+        set {}
     }
 }
 

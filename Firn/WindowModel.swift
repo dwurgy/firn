@@ -506,6 +506,38 @@ final class WindowModel {
         ReaderStyle.shared.toggle(page, space: store.activeSpace.color)
     }
 
+    // MARK: Translating
+
+    /// The tab on screen's translating, as Reader's page (never a Lookout's);
+    /// nil while Reader is on, so the mark and the menu row are simply
+    /// absent then (design, David, 2026-11-27).
+    var frontTranslator: PageTranslator? {
+        guard let page = readerPage, !page.isReading else { return nil }
+        return page.translator
+    }
+
+    /// What View's row and the command bar say, or nil when the page isn't
+    /// offered: "Translate to English", then "Show Original" once started.
+    var translateName: String? {
+        guard let translator = frontTranslator, let target = translator.targetName else { return nil }
+        switch translator.state {
+        case .none: return nil
+        case .offered, .failed: return "Translate to \(target)"
+        case .translating, .translated: return "Show Original"
+        }
+    }
+
+    /// The mark, View's row, or the command bar: translate the page on
+    /// screen, or put it back.
+    func toggleTranslation() {
+        guard let translator = frontTranslator else { return }
+        switch translator.state {
+        case .none: break
+        case .offered, .failed: translator.translate()
+        case .translating, .translated: translator.showOriginal()
+        }
+    }
+
     // MARK: Blocking
 
     /// What turning blocking on or off for the page in front is called

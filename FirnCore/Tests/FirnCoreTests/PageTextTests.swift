@@ -165,6 +165,35 @@ struct PageTextPageTests {
 
     private typealias Run = PageText.Run
 
+    @Test func readsThePagesLanguageWithoutChangingIt() async throws {
+        let (page, id) = try await load(Self.page)
+        defer { Task { try? await WKWebsiteDataStore.remove(forIdentifier: id) } }
+        let before = try #require(try await inPage("return document.body.innerHTML", page) as? String)
+        let script = try #require(PageText.script("language"))
+        let result = try await page.webView.callAsyncJavaScript(
+            script, arguments: ["input": NSNull()], in: nil, contentWorld: WebKitPageController.firnWorld)
+        let found = try #require(PageText.language(from: result))
+        #expect(found.declared == "es")
+        #expect(found.sample.contains("Una mañana tranquila"))
+        for banned in ["no tocar", "x = 1", "texto del script", "texto del área"] {
+            #expect(!found.sample.contains(banned), "\(banned) was sampled")
+        }
+        #expect(PageLanguage.detect(declared: found.declared, sample: found.sample)?.languageCode == "es")
+        #expect(try await inPage("return document.body.innerHTML", page) as? String == before)
+        #expect(PageText.language(from: ["lang": 5]) == nil)
+    }
+
+    @Test func aNewPageStartsWithNothingOffered() async throws {
+        let (page, id) = try await load(Self.page)
+        defer { Task { try? await WKWebsiteDataStore.remove(forIdentifier: id) } }
+        let translator = try #require(page.translator)
+        translator.pageChanged()
+        #expect(translator.state == .none)
+        #expect(translator.target == nil)
+        translator.translate()
+        #expect(translator.state == .none)
+    }
+
     @Test func writesPlainTextAndPutsTheOriginalBack() async throws {
         let (page, id) = try await load(Self.page)
         defer { Task { try? await WKWebsiteDataStore.remove(forIdentifier: id) } }

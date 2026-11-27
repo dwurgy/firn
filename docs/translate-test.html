@@ -1,0 +1,200 @@
+<!doctype html>
+<!-- Firn: a test page for translating pages (docs/HISTORY.md, "Plan: translating pages", step 1).
+     The page is in Spanish, so a Mac set to English should offer "Translate to English".
+     Each section has a short note in English saying what should happen; the notes are
+     marked translate="no" so they stay as written. Self-contained: no scripts, fonts, or
+     images from the network. Open it from disk or serve the docs folder locally. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de traducción · Firn</title>
+<style>
+:root {
+  --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --wash: rgba(70,55,40,.07); --hair: rgba(70,55,40,.14); --note: #F1ECE4;
+  --link: #3F6E8C;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #1C1916; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+    --wash: rgba(255,248,240,.07); --hair: rgba(255,248,240,.14); --note: #28241F;
+    --link: #A9C6D8;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 17px/1.6 -apple-system, system-ui, sans-serif;
+  padding: 48px max(16px, env(safe-area-inset-left, 0px)) 120px;
+}
+main { max-width: 680px; margin: 0 auto; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 20px; margin: 48px 0 8px; }
+a { color: var(--link); }
+.note {
+  font-size: 13px; line-height: 1.5; color: var(--muted); background: var(--note);
+  border-radius: 10px; padding: 10px 14px; margin: 12px 0;
+}
+.note b { color: var(--ink); }
+code, pre { font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+code { background: var(--wash); padding: 1px 5px; border-radius: 5px; }
+pre { background: var(--wash); padding: 12px 14px; border-radius: 10px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair); }
+form { display: grid; gap: 12px; max-width: 420px; }
+label { display: grid; gap: 4px; font-size: 15px; }
+input, textarea, select, button {
+  font: inherit; font-size: 15px; color: var(--ink); background: var(--page);
+  border: 1px solid var(--hair); border-radius: 8px; padding: 8px 10px;
+}
+button { background: var(--ink); color: var(--page); border: 0; cursor: pointer; justify-self: start; }
+[contenteditable] { border: 1px dashed var(--hair); border-radius: 8px; padding: 8px 10px; }
+iframe { width: 100%; height: 130px; border: 1px solid var(--hair); border-radius: 10px; }
+#more p { animation: arrive .3s ease-out; }
+@keyframes arrive { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #more p { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Una tarde en el glaciar</h1>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> Firn offers "Translate to English" (this page is <code>lang="es"</code> and its text is Spanish).
+  After translating, every section reads in English except what the notes say stays. "Show Original" puts back
+  the exact Spanish, links and bold included. The tab's title stays Spanish at first.
+</p>
+
+<h2>1. Enlaces y negrita en medio de la frase</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> sentences read naturally, and each link and bold piece wraps the matching English words, even
+  where English moves them. Links still go to the same place (they all point at <code>#destino</code> here).
+  No stray spaces inside a link's underline.
+</p>
+<p>Haz clic <a href="#destino">aquí</a> para continuar con tu <strong>pedido</strong>.</p>
+<p>Ayer leí <a href="#destino">el informe del glaciar</a> muy <em>despacio</em>, porque <strong>Ana</strong> me lo mandó con una <a href="#destino">nota muy amable</a>.</p>
+<p>Si tienes dudas, <a href="#destino">escríbenos</a> o lee <a href="#destino"><strong>la guía completa</strong></a> antes de empezar.</p>
+
+<h2>2. Listas</h2>
+<p class="note" lang="en" translate="no"><b>Expect:</b> each item translated on its own; the nested list keeps its shape.</p>
+<ul>
+  <li>Lleva ropa de abrigo y unas gafas de sol.</li>
+  <li>Sal temprano, antes de que el sol ablande la nieve.</li>
+  <li>Para el camino:
+    <ol>
+      <li>agua caliente en un termo,</li>
+      <li>algo dulce para la subida,</li>
+      <li>y un mapa, por si acaso.</li>
+    </ol>
+  </li>
+</ul>
+
+<h2>3. Una tabla</h2>
+<p class="note" lang="en" translate="no"><b>Expect:</b> headers and cells translated; numbers and times unchanged.</p>
+<table>
+  <thead><tr><th>Ruta</th><th>Duración</th><th>Dificultad</th></tr></thead>
+  <tbody>
+    <tr><td>Mirador del lago</td><td>1 h 30 min</td><td>Fácil</td></tr>
+    <tr><td>Refugio alto</td><td>4 h</td><td>Moderada</td></tr>
+    <tr><td>Paso del hielo</td><td>6 h 45 min</td><td>Difícil, solo con guía</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Código</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the sentence translates, <code>git status</code> inside it stays exactly as written, and the
+  whole <code>pre</code> block below stays Spanish (comments included).
+</p>
+<p>Ejecuta <code>git status</code> antes de guardar los cambios.</p>
+<pre><code># Comprueba el estado del refugio
+estado = consultar("refugio alto")
+imprimir(estado)</code></pre>
+
+<h2>5. Un formulario</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the labels and the button's word translate. Whatever is typed in the fields, and the
+  placeholder text, stays as it is. The dashed box below is editable text and stays Spanish.
+</p>
+<form onsubmit="return false">
+  <label>Nombre <input type="text" placeholder="Por ejemplo, Lucía" value="Lucía Fernández"></label>
+  <label>¿Qué ruta prefieres?
+    <select><option>Mirador del lago</option><option>Refugio alto</option></select>
+  </label>
+  <label>Mensaje <textarea rows="2">Quiero reservar dos plazas.</textarea></label>
+  <button type="button">Enviar la reserva</button>
+</form>
+<p contenteditable="true">Este texto se puede editar, así que no debería traducirse.</p>
+
+<h2>6. Lo que no se traduce</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the first two paragraphs stay Spanish (<code>translate="no"</code> and <code>class="notranslate"</code>);
+  the brand name inside the third stays "Nieve Clara".
+</p>
+<p translate="no">Este párrafo pide no ser traducido.</p>
+<p class="notranslate">Este también, con la clase que usa Google.</p>
+<p>Nuestra tienda se llama <span translate="no">Nieve Clara</span> y abre todos los días.</p>
+
+<h2>7. Otros idiomas en la misma página</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the English paragraph is left alone (it's already in your language). The German quote: open
+  question for step 2, either translated from German or left as is; write down what happens.
+</p>
+<p lang="en">This paragraph is already in English and should not change.</p>
+<blockquote lang="de"><p>„Der Schnee setzt sich langsam, und alles wird still.“</p></blockquote>
+
+<h2>8. Un párrafo muy largo</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> translated whole and sensibly, not repeated or cut off. (Apple's model can repeat itself on very
+  long inputs, so Firn splits long blocks by sentence.)
+</p>
+<p>El glaciar se formó durante miles de años, cuando la nieve que caía cada invierno no llegaba a derretirse en verano. Con el tiempo, las capas se compactaron hasta convertirse en neviza, un material intermedio entre la nieve y el hielo. Los científicos estudian estas capas para conocer el clima del pasado, porque cada una guarda pequeñas burbujas de aire de la época en que se formó. Hoy muchos glaciares retroceden, y los pueblos de montaña que dependen de su agua miran el futuro con preocupación. Aun así, quienes los visitan describen una calma difícil de encontrar en otro lugar. Por la mañana, el aire es tan limpio que se oyen las campanas de un pueblo que está a varios kilómetros. A mediodía, la luz sobre el hielo es casi blanca y obliga a entrecerrar los ojos. Por la tarde, las sombras se alargan y el glaciar se vuelve azul, primero claro y después profundo. Quien baja al anochecer suele hacerlo en silencio, como si no quisiera despertar a la montaña. Y al día siguiente, casi siempre, alguien del grupo pregunta cuándo podrán volver.</p>
+
+<h2>9. Texto que parece código peligroso</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the text below translates, and the angle-bracket part shows as plain characters. Nothing runs, no
+  image or alert appears. (Translations go back as text, never as HTML.)
+</p>
+<p>Escribe &lt;img src=x onerror=alert(1)&gt; en el buscador y verás que no pasa nada.</p>
+
+<h2>10. Un marco</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> the frame stays Spanish (frames aren't translated at first).
+</p>
+<iframe title="Marco de prueba" srcdoc="&lt;html lang='es'&gt;&lt;body style='font:16px/1.5 -apple-system,sans-serif;margin:14px'&gt;&lt;p&gt;Este texto vive dentro de un marco y no debería traducirse por ahora.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>
+
+<h2 id="destino">11. Texto que llega al desplazarse</h2>
+<p class="note" lang="en" translate="no">
+  <b>Expect:</b> on a translated page, new paragraphs arrive in Spanish as you scroll to the end (or press the
+  button), then turn English within a moment or two. "Show Original" turns them back as well.
+</p>
+<div id="more"></div>
+<button type="button" id="add">Añadir otro párrafo</button>
+<p id="end" aria-hidden="true" style="height:1px;margin:0"></p>
+
+</main>
+<script>
+// Paragraphs added later, as a page that loads more while scrolling.
+const lines = [
+  "Al llegar al refugio, el guardián nos ofreció una sopa caliente y un rincón junto a la estufa.",
+  "Afuera empezó a nevar de nuevo, con copos grandes y lentos que apenas hacían ruido.",
+  "Alguien sacó una baraja de cartas y la tarde pasó sin que nadie mirara el reloj.",
+  "Antes de dormir, salimos un momento a ver las estrellas, que parecían más cerca que nunca.",
+  "Por la mañana, el valle entero estaba blanco y el camino de vuelta había desaparecido.",
+  "El guardián se rió y nos dijo que no nos preocupáramos, que la montaña siempre devuelve el camino."
+];
+let next = 0;
+function addLine() {
+  const p = document.createElement("p");
+  p.textContent = lines[next % lines.length];
+  next += 1;
+  document.getElementById("more").appendChild(p);
+}
+document.getElementById("add").addEventListener("click", addLine);
+new IntersectionObserver((entries) => {
+  if (entries.some((e) => e.isIntersecting) && next < 12) addLine();
+}).observe(document.getElementById("end"));
+</script>
+</body>
+</html>

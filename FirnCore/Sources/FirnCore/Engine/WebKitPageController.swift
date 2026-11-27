@@ -43,6 +43,8 @@ final class WebKitPageController: NSObject, PageController {
     /// A new page came in (`PageFrame` asks it again).
     @ObservationIgnored var onCommit: (@MainActor () -> Void)?
     #endif
+    /// A translated page added text (`PageTranslation`).
+    @ObservationIgnored var onPageTextChange: (@MainActor () -> Void)?
 
     @ObservationIgnored let webView: WKWebView
     /// Only pages a site opened as popups may close themselves.
@@ -135,6 +137,7 @@ final class WebKitPageController: NSObject, PageController {
         SoundWatcher.shared.watch(webView, for: self)
         DraftWatcher.shared.watch(webView, for: self)
         SignInWatcher.shared.watch(webView, for: self)
+        PageTextWatcher.shared.watch(webView, for: self)
         #if os(macOS)
         ClickRecorder.start() // Before the first click, or it would be missed.
         #endif
@@ -680,6 +683,25 @@ extension WebKitPageController {
         let result = try? await webView.callAsyncJavaScript(
             script, arguments: ["input": input], in: nil, contentWorld: Self.firnWorld)
         return (result as? NSNumber)?.intValue ?? 0
+    }
+
+    /// Text the page added since the last read or look, while translated,
+    /// and where it's scrolled to; nil if the page isn't there to ask.
+    func readMorePageText() async -> PageText.More? {
+        guard let pageURL = url, WebAddress.isWebURL(pageURL), loadError == nil,
+              let script = PageText.script("more") else { return nil }
+        let result = try? await webView.callAsyncJavaScript(
+            script, arguments: ["input": NSNull()], in: nil, contentWorld: Self.firnWorld)
+        guard url == pageURL else { return nil }
+        return PageText.more(from: result)
+    }
+
+    /// The translation's script says the page added text (main frame only,
+    /// from the page on screen; `PageTextWatcher`).
+    func pageTextChanged(from origin: WKSecurityOrigin) {
+        guard let url, WebAddress.isWebURL(url), origin.protocol == url.scheme?.lowercased(),
+              origin.host.lowercased() == url.host()?.lowercased() else { return }
+        onPageTextChange?()
     }
 
     /// Show Original: every translated unit and the title back as they were.

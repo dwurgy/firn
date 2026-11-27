@@ -23,6 +23,7 @@ final class FakePage: PageController {
     var sendsOtherSitesToLookout = false
     var offersSplitView = false
     var blocksContent: (@MainActor (URL) -> Bool)?
+    var onPageTextChange: (@MainActor () -> Void)?
 
     init(dataStoreID: UUID) { self.dataStoreID = dataStoreID }
 

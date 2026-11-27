@@ -150,3 +150,33 @@ final class SignInWatcher: NSObject, WKScriptMessageHandler {
         page.heard(heard, from: message.frameInfo.securityOrigin)
     }
 }
+
+/// Hears the translation's script say the page added text (`PageText.js`,
+/// only while a page is translated). It has no user script: the observer
+/// starts with a translation's read. Like the watchers above, its handler
+/// lives only in Firn's content world, so a page can't post to it; even so,
+/// a message counts only from the main frame, as the exact word "changed",
+/// and the page checks the frame's real origin.
+@MainActor
+final class PageTextWatcher: NSObject, WKScriptMessageHandler {
+    static let shared = PageTextWatcher()
+    static let name = "firnPageTextChanged"
+
+    private let controllers = NSHashTable<WKUserContentController>.weakObjects()
+    private let pages = NSMapTable<WKWebView, WebKitPageController>.weakToWeakObjects()
+
+    func watch(_ webView: WKWebView, for page: WebKitPageController) {
+        pages.setObject(page, forKey: webView)
+        let controller = webView.configuration.userContentController
+        guard !controllers.contains(controller) else { return }
+        controllers.add(controller)
+        controller.add(self, contentWorld: WebKitPageController.firnWorld, name: Self.name)
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.world.name == WebKitPageController.firnWorld.name,
+              message.body as? String == "changed",
+              let webView = message.webView, let page = pages.object(forKey: webView) else { return }
+        page.pageTextChanged(from: message.frameInfo.securityOrigin)
+    }
+}

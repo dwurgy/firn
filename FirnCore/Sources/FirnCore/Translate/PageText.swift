@@ -37,9 +37,36 @@ public enum PageText {
         /// screen can go first.
         public let top: Double
         public let runs: [Run]
+        /// The language its block says it's in, when that isn't the page's
+        /// (a German quote on an English page); nil for the page's own.
+        public var declaredLanguage: String? = nil
 
         public var text: String { runs.map(\.text).joined() }
         public var pieces: [Int] { runs.compactMap(\.piece) }
+    }
+
+    /// The part of the page on screen, in points from the top.
+    public struct View: Equatable, Sendable {
+        public var top: Double
+        public var height: Double
+
+        public init(top: Double = 0, height: Double = 0) {
+            self.top = top
+            self.height = height
+        }
+
+        var bottom: Double { top + height }
+    }
+
+    /// Text the page added since the last look, and where it's scrolled to.
+    public struct More: Equatable, Sendable {
+        public let view: View
+        public let units: [Unit]
+
+        public init(view: View, units: [Unit]) {
+            self.view = view
+            self.units = units
+        }
     }
 
     /// What the page holds to translate.
@@ -50,6 +77,8 @@ public enum PageText {
         /// Some of its text, for language detection.
         public let sample: String
         public let units: [Unit]
+        /// The part of the page on screen as it was read.
+        public var view = View()
 
         /// The page's language: its `lang`, checked against its text.
         public var language: Locale.Language? {
@@ -93,7 +122,25 @@ public enum PageText {
         let declared = (fields["lang"] as? String).flatMap(languageTag)
         let title = ReaderArticle.line(fields["title"], limit: 1000) ?? ""
         let sample = String(((fields["sample"] as? String) ?? "").prefix(3000))
-        return Snapshot(declaredLanguage: declared, title: title, sample: sample, units: units)
+        return Snapshot(declaredLanguage: declared, title: title, sample: sample, units: units,
+                        view: view(from: fields["view"]))
+    }
+
+    /// Reads the script's `more()` answer, or nil if it isn't the shape
+    /// expected.
+    static func more(from result: Any?) -> More? {
+        guard let fields = result as? [String: Any], let rawUnits = fields["units"] as? [Any],
+              rawUnits.count <= maxUnits else { return nil }
+        return More(view: view(from: fields["view"]), units: rawUnits.compactMap(unit(from:)))
+    }
+
+    private static func view(from raw: Any?) -> View {
+        guard let fields = raw as? [String: Any] else { return View() }
+        func number(_ key: String) -> Double {
+            guard let value = (fields[key] as? NSNumber)?.doubleValue, value.isFinite else { return 0 }
+            return min(max(value, 0), 10_000_000)
+        }
+        return View(top: number("top"), height: number("height"))
     }
 
     private static func unit(from raw: Any) -> Unit? {
@@ -116,7 +163,8 @@ public enum PageText {
                 runs.append(Run(piece: k, text: fixed ? text : collapsed(text), isFixed: fixed))
             }
         }
-        return Unit(id: id, top: top.isFinite ? top : 0, runs: runs)
+        let lang = (fields["lang"] as? String).flatMap(languageTag)
+        return Unit(id: id, top: top.isFinite ? top : 0, runs: runs, declaredLanguage: lang)
     }
 
     /// Whitespace runs become one space, as the page shows them.

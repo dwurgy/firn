@@ -5,7 +5,7 @@ import Observation
 /// One web page, as the rest of Firn sees it. Views and app logic talk to
 /// this, never to WebKit (CLAUDE.md, Architecture: the engine layer).
 @MainActor
-public protocol PageController: AnyObject, Observable {
+public protocol PageController: AnyObject, Observable, PageTextAccess {
     /// The committed address: what's really on screen, never a pending one.
     var url: URL? { get }
     var title: String { get }
@@ -74,14 +74,7 @@ public protocol PageController: AnyObject, Observable {
     /// The page's article, read in Firn's world from a copy of the page;
     /// nil if it isn't one, or the page moved on while reading.
     func readArticle() async -> ReaderArticle?
-    /// The page's text to translate, read in Firn's world (`PageText`);
-    /// nil if it isn't a loaded web page. Puts back any translation first.
-    func readPageText() async -> PageText.Snapshot?
-    /// Writes translations of the units last read, as plain text, marked
-    /// as `language`, and the tab's title if given; how many went in.
-    func writePageText(_ translations: [PageText.Translation], language: String, title: String?) async -> Int
-    /// Show Original: the page's own words and title back, exactly.
-    func restorePageText() async
+    // Translating: `PageTextAccess` (PageTranslation.swift).
     /// Whether Reader is showing this page's article. Never saved: a page
     /// always opens with Reader off, and leaving the page leaves Reader.
     var isReading: Bool { get }
@@ -244,6 +237,7 @@ public extension PageController {
     var isArticle: Bool { false }
     func readArticle() async -> ReaderArticle? { nil }
     func readPageText() async -> PageText.Snapshot? { nil }
+    func readMorePageText() async -> PageText.More? { nil }
     func writePageText(_ translations: [PageText.Translation], language: String, title: String?) async -> Int { 0 }
     func restorePageText() async {}
     var isReading: Bool { false }

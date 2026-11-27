@@ -23,6 +23,13 @@ if (!globalThis.firnPageText) {
     const LETTER = /\p{L}/u;
 
     const state = { units: [], title: null, titleWritten: null, written: new Set() };
+    // Every node already in a unit, or written by Firn: a later look for
+    // new text (more()) passes over them.
+    let known = new WeakSet();
+    // While a page is translated, an observer notes text the page adds and
+    // tells Firn, at most about once a second (PageScriptWatchers.swift).
+    let observer = null, dirty = false, timer = null, lastPost = 0;
+    const POST_GAP = 1000;
     // Each translated block's own lang, as it was, to put back.
     let langs = new Map();
 
@@ -59,6 +66,44 @@ if (!globalThis.firnPageText) {
     let total = 0;
     let full = false;
 
+    // The language a block says it's in, if it differs from the page's own
+    // (a quote in German on an English page); a lang Firn set doesn't count.
+    function ownLang(block) {
+        for (let e = block; e && e !== document.documentElement; e = e.parentElement) {
+            if (!e.hasAttribute || !e.hasAttribute('lang')) continue;
+            if (langs.has(e)) { if (langs.get(e) === null) continue; return String(langs.get(e)); }
+            return String(e.getAttribute('lang'));
+        }
+        return '';
+    }
+
+    function view() {
+        return { top: window.scrollY || 0, height: window.innerHeight || 0 };
+    }
+
+    function post() {
+        timer = null;
+        lastPost = Date.now();
+        try { window.webkit.messageHandlers.firnPageTextChanged.postMessage('changed'); } catch (e) {}
+    }
+    function noticed(records) {
+        if (records.length === 0) return;
+        dirty = true;
+        if (timer === null) timer = setTimeout(post, Math.max(300, POST_GAP - (Date.now() - lastPost)));
+    }
+    function watch() {
+        if (observer || !document.body) return;
+        observer = new MutationObserver(noticed);
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    function unwatch() {
+        if (observer) { observer.disconnect(); observer = null; }
+        if (timer !== null) { clearTimeout(timer); timer = null; }
+        dirty = false;
+    }
+    // Firn's own writes aren't the page adding text.
+    function ignoreOwn() { if (observer) observer.takeRecords(); }
+
     function finish(block, nodes) {
         if (full || nodes.length === 0) return;
         const runs = [];
@@ -82,12 +127,13 @@ if (!globalThis.firnPageText) {
         if (!letters || runs.length > MAX_RUNS) return;
         if (state.units.length >= MAX_UNITS || total + size > MAX_TOTAL) { full = true; return; }
         total += size;
+        for (const n of nodes) known.add(n);
         const parent = nodes[0].parentNode;
         const top = block.getBoundingClientRect ? block.getBoundingClientRect().top + window.scrollY : 0;
         state.units.push({
             id: state.units.length, block: block, parent: parent, nodes: nodes,
             after: nodes[nodes.length - 1].nextSibling, pieces: pieces, current: null,
-            out: { id: state.units.length, top: isFinite(top) ? top : 0, runs: runs }
+            out: { id: state.units.length, top: isFinite(top) ? top : 0, runs: runs, lang: ownLang(block) }
         });
     }
 
@@ -95,7 +141,9 @@ if (!globalThis.firnPageText) {
         if (full || depth > MAX_DEPTH) return;
         let nodes = [];
         for (const n of Array.from(el.childNodes)) {
-            if (n.nodeType === Node.TEXT_NODE) {
+            if (known.has(n)) {
+                finish(el, nodes); nodes = [];
+            } else if (n.nodeType === Node.TEXT_NODE) {
                 nodes.push(n);
             } else if (n.nodeType !== Node.ELEMENT_NODE) {
                 finish(el, nodes); nodes = [];
@@ -113,6 +161,7 @@ if (!globalThis.firnPageText) {
     }
 
     function restore() {
+        unwatch();
         let count = 0;
         for (const id of state.written) {
             const u = state.units[id];
@@ -175,6 +224,7 @@ if (!globalThis.firnPageText) {
             for (const n of u.nodes) if (n.nodeType === Node.TEXT_NODE) u.parent.removeChild(n);
             for (const n of made) u.parent.insertBefore(n, u.after);
             u.current = made;
+            for (const n of made) known.add(n);
             state.written.add(u.id);
             if (lang && !langs.has(u.block) && u.block !== document.body) {
                 langs.set(u.block, u.block.getAttribute('lang'));
@@ -182,6 +232,7 @@ if (!globalThis.firnPageText) {
             }
             count += 1;
         }
+        ignoreOwn();
         if (typeof input.title === 'string' && input.title.length > 0 && input.title.length <= 1000) {
             if (state.title === null) state.title = document.title;
             document.title = input.title;
@@ -193,8 +244,9 @@ if (!globalThis.firnPageText) {
     function read() {
         restore();
         state.units = []; state.title = document.title; state.titleWritten = null;
-        total = 0; full = false;
+        total = 0; full = false; known = new WeakSet();
         if (document.body) visit(document.body, 0);
+        watch();
         let sample = '';
         for (const u of state.units) {
             if (sample.length > 2000) break;
@@ -205,9 +257,21 @@ if (!globalThis.firnPageText) {
             lang: String(document.documentElement.getAttribute('lang') || ''),
             title: String(document.title || ''),
             sample: sample.slice(0, 3000),
+            view: view(),
             units: state.units.map((u) => u.out)
         };
     }
 
-    globalThis.firnPageText = { read: read, write: write, restore: restore };
+    // Text the page added since the last look, while translated, and where
+    // the page is scrolled to. Walks the page again only if it changed.
+    function more() {
+        if (!observer) return { view: view(), units: [] };
+        if (!dirty) return { view: view(), units: [] };
+        dirty = false;
+        const from = state.units.length;
+        if (document.body) visit(document.body, 0);
+        return { view: view(), units: state.units.slice(from).map((u) => u.out) };
+    }
+
+    globalThis.firnPageText = { read: read, more: more, write: write, restore: restore };
 }

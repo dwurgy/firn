@@ -1,6 +1,6 @@
 # iCloud sync: the plan
 
-Planned 2026-11-13 with David. Built now, ahead of the iPhone's remaining phases (it was phase 9 in `docs/IOS-PLAN.md`). Opus throughout. Work on the `ios` branch, where both apps build. This is the first work that changes the Mac app for the iPhone's sake, so every Mac change is named in its step.
+Planned 2026-11-13 with David. Built now, ahead of the iPhone's remaining phases (it was phase 9 in `docs/IOS-PLAN.md`). Opus throughout. Work on `main`, where both apps build (the `ios` branch was merged in, 2026-11-27). This is the first work that changes the Mac app for the iPhone's sake, so every Mac change is named in its step.
 
 The aim (David): Apple users should find it seamless, using every piece of Apple's encrypted sync that fits.
 

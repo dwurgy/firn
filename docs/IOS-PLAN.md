@@ -72,7 +72,7 @@ Rule for every one of these: the Mac's code lines stay as they are. iOS gets a n
 - `git diff main -- Firn/` is empty, except the files moved to `Shared/` (checked line by line: only `#if` additions).
 - You open the Mac Firn built from this branch and use it for a minute: nothing looks or acts differently.
 
-**Branches.** Mac fixes keep happening on `main` in their own sessions. The `ios` branch takes `main` in regularly. I'd suggest merging phase 0's small FirnCore changes into `main` early (after your check), so later Mac fixes to the engine don't collide with them. Nothing else from `ios` goes to `main` until you decide.
+**Branches.** *Since 2026-11-27 (David): `ios` is merged into `main` and retired; both apps live and release from `main`. What follows is how it was.* Mac fixes keep happening on `main` in their own sessions. The `ios` branch takes `main` in regularly. I'd suggest merging phase 0's small FirnCore changes into `main` early (after your check), so later Mac fixes to the engine don't collide with them. Nothing else from `ios` goes to `main` until you decide.
 
 ---
 

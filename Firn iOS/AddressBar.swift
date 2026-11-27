@@ -88,6 +88,12 @@ struct AddressBar: View {
     private static let pointSlop: CGFloat = 10
 
     private var page: (any PageController)? { store.activeTab?.page }
+    /// The page on screen's translating, absent while Reader is on (as
+    /// on the Mac) and before iOS 26.4; nil when the page isn't offered.
+    private var translator: PageTranslator? {
+        guard let page, !page.isReading, let translator = page.translator, translator.actionName != nil else { return nil }
+        return translator
+    }
     private var space: String { store.activeSpace.color }
     private var engine: SearchEngine { SearchEngine.chosen }
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
@@ -177,6 +183,21 @@ struct AddressBar: View {
                     ReaderStyle.shared.summarize(page, space: space)
                 })
             }
+        }
+        // Translate, just under them, on any page in a language the person
+        // doesn't read (design, 2026-11-27). The iPhone has no mark, so the
+        // second line says what the Mac's mark does.
+        if let translator, let title = translator.actionName {
+            let detail: String? = switch translator.state {
+            case .translating: "Translating…"
+            case .translated: translator.sourceName.map { "Translated from \($0)" }
+            case .failed: "Couldn't translate this page"
+            case .none, .offered: nil
+            }
+            reading.append(Entry(key: "translate", title: title, detail: detail,
+                                 spoken: detail.map { "\(title), \($0)" }, icon: .symbol("translate")) {
+                translator.toggle()
+            })
         }
         let share = [Entry(key: "share", title: "Share…", icon: .symbol("square.and.arrow.up")) { ShareSheet.present(url) }]
         if tab.place == .open {
@@ -395,6 +416,9 @@ struct AddressBar: View {
             add("summarize", "Summarize", ["summary", "article", "reader", "tl;dr", "apple intelligence"],
                 when: (page.isArticle || page.isReading) && ArticleSummarizer.isOffered) {
                 ReaderStyle.shared.summarize(page, space: space)
+            }
+            if let translator, let name = translator.actionName {
+                add("translate", name, translator.searchWords) { translator.toggle() }
             }
             add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)

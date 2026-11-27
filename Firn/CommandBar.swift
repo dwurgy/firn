@@ -318,9 +318,7 @@ private struct CommandBar: View {
         }
         if let name = window.translateName, let translator = window.frontTranslator {
             // Found by "translate", or either language's name, in yours or its own.
-            let languages = [translator.source, translator.target].compactMap { $0 }
-            let names = languages.map(PageTranslator.name) + languages.compactMap(PageTranslator.ownName)
-            add("translate", name, ["translate", "translation", "language", "original"] + names) {
+            add("translate", name, translator.searchWords) {
                 window.toggleTranslation()
                 window.focusPage()
             }

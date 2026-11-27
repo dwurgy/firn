@@ -80,6 +80,34 @@ public final class PageTranslator {
             ?? id
     }
 
+    /// What a menu row or the command bar says, or nil when the page isn't
+    /// offered: "Translate to English", then "Show Original" once started.
+    public var actionName: String? {
+        guard let target = targetName else { return nil }
+        switch state {
+        case .none: return nil
+        case .offered, .failed: return "Translate to \(target)"
+        case .translating, .translated: return "Show Original"
+        }
+    }
+
+    /// Words the command bar finds the action by: "translate", and either
+    /// language's name, in the person's language and its own.
+    public var searchWords: [String] {
+        let languages = [source, target].compactMap { $0 }
+        return ["translate", "translation", "language", "original"]
+            + languages.map(Self.name) + languages.compactMap(Self.ownName)
+    }
+
+    /// A menu row or the command bar: translate the page, or put it back.
+    public func toggle() {
+        switch state {
+        case .none: break
+        case .offered, .failed: translate()
+        case .translating, .translated: showOriginal()
+        }
+    }
+
     /// The language's name in that language ("español"), for the command bar.
     public static func ownName(_ language: Locale.Language) -> String? {
         let id = language.minimalIdentifier

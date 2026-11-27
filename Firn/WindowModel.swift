@@ -518,25 +518,11 @@ final class WindowModel {
 
     /// What View's row and the command bar say, or nil when the page isn't
     /// offered: "Translate to English", then "Show Original" once started.
-    var translateName: String? {
-        guard let translator = frontTranslator, let target = translator.targetName else { return nil }
-        switch translator.state {
-        case .none: return nil
-        case .offered, .failed: return "Translate to \(target)"
-        case .translating, .translated: return "Show Original"
-        }
-    }
+    var translateName: String? { frontTranslator?.actionName }
 
     /// The mark, View's row, or the command bar: translate the page on
     /// screen, or put it back.
-    func toggleTranslation() {
-        guard let translator = frontTranslator else { return }
-        switch translator.state {
-        case .none: break
-        case .offered, .failed: translator.translate()
-        case .translating, .translated: translator.showOriginal()
-        }
-    }
+    func toggleTranslation() { frontTranslator?.toggle() }
 
     // MARK: Blocking
 

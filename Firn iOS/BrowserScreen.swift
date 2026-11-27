@@ -417,6 +417,8 @@ struct BrowserScreen: View {
             if sheets.newSpace || sheets.settings || sheets.downloads || sheets.history { editing = false }
         }
         .sheet(isPresented: $sheets.newSpace) { NewSpaceSheet(store: store) }
+        // The system's sheet to download a translation's languages.
+        .translationDownloads(for: store.activeTab?.page?.translator)
         .sheet(isPresented: $sheets.settings) {
             // Privacy Policy opens as History's visits do.
             SettingsSheet(store: store, sync: sync) { url in

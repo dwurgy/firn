@@ -88,11 +88,19 @@ struct AddressBar: View {
     private static let pointSlop: CGFloat = 10
 
     private var page: (any PageController)? { store.activeTab?.page }
-    /// The page on screen's translating, absent while Reader is on (as
-    /// on the Mac) and before iOS 26.4; nil when the page isn't offered.
+    /// The page on screen's translating; nil when the page isn't offered,
+    /// and before iOS 26.4. In Reader's menu too (David, 2026-11-27: on an
+    /// iPhone most articles are read in Reader), where it closes Reader.
     private var translator: PageTranslator? {
-        guard let page, !page.isReading, let translator = page.translator, translator.actionName != nil else { return nil }
+        guard let page, let translator = page.translator, translator.actionName != nil else { return nil }
         return translator
+    }
+
+    /// Translate, or put the page back: Reader closes first, since it reads
+    /// a copy of the page that translating doesn't reach.
+    private func toggleTranslation(_ translator: PageTranslator) {
+        if let page, page.isReading { ReaderStyle.shared.toggle(page, space: space) }
+        translator.toggle()
     }
     private var space: String { store.activeSpace.color }
     private var engine: SearchEngine { SearchEngine.chosen }
@@ -196,7 +204,7 @@ struct AddressBar: View {
             }
             reading.append(Entry(key: "translate", title: title, detail: detail,
                                  spoken: detail.map { "\(title), \($0)" }, icon: .symbol("translate")) {
-                translator.toggle()
+                toggleTranslation(translator)
             })
         }
         let share = [Entry(key: "share", title: "Share…", icon: .symbol("square.and.arrow.up")) { ShareSheet.present(url) }]
@@ -418,7 +426,7 @@ struct AddressBar: View {
                 ReaderStyle.shared.summarize(page, space: space)
             }
             if let translator, let name = translator.actionName {
-                add("translate", name, translator.searchWords) { translator.toggle() }
+                add("translate", name, translator.searchWords) { toggleTranslation(translator) }
             }
             add("new-group", "New Group with This Tab", [], when: tab.groupID == nil && tab.place == .open) {
                 _ = store.newGroup(with: tab)
@@ -834,9 +842,20 @@ private struct AddressField: View {
     /// The address editing started from, so it alone shows no results.
     @State private var startedWith = ""
     @State private var selection: TextSelection?
-    /// "Reader available" is showing (see `sawArticle`).
-    @State private var readerNote = false
+    /// The note showing in the site's place ("Reader available", then
+    /// "Translation available"), and the ones waiting their turn.
+    @State private var note: BarNote?
+    @State private var waitingNotes: [BarNote] = []
     @State private var noteTask: Task<Void, Never>?
+    /// The translate symbol breathing while the page translates.
+    @State private var breathing = false
+
+    /// What the pill says for a moment after a page loads, as Safari's:
+    /// Reader's first, then translation's, about 1.6s each (David's
+    /// recording of Safari, 2026-11-27).
+    private enum BarNote: Equatable {
+        case reader, translation
+    }
 
     private var page: (any PageController)? { store.activeTab?.page }
     /// The address the page shows: one that failed to load comes first, as
@@ -981,6 +1000,7 @@ private struct AddressField: View {
         .onChange(of: isEditing) { startOrEndEditing() }
         .onChange(of: frontURL) { showRestingAddress() }
         .onChange(of: articleSighting, sawArticle)
+        .onChange(of: offerSighting, sawOffer)
         .onAppear(perform: showRestingAddress)
     }
 
@@ -991,26 +1011,40 @@ private struct AddressField: View {
     /// Show Reader is the first row; but while "Reader available" shows, a
     /// tap goes straight into Reader (David, 2026-11-13).
     private func pageMenuButton(_ page: any PageController) -> some View {
-        let reader = showsReaderNote || page.isReading
+        let icon = menuIcon(page)
         let color = Theme.spaceColor(store.activeSpace.color)
+        let translating = icon == .translate && page.translator?.state == .translating
         // Only opens: a hold already opened it, and the finger lifting
         // over the button mustn't close it again.
         return Button {
             guard barQuiet?.on != true else { return }
             if showsReaderNote, page.isArticle {
-                noteTask?.cancel()
-                readerNote = false
+                endNotes()
                 ReaderStyle.shared.toggle(page, space: store.activeSpace.color)
+            } else if showsTranslationNote, let translator = page.translator {
+                // "Translation available": a tap translates at once.
+                endNotes()
+                translator.toggle()
             } else {
                 menuOpen = true
             }
         } label: {
             ZStack {
-                if reader {
+                switch icon {
+                case .book:
                     ReaderBookIcon(isOn: page.isReading, color: color, off: Theme.ink,
                                    size: 19, lineWidth: 1.9)
                         .transition(.opacity)
-                } else {
+                case .translate:
+                    // Ink while offered or working (breathing; Reduce Motion:
+                    // dimmed), the space's color once translated, as the
+                    // Mac's mark and Reader's book.
+                    Image(systemName: "translate")
+                        .font(BarButton.symbolFont)
+                        .foregroundStyle(page.translator?.state == .translated ? color : Theme.ink)
+                        .opacity(translating ? (reduceMotion ? 0.5 : (breathing ? 0.35 : 1)) : 1)
+                        .transition(.opacity)
+                case .menu:
                     Image(systemName: "ellipsis")
                         .font(BarButton.symbolFont)
                         .foregroundStyle(Theme.ink)
@@ -1021,12 +1055,46 @@ private struct AddressField: View {
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.2), value: reader)
+        .animation(.easeOut(duration: 0.2), value: icon)
         .animation(.easeOut(duration: 0.2), value: page.isReading)
+        .animation(.easeOut(duration: 0.2), value: page.translator?.state)
+        .onChange(of: translating && !reduceMotion, initial: true) { _, breathes in
+            // Only while working: nothing moves once it's done.
+            if breathes {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { breathing = true }
+            } else {
+                withAnimation(.easeOut(duration: 0.2)) { breathing = false }
+            }
+        }
         .accessibilityLabel("Page Menu")
-        .accessibilityValue(page.isReading ? "Reader on" : reader ? "Reader available" : "")
+        .accessibilityValue(menuValue(page))
         .accessibilityHint(showsReaderNote ? "Opens Reader"
-                           : reader ? "Reader, share, or copy this page's link" : "Share or copy this page's link")
+                           : showsTranslationNote ? "Translates this page"
+                           : icon == .book ? "Reader, share, or copy this page's link" : "Share or copy this page's link")
+    }
+
+    private enum MenuIcon: Equatable { case menu, book, translate }
+
+    /// What the page menu's button shows, as Safari's: Reader's book while
+    /// Reader is on or "Reader available" shows; the translate symbol while
+    /// "Translation available" shows, while translating, and once
+    /// translated (David, 2026-11-27); ••• otherwise.
+    private func menuIcon(_ page: any PageController) -> MenuIcon {
+        if page.isReading || showsReaderNote { return .book }
+        if showsTranslationNote { return .translate }
+        if let state = page.translator?.state, state == .translating || state == .translated { return .translate }
+        return .menu
+    }
+
+    private func menuValue(_ page: any PageController) -> String {
+        if page.isReading { return "Reader on" }
+        if showsReaderNote { return "Reader available" }
+        if showsTranslationNote { return "Translation available" }
+        switch page.translator?.state {
+        case .translating: return "Translating"
+        case .translated: return page.translator?.sourceName.map { "Translated from \($0)" } ?? "Translated"
+        default: return ""
+        }
     }
 
     /// The site at rest, as Safari shows it: 16pt rather than the field's
@@ -1038,6 +1106,11 @@ private struct AddressField: View {
             Group {
                 if showsReaderNote {
                     Text("Reader available").foregroundStyle(Theme.ink)
+                } else if showsTranslationNote {
+                    // A little smaller rather than cut short (Safari cuts it
+                    // to "Translation Avai…").
+                    Text("Translation available").foregroundStyle(Theme.ink)
+                        .minimumScaleFactor(0.85)
                 } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
                 } else if notSecure {
@@ -1082,7 +1155,7 @@ private struct AddressField: View {
             // next move (David's recording, 2026-11-23).
             .frame(width: compact ? compactTextWidth : restTextWidth)
             // The name and "Reader available" cross-fade, never slide.
-            .id(showsReaderNote)
+            .id(note.map { "\($0)" } ?? "")
             .transition(.opacity.animation(.easeOut(duration: 0.3)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -1121,9 +1194,15 @@ private struct AddressField: View {
     /// "Reader available" in the site's place, for a moment after a page
     /// turns out to be an article, as Safari says it; never in the small
     /// pill, and gone once Reader is on.
-    private var showsReaderNote: Bool {
-        readerNote && !compact && !typingNewTab && page?.isReading == false
+    private var showsReaderNote: Bool { note == .reader && notesShow }
+
+    /// "Translation available", just after Reader's (or alone), for a page
+    /// in a language the person doesn't read; gone once it's translating.
+    private var showsTranslationNote: Bool {
+        note == .translation && notesShow && page?.translator?.state == .offered
     }
+
+    private var notesShow: Bool { !compact && !typingNewTab && page?.isReading == false }
 
     /// The tab on screen, and whether its page reads as an article: the
     /// note shows when the same tab's page becomes one, not on a switch to
@@ -1138,17 +1217,81 @@ private struct AddressField: View {
     }
 
     private func sawArticle(_ old: ArticleSighting, _ new: ArticleSighting) {
-        noteTask?.cancel()
-        guard new.tab == old.tab, !old.isArticle, new.isArticle else {
-            readerNote = false
+        guard new.tab == old.tab else { return endNotes() }
+        guard !old.isArticle, new.isArticle else {
+            // No longer an article (another page): its note goes.
+            if !new.isArticle { drop(.reader) }
             return
         }
-        readerNote = true
-        noteTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            readerNote = false
+        // Reader's note comes first, as Safari's, even if translation's
+        // was found a moment sooner and hasn't shown yet.
+        show(.reader, first: true)
+    }
+
+    /// The same for the translation's offer: a new page in another
+    /// language, on the same tab.
+    private struct OfferSighting: Equatable {
+        let tab: UUID?
+        let offered: Bool
+    }
+
+    private var offerSighting: OfferSighting {
+        OfferSighting(tab: store.activeTab?.id, offered: page?.translator?.target != nil)
+    }
+
+    private func sawOffer(_ old: OfferSighting, _ new: OfferSighting) {
+        guard new.tab == old.tab else { return endNotes() }
+        if !new.offered { return drop(.translation) }
+        if !old.offered { show(.translation, first: false) }
+    }
+
+    /// Shows `kind` now, or after the note showing.
+    private func show(_ kind: BarNote, first: Bool) {
+        guard note != kind, !waitingNotes.contains(kind) else { return }
+        if note == nil {
+            note = kind
+            runNotes()
+        } else if first {
+            waitingNotes.insert(kind, at: 0)
+        } else {
+            waitingNotes.append(kind)
         }
+    }
+
+    /// Each note holds 1.6s, then the next cross-fades in, then the site.
+    private func runNotes() {
+        noteTask?.cancel()
+        noteTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard !Task.isCancelled else { return }
+            // A translation already started needs no note.
+            if page?.translator?.state != .offered { waitingNotes.removeAll { $0 == .translation } }
+            if waitingNotes.isEmpty {
+                note = nil
+            } else {
+                note = waitingNotes.removeFirst()
+                runNotes()
+            }
+        }
+    }
+
+    private func drop(_ kind: BarNote) {
+        waitingNotes.removeAll { $0 == kind }
+        guard note == kind else { return }
+        if waitingNotes.isEmpty {
+            noteTask?.cancel()
+            note = nil
+        } else {
+            note = waitingNotes.removeFirst()
+            runNotes()
+        }
+    }
+
+    private func endNotes() {
+        noteTask?.cancel()
+        noteTask = nil
+        note = nil
+        waitingNotes = []
     }
 
     /// How far the small pill's middle sits below the field's.
@@ -1167,7 +1310,7 @@ private struct AddressField: View {
     /// for one a little too long, as Safari's (never under 0.9; past that
     /// it's cut short). "Reader available" and a name that fits aren't.
     private var restTextScale: CGFloat {
-        guard !showsReaderNote, restWidth > 0, labelWidth > restWidth else { return 1 }
+        guard !showsReaderNote, !showsTranslationNote, restWidth > 0, labelWidth > restWidth else { return 1 }
         return max(restWidth / labelWidth, 0.9)
     }
 

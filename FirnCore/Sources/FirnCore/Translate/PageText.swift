@@ -370,7 +370,13 @@ public enum PageLanguage {
             let same = supported.filter { $0.languageCode == language.languageCode }
             guard let first = same.first else { continue }
             return same.first { $0.region != nil && $0.region == language.region }
+                // Not the person's own region: the plain language in their
+                // script ("en", "zh" for Simplified), never whichever regional
+                // one the list starts with (every English is Latin, so the
+                // script alone would pick "en-IN" for someone in the US).
+                ?? same.first { $0.region == nil && $0.script == language.script }
                 ?? same.first { $0.script != nil && $0.script == language.script }
+                ?? same.first { $0.region == nil }
                 ?? first
         }
         return nil

@@ -101,6 +101,12 @@ struct PageTextTests {
         #expect(PageLanguage.offer(page: spanish, preferred: ["xx", "fr-CA"], supported: supported)?.languageCode == "fr")
         #expect(PageLanguage.offer(page: Locale.Language(identifier: "ja"), preferred: ["en"], supported: supported) == nil)
         #expect(PageLanguage.offer(page: spanish, preferred: ["xx"], supported: supported) == nil)
+        // The device's list starts with a regional English: someone in the
+        // US or Zimbabwe is offered plain English, not English (India).
+        let device = ["en-IN", "es-CL", "en-CA", "es", "en-GB", "en", "zh-HK", "zh"].map(Locale.Language.init(identifier:))
+        #expect(PageLanguage.offer(page: spanish, preferred: ["en-US"], supported: device)?.minimalIdentifier == "en")
+        #expect(PageLanguage.offer(page: spanish, preferred: ["en-ZW"], supported: device)?.minimalIdentifier == "en")
+        #expect(PageLanguage.offer(page: spanish, preferred: ["en-CA"], supported: device)?.region?.identifier == "CA")
     }
 }
 

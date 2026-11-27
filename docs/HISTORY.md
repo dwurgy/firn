@@ -573,6 +573,29 @@ After the iPhone's Basecamp tiles went to iOS's own glass (David: "pretty cool")
 
 **Frosty, no tint, as the iPhone (David, 2026-11-18: plain glass "too clear and bubbly"):** every Mac glass (`FrostGlass`, tiles, the empty-tile spot) now has the thinnest blur (`.ultraThinMaterial`) under regular glass, the iPhone's exact recipe. Builds; not yet seen. David (2026-11-18, from demo shots): fine. Still to see on his Mac: a tile on screen (ring and tint), hover, the press, drags, and groups forming and thawing; then step 4's look over.
 
+## Plan: translating pages (David, 2026-11-27)
+
+**Why:** a Spanish speaker asked for "translate this page." Whole pages, Mac first, then the iPhone (David). Opus, every step.
+
+**Decided:**
+- **On the device, with Apple's Translation framework.** The page's words never leave the device. Only the language packs come from Apple, once, through the system's own download prompt when the person picks a language. Safari's page translation isn't open to apps, so Firn builds its own on the framework. Simply absent where the framework can't do it (macOS 14 for certain; check 15).
+- **Offered by language, not by region.** Firn compares the page's language with the device's preferred languages (`Locale.preferredLanguages`): a page in one of them is never offered; any other page is offered "Translate to [the first preferred language the framework supports]". Someone with English and Spanish both listed never gets an offer for either.
+- **Quiet.** No banner, no popup: a menu item and at most a small mark, the way Reader's book appears. "Show Original" puts the page back exactly.
+- **Not at first:** "always translate this site," frames, and choosing another target language.
+
+**Open, for step 1:** the framework's exact availability (batch translation outside SwiftUI may need macOS 26; macOS 15 may need SwiftUI's `translationTask`), and how to keep sentences whole: translating each text piece alone ("Click" / "here" / "to continue" around a link) gives clumsy grammar, while translating each paragraph whole reads well but has to put its links back in the right place. Safari does this well; match it as closely as we can.
+
+**Steps:**
+1. **Research, a test page, and the design.** Check the API against Apple's docs (availability, language list, the download prompt, limits per request). `docs/translate-test.html`: inline links and bold mid-sentence, lists, a table, code, a form, text added while scrolling, a frame, `translate="no"`. The design (`docs/translate-design.html`, saved once approved): where the offer sits on the Mac (View menu, the command bar, a mark in the address bar?), what a translated page shows ("Translated from Español · Show Original"), the wait on a long page, and the iPhone's page menu.
+2. **FirnCore: reading and writing the page.** A script in Firn's own content world collects the page's text by block (skipping script, style, code, pre, form fields, editable text, and `translate="no"` / `.notranslate`), keeps the originals, and writes translations back as plain text only, never as HTML; sets `lang` on translated blocks so VoiceOver reads them in the right voice. The page's language: its `lang` attribute checked against Apple's on-device language detection (`NLLanguageRecognizer`) on its text. The "should we offer" rule above. Tested.
+3. **FirnCore: the translator.** A small wrapper on the Translation framework: batches, the page on screen first, cancels on navigation or Show Original, translates text added later (a `MutationObserver`, rate-limited). Tested where the framework allows.
+4. **The Mac.** The menu item (and a shortcut, checked against Dia's), the command bar's "Translate Page," the mark if the design keeps one, the translated state, and Show Original. A tab remembers it's translated while open, not across a restart.
+5. **A look over, the Mac.** Light and dark, VoiceOver, keyboard only, Reduce Motion, macOS 14 (absent) and 15, long pages, the security check. David checks it on his Mac.
+6. **The iPhone.** "Translate to [language]" in the page menu (as Safari's), the same FirnCore pieces, Show Original.
+7. **A look over, the iPhone.** The same list, on David's iPhone, in a Release build.
+
+**Security, planned in:** page text is hostile input. Firn's script runs in its own world and exposes nothing to the page; its messages are taken from the main frame only, with the real origin checked and their exact shape and size capped. Translations go back as text nodes, never `innerHTML`, so a translation can't add markup or script. Nothing is stored or logged: no translated text, no addresses. New network traffic is only the system's own language download, which the person starts (David to approve).
+
 ## Where we were: the full progress log up to 2026-11-23
 
 Moved out of `CLAUDE.md` on 2026-11-23, word for word, so that file stays short. Nothing here was edited.

@@ -594,7 +594,7 @@ After the iPhone's Basecamp tiles went to iOS's own glass (David: "pretty cool")
 6. **The iPhone.** "Translate to [language]" in the page menu (as Safari's), the same FirnCore pieces, Show Original.
 7. **A look over, the iPhone.** The same list, on David's iPhone, in a Release build.
 
-**Security, planned in:** page text is hostile input. Firn's script runs in its own world and exposes nothing to the page; its messages are taken from the main frame only, with the real origin checked and their exact shape and size capped. Translations go back as text nodes, never `innerHTML`, so a translation can't add markup or script. Nothing is stored or logged: no translated text, no addresses. New network traffic is only the system's own language download, which the person starts (David to approve).
+**Security, planned in:** page text is hostile input. Firn's script runs in its own world and exposes nothing to the page; its messages are taken from the main frame only, with the real origin checked and their exact shape and size capped. Translations go back as text nodes, never `innerHTML`, so a translation can't add markup or script. Nothing is stored or logged: no translated text, no addresses. New network traffic is only the system's own language download, which the person starts (approved, David, 2026-11-27).
 
 ## Where we were: the full progress log up to 2026-11-23
 

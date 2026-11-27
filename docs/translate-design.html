@@ -219,7 +219,7 @@ table.facts th { color: var(--muted); font-weight: 500; width: 34%; }
 </div></div>
 
 <h3 class="doc">The tab's title</h3>
-<p class="note">The tab's name in the sidebar stays as the site wrote it at first (the plan leaves the title out of step 2). Worth deciding: Safari translates the title too.</p>
+<p class="note">The tab's name in the sidebar translates too, as Safari's does, and Show Original puts it back (decided, David, 2026-11-27).</p>
 
 <h3 class="doc">The wait</h3>
 <p class="note">No progress bar and no overlay: the page stays readable the whole time. Paragraphs on screen change one after another as each is ready, with a 150ms fade (Reduce Motion: they just change, and the mark stops breathing and simply dims). Paragraphs further down translate as you scroll toward them, so a long page never makes you wait for the end. Text a page adds later (comments, "load more") translates a moment after it appears.</p>
@@ -303,10 +303,6 @@ table.facts th { color: var(--muted); font-weight: 500; width: 34%; }
   <li>Reader is on (Reader would translate as its own later step), error pages, and Firn's own pages.</li>
 </ul>
 
-<h2 class="doc">Questions for David</h2>
-<ul class="note">
-  <li><b>The tab's title</b>: translate it too, as Safari does, or leave it?</li>
-</ul>
 </main>
 
 <script>
@@ -343,11 +339,11 @@ function setState(state) {
   mark.classList.toggle('busy', state === 'busy');
   const label = { offered: 'Translate to English', busy: 'Translating to English…', done: 'Translated from Spanish · Show Original' }[state];
   mark.setAttribute('aria-label', label); tip.textContent = label;
-  if (state === 'offered') es.forEach((_, i) => setPara(i, false));
-  if (state === 'done') es.forEach((_, i) => setPara(i, true));
+  if (state === 'offered') { es.forEach((_, i) => setPara(i, false)); title.textContent = es[0][1]; }
+  if (state === 'done') { es.forEach((_, i) => setPara(i, true)); title.textContent = es[0][2]; }
   if (state === 'busy') {
     es.forEach((_, i) => setPara(i, false));
-    es.forEach((_, i) => setTimeout(() => { if (run === me) setPara(i, true); }, 700 + i * 550));
+    es.forEach((_, i) => setTimeout(() => { if (run === me) { setPara(i, true); if (i === 0) title.textContent = es[0][2]; } }, 700 + i * 550));
     setTimeout(() => { if (run === me) setState('done'); }, 700 + es.length * 550 + 200);
   }
 }

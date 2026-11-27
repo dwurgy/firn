@@ -110,12 +110,15 @@ public final class PageTranslator {
     /// before macOS 26.4 and iOS 26.4.
     public func pageLoaded(after delay: Double = 0, language: @escaping @MainActor () async -> (declared: String?, sample: String)?) {
         guard PageTranslationSupport.isAvailable, let url = page?.url, WebAddress.isWebURL(url) else { return }
-        // A translated page that loads again in place (a #jump) keeps it.
-        if let translation, translation.phase != .original, translation.phase != .failed { return }
         if checkedURL.map({ PageTranslation.samePage($0, url) }) == true, target != nil { return }
         check?.cancel()
         check = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            // A translated page that loads again in place (a #jump) keeps it.
+            // Looked at after the wait: a site changing pages without loading
+            // (pushState) has just had Show Original, which ends the old
+            // translation a moment later, and the new page is checked.
+            if let translation = self?.translation, translation.phase == .translating || translation.phase == .translated { return }
             guard !Task.isCancelled, let self, self.page?.url == url,
                   let found = await language(), !Task.isCancelled, self.page?.url == url else { return }
             let supported = await Self.supported()

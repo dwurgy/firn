@@ -411,6 +411,10 @@ final class WebKitPageController: NSObject, PageController {
     /// Tells history the page's title, once it has one.
     private func reportTitle() {
         guard !isProvisional, let url, !title.isEmpty else { return }
+        // History keeps the page's own title, not Firn's translation of it
+        // (decided in the translate look over, 2026-11-27); Show Original
+        // puts the title back, and that's reported as usual.
+        if let state = translator?.state, state == .translating || state == .translated { return }
         onVisit?(url, title)
     }
 

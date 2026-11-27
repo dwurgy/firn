@@ -45,13 +45,23 @@ struct TranslateMarkButton: View {
         }
         .help(help)
         .accessibilityLabel(state == .translating || state == .translated ? "Show Original" : "Translate to \(target)")
-        .accessibilityValue(state == .translated ? "Translated" : state == .translating ? "Translating" : "")
+        .accessibilityValue(accessibilityValue)
     }
 
     private var markOpacity: Double {
         switch state {
         case .translating: reduceMotion ? 0.5 : (breathing ? 0.4 : 1)
         default: 1
+        }
+    }
+
+    /// What VoiceOver adds after the label; it hears a failed try too.
+    private var accessibilityValue: String {
+        switch state {
+        case .none, .offered: ""
+        case .translating: "Translating"
+        case .translated: "Translated from \(translator.sourceName ?? "")"
+        case .failed: "Couldn't translate this page"
         }
     }
 

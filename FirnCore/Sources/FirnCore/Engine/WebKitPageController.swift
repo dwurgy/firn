@@ -655,6 +655,41 @@ extension WebKitPageController {
     }
 }
 
+// MARK: - Translating
+
+extension WebKitPageController {
+    /// The page's text to translate (`PageText`), read in Firn's world on
+    /// the main frame; nil for anything but a loaded web page, or if the
+    /// page moved on while reading. Reading again puts back any
+    /// translation first.
+    func readPageText() async -> PageText.Snapshot? {
+        guard let pageURL = url, WebAddress.isWebURL(pageURL), loadError == nil,
+              let script = PageText.script("read") else { return nil }
+        let result = try? await webView.callAsyncJavaScript(
+            script, arguments: ["input": NSNull()], in: nil, contentWorld: Self.firnWorld)
+        guard url == pageURL, loadError == nil else { return nil }
+        return PageText.snapshot(from: result)
+    }
+
+    /// Writes translations of the units last read, as plain text, marking
+    /// them as `language`, and the title if given. Returns how many units
+    /// went in (one the page has moved since, or that doesn't fit, doesn't).
+    func writePageText(_ translations: [PageText.Translation], language: String, title: String?) async -> Int {
+        guard let pageURL = url, WebAddress.isWebURL(pageURL), let script = PageText.script("write") else { return 0 }
+        let input = PageText.argument(translations, language: language, title: title)
+        let result = try? await webView.callAsyncJavaScript(
+            script, arguments: ["input": input], in: nil, contentWorld: Self.firnWorld)
+        return (result as? NSNumber)?.intValue ?? 0
+    }
+
+    /// Show Original: every translated unit and the title back as they were.
+    func restorePageText() async {
+        guard let script = PageText.script("restore") else { return }
+        _ = try? await webView.callAsyncJavaScript(
+            script, arguments: ["input": NSNull()], in: nil, contentWorld: Self.firnWorld)
+    }
+}
+
 // MARK: - Site icon
 
 extension WebKitPageController {

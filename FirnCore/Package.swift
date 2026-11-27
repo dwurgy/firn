@@ -11,8 +11,9 @@ let package = Package(
     ],
     targets: [
         // The ad and tracker lists ship inside Firn (BlockLists.swift), and
-        // so does Reader's Readability.js (Reader.swift).
-        .target(name: "FirnCore", resources: [.copy("Blocking/Lists"), .copy("Reader/Readability")]),
+        // so do Reader's Readability.js (Reader.swift) and the translation's
+        // page script (PageText.swift).
+        .target(name: "FirnCore", resources: [.copy("Blocking/Lists"), .copy("Reader/Readability"), .copy("Translate/Scripts")]),
         .testTarget(name: "FirnCoreTests", dependencies: ["FirnCore"]),
     ]
 )

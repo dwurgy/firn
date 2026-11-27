@@ -10,6 +10,7 @@ import SwiftUI
 /// - Spaces: every space in its order (hold and drag to reorder); a tap opens
 ///   its page (name, color, sign-ins, and Delete, in the Mac's words,
 ///   `Firn/SpacesSettings.swift`).
+/// - Tabs: when they're tidied away.
 /// - Privacy: blocking's switch, Clear History…, and Privacy Policy. iCloud: sync's switch (docs/SYNC-PLAN.md).
 /// - Tip Jar, last: the family's shared jar, its words unchanged.
 ///
@@ -27,6 +28,7 @@ struct SettingsSheet: View {
     @AppStorage(ICloudSync.enabledKey) private var syncIsOn = false
     @State private var availability = ICloudSync.Availability.available
     @AppStorage(BrowserEngine.blockingKey) private var blocksContent = true
+    @AppStorage(TidySetting.key) private var driftAfter = DriftAfter.sevenDays
     @AppStorage(SearchSuggestions.preferenceKey) private var searchSuggestions = false
     @AppStorage(SearchEngine.preferenceKey) private var searchEngine = SearchEngine.default
     @Environment(TipJar.self) private var tipJar
@@ -41,6 +43,7 @@ struct SettingsSheet: View {
         NavigationStack(path: $path) {
             List {
                 spacesSection
+                tabsSection
                 searchSection
                 privacySection
                 syncSection
@@ -114,6 +117,24 @@ struct SettingsSheet: View {
             if store.spaces.count > 1 {
                 Text("Hold a space and drag to change the order.")
             }
+        }
+    }
+
+    /// "Tidy away tabs after", the Mac's choice in the Mac's words
+    /// (Settings › Tabs there). Each device keeps its own (docs/SYNC-PLAN.md).
+    private var tabsSection: some View {
+        Section {
+            Picker("Tidy away tabs after", selection: $driftAfter) {
+                Text("1 day").tag(DriftAfter.oneDay)
+                Text("7 days").tag(DriftAfter.sevenDays)
+                Text("30 days").tag(DriftAfter.thirtyDays)
+                Text("Never").tag(DriftAfter.never)
+            }
+            .onChange(of: driftAfter) { store.driftAfter = driftAfter }
+        } header: {
+            Text("Tabs")
+        } footer: {
+            Text("Tabs you haven't looked at in a while go to Tidied Away, in the space menu, and are deleted 30 days later. Only days you use Firn count. Basecamp and grouped tabs stay put.")
         }
     }
 

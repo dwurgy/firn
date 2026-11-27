@@ -20,6 +20,8 @@ extension EnvironmentValues {
     /// History (docs/IOS-PLAN.md, section 12): the page menu or the command
     /// bar.
     var history = false
+    /// Tidied Away: the space menu's row, or the pill while it speaks.
+    var tidied = false
 }
 
 /// Opens a sheet. Always equal to itself, so setting it never makes the

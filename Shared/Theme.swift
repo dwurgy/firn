@@ -195,6 +195,16 @@ enum Theme {
         return Color(light: hex, dark: hex)
     }
 
+    #if os(iOS)
+    /// The space's color frosted over the iPhone's pill, and gathering over
+    /// a card, as tabs are tidied away into it (`Tidying`): the color over
+    /// a veil of the mode's own white or black.
+    static func tidyFrost(_ name: String) -> Color {
+        spaceColor(name).mix(with: Color(light: 0xFFFFFF, dark: 0x1E2023), by: 0.5).opacity(0.82)
+    }
+    static let tidyRim = Color(light: 0xFFFFFF, lightOpacity: 0.55, dark: 0xFFFFFF, darkOpacity: 0.2)
+    #endif
+
     /// The iPhone's bars (the address bar, and the overview's bar): Firn's
     /// frost over iOS's thinnest material, which already blurs and veils,
     /// so the fill is far lighter than the pills': 42%, then 24%, still

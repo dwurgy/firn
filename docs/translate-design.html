@@ -1,0 +1,363 @@
+<!doctype html>
+<!-- Firn: translating pages, the design (docs/HISTORY.md, "Plan: translating pages", step 1).
+     Approved (David, 2026-11-27). This page is the reference for the build.
+     Self-contained: no scripts or fonts from the network. -apple-system is SF on Apple devices;
+     the translate mark is a stand-in drawn here (the app uses SF Symbols' "translate"). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firn: Translate</title>
+<style>
+:root {
+  --frame: #E9E3DA; --page: #FBFAF8; --ink: #241F1B; --muted: #5E564E; --faint: #9D9389;
+  --wash: rgba(70,55,40,.07); --press: rgba(70,55,40,.13); --hair: rgba(70,55,40,.12);
+  --shadow: 0 1px 2px rgba(60,40,20,.08), 0 10px 30px rgba(60,40,20,.10);
+  --space: #7F9CB0; --tint: .16;
+  --glass: rgba(251,250,248,.72); --sheet-bg: #F3EFE9;
+  --menu: rgba(246,246,246,.92); --menu-ink: #1d1d1f; --menu-faint: #8a8a8e; --menu-sel: #689ABB;
+  color-scheme: light;
+}
+:root.dark {
+  --frame: #28241F; --page: #1C1916; --ink: #F5F1EC; --muted: #D4CDC5; --faint: #958D85;
+  --wash: rgba(255,248,240,.07); --press: rgba(255,248,240,.13); --hair: rgba(255,248,240,.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.25), 0 10px 30px rgba(0,0,0,.30);
+  --tint: .14; --glass: rgba(40,36,31,.72); --sheet-bg: #161411;
+  --menu: rgba(44,44,46,.94); --menu-ink: #f2f2f7; --menu-faint: #8e8e93; --menu-sel: #5F98BB;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding-block: 40px 80px; padding-inline: 16px;
+  background: var(--sheet-bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, system-ui, sans-serif;
+  transition: background .2s ease-out, color .2s ease-out;
+}
+main { max-width: 1080px; margin: 0 auto; }
+h1.doc { font: 600 28px/1.2 -apple-system, system-ui, sans-serif; margin: 0 0 8px; }
+h2.doc { font: 600 19px/1.3 -apple-system, system-ui, sans-serif; margin: 56px 0 6px; }
+h3.doc { font: 600 15px/1.3 -apple-system, system-ui, sans-serif; margin: 28px 0 4px; }
+p.note, ul.note { margin: 0 0 12px; color: var(--muted); max-width: 72ch; }
+ul.note { padding-left: 1.2em; }
+ul.note li { margin: 4px 0; }
+.pick { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--ink); color: var(--page); margin-left: 6px; vertical-align: 2px; }
+.alt { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--wash); color: var(--muted); margin-left: 6px; vertical-align: 2px; }
+
+.controls {
+  position: sticky; top: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  margin: 24px 0 0; padding: 10px 14px; border-radius: 14px;
+  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--shadow);
+}
+.controls button {
+  font: 13px -apple-system, system-ui; padding: 5px 12px; border-radius: 8px; border: 0; cursor: pointer;
+  background: var(--wash); color: var(--ink);
+}
+.controls button[aria-pressed="true"] { background: var(--ink); color: var(--page); font-weight: 600; }
+.controls button:focus-visible { outline: 3px solid rgba(130,168,190,.7); }
+.controls .label { color: var(--muted); font-size: 13px; }
+
+/* The translate mark (stand-in for SF Symbols' "translate") and the book, as in the Reader mockup */
+.mark {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; flex: none;
+  color: var(--muted); transition: color .2s ease-out, background .2s ease-out;
+}
+.mark svg { width: 17px; height: 17px; }
+.mark.on { color: var(--space); background: color-mix(in srgb, var(--space) 16%, transparent); }
+.mark.busy svg { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
+
+/* ---------- Mac window ---------- */
+.macscroll { overflow-x: auto; padding: 0 2px 40px; margin-bottom: -20px; }
+.mac {
+  margin-top: 16px; min-width: 900px; height: 560px; border-radius: 12px; overflow: hidden; display: flex;
+  background: color-mix(in srgb, var(--space) calc(var(--tint) * 100%), var(--frame));
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 24px 60px rgba(60,40,20,.22);
+  position: relative;
+}
+.side { width: 260px; flex: none; padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.lights { display: flex; gap: 8px; padding: 2px 4px 12px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #E0695D; }
+.lights i:nth-child(2) { background: #E7B54B; } .lights i:nth-child(3) { background: #6DBE5B; }
+.field {
+  height: 36px; border-radius: 10px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 12px;
+  background: color-mix(in srgb, var(--page) 55%, transparent); color: var(--ink); margin-bottom: 14px;
+}
+.field .host { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field .reload { color: var(--faint); width: 22px; text-align: center; }
+.field .tag { font-size: 12px; font-weight: 500; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 18px; }
+.tiles i { aspect-ratio: 1.25; border-radius: 9px; background: color-mix(in srgb, var(--page) 45%, transparent); }
+.row { height: 36px; border-radius: 10px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: var(--ink); }
+.row b { width: 16px; height: 16px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 18%, transparent); flex: none; }
+.row.on { background: color-mix(in srgb, var(--page) 70%, transparent); box-shadow: 0 1px 2px rgba(60,40,20,.06); }
+.row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spacebar { margin-top: auto; text-align: center; font-weight: 600; font-size: 13px; padding-bottom: 4px; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-top: 6px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); opacity: .5; }
+.dots i:first-child { background: var(--space); opacity: 1; }
+.pagebox { flex: 1; margin: 8px 8px 8px 0; border-radius: 12px; background: var(--page); overflow: hidden; box-shadow: 0 0 0 .5px var(--hair); }
+.site { max-width: 600px; margin: 0 auto; padding: 44px 32px; font-size: 16px; line-height: 1.6; }
+.site h1 { font-size: 26px; line-height: 1.2; margin: 0 0 14px; }
+.site p { margin: 0 0 14px; transition: opacity .15s ease-out; }
+.site a { color: #3F6E8C; }
+:root.dark .site a { color: #A9C6D8; }
+.site p.swap { opacity: 0; }
+
+/* Hover label, the app's tooltip */
+.tip {
+  position: absolute; z-index: 5; font-size: 12px; padding: 4px 8px; border-radius: 6px;
+  background: var(--menu); color: var(--menu-ink); box-shadow: 0 0 0 .5px rgba(0,0,0,.15), 0 4px 12px rgba(0,0,0,.12);
+  white-space: nowrap;
+}
+
+/* Native menus: neutral greys, never warm */
+.menus { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 16px; align-items: flex-start; }
+.menu {
+  width: 250px; padding: 5px; border-radius: 10px; background: var(--menu); color: var(--menu-ink);
+  font: 13px/1 -apple-system, system-ui; box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 10px 30px rgba(0,0,0,.18);
+}
+.menu .t { font-size: 12px; color: var(--muted); margin: 0 0 8px 2px; }
+.menu div { display: flex; justify-content: space-between; padding: 5px 10px; border-radius: 5px; }
+.menu div.sel { background: var(--menu-sel); color: #fff; }
+.menu div.sep { height: 1px; padding: 0; margin: 5px 10px; background: rgba(128,128,128,.25); }
+.menu div.dim { color: var(--menu-faint); }
+.menu kbd { font: inherit; color: var(--menu-faint); }
+.menu div.sel kbd { color: rgba(255,255,255,.8); }
+.cap { font-size: 12px; color: var(--muted); margin: 6px 0 0 4px; }
+
+/* Command bar */
+.cmd {
+  width: min(560px, 100%); border-radius: 14px; padding: 8px; margin-top: 16px;
+  background: var(--glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 0 0 .5px var(--hair), var(--shadow);
+}
+.cmd .q { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 17px; color: var(--ink); }
+.cmd .q::after { content: ""; width: 1.5px; height: 20px; background: #689ABB; margin-left: 1px; }
+.cmd .r { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+.cmd .r.sel { background: var(--press); }
+.cmd .r .mark { width: 20px; height: 20px; }
+.cmd .r kbd { margin-left: auto; font: 11px -apple-system; color: var(--faint); }
+
+/* iPhone page menu */
+.phones { display: flex; flex-wrap: wrap; gap: 32px; margin-top: 16px; }
+.ios-menu {
+  width: 280px; border-radius: 22px; overflow: hidden; background: var(--menu); color: var(--menu-ink);
+  font: 17px/1.2 -apple-system, system-ui; box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 18px 50px rgba(0,0,0,.2);
+}
+.ios-menu .r { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; }
+.ios-menu .r + .r { border-top: .5px solid rgba(128,128,128,.25); }
+.ios-menu .gap { height: 8px; background: rgba(128,128,128,.15); }
+.ios-menu .r svg { width: 20px; height: 20px; }
+.ios-menu .r.new { background: color-mix(in srgb, var(--menu-sel) 12%, transparent); }
+
+/* Apple's download sheet, drawn only as a placeholder */
+.sheet {
+  width: 340px; border-radius: 14px; padding: 18px; background: var(--menu); color: var(--menu-ink);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 18px 50px rgba(0,0,0,.2); font: 13px/1.4 -apple-system;
+  border: 1.5px dashed rgba(128,128,128,.45);
+}
+.sheet b { display: block; font-size: 14px; margin-bottom: 6px; }
+.sheet .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.sheet .btns span { padding: 4px 12px; border-radius: 6px; background: rgba(128,128,128,.18); }
+.sheet .btns span:last-child { background: #689ABB; color: #fff; }
+
+table.facts { border-collapse: collapse; margin-top: 10px; font-size: 14px; max-width: 760px; width: 100%; }
+table.facts td, table.facts th { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--hair); }
+table.facts th { color: var(--muted); font-weight: 500; width: 34%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark.busy svg { animation: none; opacity: .55; }
+  .site p, .mark, body { transition: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1 class="doc">Translating pages</h1>
+<p class="note">Approved (David, 2026-11-27). Whole pages, on the device with Apple's Translation framework, offered only when a page isn't in one of your languages. Quiet: a mark beside the book, a menu item, nothing that pops up on its own.</p>
+
+<div class="controls" role="group" aria-label="Mockup controls">
+  <span class="label">Look</span>
+  <button type="button" data-theme="light" aria-pressed="true">Light</button>
+  <button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+  <span class="label">Page</span>
+  <button type="button" data-state="offered" aria-pressed="true">Offered</button>
+  <button type="button" data-state="busy" aria-pressed="false">Translating</button>
+  <button type="button" data-state="done" aria-pressed="false">Translated</button>
+</div>
+
+<h2 class="doc">What Apple's framework can do (tested on this Mac, macOS 27)</h2>
+<table class="facts">
+  <tr><th>Keeping links in place</th><td>From macOS 26.4 and iOS 26.4 a whole paragraph can be translated with its links and bold marked inside it, and they come back around the right words, even when the order changes ("Ich habe <u>den Bericht</u> gestern gelesen" → "I read <u>the report</u> yesterday"). Code marked "skip" comes back untouched. This is how Firn matches Safari.</td></tr>
+  <tr><th>Which Macs and iPhones</th><td><b>macOS 26.4 and later, iOS 26.4 and later.</b> Before that, links can't be kept in place (macOS 15 and 26.0–26.3 could only translate the plain words), so the feature is simply absent there, as Summarize is without Apple Intelligence.</td></tr>
+  <tr><th>Speed</th><td>About half a second a paragraph, one at a time; running several at once is no faster. A long page of 60 paragraphs would take about 30 seconds, so Firn translates what's on screen first, then just ahead as you scroll.</td></tr>
+  <tr><th>Long paragraphs</th><td>A paragraph of about 1,400 characters or more can make the model repeat itself, so Firn splits long blocks by sentence and checks that what comes back isn't far longer than what went in.</td></tr>
+  <tr><th>Languages</th><td>About 20 languages (47 regional variants), from Arabic to Vietnamese. The list comes from the system, never hard-coded.</td></tr>
+  <tr><th>First time for a language</th><td>Apple shows its own sheet to download the language, the first time someone picks it. That's the only network traffic, and the person starts it.</td></tr>
+</table>
+
+<h2 class="doc">On the Mac: the mark, beside the book</h2>
+<p class="note">A small translate mark shows in the address bar only on pages that can be offered, in the same quiet place as Reader's book and looking just like it. One click translates; while working it breathes gently; once translated it takes the space's color, as the book does when Reader is on. Click it again for the original. Pointing at it says what it will do. It's hidden while Reader is on, so the bar never holds more than the book, the mark, and reload (decided, David, 2026-11-27).</p>
+
+<div class="macscroll"><div class="mac" id="mac">
+  <aside class="side">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="field">
+      <span class="host">nieveclara.example</span>
+      <span class="mark" id="mark" role="button" tabindex="0" aria-label="Translate to English"></span>
+      <span class="mark book" aria-label="Reader"></span>
+      <span class="reload">↻</span>
+    </div>
+    <div class="tiles"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="row"><b></b><span>Weekend forecast</span></div>
+    <div class="row on"><b></b><span id="tabTitle">Una tarde en el glaciar</span></div>
+    <div class="row"><b></b><span>Trail conditions</span></div>
+    <div class="spacebar">Personal<div class="dots"><i></i><i></i><i></i></div></div>
+  </aside>
+  <div class="pagebox"><div class="site" id="site"></div></div>
+  <div class="tip" id="tip" style="left: 128px; top: 104px;">Translate to English</div>
+</div></div>
+
+<h3 class="doc">The tab's title</h3>
+<p class="note">The tab's name in the sidebar translates too, as Safari's does, and Show Original puts it back (decided, David, 2026-11-27).</p>
+
+<h3 class="doc">The wait</h3>
+<p class="note">No progress bar and no overlay: the page stays readable the whole time. Paragraphs on screen change one after another as each is ready, with a 150ms fade (Reduce Motion: they just change, and the mark stops breathing and simply dims). Paragraphs further down translate as you scroll toward them, so a long page never makes you wait for the end. Text a page adds later (comments, "load more") translates a moment after it appears.</p>
+
+<h3 class="doc">If something goes wrong</h3>
+<p class="note">If the language download is declined or a paragraph can't be translated, the mark goes back to its plain look and the rest of the page stays as the site wrote it. No alert: pointing at the mark says "Couldn't translate this page".</p>
+
+<h2 class="doc">On the Mac: the View menu and the command bar</h2>
+<p class="note">In the View menu just under Reader and Summarize, as Safari's sits near its Reader. No shortcut at first (Safari has none); step 4 checks Dia's. The command bar finds it by "translate", the language's name, or the language's own name ("español").</p>
+
+<div class="menus">
+  <div>
+    <div class="menu" role="img" aria-label="View menu while offered">
+      <div>Hide Sidebar<kbd>⌘S</kbd></div><div class="sep"></div>
+      <div>Show Reader<kbd>⇧⌘R</kbd></div>
+      <div>Summarize Article</div>
+      <div class="sel">Translate to English</div>
+      <div class="sep"></div>
+      <div>Zoom In<kbd>⌘+</kbd></div><div>Zoom Out<kbd>⌘−</kbd></div><div class="dim">Actual Size<kbd>⌘0</kbd></div>
+    </div>
+    <p class="cap">Offered</p>
+  </div>
+  <div>
+    <div class="menu" role="img" aria-label="View menu while translated">
+      <div>Hide Sidebar<kbd>⌘S</kbd></div><div class="sep"></div>
+      <div>Show Reader<kbd>⇧⌘R</kbd></div>
+      <div>Summarize Article</div>
+      <div class="sel">Show Original</div>
+      <div class="sep"></div>
+      <div>Zoom In<kbd>⌘+</kbd></div><div>Zoom Out<kbd>⌘−</kbd></div><div class="dim">Actual Size<kbd>⌘0</kbd></div>
+    </div>
+    <p class="cap">Translated. On a page that isn't offered the row is simply absent, never greyed out.</p>
+  </div>
+</div>
+
+<div class="cmd" role="img" aria-label="Command bar">
+  <div class="q">trans</div>
+  <div class="r sel"><span class="mark cmdmark"></span>Translate to English</div>
+</div>
+
+<h2 class="doc">The first time for a language</h2>
+<p class="note">Apple's own sheet, not Firn's (drawn here only as a placeholder with a dashed edge). Firn shows nothing of its own before it. Declining leaves the page as it was.</p>
+<div class="sheet" role="img" aria-label="Placeholder for Apple's download sheet">
+  <b>Apple's language download</b>
+  Asks to download Spanish and English for translating on this Mac. Wording, look, and buttons are the system's.
+  <div class="btns"><span>Cancel</span><span>Download</span></div>
+</div>
+
+<h2 class="doc">On the iPhone: the page menu</h2>
+<p class="note">As Safari's: "Translate to English" in the page menu, in the reading section just under Show Reader and Summarize; "Show Original" once translated. No mark in the address pill at first: the book already takes •••'s place on articles, and a second mark there would crowd it. The wait and the 150ms fade are the same as on the Mac.</p>
+<div class="phones">
+  <div>
+    <div class="ios-menu" role="img" aria-label="iPhone page menu while offered">
+      <div class="r">Show Reader<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 5.5C8 4.3 5.5 4 3 4.3v10.4c2.5-.3 5 0 7 1.3 2-1.3 4.5-1.6 7-1.3V4.3C14.5 4 12 4.3 10 5.5zM10 5.5V16"/></svg></div>
+      <div class="r">Summarize<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 6h12M4 10h12M4 14h7"/></svg></div>
+      <div class="r new">Translate to English<span class="mark" style="color:inherit"></span></div>
+      <div class="gap"></div>
+      <div class="r">Share…<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6.5 6.5 10 3l3.5 3.5M5 10v6h10v-6"/></svg></div>
+      <div class="r">Send to My Mac<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4.5" width="14" height="9" rx="1.5"/><path d="M7 16h6"/></svg></div>
+    </div>
+    <p class="cap">Offered (the new row is tinted here only to point it out)</p>
+  </div>
+  <div>
+    <div class="ios-menu" role="img" aria-label="iPhone page menu while translated">
+      <div class="r">Show Reader<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 5.5C8 4.3 5.5 4 3 4.3v10.4c2.5-.3 5 0 7 1.3 2-1.3 4.5-1.6 7-1.3V4.3C14.5 4 12 4.3 10 5.5zM10 5.5V16"/></svg></div>
+      <div class="r">Summarize<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 6h12M4 10h12M4 14h7"/></svg></div>
+      <div class="r new">Show Original<span class="mark" style="color:inherit"></span></div>
+      <div class="gap"></div>
+      <div class="r">Share…<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6.5 6.5 10 3l3.5 3.5M5 10v6h10v-6"/></svg></div>
+      <div class="r">Send to My Mac<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4.5" width="14" height="9" rx="1.5"/><path d="M7 16h6"/></svg></div>
+    </div>
+    <p class="cap">Translated</p>
+  </div>
+</div>
+
+<h2 class="doc">When it's never offered</h2>
+<ul class="note">
+  <li>The page is in one of your languages (System Settings › Language &amp; Region), or there's too little text to tell.</li>
+  <li>The page's language isn't one Apple translates, or none of your languages is.</li>
+  <li>macOS before 26.4, or iOS before 26.4.</li>
+  <li>Reader is on (Reader would translate as its own later step), error pages, and Firn's own pages.</li>
+</ul>
+
+</main>
+
+<script>
+const MARK = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1.8" y="2.6" width="10.2" height="10.2" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><text x="6.9" y="10.6" font-size="7.6" font-weight="600" text-anchor="middle" fill="currentColor" font-family="-apple-system,system-ui,sans-serif">A</text><rect x="8" y="7.2" width="10.2" height="10.2" rx="2.4" fill="var(--page)" stroke="currentColor" stroke-width="1.4"/><text x="13.1" y="15.3" font-size="7" font-weight="600" text-anchor="middle" fill="currentColor" font-family="PingFang SC,Hiragino Sans,sans-serif">文</text></svg>';
+const BOOK = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 5.5C8 4.3 5.5 4 3 4.3v10.4c2.5-.3 5 0 7 1.3 2-1.3 4.5-1.6 7-1.3V4.3C14.5 4 12 4.3 10 5.5zM10 5.5V16"/></svg>';
+document.querySelectorAll('.mark:not(.book)').forEach((m) => m.innerHTML = MARK);
+document.querySelectorAll('.mark.book').forEach((m) => m.innerHTML = BOOK);
+
+const es = [
+  ['h1', 'Una tarde en el glaciar', 'An afternoon on the glacier'],
+  ['p', 'Haz clic <a href="#">aquí</a> para reservar tu plaza en la <b>excursión de mañana</b>.', 'Click <a href="#">here</a> to book your place on <b>tomorrow\'s excursion</b>.'],
+  ['p', 'El glaciar se formó durante miles de años, cuando la nieve que caía cada invierno no llegaba a derretirse en verano.', 'The glacier formed over thousands of years, when the snow that fell each winter did not melt in the summer.'],
+  ['p', 'Con el tiempo, las capas se compactaron hasta convertirse en neviza, un material intermedio entre la nieve y el hielo.', 'Over time, the layers compacted until they became firn, a material between snow and ice.'],
+  ['p', 'Quienes lo visitan describen una calma difícil de encontrar en otro lugar. Lee <a href="#">la guía completa</a> antes de subir.', 'Those who visit describe a calm that is hard to find elsewhere. Read <a href="#">the full guide</a> before you go up.'],
+];
+const site = document.getElementById('site');
+site.innerHTML = es.map(([t, a], i) => `<${t} data-i="${i}">${a}</${t}>`).join('');
+const mark = document.getElementById('mark'), tip = document.getElementById('tip'), title = document.getElementById('tabTitle');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+let run = 0;
+
+function setPara(i, english) {
+  const el = site.querySelector(`[data-i="${i}"]`);
+  const html = es[i][english ? 2 : 1];
+  if (reduce.matches) { el.innerHTML = html; return; }
+  el.classList.add('swap');
+  setTimeout(() => { el.innerHTML = html; el.classList.remove('swap'); }, 150);
+}
+
+function setState(state) {
+  run += 1; const me = run;
+  document.querySelectorAll('[data-state]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state)));
+  mark.classList.toggle('on', state === 'done');
+  mark.classList.toggle('busy', state === 'busy');
+  const label = { offered: 'Translate to English', busy: 'Translating to English…', done: 'Translated from Spanish · Show Original' }[state];
+  mark.setAttribute('aria-label', label); tip.textContent = label;
+  if (state === 'offered') { es.forEach((_, i) => setPara(i, false)); title.textContent = es[0][1]; }
+  if (state === 'done') { es.forEach((_, i) => setPara(i, true)); title.textContent = es[0][2]; }
+  if (state === 'busy') {
+    es.forEach((_, i) => setPara(i, false));
+    es.forEach((_, i) => setTimeout(() => { if (run === me) { setPara(i, true); if (i === 0) title.textContent = es[0][2]; } }, 700 + i * 550));
+    setTimeout(() => { if (run === me) setState('done'); }, 700 + es.length * 550 + 200);
+  }
+}
+document.querySelectorAll('[data-state]').forEach((b) => b.addEventListener('click', () => setState(b.dataset.state)));
+mark.addEventListener('click', () => setState(mark.classList.contains('on') ? 'offered' : 'busy'));
+mark.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mark.click(); } });
+
+function setTheme(t) {
+  document.documentElement.classList.toggle('dark', t === 'dark');
+  document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.theme === t)));
+}
+document.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => setTheme(b.dataset.theme)));
+if (matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+setState('offered');
+</script>
+</body>
+</html>

@@ -20,6 +20,12 @@ struct OverviewBar: View {
     let newTab: () -> Void
     let done: () -> Void
     let select: (Space) -> Void
+    /// Idle tabs sinking into the pill, which says so (`Tidying`).
+    let tidying: Tidying
+    /// The space menu's Tidied Away row, only while the space has any, and
+    /// whether some came since its list was last opened.
+    let showTidied: SheetAction?
+    let unseenTidied: Bool
     /// The space menu's last rows, when the app offers them.
     let newSpace: SheetAction?
     let spaceSettings: SheetAction?
@@ -57,6 +63,9 @@ struct OverviewBar: View {
     /// Each space's label at its own width (name, dots, and padding), so
     /// the pill hugs the name and can glide to the next one's width.
     @State private var labelWidths: [UUID: CGFloat] = [:]
+    /// How wide "Tidied away 4 tabs" wants to be, in its pill.
+    @State private var saidWidth: CGFloat = 0
+    private var speaks: Bool { tidying.pill == .speaking && progress == 0 && !menuOpen }
     /// The room between + and the check: the widest a pill can be.
     @State private var room: CGFloat = 0
     /// A finished slide's width, held until the new space arrives: the
@@ -107,6 +116,7 @@ struct OverviewBar: View {
     private var pillWidth: CGFloat {
         if let landedWidth { return landedWidth }
         let held = restWidth(space)
+        if speaks { return room > 0 ? min(max(saidWidth, held), room) : held }
         guard progress != 0, let next = neighbor(progress) else { return held }
         let t = min(abs(progress), 1)
         return held + (restWidth(next) - held) * t
@@ -176,6 +186,7 @@ struct OverviewBar: View {
             quiet.disablesAnimations = true
             withTransaction(quiet) { landedWidth = nil }
         }
+        .onChange(of: menuOpen) { _, open in tidying.menuOpen = open }
         .onChange(of: touching) { _, now in
             guard !now, !finishing, progress != 0 else { return }
             settleBack()
@@ -198,9 +209,22 @@ struct OverviewBar: View {
                     .fixedSize()
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labelWidths[each.id] = $0 }
             }
+            saidLabel
+                .fixedSize()
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { saidWidth = $0 }
         }
         .hidden()
         .accessibilityHidden(true)
+    }
+
+    /// "Tidied away 4 tabs".
+    private var saidLabel: some View {
+        Text(tidying.said)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 20)
     }
 
     /// The name, and the dots under it once there's more than one space.
@@ -235,7 +259,16 @@ struct OverviewBar: View {
     /// sideways swipe changes space, as before (moving ends the hold).
     private var spaceMenu: some View {
         pill
-            .onTapGesture { if progress == 0, !menuOpen { menuOpen = true } }
+            .onTapGesture {
+                guard progress == 0, !menuOpen else { return }
+                // While it speaks, a tap goes to what it speaks of.
+                if tidying.pill == .speaking, let showTidied {
+                    tidying.heard()
+                    showTidied()
+                } else {
+                    menuOpen = true
+                }
+            }
             .gesture(spaceSwipe)
             // Kept on while the hold that opened the menu is down, so the
             // finger can go on to a row.
@@ -300,7 +333,8 @@ struct OverviewBar: View {
     private var menuSize: CGSize {
         CGSize(width: SpaceMenuPanel.width,
                height: SpaceMenuPanel.height(spaces: spaces.count,
-                                             more: (newSpace == nil ? 0 : 1) + (spaceSettings == nil ? 0 : 1)))
+                                             more: (showTidied == nil ? 0 : 1) + (newSpace == nil ? 0 : 1)
+                                                 + (spaceSettings == nil ? 0 : 1)))
     }
 
     /// The pill's one glass, grown into the menu while it's open.
@@ -314,7 +348,8 @@ struct OverviewBar: View {
             SpaceMenuPanel(spaces: spaces, current: space.id, select: { each in
                 menuOpen = false
                 if each.id != space.id { select(each) }
-            }, newSpace: newSpace, spaceSettings: spaceSettings, pointer: menuPoint, lift: menuLift,
+            }, showTidied: showTidied, unseenTidied: unseenTidied,
+               newSpace: newSpace, spaceSettings: spaceSettings, pointer: menuPoint, lift: menuLift,
                liftPoint: menuLiftPoint) { menuOpen = false }
                 .frame(width: size.width, height: size.height)
                 .position(x: pill.width / 2, y: pill.height - size.height / 2)
@@ -373,6 +408,10 @@ struct OverviewBar: View {
             .opacity(menuOpen ? 0 : 1)
             .animation(menuOpen || reduceMotion ? .easeOut(duration: 0.1) : .easeOut(duration: 0.12).delay(0.18),
                        value: menuOpen)
+            // One set of words at a time: the name goes before the pill
+            // says what was tidied, and comes back after.
+            .opacity(speaks ? 0 : 1)
+            .animation(speaks ? .easeOut(duration: 0.12) : .easeOut(duration: 0.16).delay(0.16), value: speaks)
             .frame(maxWidth: .infinity)
             // A space picked from the menu or the command bar glides to its
             // own width; a swipe already moves it with the finger.
@@ -382,7 +421,17 @@ struct OverviewBar: View {
                 }
             } body: { $0.frame(width: pillWidth) }
             .frame(height: Self.height)
+            .overlay {
+                saidLabel
+                    // Whole while the pill is still widening, or closing.
+                    .fixedSize(horizontal: saidWidth <= room, vertical: false)
+                    .opacity(speaks ? 1 : 0)
+                    .animation(speaks ? .easeOut(duration: 0.2).delay(0.14) : .easeOut(duration: 0.12), value: speaks)
+                    .accessibilityHidden(true)
+            }
+            .background { frost }
             .clipShape(Capsule())
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { tidying.pillFrame = $0 }
             // The name's one glass, iOS's own, on the pill itself (David,
             // 2026-11-18: one native glass per button), so a finger on the
             // name reaches it and it takes iOS's press. Whole through a
@@ -400,6 +449,17 @@ struct OverviewBar: View {
                 @unknown default: break
                 }
             }
+    }
+
+    /// The space's color frosted over the pill's glass as tabs are tidied
+    /// into it.
+    private var frost: some View {
+        Capsule()
+            .fill(Theme.tidyFrost(space.color))
+            .overlay { Capsule().strokeBorder(Theme.tidyRim, lineWidth: 1) }
+            .opacity(tidying.pill != .rest && !menuOpen && progress == 0 ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: menuOpen)
+            .accessibilityHidden(true)
     }
 
     /// How far a finger travels for a whole swipe: the bar's own width,
@@ -515,6 +575,8 @@ private struct SpaceMenuPanel: View {
     let spaces: [Space]
     let current: UUID
     let select: (Space) -> Void
+    let showTidied: SheetAction?
+    let unseenTidied: Bool
     let newSpace: SheetAction?
     let spaceSettings: SheetAction?
     /// The finger that held the pill open, once it has slid (global).
@@ -530,6 +592,7 @@ private struct SpaceMenuPanel: View {
     @Namespace private var highlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private static let tidiedKey = "tidied"
     private static let newKey = "new"
     private static let settingsKey = "settings"
 
@@ -540,7 +603,10 @@ private struct SpaceMenuPanel: View {
     }
 
     private func run(_ key: String) {
-        if key == Self.newKey, let newSpace {
+        if key == Self.tidiedKey, let showTidied {
+            close()
+            showTidied()
+        } else if key == Self.newKey, let newSpace {
             close()
             newSpace()
         } else if key == Self.settingsKey, let spaceSettings {
@@ -570,8 +636,25 @@ private struct SpaceMenuPanel: View {
                     .accessibilityFocused($focused, equals: space.id)
                     .accessibilityAddTraits(space.id == current ? .isSelected : [])
             }
-            if newSpace != nil || spaceSettings != nil {
+            if showTidied != nil || newSpace != nil || spaceSettings != nil {
                 GrownMenuLine()
+            }
+            if showTidied != nil {
+                row(Self.tidiedKey, "Tidied Away", checked: false, lit: lit) {
+                    ArchiveBoxIcon(size: 22)
+                }
+                // Some came since the list was last opened, as the Mac's dot.
+                .overlay(alignment: .trailing) {
+                    if unseenTidied {
+                        Circle()
+                            .fill(Theme.spaceVivid(spaces.first { $0.id == current }?.color ?? "glacier"))
+                            .frame(width: 7, height: 7)
+                            .padding(.trailing, 25)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityValue(unseenTidied ? "New tabs tidied away" : "")
             }
             if newSpace != nil {
                 row(Self.newKey, "New Space…", checked: false, lit: lit) {

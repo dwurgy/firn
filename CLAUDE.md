@@ -279,28 +279,30 @@ Only what's open lives here. The full step-by-step log up to 2026-11-23 is in `d
 ## How to work on this project (instructions for Claude)
 
 - **Only work in `dwurgy/firn`** (this folder, still named `firn-swift-test` on David's Mac). Both apps live and release from `main` (David, 2026-11-27; `ios` was merged in and is retired). The Electron app (`dwurgy/firn-legacy`) and the website (`dwurgy/firn-site`) have their own sessions. Never attach, clone, or change another repository, including `dwurgy/firn-legacy` and the retired `dwurgy/firn-swift-test`. You may describe how the Electron app does something only if David pastes it in.
-- **Pick the model before starting** (David is on the Pro plan and wants his limits to last the week). Before any task, say in one line which model it needs and why: "Sonnet is fine: <reason>" or "This needs Opus: <reason>. Switch with /model, then say go." If it needs Opus and you're on Sonnet, stop and wait. If you're on Opus and Sonnet would do, say so and wait. If a Sonnet task turns out harder than it looked, stop and say so rather than guessing on.
-  - **Sonnet (only the most basic tasks):** copy and wording, README edits, renames, and simple questions about the code. David's rule (2026-10-18): Sonnet wasted his time on design work, so anything visual, any SwiftUI view or layout, and anything else goes to Opus.
-  - **Opus:** all design and SwiftUI work, core architecture and the data model, per-space data stores and sharing, the engine layer and `WKWebView` delegates (navigation, UI delegate, downloads, script messages), multi-window and app lifecycle, sandbox and entitlements, anything security-related (passwords, content worlds, permissions, content blocking, URL handling), performance work, signing, notarization, and updates, sync, and "look back" reviews.
-  - When unsure, say which way it leans and why, in one line, and let David pick.
+- **Threads and pull requests** (David, 2026-11-27): work happens in the "Firn code" project, several threads at once, each a Remote Control session on David's Mac mini using this checkout, Xcode, and the Simulator; never change code in a cloud-only copy.
+  - **One task per thread, ending in one pull request.** Each thread works on its own branch in its own git worktree, cut from the latest `main`. Never commit straight to `main`: it changes only when David merges a pull request. Never merge one yourself. If the work grows a second job, stop and say so; it becomes its own thread.
+  - **Other threads are working too.** Before starting, look at open pull requests and other branches; if one changes the same files, say so and ask. In shared docs (this file's "Where we are", `docs/HISTORY.md`, the plans, the changelogs), add or change only your own lines; never rewrite another thread's.
+  - **A fresh worktree lacks git-ignored files.** Copy `PrivateFonts/` in from the main checkout when a build needs Gooper Deck (never commit it). In the Simulator, use a device no other thread is using.
+  - **Releases** (version numbers, builds, the appcast, App Store and TestFlight uploads) happen only in a thread David opened for that release.
+  - **The pull request** says, in plain words: what changed; exactly what David should open and look at to test it; the four-line security check; and what isn't verified yet.
+- **Models:** threads run on Opus; there's no model check to make. Effort stays at Medium; if a thread goes in circles, say so and suggest David raise that thread to High.
 - **Spend David's budget carefully.** The aim is less bloat and less rehashing, never lower quality. Never skip reading code before editing it, building and testing before a commit, the security rules, or asking David at a real fork.
   - **Read less.** Find with Grep and Glob, then Read only the part you need. Don't re-read a file already read in this conversation unless it changed.
   - **Keep searching out of this conversation.** For broad questions, use the Explore agent. Don't spawn agents for anything else.
   - **Plan before multi-file work.** Say the plan in a few lines and wait for David's OK.
-  - **One task per conversation, small steps.**
-  - **Checkpoints.** When a step works and is committed, say so and always recommend one, with a one-line reason: "/clear" when everything that matters is saved (commits, this file, `docs/HISTORY.md`, memory), even if the same feature continues; "/compact" only when something important lives only in the conversation (a half-done change, an undocumented decision, a bug mid-hunt). Anything worth keeping goes in a commit or a short note here first.
-  - **Say when a step isn't worth testing** (David, 2026-11-20). When steps are links of one thing that can only be judged whole (one motion, say), say so up front, do them in a row, and ask David to test once at the end; testing between them is chasing ghosts. Say too whether to /clear between them.
+  - **Small steps.** A thread ends when its pull request is merged, so nothing worth keeping lives only in the conversation: decisions and progress go in commits, the pull request, this file, or `docs/HISTORY.md` before it ends.
+  - **Say when a step isn't worth testing** (David, 2026-11-20). When steps are links of one thing that can only be judged whole (one motion, say), say so up front, do them in a row, and ask David to test once at the end; testing between them is chasing ghosts.
   - **Short replies.** After a change: what changed, where, and how to test it, in a few lines. Don't recap the diff or paste whole files. Use Edit, not rewrites.
   - **Quiet output.** `xcodebuild` is very loud: pipe it through `tail` or `grep -E "error|warning: |BUILD"`. Never dump a whole log.
-  - **Stuck rule.** After two failed attempts at the same fix, stop. Say what's known, what's been ruled out, and whether a fresh session or Opus would help.
+  - **Stuck rule.** After two failed attempts at the same fix, stop. Say what's known, what's been ruled out, and whether a fresh thread or High effort would help.
 - **Build and test from the command line** (on David's Mac, with Xcode installed):
   - `swift test --scratch-path ~/Library/Caches/FirnCore-build` inside `FirnCore` for logic (building inside `~/Documents` leaves Finder metadata that breaks code signing).
   - `xcodebuild -scheme Firn -destination 'platform=macOS' build` for the app, and `xcodebuild test -scheme FirnCore -destination 'platform=macOS'` inside `FirnCore` before committing (then delete the `FirnCore/.swiftpm` it leaves).
   - You can't see the running app. After each step, tell David exactly what to open and look at (light and dark, sidebar shown and hidden, Reduce Motion on).
 - **Design is half the job.** Follow the principles and tokens above; flag anything that would look cramped, loud, or like a web page in a box.
 - Ask before adding dependencies; prefer Apple's frameworks.
-- Commit after each working step with a clear message. Keep this file lean: details and reasoning go in `docs/HISTORY.md` and commit messages; update "Where we are" in a line or two.
-- **Every so often, a look back:** a review for bugs and for places to make Firn faster or lighter, then fixes in small steps.
+- Commit each working step on the thread's branch with a clear message. Keep this file lean: details and reasoning go in `docs/HISTORY.md` and commit messages; in "Where we are", a line or two about your own work only.
+- **Every so often, a look back:** a thread of its own that reviews for bugs and for places to make Firn faster or lighter, and reports what it found. Each fix becomes its own thread and pull request.
 
 ## License
 

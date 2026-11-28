@@ -116,9 +116,11 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
         // The X and shadow: early as it opens, gone at once as it folds,
         // as Safari's.
         let bare = glide.opening ? t < 0.2 : t < 0.97
-        // The titles: there from the first frame of an opening and gone in
-        // the first of a fold, as Safari's.
-        let titles = glide.opening ? Self.ramp(t, 0, 0.1) : Self.ramp(t, 0.9, 1)
+        // The titles ride under their cards, fading in over the second half
+        // of an opening so they arrive with the cards instead of sitting at
+        // full size under tiny ones (David's recording, 2026-11-28); gone in
+        // the first part of a fold, as Safari's.
+        let titles = glide.opening ? Self.ramp(t, 0.55, 0.95) : Self.ramp(t, 0.9, 1)
         ZStack(alignment: .topLeading) {
             ForEach(glide.arrivals) { arrival in
                 let spot = Self.mix(arrival.folded, arrival.open, share)

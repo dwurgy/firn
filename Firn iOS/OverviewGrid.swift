@@ -96,12 +96,13 @@ enum OverviewGridRun: Identifiable {
     }
 }
 
-/// A folded group in the grid: one tab's size (the picture's, nothing
-/// under it), on the group's glass, its name at the top and its first
-/// tabs as small square pictures, as Safari's (David, 2026-11-18): the
-/// squares fill the bottom, and the name sits centered in the room above
-/// them (17pt bold, as Safari's), as tab titles are centered. A tap opens it; holding it is iOS's
-/// menu and drag, from the grid (`GridCards`).
+/// A folded group in the grid: one tab's size, on the group's glass, its
+/// first four tabs filling the card as small pictures and its name under
+/// it, as a loose tab's title (David, 2026-11-27, after a mockup). The
+/// pictures sit `inset` from every edge and `gap` apart, each the card's
+/// own shape (taller than wide), their corners concentric with the card's.
+/// No count, even folded. A tap opens it; holding it is iOS's menu and
+/// drag, from the grid (`GridCards`).
 struct GroupFolder: View {
     let group: TabGroup
     let tabs: [FirnCore.Tab]
@@ -115,10 +116,21 @@ struct GroupFolder: View {
     /// behind it and came out a flat dark grey (the Simulator, 2026-11-24).
     var flat = false
 
-    private static let shown = 4
-    static let inset: CGFloat = 8
-    static let gap: CGFloat = 6
-    private static let thumbCorner: CGFloat = 7
+    static let shown = 4
+    static let inset: CGFloat = 10
+    static let gap: CGFloat = 10
+    /// Concentric with the card's corner, so it follows if that changes.
+    static let thumbCorner: CGFloat = OverviewRow.gridCornerRadius - inset
+
+    /// The `index`th small picture in a card of `size`: two columns and two
+    /// rows filling it. Shared with the fold's glide (`GroupGlide.mini`).
+    static func thumb(_ index: Int, in size: CGSize) -> CGRect {
+        let width = max((size.width - 2 * inset - gap) / 2, 1)
+        let height = max((size.height - 2 * inset - gap) / 2, 1)
+        return CGRect(x: inset + CGFloat(index % 2) * (width + gap),
+                      y: inset + CGFloat(index / 2) * (height + gap),
+                      width: width, height: height)
+    }
 
     @State private var width: CGFloat = 0
     private var folderSize: CGSize {
@@ -129,39 +141,18 @@ struct GroupFolder: View {
         let shape = RoundedRectangle(cornerRadius: OverviewRow.gridCornerRadius, style: .continuous)
         VStack(spacing: 0) {
             Button(action: open) {
-                VStack(spacing: Self.gap) {
-                    Group {
-                        if naming {
-                            NamingDots(color: Theme.ink, size: 5).frame(height: 18)
-                        } else {
-                            Text(group.name)
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(Theme.ink)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: Self.gap, alignment: .top),
-                                        GridItem(.flexible(), spacing: Self.gap, alignment: .top)],
-                              spacing: Self.gap) {
-                        ForEach(tabs.prefix(Self.shown)) { tab in
+                // Fewer than four tabs leave their places empty: the glass.
+                ZStack(alignment: .topLeading) {
+                    if width > 0 {
+                        ForEach(Array(tabs.prefix(Self.shown).enumerated()), id: \.element.id) { index, tab in
+                            let spot = Self.thumb(index, in: folderSize)
                             FolderThumb(tab: tab, pictures: pictures, corner: Self.thumbCorner)
-                        }
-                        // Empty places keep two rows' room with fewer tabs,
-                        // so the name sits at the same height in every folder.
-                        ForEach(tabs.count..<max(Self.shown, tabs.count), id: \.self) { _ in
-                            Color.clear.aspectRatio(1, contentMode: .fit)
+                                .frame(width: spot.width, height: spot.height)
+                                .offset(x: spot.minX, y: spot.minY)
                         }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(Self.inset)
-                // `minHeight: 0`: at large text sizes the name and two rows
-                // can be taller than the cell; without it the folder grows
-                // past its cell instead of the top being squeezed.
-                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background {
                     if flat {
                         shape.fill(Theme.folderCarried)
@@ -175,9 +166,19 @@ struct GroupFolder: View {
             .buttonStyle(UndimmedPress())
             .frame(height: folderSize.height)
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-            Color.clear.frame(height: OverviewRow.gridTitleHeight)
+            Group {
+                if naming {
+                    NamingDots(color: Theme.ink, size: 5)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                } else {
+                    GridTitle(text: group.name, bold: true)
+                }
+            }
+            .frame(height: OverviewRow.gridTitleHeight, alignment: .top)
+            .contentShape(.rect)
+            .onTapGesture(perform: open)
         }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(naming ? "New group, naming" : group.name)
         .accessibilityValue("Folded, \(tabs.count) \(tabs.count == 1 ? "tab" : "tabs")")
@@ -187,8 +188,8 @@ struct GroupFolder: View {
     }
 }
 
-/// One small page picture in a folded group: square, as Safari's, the
-/// page's top below its header.
+/// One small page picture in a folded group: the card's shape, the page's
+/// top below its header.
 private struct FolderThumb: View {
     let tab: FirnCore.Tab
     let pictures: PagePictures
@@ -197,7 +198,6 @@ private struct FolderThumb: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
         Color.clear
-            .aspectRatio(1, contentMode: .fit)
             .overlay(alignment: .top) {
                 if let picture = pictures.cachedImage(for: tab.id), picture.size.width > 0 {
                     GeometryReader { box in

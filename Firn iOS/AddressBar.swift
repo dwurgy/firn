@@ -1117,16 +1117,9 @@ private struct AddressField: View {
                 if showsReaderNote {
                     Text("Reader available").foregroundStyle(Theme.ink)
                 } else if showsTranslationNote {
-                    // A text size smaller rather than cut short (Safari cuts
-                    // it to "Translation Avai…"), picked once, never scaled
-                    // as it fades: scaling made it jump (David's recording,
-                    // 2026-11-27).
-                    ViewThatFits(in: .horizontal) {
-                        Text("Translation available")
-                        Text("Translation available").font(.subheadline.weight(.medium))
-                        Text("Translation available").font(.footnote.weight(.medium))
-                    }
-                    .foregroundStyle(Theme.ink)
+                    // The bar's own size, cut short where it doesn't fit, as
+                    // Safari's "Translation Avai…" (David, 2026-11-27).
+                    Text("Translation available").foregroundStyle(Theme.ink)
                 } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
                 } else if notSecure {

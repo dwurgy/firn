@@ -844,6 +844,11 @@ struct TabOverview: View {
                               if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
                           }
                       },
+                      shown: { id in
+                          var quiet = Transaction()
+                          quiet.disablesAnimations = true
+                          withTransaction(quiet) { _ = systemDragged.remove(id) }
+                      },
                       liftGroup: { id in
                           // At once: iOS takes its picture of the group next.
                           var quiet = Transaction()

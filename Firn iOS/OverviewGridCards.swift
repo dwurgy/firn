@@ -203,6 +203,8 @@ struct GridCards: UIViewRepresentable {
     /// A card held (its menu open, or carried by the drag), so its X hides:
     /// iOS lifts only the picture, as Safari's.
     let held: (UUID, Bool) -> Void
+    /// A card back from its hold menu: its X at once, as iOS shows its title.
+    let shown: (UUID) -> Void
     /// An open group lifted whole by its name line (nil: none): its tabs'
     /// X go at once, before iOS's picture of it is taken.
     let liftGroup: (UUID?) -> Void
@@ -806,9 +808,6 @@ struct GridCards: UIViewRepresentable {
         /// card as it is on screen, laid exactly over it; its drag still
         /// carries the folder card (`carryFolder`).
         private var liftedGroup: (id: UUID, preview: UITargetedPreview, frame: CGRect)?
-        /// How long after a hold menu starts closing its card's X and
-        /// title come back: about when the card is nearly settled.
-        private static let showAgainAfter: TimeInterval = 0.12
 
         private func hideLifted(_ card: CGRect, in view: UICollectionView, hidden: Bool) {
             let alpha: CGFloat = hidden ? 0 : 1
@@ -865,17 +864,10 @@ struct GridCards: UIViewRepresentable {
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
             menuShown = false
-            // The X and title come back as the card settles, not after: on
-            // the settle's end they came after a noticeable pause (David,
-            // 2026-11-28).
-            var shown = false
-            let showAgain = { [weak self, weak view] in
-                guard !shown else { return }
-                shown = true
-                guard let self, carried != id, view?.hasActiveDrag != true else { return }
-                if lifting == id { lifting = nil }
-                parent?.held(id, false)
-            }
+            // The X comes back the moment iOS puts the card back, at once,
+            // as iOS shows its title then: the two together, for a tab, a
+            // grouped tab, a folder, and an open group alike (David,
+            // 2026-11-28). An X brought back earlier came before the title.
             let back = { [weak self, weak view] in
                 // Carried on by the drag: its X stays hidden until it's down.
                 self?.carryFolderAgain()
@@ -885,18 +877,11 @@ struct GridCards: UIViewRepresentable {
                     hideLifted(lifted.frame, in: view, hidden: false)
                     parent?.liftGroup(nil)
                 }
-                showAgain()
+                guard let self, carried != id, view?.hasActiveDrag != true else { return }
+                if lifting == id { lifting = nil }
+                parent?.shown(id)
             }
-            if let animator {
-                animator.addCompletion(back)
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.showAgainAfter) {
-                    MainActor.assumeIsolated {
-                        if self.liftedGroup?.id != id { showAgain() }
-                    }
-                }
-            } else {
-                back()
-            }
+            if let animator { animator.addCompletion(back) } else { back() }
         }
 
         // MARK: iOS's drag

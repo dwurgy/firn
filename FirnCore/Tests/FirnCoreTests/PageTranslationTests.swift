@@ -47,9 +47,21 @@ private final class FakeTranslator: RunTranslating {
     var runsAwayOver = Int.max
     var delay: Duration = .zero
     var cancelled = false
+    /// The quick way misses any part with a piece; the careful way doesn't.
+    var missesPieces = false
+    var carefulCalls = 0
+
+    func translateCarefully(_ runs: [Run]) async throws -> [Run] {
+        carefulCalls += 1
+        let misses = missesPieces
+        missesPieces = false
+        defer { missesPieces = misses }
+        return try await translate(runs)
+    }
 
     func translate(_ runs: [Run]) async throws -> [Run] {
         calls.append(runs)
+        if missesPieces, runs.contains(where: { $0.piece != nil }) { throw PiecesMissed() }
         if delay > .zero { try await Task.sleep(for: delay) }
         if fails { throw URLError(.cannotFindHost) }
         if runs.map(\.text).joined().count > runsAwayOver {
@@ -85,6 +97,22 @@ struct PageTranslationTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         return translation
+    }
+
+    @Test func leavesPartsTheQuickWayMissedForTheCarefulWayLast() async throws {
+        let page = FakeTextPage(units: [
+            unit(0, [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: ". Y luego espera.")]),
+            unit(1, top: 50, [Run(text: "Una mañana tranquila")]),
+            unit(2, top: 100, [Run(text: "Otra más")]),
+        ])
+        let translator = FakeTranslator()
+        translator.missesPieces = true
+        let translation = try await translate(page, translator)
+        #expect(translation.phase == .translated)
+        // The rest of the page first; the missed unit carefully, once.
+        #expect(page.writes.map(\.id) == [1, 2, 0])
+        #expect(page.writes.last?.runs.compactMap(\.piece) == [0])
+        #expect(translator.carefulCalls == 1)
     }
 
     @Test func ordersWhatsOnScreenFirstThenBelowThenAbove() {

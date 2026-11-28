@@ -299,14 +299,19 @@ struct OverviewRow: View {
 /// says which site it is, so the icon only repeated it; unlike Safari's.
 /// 12pt words, 7pt under the card, 2pt in from its side (Safari's
 /// measures, from David's recordings).
+/// A folded group's name sits under its card the same way (David,
+/// 2026-11-27).
 struct GridTitle: View {
-    let tab: FirnCore.Tab
+    let text: String
     static let titleFont = Font.caption.weight(.semibold)
+
+    init(text: String) { self.text = text }
+    init(tab: FirnCore.Tab) { text = tab.title }
 
     var body: some View {
         // A short title sits centered under its card; a long one fills the
         // width and truncates.
-        Text(tab.title)
+        Text(text)
             .font(Self.titleFont)
             .foregroundStyle(Theme.ink)
             .lineLimit(1)

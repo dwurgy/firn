@@ -6,7 +6,7 @@ import SwiftUI
 // continuous change. The group's glass grows from the folder's shape to
 // the open card's; each small picture in the folder is the tab's own card,
 // growing to its place, its title beside it at full size from the first
-// frame; the folder's big name blurs away as the open group's name line
+// frame; the folder's name under it fades as the open group's name line
 // comes in; the tabs after the group ride the same curve to their new
 // places; and the cards before it in its row stay in front of the glass.
 //
@@ -48,14 +48,10 @@ import SwiftUI
         let open: CGRect
     }
 
-    /// The folder's small pictures: two columns of squares at the bottom,
-    /// as `GroupFolder` lays them out. In the cell's own space.
+    /// The folder's small pictures, as `GroupFolder` lays them out. In the
+    /// cell's own space.
     func mini(_ index: Int) -> CGRect {
-        let side = max((cell.width - 2 * GroupFolder.inset - GroupFolder.gap) / 2, 1)
-        let top = cell.height - GroupFolder.inset - (2 * side + GroupFolder.gap)
-        return CGRect(x: GroupFolder.inset + CGFloat(index % 2) * (side + GroupFolder.gap),
-                      y: top + CGFloat(index / 2) * (side + GroupFolder.gap),
-                      width: side, height: side)
+        GroupFolder.thumb(index, in: cell.size)
     }
 
     /// A tab's tile in the open group, title and all. In the card's space.
@@ -65,11 +61,6 @@ import SwiftUI
         return CGRect(x: GroupCard.side + CGFloat(index % columns) * (width + GroupCard.columnGap),
                       y: GroupCard.headerHeight + CGFloat(index / columns) * (tileHeight + GroupCard.rowGap),
                       width: max(width, 1), height: tileHeight)
-    }
-
-    /// The middle of the folder's name, down from the folder's top.
-    var nameMiddle: CGFloat {
-        (GroupFolder.inset + mini(0).minY - GroupFolder.gap) / 2
     }
 
     static func == (a: Self, b: Self) -> Bool { a.token == b.token }
@@ -135,6 +126,10 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
                     .frame(width: spot.width, height: spot.height)
                     .offset(x: spot.minX, y: spot.minY)
             }
+            // The folder's name under it, as a tab's title: it fades as the
+            // glass grows over it, and back at the end of a fold.
+            folderName(t)
+                .offset(x: glide.cell.minX, y: glide.cell.maxY)
             // The glass laid out at each size, never scaled or masked: iOS
             // draws no glass inside a mask or a scale until it's over.
             FirnGlass(shape: shape)
@@ -147,7 +142,6 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
                     card(id, at: index, in: frame, bare: bare)
                     titleLine(id, at: index, in: frame).opacity(titles)
                 }
-                folderName(t).position(x: frame.width / 2, y: glide.nameMiddle)
                 nameLine(t)
             }
             .frame(width: max(frame.width, 1), height: max(frame.height, 1), alignment: .topLeading)
@@ -166,7 +160,7 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
 
     /// A tab's card between its small picture in the folder and its place
     /// in the open group: scaled by its width, its picture's height opening
-    /// from the folder's square to the card's portrait.
+    /// from the folder's small one to the card's.
     private func card(_ id: UUID, at index: Int, in frame: CGRect, bare: Bool) -> some View {
         let small = glide.mini(index).offsetBy(dx: glide.cell.minX, dy: glide.cell.minY)
         let whole = glide.tile(index).offsetBy(dx: glide.card.minX, dy: glide.card.minY)
@@ -199,19 +193,12 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
             .offset(x: Self.mix(small.minX, whole.minX, share) - frame.minX, y: top - frame.minY)
     }
 
-    /// The folder's name, where the folder has it: it blurs away over the
-    /// first part of an opening, and comes back over the last of a fold.
+    /// The folder's name under its card: gone over the first part of an
+    /// opening, back over the last of a fold.
     private func folderName(_ t: CGFloat) -> some View {
-        let gone = Self.ramp(t, 0, 0.4)
-        return Text(name)
-            .font(.headline.weight(.bold))
-            .foregroundStyle(Theme.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .frame(width: max(glide.cell.width - 2 * GroupFolder.inset - 12, 1))
-            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-            .opacity(1 - gone)
-            .blur(radius: 6 * gone)
+        GridTitle(text: name)
+            .frame(width: max(glide.cell.width, 1), height: OverviewRow.gridTitleHeight, alignment: .top)
+            .opacity(1 - Self.ramp(t, 0, 0.3))
     }
 
     /// The open group's name line (`GroupLine`'s look), coming in over the

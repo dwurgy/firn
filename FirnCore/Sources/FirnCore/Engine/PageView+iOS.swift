@@ -236,6 +236,10 @@ private final class PageFrame: UIView {
                 MainActor.assumeIsolated { self?.scrolled(scroller) }
             },
         ]
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)),
+                                               name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)),
+                                               name: UIResponder.keyboardWillHideNotification, object: nil)
     }
 
     // MARK: Reader
@@ -732,27 +736,73 @@ private final class PageFrame: UIView {
             webView.setMinimumViewportInset(least, maximumViewportInset: most)
         }
         let scroller = webView.scrollView
+        // The keyboard gives the page more room to scroll, never less, as
+        // Safari's: WebKit scrolls a field the keyboard would cover up
+        // into view, and a field at a page's very end (Google's "Ask
+        // anything" box under an AI Overview, David, 2026-11-28) had
+        // nowhere to go and stayed under the keyboard. Only the scroll
+        // room: what's covered for the page's own layout stays the bar.
+        let scrolls = UIEdgeInsets(top: covered.top, left: covered.left,
+                                   bottom: max(covered.bottom, keyboardRoom), right: covered.right)
         // Firn's inset already holds the status bar; left automatic, iOS
         // added the safe area again (124pt), and a page bounced back to the
         // top settled 62pt too low (David's recording, 2026-11-05).
         if scroller.contentInsetAdjustmentBehavior != .never {
             scroller.contentInsetAdjustmentBehavior = .never
         }
-        if scroller.contentInset != covered {
-            let grew = covered.bottom - scroller.contentInset.bottom
+        if scroller.contentInset != scrolls {
+            // Only the bar growing slides a page resting at its end up;
+            // the keyboard leaves the scrolling to WebKit.
+            let grew = keyboardRoom > 0 ? 0 : scrolls.bottom - scroller.contentInset.bottom
             let wasAtEnd = scroller.contentOffset.y >= endOffset(webView) - 1
             // Turned or unfolded while at its top: it stays at its top. Left
             // alone, a page turned upright kept its first line under the clock.
-            let taller = scroller.contentInset != .zero && covered.top > scroller.contentInset.top
+            let taller = scroller.contentInset != .zero && scrolls.top > scroller.contentInset.top
             let wasAtTop = scroller.contentOffset.y <= 1 - scroller.contentInset.top
-            scroller.contentInset = covered
-            if taller, wasAtTop, !scroller.isTracking { scroller.contentOffset.y = -covered.top }
+            scroller.contentInset = scrolls
+            if taller, wasAtTop, !scroller.isTracking { scroller.contentOffset.y = -scrolls.top }
             scroller.verticalScrollIndicatorInsets = covered
             if grew > 0, wasAtEnd { keepEndInView(webView) }
         }
         // iOS's own choice, as Safari's: `.soft` ran the blur about 80pt
         // down and whiter; `.automatic` ends just under the clock (2026-11-05).
         scroller.topEdgeEffect.style = .automatic
+    }
+
+    /// How far the keyboard reaches up over the page, from its bottom
+    /// edge; 0 while it's down or off the page.
+    private var keyboardRoom: CGFloat = 0
+
+    @objc private func keyboardMoved(_ note: Notification) {
+        var room: CGFloat = 0
+        if note.name != UIResponder.keyboardWillHideNotification,
+           let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+           let screen = window?.screen {
+            let keyboard = convert(end, from: screen.coordinateSpace)
+            // A keyboard that isn't across the bottom of the page (floating
+            // on an iPad, or off screen) gives no room.
+            if keyboard.width >= bounds.width / 2, keyboard.maxY >= bounds.maxY - 1 {
+                room = max(bounds.maxY - keyboard.minY, 0)
+            }
+        }
+        guard room != keyboardRoom else { return }
+        keyboardRoom = room
+        guard held == nil else { return }
+        applyInsets(to: webView)
+        if let reader { applyInsets(to: reader) }
+        // Gone again: a page scrolled past its end eases back to it.
+        guard room == 0 else { return }
+        for view in [webView, reader].compactMap({ $0 }) {
+            let scroller = view.scrollView
+            let end = max(endOffset(view), -scroller.contentInset.top)
+            guard scroller.contentOffset.y > end, !scroller.isTracking else { continue }
+            let move = { scroller.contentOffset.y = end }
+            if UIAccessibility.isReduceMotionEnabled {
+                UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut, animations: move)
+            } else {
+                UIView.animate(springDuration: 0.32, bounce: 0, animations: move)
+            }
+        }
     }
 
     /// The furthest the page scrolls down: its end just clear of the bar.

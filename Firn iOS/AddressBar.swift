@@ -1036,12 +1036,13 @@ private struct AddressField: View {
                                    size: 19, lineWidth: 1.9)
                         .transition(.opacity)
                 case .translate:
-                    // Ink while offered or working (breathing; Reduce Motion:
-                    // dimmed), the space's color once translated, as the
-                    // Mac's mark and Reader's book.
+                    // Ink while only offered; the space's color from the tap
+                    // on, as Reader's book once Reader is on (David,
+                    // 2026-11-27), breathing while it works (Reduce Motion:
+                    // dimmed).
                     Image(systemName: "translate")
                         .font(BarButton.symbolFont)
-                        .foregroundStyle(page.translator?.state == .translated ? color : Theme.ink)
+                        .foregroundStyle(page.translator?.state == .translated || translating ? color : Theme.ink)
                         .opacity(translating ? (reduceMotion ? 0.5 : (breathing ? 0.35 : 1)) : 1)
                         .transition(.opacity)
                 case .menu:

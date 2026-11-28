@@ -4,10 +4,10 @@ import SwiftUI
 /// The translate mark in the address field, beside Reader's book and
 /// looking just like it (design: `docs/translate-design.html`). Shown only
 /// on pages that are offered; one click translates, another puts the page
-/// back. Muted while offered; breathing gently while translating (Reduce
-/// Motion: simply dimmed); the space's color once translated, as the book
-/// is while Reader is on. Pointing at it says what it will do. The Mac
-/// only: the iPhone has just its page menu's row.
+/// back. Muted while offered; the space's color from the click on, as the
+/// book is while Reader is on (David, 2026-11-27), breathing gently while
+/// translating (Reduce Motion: simply dimmed). Pointing at it says what it
+/// will do. The iPhone shows the same in its page menu's button.
 struct TranslateMarkButton: View {
     let translator: PageTranslator
     let space: String
@@ -23,7 +23,7 @@ struct TranslateMarkButton: View {
         Button(action: action) {
             Image(systemName: "translate")
                 .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(state == .translated ? Theme.spaceColor(space) : Theme.muted)
+                .foregroundStyle(state == .translated || state == .translating ? Theme.spaceColor(space) : Theme.muted)
                 .opacity(markOpacity)
                 .frame(width: 26, height: 22)
                 .background {

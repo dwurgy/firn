@@ -172,7 +172,7 @@ struct GroupFolder: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 12)
                 } else {
-                    GridTitle(text: group.name)
+                    GridTitle(text: group.name, bold: true)
                 }
             }
             .frame(height: OverviewRow.gridTitleHeight, alignment: .top)

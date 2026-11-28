@@ -196,7 +196,7 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
     /// The folder's name under its card: gone over the first part of an
     /// opening, back over the last of a fold.
     private func folderName(_ t: CGFloat) -> some View {
-        GridTitle(text: name)
+        GridTitle(text: name, bold: true)
             .frame(width: max(glide.cell.width, 1), height: OverviewRow.gridTitleHeight, alignment: .top)
             .opacity(1 - Self.ramp(t, 0, 0.3))
     }

@@ -1108,6 +1108,33 @@ private struct AddressField: View {
     /// touch smaller, before it's cut short. A text field can do neither,
     /// so this is a plain label over it.
     private var restingLabel: some View {
+        // The room the bar gives the name, measured on an empty frame with
+        // the name drawn over it. Measured on the name's own frame, a name a
+        // little too long (laid out whole, then scaled) made that frame wider
+        // than the room, which then read as more room, so the name came back
+        // unscaled and ran under Reload (chelseasmessyapron.com, 2026-11-28).
+        Color.clear
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .frame(height: 24)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !compact { restWidth = $0 } }
+            .overlay { restingName }
+            .scaleEffect(compact ? AddressBar.compactTextScale : restTextScale)
+            .offset(y: compact ? compactDrop : 0)
+            .background {
+                Text(verbatim: text.isEmpty ? "Search or enter address"
+                               : notSecure ? "\u{2003}\u{2002}" + WebAddress.shortSite(of: frontURL) : text)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labelWidth = $0 }
+            }
+            .opacity(menuOpen || settling ? 0 : 1)
+            .animation(.easeOut(duration: 0.1), value: menuOpen)
+            .allowsHitTesting(false)
+    }
+
+    private var restingName: some View {
         // A stack, not a row: as one note leaves and the next arrives, both
         // are here for a moment, and side by side they squeezed and moved
         // each other (the jump in David's recording, 2026-11-27).
@@ -1171,24 +1198,6 @@ private struct AddressField: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        // The room it's given whatever the name's own width (with no least
-        // width, a wider name made this frame wider too).
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !compact { restWidth = $0 } }
-        .scaleEffect(compact ? AddressBar.compactTextScale : restTextScale)
-        .offset(y: compact ? compactDrop : 0)
-        .background {
-            Text(verbatim: text.isEmpty ? "Search or enter address"
-                           : notSecure ? "\u{2003}\u{2002}" + WebAddress.shortSite(of: frontURL) : text)
-                .font(.callout.weight(.medium))
-                .lineLimit(1)
-                .fixedSize()
-                .hidden()
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labelWidth = $0 }
-        }
-        .opacity(menuOpen || settling ? 0 : 1)
-        .animation(.easeOut(duration: 0.1), value: menuOpen)
-        .allowsHitTesting(false)
     }
 
     /// The page is on plain http, so the bar says "Not Secure" before the

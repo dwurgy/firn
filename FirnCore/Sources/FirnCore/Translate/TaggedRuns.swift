@@ -7,7 +7,7 @@ import Foundation
 /// right words: "Haz clic <a0>aquí</a0> para leer <x1/>" comes back as
 /// "Click <a0>here</a0> to read <x1/>". A piece is `<aN>words</aN>`; a
 /// kept piece (code, `translate="no"`) is `<xN/>`, its words left out so
-/// the model can't touch them.
+/// the model can't touch them; a piece with no words isn't tagged.
 ///
 /// The page's words are hostile input: a page whose own text looks like a
 /// tag isn't tagged at all, and a translation whose tags don't come back
@@ -21,6 +21,10 @@ enum TaggedRuns {
             guard !looksLikeTag(run.text) else { return nil }
             switch (run.piece, run.isFixed) {
             case (nil, _): out += run.text
+            // A piece with no words (Wikipedia's space in "10 %") goes in
+            // as its text: a tag per space crowds the model, which then
+            // cuts the sentence short. The translator puts it back.
+            case (_?, false) where !run.text.contains(where: { $0.isLetter || $0.isNumber }): out += run.text
             case (let piece?, true): out += "<x\(piece)/>"
             case (let piece?, false): out += "<a\(piece)>\(run.text)</a\(piece)>"
             }
@@ -31,7 +35,10 @@ enum TaggedRuns {
     /// A tagged translation read back into runs, or nil if its tags don't
     /// match `part`'s pieces exactly. A piece with no words (an empty
     /// anchor) may go missing; the translator puts it back.
-    static func decode(_ text: String, from part: [PageText.Run]) -> [PageText.Run]? {
+    static func decode(_ output: String, from part: [PageText.Run]) -> [PageText.Run]? {
+        // The fast model sometimes stops one character short: "…</a1".
+        var text = output
+        if text.contains(/<\/a\d{1,4}$/) { text += ">" }
         var byPiece: [Int: PageText.Run] = [:]
         for run in part { if let piece = run.piece { byPiece[piece] = run } }
         var out: [PageText.Run] = []
@@ -78,6 +85,24 @@ enum TaggedRuns {
         }
         return merged
     }
+
+    /// Whether the fast model seems to have stopped early, which it does
+    /// now and then with tags in the text: a sentence that ended doesn't
+    /// end, or the output is under half the input (counted in bytes, so a
+    /// change of script doesn't look like one).
+    static func looksCut(input: String, output: String) -> Bool {
+        let i = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let o = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if o.utf8.count * 2 < i.utf8.count { return true }
+        func ends(_ text: String) -> Bool {
+            guard let last = text.last else { return false }
+            return last == ">" || enders.contains(last)
+        }
+        return ends(i) && !ends(o)
+    }
+
+    private static let enders: Set<Character> = [".", "!", "?", "…", ":", ";", ")", "]", "\"", "'", "”", "’", "»",
+                                                 "。", "！", "？", "」", "』", "）", "۔", "؟", "।"]
 
     // `<a3>`, `</a3>`, or `<x3/>`.
     nonisolated(unsafe) private static let tag = /<(\/?[ax])(\d{1,4})(\/)?>/

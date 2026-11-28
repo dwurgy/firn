@@ -283,6 +283,10 @@ struct PageTranslationTests {
         let out = try #require(TaggedRuns.decode("Read <x1/> by clicking <a0>here</a0>.", from: runs))
         #expect(out == [Run(text: "Read "), Run(piece: 1, text: "git log", isFixed: true),
                         Run(text: " by clicking "), Run(piece: 0, text: "here"), Run(text: ".")])
+        // A piece with no words isn't tagged, and may come back missing.
+        let spaced = [Run(text: "Un 10"), Run(piece: 0, text: "\u{a0}"), Run(text: "% de la "), Run(piece: 1, text: "Tierra")]
+        #expect(TaggedRuns.encode(spaced) == "Un 10\u{a0}% de la <a1>Tierra</a1>")
+        #expect(TaggedRuns.decode("10% of the <a1>Earth</a1>", from: spaced)?.compactMap(\.piece) == [1])
         // No pieces: plain text both ways.
         #expect(TaggedRuns.decode("Hello.", from: [Run(text: "Hola.")]) == [Run(text: "Hello.")])
     }
@@ -301,6 +305,17 @@ struct PageTranslationTests {
         // A piece with no words (an empty anchor) may go missing.
         let empty = [Run(piece: 0, text: ""), Run(text: "Hola")]
         #expect(TaggedRuns.decode("Hello", from: empty) == [Run(text: "Hello")])
+    }
+
+    @Test func noticesTheFastModelStoppingEarly() {
+        let runs = [Run(piece: 0, text: "10.1"), Run(text: " "), Run(piece: 1, text: "Derretimiento de los glaciares.")]
+        // One character short: mended.
+        #expect(TaggedRuns.decode("<a0>10.1</a0> <a1>Melting of glaciers.</a1", from: runs)?.compactMap(\.piece) == [0, 1])
+        #expect(TaggedRuns.looksCut(input: "La velocidad depende de la humedad.", output: "The speed depends on the"))
+        #expect(TaggedRuns.looksCut(input: "Una frase bastante larga sobre los glaciares.", output: "A"))
+        #expect(!TaggedRuns.looksCut(input: "Ver <a0>más</a0>.<x1/>", output: "See <a0>more</a0>.<x1/>"))
+        #expect(!TaggedRuns.looksCut(input: "氷河は動く。", output: "Glaciers move."))
+        #expect(!TaggedRuns.looksCut(input: "Glaciares de montaña", output: "Mountain glaciers"))
     }
 
     @Test func doesntTagTextThatLooksLikeATag() {

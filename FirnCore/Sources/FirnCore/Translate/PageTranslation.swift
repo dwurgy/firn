@@ -538,7 +538,8 @@ public final class SystemRunTranslator: RunTranslating {
             do {
                 nonisolated(unsafe) let session = fast
                 let response = try await session.translate(tagged)
-                if let out = TaggedRuns.decode(response.targetText, from: runs) { return out }
+                if !TaggedRuns.looksCut(input: tagged, output: response.targetText),
+                   let out = TaggedRuns.decode(response.targetText, from: runs) { return out }
                 throw PiecesMissed()
             } catch let error where TranslationError.notInstalled ~= error
                 || TranslationError.unsupportedLanguagePairing ~= error {

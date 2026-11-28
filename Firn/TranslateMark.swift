@@ -23,7 +23,7 @@ struct TranslateMarkButton: View {
         Button(action: action) {
             Image(systemName: "translate")
                 .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(state == .translated || state == .translating ? Theme.spaceColor(space) : Theme.muted)
+                .foregroundStyle(state == .translated || state == .translating ? Theme.spaceSymbol(space) : Theme.muted)
                 .opacity(markOpacity)
                 .frame(width: 26, height: 22)
                 .background {

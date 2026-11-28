@@ -182,7 +182,12 @@ enum Theme {
     /// A hair calmer since (David, 2026-11-15: read too saturated): about a
     /// fifth less saturation at the same lightness, so the white reads the same.
     static func spaceVivid(_ name: String) -> Color {
-        let hex: UInt32 = switch name {
+        let hex = vividHex(name)
+        return Color(light: hex, dark: hex)
+    }
+
+    private static func vividHex(_ name: String) -> UInt32 {
+        switch name {
         case "sand": 0xA38460
         case "sage": 0x6C9368
         case "heather": 0xA87189
@@ -192,7 +197,25 @@ enum Theme {
         case "lagoon": 0x4A9793
         default: 0x628FAE
         }
-        return Color(light: hex, dark: hex)
+    }
+
+    /// A space's color for a small symbol that's on (Reader's book while
+    /// reading, the translate mark once tapped), livelier so it reads on the
+    /// bar's glass (David, 2026-11-27). Light: the check's vivid color
+    /// (about 3:1 on the pale glass). Dark: the same hue, as lively but
+    /// lighter, since the vivid one sinks into the dark grey (about 3:1 there).
+    static func spaceSymbol(_ name: String) -> Color {
+        let dark: UInt32 = switch name {
+        case "sand": 0xD3B592
+        case "sage": 0xA1C79E
+        case "heather": 0xD9AABF
+        case "ochre": 0xDEC887
+        case "dusk": 0xAFAEDB
+        case "clay": 0xDFA890
+        case "lagoon": 0x89DCD8
+        default: 0x8BBADA
+        }
+        return Color(light: vividHex(name), dark: dark)
     }
 
     #if os(iOS)

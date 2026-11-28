@@ -1012,7 +1012,7 @@ private struct AddressField: View {
     /// tap goes straight into Reader (David, 2026-11-13).
     private func pageMenuButton(_ page: any PageController) -> some View {
         let icon = menuIcon(page)
-        let color = Theme.spaceColor(store.activeSpace.color)
+        let color = Theme.spaceSymbol(store.activeSpace.color)
         let translating = icon == .translate && page.translator?.state == .translating
         // Only opens: a hold already opened it, and the finger lifting
         // over the button mustn't close it again.

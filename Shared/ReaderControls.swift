@@ -105,7 +105,7 @@ struct ReaderBookButton: View {
 
     var body: some View {
         Button(action: action) {
-            ReaderBookIcon(isOn: isOn, color: Theme.spaceColor(space))
+            ReaderBookIcon(isOn: isOn, color: Theme.spaceSymbol(space))
                 .frame(width: 26, height: 22)
                 .background {
                     RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)

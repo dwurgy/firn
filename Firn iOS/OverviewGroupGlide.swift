@@ -116,9 +116,11 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
         // The X and shadow: early as it opens, gone at once as it folds,
         // as Safari's.
         let bare = glide.opening ? t < 0.2 : t < 0.97
-        // The titles: there from the first frame of an opening and gone in
-        // the first of a fold, as Safari's.
-        let titles = glide.opening ? Self.ramp(t, 0, 0.1) : Self.ramp(t, 0.9, 1)
+        // The titles ride under their cards, fading in over the second half
+        // of an opening so they arrive with the cards instead of sitting at
+        // full size under tiny ones (David's recording, 2026-11-28); gone in
+        // the first part of a fold, as Safari's.
+        let titles = glide.opening ? Self.ramp(t, 0.55, 0.95) : Self.ramp(t, 0.9, 1)
         ZStack(alignment: .topLeading) {
             ForEach(glide.arrivals) { arrival in
                 let spot = Self.mix(arrival.folded, arrival.open, share)
@@ -128,8 +130,11 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
             }
             // The folder's name under it, as a tab's title: it fades as the
             // glass grows over it, and back at the end of a fold.
+            // It rides under the glass's bottom edge, centered, so it
+            // arrives with the folder instead of waiting where it lands
+            // (David's recording, 2026-11-28).
             folderName(t)
-                .offset(x: glide.cell.minX, y: glide.cell.maxY)
+                .offset(x: frame.midX - glide.cell.width / 2, y: frame.maxY)
             // The glass laid out at each size, never scaled or masked: iOS
             // draws no glass inside a mask or a scale until it's over.
             FirnGlass(shape: shape)
@@ -198,7 +203,7 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
     private func folderName(_ t: CGFloat) -> some View {
         GridTitle(text: name, bold: true)
             .frame(width: max(glide.cell.width, 1), height: OverviewRow.gridTitleHeight, alignment: .top)
-            .opacity(1 - Self.ramp(t, 0, 0.3))
+            .opacity(1 - Self.ramp(t, 0, 0.2))
     }
 
     /// The open group's name line (`GroupLine`'s look), coming in over the

@@ -202,9 +202,11 @@ struct OverviewRow: View {
     /// measured from David's recording (2026-11-17).
     private static let swipeGrowth: CGFloat = 1.09
 
-    /// The grid card's corners: Safari's 15pt, measured from David's
-    /// screenshots (2026-11-16); the X's disc sits concentric in the corner.
-    static let gridCornerRadius: CGFloat = 15
+    /// The grid card's corners: 20pt, rounder than Safari's 15pt so the
+    /// look is Firn's own and the X has room in the curve (David,
+    /// 2026-11-27). Everything that follows a card's corner derives from
+    /// it; the X's disc sits concentric in the corner.
+    static let gridCornerRadius: CGFloat = 20
     /// The X, title, and shadow coming and going as a group folds or opens.
     private static let bareFade: TimeInterval = 0.14
     /// The grid card's shadow at rest, as Safari's: about 14pt of blur
@@ -325,43 +327,39 @@ struct GridTitle: View {
     }
 }
 
-/// A grid card's X, on the picture's corner as Safari's: a small disc of
-/// ink with the X in the page's white, so it reads over any page; 44pt to
-/// tap.
+/// A grid card's X, on the picture's corner: a small disc of Firn's iPhone
+/// glass (`FirnGlass`) with the X on it, its middle one corner radius in
+/// from the card's corner, so it sits concentric in the curve (David,
+/// 2026-11-27); 44pt to tap.
 struct GridCloseButton: View {
     let title: String
     let close: () -> Void
 
+    static let disc: CGFloat = 26
+    private static let mark: CGFloat = 13
+    private static let target: CGFloat = 44
+
     var body: some View {
         Button(action: close) {
             Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: Self.mark, weight: .bold))
                 .foregroundStyle(Theme.closeDiscMark)
-                .frame(width: 22, height: 22)
-                .background(Theme.closeDisc, in: .circle)
-                // Its middle 15pt from the corner, as Safari's, so it sits
-                // concentric with the card's 15pt corner; the 44pt
-                // to tap reaches past the card's edge.
-                .frame(width: 44, height: 44)
+                .frame(width: Self.disc, height: Self.disc)
+                .background { FirnGlass(shape: Circle()) }
+                // The 44pt to tap reaches past the card's edge.
+                .frame(width: Self.target, height: Self.target)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(-7)
+        // Its middle `gridCornerRadius` in from the corner.
+        .padding(OverviewRow.gridCornerRadius - Self.target / 2)
         .accessibilityLabel("Close \(title)")
     }
 }
 
 extension Theme {
-    /// A grid card's X, neutral (menus and cards stay neutral, David,
-    /// 2026-11-15). Dark: a dark grey disc at 80%, the X near-white. Light:
-    /// a pale disc with a dark grey X, as Safari's (David, 2026-11-18; the
-    /// dark disc read heavy on light pages); solid enough to read over any
-    /// page, with no blur to draw per card.
-    static let closeDisc = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(white: 0.13, alpha: 0.8)
-            : UIColor(white: 0.90, alpha: 0.9)
-    })
+    /// A grid card's X on its glass disc, neutral (menus and cards stay
+    /// neutral, David, 2026-11-15): near-white in dark, dark grey in light.
     static let closeDiscMark = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark ? UIColor(white: 0.97, alpha: 1) : UIColor(white: 0.25, alpha: 1)
     })

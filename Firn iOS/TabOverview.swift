@@ -102,6 +102,8 @@ struct TabOverview: View {
     /// drag (`GridCards.held`), so their X hides (the lift is only the
     /// picture).
     @State private var systemDragged: Set<UUID> = []
+    /// An open group lifted whole for its menu: its tabs show no X.
+    @State private var liftedGroup: UUID?
     /// A group folding into its cell or opening out of it drawn over the list until it's done (`GroupGlideView`),
     /// and how far open it's drawn (0 folded, 1 open).
     @State private var glide: GroupGlide?
@@ -739,7 +741,8 @@ struct TabOverview: View {
             groupName: tab.groupID.flatMap { id in store.groups.first(where: { $0.id == id })?.name },
             actionsKey: [index ?? -1, reduceMotion ? 1 : 0],
             cardHeight: height ?? cardHeight,
-            carried: systemDragged.contains(tab.id) || tidying.leaving.contains(tab.id),
+            carried: systemDragged.contains(tab.id) || tidying.leaving.contains(tab.id)
+                || (liftedGroup != nil && tab.groupID == liftedGroup),
             bare: bare,
             titled: titled,
             swipesItself: !inCollection,
@@ -840,6 +843,17 @@ struct TabOverview: View {
                           withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
                               if held { systemDragged.insert(id) } else { systemDragged.remove(id) }
                           }
+                      },
+                      shown: { id in
+                          var quiet = Transaction()
+                          quiet.disablesAnimations = true
+                          withTransaction(quiet) { _ = systemDragged.remove(id) }
+                      },
+                      liftGroup: { id in
+                          // At once: iOS takes its picture of the group next.
+                          var quiet = Transaction()
+                          quiet.disablesAnimations = true
+                          withTransaction(quiet) { liftedGroup = id.flatMap { open[$0]?.group.id } }
                       },
                       move: { id, before, group, after in
                           GridMove(sources: [id], collection: group.map { .tabs($0) } ?? .loose(after: after),

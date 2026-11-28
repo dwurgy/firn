@@ -203,6 +203,11 @@ struct GridCards: UIViewRepresentable {
     /// A card held (its menu open, or carried by the drag), so its X hides:
     /// iOS lifts only the picture, as Safari's.
     let held: (UUID, Bool) -> Void
+    /// A card back from its hold menu: its X at once, as iOS shows its title.
+    let shown: (UUID) -> Void
+    /// An open group lifted whole by its name line (nil: none): its tabs'
+    /// X go at once, before iOS's picture of it is taken.
+    let liftGroup: (UUID?) -> Void
     /// A card let go before another (nil: at the end), among an open
     /// group's tabs, or in the run after an open group (nil: the first run).
     let move: (_ id: UUID, _ before: UUID?, _ group: UUID?, _ after: UUID?) -> Void
@@ -556,7 +561,7 @@ struct GridCards: UIViewRepresentable {
                 touchedAt = touch.timestamp
                 // A new finger with no drag under way: anything left from
                 // a hold that never became a drag is let go.
-                if let view = gesture.view as? UICollectionView, !view.hasActiveDrag { forgetHold() }
+                if let view = gesture.view as? UICollectionView, !view.hasActiveDrag { forgetHold(in: view) }
             }
             return true
         }
@@ -786,19 +791,72 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, contextMenuConfiguration configuration: UIContextMenuConfiguration,
                             highlightPreviewForItemAt path: IndexPath) -> UITargetedPreview? {
+            if let whole = wholeGroup(view, path) { return whole }
             guard let cell = view.cellForItem(at: path), let parameters = picture(view, path) else { return nil }
             return UITargetedPreview(view: cell, parameters: parameters)
         }
 
         func collectionView(_ view: UICollectionView, contextMenuConfiguration configuration: UIContextMenuConfiguration,
                             dismissalPreviewForItemAt path: IndexPath) -> UITargetedPreview? {
-            self.collectionView(view, contextMenuConfiguration: configuration, highlightPreviewForItemAt: path)
+            if let lifted = liftedGroup, dataSource?.itemIdentifier(for: path) == lifted.id { return lifted.preview }
+            return self.collectionView(view, contextMenuConfiguration: configuration, highlightPreviewForItemAt: path)
+        }
+
+        /// An open group held by its name line lifts whole for its menu, glass
+        /// and tabs, as a tab or a folded group lifts whole; before, only the
+        /// name line rose (David's recording, 2026-11-28). A picture of the
+        /// card as it is on screen, laid exactly over it; its drag still
+        /// carries the folder card (`carryFolder`).
+        private var liftedGroup: (id: UUID, preview: UITargetedPreview, frame: CGRect)?
+
+        private func hideLifted(_ card: CGRect, in view: UICollectionView, hidden: Bool) {
+            let alpha: CGFloat = hidden ? 0 : 1
+            UIView.performWithoutAnimation {
+                for path in view.indexPathsForVisibleSupplementaryElements(ofKind: GridPlanLayout.cardKind) {
+                    if let view = view.supplementaryView(forElementKind: GridPlanLayout.cardKind, at: path),
+                       view.frame.intersects(card) {
+                        view.alpha = alpha
+                    }
+                }
+                for case let cell as GridCardCell in view.visibleCells where cell.frame.intersects(card) {
+                    cell.contentView.alpha = alpha
+                }
+            }
+        }
+
+        private func wholeGroup(_ view: UICollectionView, _ path: IndexPath) -> UITargetedPreview? {
+            guard let id = dataSource?.itemIdentifier(for: path), let parent, parent.kind(id) == .line,
+                  let card = view.collectionViewLayout.layoutAttributesForSupplementaryView(
+                      ofKind: GridPlanLayout.cardKind, at: IndexPath(item: 0, section: path.section))?.frame,
+                  !card.isEmpty else { return nil }
+            // Its tabs' X go first, as a lifted tab's (David, 2026-11-28):
+            // laid out now, so the picture is taken without them.
+            parent.liftGroup(id)
+            for case let cell as GridCardCell in view.visibleCells where cell.frame.intersects(card) {
+                cell.contentView.setNeedsLayout()
+                cell.contentView.layoutIfNeeded()
+            }
+            guard let picture = view.resizableSnapshotView(from: card, afterScreenUpdates: true,
+                                                           withCapInsets: .zero) else { return nil }
+            let parameters = UIPreviewParameters()
+            parameters.visiblePath = UIBezierPath(roundedRect: CGRect(origin: .zero, size: card.size),
+                                                  cornerRadius: GroupCard.cornerRadius)
+            parameters.backgroundColor = .clear
+            let preview = UITargetedPreview(view: picture, parameters: parameters,
+                                            target: UIPreviewTarget(container: view,
+                                                                    center: CGPoint(x: card.midX, y: card.midY)))
+            liftedGroup = (id, preview, card)
+            return preview
         }
 
         func collectionView(_ view: UICollectionView, willDisplayContextMenu configuration: UIContextMenuConfiguration,
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
             menuShown = true
+            // A lifted open group's real card hides under its picture, which
+            // iOS grows a little: it showed round the picture's edge (David's
+            // screenshot, 2026-11-28).
+            if let lifted = liftedGroup, lifted.id == id { hideLifted(lifted.frame, in: view, hidden: true) }
             parent?.held(id, true)
         }
 
@@ -806,12 +864,22 @@ struct GridCards: UIViewRepresentable {
                             animator: (any UIContextMenuInteractionAnimating)?) {
             guard let id = configuration.identifier as? UUID else { return }
             menuShown = false
+            // The X comes back the moment iOS puts the card back, at once,
+            // as iOS shows its title then: the two together, for a tab, a
+            // grouped tab, a folder, and an open group alike (David,
+            // 2026-11-28). An X brought back earlier came before the title.
             let back = { [weak self, weak view] in
                 // Carried on by the drag: its X stays hidden until it's down.
                 self?.carryFolderAgain()
+                // A lifted group's real card only once its picture is down.
+                if let self, let view, let lifted = liftedGroup, lifted.id == id {
+                    liftedGroup = nil
+                    hideLifted(lifted.frame, in: view, hidden: false)
+                    parent?.liftGroup(nil)
+                }
                 guard let self, carried != id, view?.hasActiveDrag != true else { return }
                 if lifting == id { lifting = nil }
-                parent?.held(id, false)
+                parent?.shown(id)
             }
             if let animator { animator.addCompletion(back) } else { back() }
         }
@@ -879,7 +947,13 @@ struct GridCards: UIViewRepresentable {
 
         /// A hold that never became a drag: its card shows its X again, and
         /// swipes are taken again.
-        private func forgetHold() {
+        private func forgetHold(in view: UICollectionView) {
+            // An open group lifted for a menu that never showed comes back.
+            if let lifted = liftedGroup, !menuShown {
+                liftedGroup = nil
+                hideLifted(lifted.frame, in: view, hidden: false)
+                parent?.liftGroup(nil)
+            }
             if let id = lifting, !menuShown { parent?.held(id, false) }
             if !menuShown { lifting = nil }
             if let id = carried { parent?.held(id, false) }

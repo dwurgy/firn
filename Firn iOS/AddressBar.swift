@@ -1076,11 +1076,10 @@ private struct AddressField: View {
 
     private enum MenuIcon: Equatable { case menu, book, translate }
 
-    /// How the button's icon and the words beside it change: the old fade
-    /// out quickly, then the new fade in, so the two never show at once.
-    static let handOver: AnyTransition = .asymmetric(
-        insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
-        removal: .opacity.animation(.easeIn(duration: 0.12)))
+    /// How the button's icon and the words beside it change: one
+    /// cross-fade, the old going as the new comes, in the same spot (a gap
+    /// between them felt jumpy; David, 2026-11-27).
+    static let handOver: AnyTransition = .opacity.animation(.easeInOut(duration: 0.25))
 
     /// What the page menu's button shows, as Safari's: Reader's book while
     /// Reader is on or "Reader available" shows; the translate symbol while
@@ -1166,8 +1165,7 @@ private struct AddressField: View {
             // One height for every label, so a note in a smaller size can't
             // shift the one leaving as it arrives.
             .frame(height: 24)
-            // The name and the notes fade one out, then the next in, never
-            // over each other or sliding (David, 2026-11-27).
+            // The name and the notes cross-fade in place, never sliding.
             .id(note.map { "\($0)" } ?? "")
             .transition(Self.handOver)
             .allowsHitTesting(false)

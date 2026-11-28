@@ -12,3 +12,7 @@ The EasyList authors offer the lists under either GPL-3.0 or CC BY-SA 3.0 (https
 ## Refreshing them
 
 Replace both files with fresh copies from the addresses above, then run the FirnCore tests: `BlockListTests` checks that every rule still fits WebKit's limits and compiles. Firn notices the new lists on its next launch and compiles them again.
+
+## Left alone on purpose
+
+- **Ad-Shield** (`html-load.com` and addresses that change on their own): when a site's ads are blocked, it serves them again through its own servers, and if those are blocked too, the site replaces the page with "An ad blocker is preventing this page from loading". Content blockers can't get past it, since they can't change a page's own scripts. So Firn leaves it alone: a few ads get through on those sites, but the page works (David, 2026-11-28; seen on chelseasmessyapron.com).

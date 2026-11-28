@@ -425,10 +425,22 @@ final class WebKitPageController: NSObject, PageController {
     }
 
     static var safariUserAgentSuffix: String {
-        // Safari's version follows macOS from 26 on; before that it was macOS + 3.
-        let macOS = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
-        let safari = macOS >= 26 ? macOS : macOS + 3
+        // Safari's version follows the system from 26 on; before that it was
+        // the system + 3 on macOS, and the same number on iOS.
+        let system = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        #if os(iOS)
+        // The iPhone ends as iPhone Safari does. WebKit's own ending there is
+        // "Mobile/15E148", and this replaces it: without "Mobile", Google
+        // left the "Ask anything" box out of an expanded AI Overview (David,
+        // 2026-11-28). The iPad keeps the Mac's ending, as iPad Safari does.
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            return "Version/\(system).0 Mobile/15E148 Safari/604.1"
+        }
+        return "Version/\(system).0 Safari/605.1.15"
+        #else
+        let safari = system >= 26 ? system : system + 3
         return "Version/\(safari).0 Safari/605.1.15"
+        #endif
     }
 }
 

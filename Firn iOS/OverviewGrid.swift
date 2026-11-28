@@ -117,8 +117,8 @@ struct GroupFolder: View {
     var flat = false
 
     static let shown = 4
-    static let inset: CGFloat = 8
-    static let gap: CGFloat = 6
+    static let inset: CGFloat = 10
+    static let gap: CGFloat = 10
     /// Concentric with the card's corner, so it follows if that changes.
     static let thumbCorner: CGFloat = OverviewRow.gridCornerRadius - inset
 

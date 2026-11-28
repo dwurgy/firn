@@ -20,14 +20,16 @@ enum Theme {
     static let groupName = Color(light: 0x3B342E, dark: 0xF5F1EC)
     static let faint = Color(light: 0x9D9389, dark: 0x958D85)
     static let frost = Color(light: 0x82A8BE, dark: 0xA0C4D6, opacity: 0.45)
-    /// The system accent (radio buttons, switches, focus): a slightly more
-    /// saturated Glacier, from the asset catalog. Set on controls in sheets
+    /// The system accent (radio buttons, switches, focus, text selection): a
+    /// deeper, more saturated Glacier, #458CBA, the same in light and dark
+    /// (David, 2026-11-27: the device's mode picks it, not the page's, so a
+    /// white page in dark mode needs it as strong), from the asset catalog. Set on controls in sheets
     /// by hand, where macOS otherwise draws them in its own blue.
     #if os(macOS)
     static let accent = Color("AccentColor")
     #else
     /// The iPhone's catalog has no accent: the same values, here.
-    static let accent = Color(light: 0x689ABB, dark: 0x5F98BB)
+    static let accent = Color(light: 0x458CBA, dark: 0x458CBA)
     #endif
 
     /// Hover and press: a warm brown wash in light, warm white in dark.

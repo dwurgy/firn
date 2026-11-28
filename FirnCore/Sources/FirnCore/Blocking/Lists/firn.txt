@@ -1,0 +1,12 @@
+! Title: Firn's own additions
+! Ad servers the EasyList lists don't block yet, found in Firn's own use.
+! Keep it short: each line says whose servers they are and when they were found.
+! Firn's code license (MPL 2.0) covers this file.
+
+! Raptive (AdThrive): when ads.adthrive.com is blocked, its sites load the same
+! ads from these backup addresses (chelseasmessyapron.com, 2026-11-28).
+||rapt-c-0.net^$third-party
+||rapt-c-1.net^$third-party
+||rapt-i-i-1.net^$third-party
+||rapt-i-rnf-1.net^$third-party
+||ads.raptivecdn.net^$third-party

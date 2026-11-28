@@ -5,6 +5,8 @@ import Foundation
 public enum BlockList: String, CaseIterable, Sendable {
     case ads = "easylist"
     case trackers = "easyprivacy"
+    /// Firn's own few additions, for ad servers EasyList doesn't block yet.
+    case firn
 
     /// The list's text, as shipped.
     public func text() -> String? {

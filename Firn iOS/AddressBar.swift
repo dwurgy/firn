@@ -1034,7 +1034,7 @@ private struct AddressField: View {
                 case .book:
                     ReaderBookIcon(isOn: page.isReading, color: color, off: Theme.ink,
                                    size: 19, lineWidth: 1.9)
-                        .transition(.opacity)
+                        .transition(Self.handOver)
                 case .translate:
                     // Ink while only offered; the space's color from the tap
                     // on, as Reader's book once Reader is on (David,
@@ -1044,12 +1044,12 @@ private struct AddressField: View {
                         .font(BarButton.symbolFont)
                         .foregroundStyle(page.translator?.state == .translated || translating ? color : Theme.ink)
                         .opacity(translating ? (reduceMotion ? 0.5 : (breathing ? 0.35 : 1)) : 1)
-                        .transition(.opacity)
+                        .transition(Self.handOver)
                 case .menu:
                     Image(systemName: "ellipsis")
                         .font(BarButton.symbolFont)
                         .foregroundStyle(Theme.ink)
-                        .transition(.opacity)
+                        .transition(Self.handOver)
                 }
             }
             .frame(width: BarButton.size, height: BarButton.size)
@@ -1075,6 +1075,12 @@ private struct AddressField: View {
     }
 
     private enum MenuIcon: Equatable { case menu, book, translate }
+
+    /// How the button's icon and the words beside it change: the old fade
+    /// out quickly, then the new fade in, so the two never show at once.
+    static let handOver: AnyTransition = .asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
+        removal: .opacity.animation(.easeIn(duration: 0.12)))
 
     /// What the page menu's button shows, as Safari's: Reader's book while
     /// Reader is on or "Reader available" shows; the translate symbol while
@@ -1103,15 +1109,24 @@ private struct AddressField: View {
     /// touch smaller, before it's cut short. A text field can do neither,
     /// so this is a plain label over it.
     private var restingLabel: some View {
-        HStack(spacing: 2) {
+        // A stack, not a row: as one note leaves and the next arrives, both
+        // are here for a moment, and side by side they squeezed and moved
+        // each other (the jump in David's recording, 2026-11-27).
+        ZStack {
             Group {
                 if showsReaderNote {
                     Text("Reader available").foregroundStyle(Theme.ink)
                 } else if showsTranslationNote {
-                    // A little smaller rather than cut short (Safari cuts it
-                    // to "Translation Avai…").
-                    Text("Translation available").foregroundStyle(Theme.ink)
-                        .minimumScaleFactor(0.85)
+                    // A text size smaller rather than cut short (Safari cuts
+                    // it to "Translation Avai…"), picked once, never scaled
+                    // as it fades: scaling made it jump (David's recording,
+                    // 2026-11-27).
+                    ViewThatFits(in: .horizontal) {
+                        Text("Translation available")
+                        Text("Translation available").font(.subheadline.weight(.medium))
+                        Text("Translation available").font(.footnote.weight(.medium))
+                    }
+                    .foregroundStyle(Theme.ink)
                 } else if text.isEmpty {
                     Text("Search or enter address").foregroundStyle(Theme.muted)
                 } else if notSecure {
@@ -1155,9 +1170,13 @@ private struct AddressField: View {
             // back from the small pill unshrunk, against Reload, until the
             // next move (David's recording, 2026-11-23).
             .frame(width: compact ? compactTextWidth : restTextWidth)
-            // The name and "Reader available" cross-fade, never slide.
+            // One height for every label, so a note in a smaller size can't
+            // shift the one leaving as it arrives.
+            .frame(height: 24)
+            // The name and the notes fade one out, then the next in, never
+            // over each other or sliding (David, 2026-11-27).
             .id(note.map { "\($0)" } ?? "")
-            .transition(.opacity.animation(.easeOut(duration: 0.3)))
+            .transition(Self.handOver)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }

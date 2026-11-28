@@ -95,6 +95,8 @@ struct TabList: View {
     /// One speed for rows gliding aside and for the dropped row settling.
     private static let glide = Animation.smooth(duration: 0.2)
     private nonisolated static let space = "tabList"
+    /// How far above its first row the list may draw: the glass shadow's reach.
+    private static let topRoom: CGFloat = 16
 
     var body: some View {
         let items = shownItems
@@ -135,11 +137,26 @@ struct TabList: View {
                     // Room at the sides for the group cards' glass shadow, which
                     // the scroll view would otherwise clip; taken back below.
                     .padding(.horizontal, Theme.pageInset)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                    // And above, so a group first in the list keeps its shadow's
+                    // top edge (it was cut flat; David, 2026-11-28).
+                    .padding(.top, Self.topRoom)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height + Self.topRoom, alignment: .top)
                     .background { WindowDragArea { blankSpaceMenu } }
                 }
                 .scrollIndicators(.never)
+                // The room above reaches into the gap under Basecamp, so a list
+                // scrolled up fades out across it instead of stopping at a line.
+                // (On the scroll view itself, before the padding takes the room
+                // back, so the fade sits above the first row, not over it.)
+                .mask {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: Self.topRoom)
+                        Color.black
+                    }
+                }
                 .padding(.horizontal, -Theme.pageInset)
+                .padding(.top, -Self.topRoom)
                 // A tab coming on screen (a new one at the bottom of a long
                 // list, say) scrolls into view, by as little as it takes.
                 .onChange(of: store.activeTabID) {

@@ -104,6 +104,11 @@ enum Theme {
     /// washed with the space's color.
     static let groupFill = Color(light: 0xFFFFFF, lightOpacity: 0.34, dark: 0xFFFFFF, darkOpacity: 0.05)
     static let groupTint = 0.10
+    /// The Mac's native glass on tiles and group cards, in light: a faint warm
+    /// shade in the glass, so it sits nearer the frame instead of reading
+    /// white (David, 2026-11-28: light stuck out beside dark). Dark keeps the
+    /// plain glass.
+    static let glassWash = Color(light: 0x463728, lightOpacity: 0.08, dark: 0x463728, darkOpacity: 0)
     /// The frost where a tab dragged over the page would open: a little stronger, so it reads over a page.
     static let dropTint = 0.18
     /// The frost that forms across the address field while a page loads, in

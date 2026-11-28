@@ -20,7 +20,7 @@ struct FrostGlass: View {
             // menus, and the iPhone. Lifted, over the frame, so it stays
             // frost over the page.
             shape.fill(.clear)
-                .glassEffect(color.map { .regular.tint($0.opacity(Theme.groupTint)) } ?? .regular, in: shape)
+                .glassEffect(.regular.tint(color.map { $0.opacity(Theme.groupTint) } ?? Theme.glassWash), in: shape)
                 // The iPhone's "Frosty, no tint": the thinnest blur under the
                 // glass, so what's behind turns to soft color (plain glass
                 // read too clear and bubbly; David, 2026-11-18).

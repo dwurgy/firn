@@ -785,7 +785,7 @@ private struct TileButtonStyle: ButtonStyle {
     private var glass: Glass {
         if away { return .identity }
         let base = Glass.regular.interactive()
-        return isActive ? base.tint(accent.main.opacity(dark ? 0.24 : 0.22)) : base
+        return base.tint(isActive ? accent.main.opacity(dark ? 0.24 : 0.22) : Theme.glassWash)
     }
 
     private func frosted(_ configuration: Configuration) -> some View {
@@ -849,7 +849,7 @@ private struct TileGlass: View {
             shape.fill(Theme.tileSolid)
                 .overlay { shape.strokeBorder(Theme.tileHairline, lineWidth: 0.5) }
         } else if #available(macOS 26, *) {
-            shape.fill(.clear).glassEffect(.regular, in: shape)
+            shape.fill(.clear).glassEffect(.regular.tint(Theme.glassWash), in: shape)
                 .background { shape.fill(.ultraThinMaterial) }
         } else {
             shape.fill(hovering ? Theme.tileFillHover : Theme.tileFill)

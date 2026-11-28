@@ -1189,6 +1189,12 @@ private struct AddressField: View {
             // back from the small pill unshrunk, against Reload, until the
             // next move (David's recording, 2026-11-23).
             .frame(width: compact ? compactTextWidth : restTextWidth)
+            // The width changes at once as the bar shrinks or grows; only
+            // the scale glides. Gliding the width too, the name kept its
+            // small pill's layout once grown back, whole and under Reload,
+            // and the pill showed it cut off at the left (David's recording,
+            // chelseasmessyapron.com, 2026-11-28).
+            .animation(nil, value: compact)
             // One height for every label, so a note in a smaller size can't
             // shift the one leaving as it arrives.
             .frame(height: 24)

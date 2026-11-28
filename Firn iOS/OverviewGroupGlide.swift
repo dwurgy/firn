@@ -128,8 +128,11 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
             }
             // The folder's name under it, as a tab's title: it fades as the
             // glass grows over it, and back at the end of a fold.
+            // It rides under the glass's bottom edge, centered, so it
+            // arrives with the folder instead of waiting where it lands
+            // (David's recording, 2026-11-28).
             folderName(t)
-                .offset(x: glide.cell.minX, y: glide.cell.maxY)
+                .offset(x: frame.midX - glide.cell.width / 2, y: frame.maxY)
             // The glass laid out at each size, never scaled or masked: iOS
             // draws no glass inside a mask or a scale until it's over.
             FirnGlass(shape: shape)
@@ -198,7 +201,7 @@ struct GroupGlideView<Tile: View, Title: View, Cell: View>: View, @MainActor Ani
     private func folderName(_ t: CGFloat) -> some View {
         GridTitle(text: name, bold: true)
             .frame(width: max(glide.cell.width, 1), height: OverviewRow.gridTitleHeight, alignment: .top)
-            .opacity(1 - Self.ramp(t, 0, 0.3))
+            .opacity(1 - Self.ramp(t, 0, 0.2))
     }
 
     /// The open group's name line (`GroupLine`'s look), coming in over the

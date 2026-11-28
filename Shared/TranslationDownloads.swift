@@ -58,10 +58,18 @@ private struct DownloadPrompt: ViewModifier {
             .onChange(of: translator?.download, initial: true) {
                 guard let translator, let download = translator.download else { return }
                 asking = translator
-                if configuration?.source == download.source, configuration?.target == download.target {
-                    configuration?.invalidate()
-                } else {
-                    configuration = .init(source: download.source, target: download.target)
+                Task {
+                    // The fast model has its own download; it's the one
+                    // Firn translates with, where it has the pair.
+                    let fast = await PageTranslationSupport.downloadsFastModel(from: download.source, to: download.target)
+                    guard asking === translator, translator.download == download else { return }
+                    let strategy: TranslationSession.Strategy = fast ? .lowLatency : .highFidelity
+                    if configuration?.source == download.source, configuration?.target == download.target,
+                       configuration?.preferredStrategy == strategy {
+                        configuration?.invalidate()
+                    } else {
+                        configuration = .init(source: download.source, target: download.target, preferredStrategy: strategy)
+                    }
                 }
             }
     }

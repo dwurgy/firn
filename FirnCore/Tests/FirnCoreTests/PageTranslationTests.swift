@@ -47,9 +47,21 @@ private final class FakeTranslator: RunTranslating {
     var runsAwayOver = Int.max
     var delay: Duration = .zero
     var cancelled = false
+    /// The quick way misses any part with a piece; the careful way doesn't.
+    var missesPieces = false
+    var carefulCalls = 0
+
+    func translateCarefully(_ runs: [Run]) async throws -> [Run] {
+        carefulCalls += 1
+        let misses = missesPieces
+        missesPieces = false
+        defer { missesPieces = misses }
+        return try await translate(runs)
+    }
 
     func translate(_ runs: [Run]) async throws -> [Run] {
         calls.append(runs)
+        if missesPieces, runs.contains(where: { $0.piece != nil }) { throw PiecesMissed() }
         if delay > .zero { try await Task.sleep(for: delay) }
         if fails { throw URLError(.cannotFindHost) }
         if runs.map(\.text).joined().count > runsAwayOver {
@@ -85,6 +97,22 @@ struct PageTranslationTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         return translation
+    }
+
+    @Test func leavesPartsTheQuickWayMissedForTheCarefulWayLast() async throws {
+        let page = FakeTextPage(units: [
+            unit(0, [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: ". Y luego espera.")]),
+            unit(1, top: 50, [Run(text: "Una mañana tranquila")]),
+            unit(2, top: 100, [Run(text: "Otra más")]),
+        ])
+        let translator = FakeTranslator()
+        translator.missesPieces = true
+        let translation = try await translate(page, translator)
+        #expect(translation.phase == .translated)
+        // The rest of the page first; the missed unit carefully, once.
+        #expect(page.writes.map(\.id) == [1, 2, 0])
+        #expect(page.writes.last?.runs.compactMap(\.piece) == [0])
+        #expect(translator.carefulCalls == 1)
     }
 
     @Test func ordersWhatsOnScreenFirstThenBelowThenAbove() {
@@ -247,6 +275,55 @@ struct PageTranslationTests {
         #expect(SystemRunTranslator.runs(from: attributed).map(\.piece) == runs.map(\.piece))
     }
 
+    @Test func tagsPiecesForTheFastModelAndReadsThemBack() throws {
+        let runs = [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: " para leer "),
+                    Run(piece: 1, text: "git log", isFixed: true), Run(text: ".")]
+        #expect(TaggedRuns.encode(runs) == "Haz clic <a0>aquí</a0> para leer <x1/>.")
+        // The sentence's order may move; a kept piece keeps its own words.
+        let out = try #require(TaggedRuns.decode("Read <x1/> by clicking <a0>here</a0>.", from: runs))
+        #expect(out == [Run(text: "Read "), Run(piece: 1, text: "git log", isFixed: true),
+                        Run(text: " by clicking "), Run(piece: 0, text: "here"), Run(text: ".")])
+        // A piece with no words isn't tagged, and may come back missing.
+        let spaced = [Run(text: "Un 10"), Run(piece: 0, text: "\u{a0}"), Run(text: "% de la "), Run(piece: 1, text: "Tierra")]
+        #expect(TaggedRuns.encode(spaced) == "Un 10\u{a0}% de la <a1>Tierra</a1>")
+        #expect(TaggedRuns.decode("10% of the <a1>Earth</a1>", from: spaced)?.compactMap(\.piece) == [1])
+        // No pieces: plain text both ways.
+        #expect(TaggedRuns.decode("Hello.", from: [Run(text: "Hola.")]) == [Run(text: "Hello.")])
+    }
+
+    @Test func refusesTagsThatDontComeBackExactly() {
+        let runs = [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: " o "), Run(piece: 1, text: "allí")]
+        for bad in ["Click <a0>here</a0> or there",                 // lost
+                    "Click <a0>here</a0> or <a1>there</a1> <a1>x</a1>", // repeated
+                    "Click <a0>here <a1>or</a1></a0> there",        // nested
+                    "Click <a0>here</a0> or <a1>there",             // unclosed
+                    "Click <a0>here</a0> or <a7>there</a7>",        // unknown
+                    "Click <a0>here</a0> or <x1/>",                 // kept, but it isn't
+                    "Click <a0>here</a0> or < a1 >there</a1>"] {    // mangled
+            #expect(TaggedRuns.decode(bad, from: runs) == nil, "\(bad)")
+        }
+        // A piece with no words (an empty anchor) may go missing.
+        let empty = [Run(piece: 0, text: ""), Run(text: "Hola")]
+        #expect(TaggedRuns.decode("Hello", from: empty) == [Run(text: "Hello")])
+    }
+
+    @Test func noticesTheFastModelStoppingEarly() {
+        let runs = [Run(piece: 0, text: "10.1"), Run(text: " "), Run(piece: 1, text: "Derretimiento de los glaciares.")]
+        // One character short: mended.
+        #expect(TaggedRuns.decode("<a0>10.1</a0> <a1>Melting of glaciers.</a1", from: runs)?.compactMap(\.piece) == [0, 1])
+        #expect(TaggedRuns.looksCut(input: "La velocidad depende de la humedad.", output: "The speed depends on the"))
+        #expect(TaggedRuns.looksCut(input: "Una frase bastante larga sobre los glaciares.", output: "A"))
+        #expect(!TaggedRuns.looksCut(input: "Ver <a0>más</a0>.<x1/>", output: "See <a0>more</a0>.<x1/>"))
+        #expect(!TaggedRuns.looksCut(input: "氷河は動く。", output: "Glaciers move."))
+        #expect(!TaggedRuns.looksCut(input: "Glaciares de montaña", output: "Mountain glaciers"))
+    }
+
+    @Test func doesntTagTextThatLooksLikeATag() {
+        #expect(TaggedRuns.encode([Run(text: "Escribe <a1> aquí")]) == nil)
+        #expect(TaggedRuns.encode([Run(text: "x "), Run(piece: 0, text: "</ A2>")]) == nil)
+        #expect(TaggedRuns.encode([Run(text: "5 < 3 y a > 2")]) == "5 < 3 y a > 2")
+    }
+
     /// Only where Spanish to English is already on this Mac.
     @Test func translatesWithTheRealFramework() async throws {
         guard #available(macOS 26.4, iOS 26.4, *),
@@ -256,6 +333,8 @@ struct PageTranslationTests {
         let out = PageText.movingEdgeSpaces(try await translator.translate(runs))
         #expect(out.compactMap(\.piece) == [0])
         #expect(out.map(\.text).joined().lowercased().contains("click"))
+        let kept = [Run(text: "Ejecuta "), Run(piece: 0, text: "git log", isFixed: true), Run(text: " en la terminal.")]
+        #expect(try await translator.translate(kept).contains(kept[1]))
     }
 }
 

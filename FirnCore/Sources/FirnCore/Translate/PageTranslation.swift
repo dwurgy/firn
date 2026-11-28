@@ -42,8 +42,23 @@ public protocol RunTranslating: AnyObject {
     /// `runs` in the target language, each piece where the sentence puts
     /// it. Throws if it can't (the language isn't on the device, say).
     func translate(_ runs: [PageText.Run]) async throws -> [PageText.Run]
+    /// The same, more slowly and surely: for a part whose pieces
+    /// `translate` couldn't place (it threw `PiecesMissed`).
+    func translateCarefully(_ runs: [PageText.Run]) async throws -> [PageText.Run]
     /// Stops whatever it's doing.
     func cancel()
+}
+
+extension RunTranslating {
+    public func translateCarefully(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        try await translate(runs)
+    }
+}
+
+/// A translator's quick way couldn't place a part's pieces; the careful
+/// way might.
+public struct PiecesMissed: Error {
+    public init() {}
 }
 
 /// One page being translated. Made for a page and its two languages,
@@ -86,6 +101,11 @@ public final class PageTranslation {
     @ObservationIgnored private var translators: [String: (any RunTranslating)?] = [:]
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var queue: [PageText.Unit] = []
+    /// Units the quick way couldn't place pieces in, left for the careful
+    /// way once the rest of the page is done (it's about 2-9s a part, so
+    /// it never holds up the page); and those now on that second go.
+    @ObservationIgnored private var later: [PageText.Unit] = []
+    @ObservationIgnored private var carefulIDs: Set<Int> = []
     @ObservationIgnored private var view = PageText.View()
     @ObservationIgnored private var pageURL: URL?
     @ObservationIgnored private var changed = false
@@ -190,6 +210,11 @@ public final class PageTranslation {
                 found += more.units.count
             }
             guard !Task.isCancelled else { return }
+            if queue.isEmpty, !changed, !later.isEmpty {
+                carefulIDs.formUnion(later.map(\.id))
+                queue = later
+                later = []
+            }
             guard !queue.isEmpty else {
                 if changed { continue }
                 break
@@ -198,10 +223,14 @@ public final class PageTranslation {
             let ids = Set(next.map(\.id))
             queue.removeAll { ids.contains($0.id) }
             for unit in next {
-                let runs = await translation(of: unit)
+                let outcome = await translation(of: unit, carefully: carefulIDs.contains(unit.id))
                 guard !Task.isCancelled else { return }
                 guard stillOnPage else { return leave() }
-                if let runs {
+                if case .later = outcome {
+                    later.append(unit)
+                    continue
+                }
+                if case .done(let runs) = outcome {
                     // Checked just before writing, with nothing in between:
                     // Show Original can't be overtaken by a late write.
                     let count = await page.writePageText(
@@ -295,49 +324,68 @@ public final class PageTranslation {
 
     // MARK: Translating a unit
 
-    /// A unit's translation, ready to write, or nil to leave it as it is:
-    /// already in the target language, no translator for its language, or
-    /// a translation that lost a piece or ran away.
-    private func translation(of unit: PageText.Unit) async -> [PageText.Run]? {
+    enum Outcome {
+        /// Ready to write.
+        case done([PageText.Run])
+        /// Left as it is: already in the target language, no translator
+        /// for its language, or a translation that lost a piece or ran away.
+        case leave
+        /// The quick way couldn't place its pieces: try carefully, later.
+        case later
+    }
+
+    private func translation(of unit: PageText.Unit, carefully: Bool) async -> Outcome {
         let from = Self.language(of: unit, page: source)
-        guard from.languageCode != target.languageCode, let translator = translator(from: from) else { return nil }
+        guard from.languageCode != target.languageCode, let translator = translator(from: from) else { return .leave }
         do {
             var out: [PageText.Run] = []
             for part in PageText.parts(of: unit) {
-                guard let runs = try await translated(part, with: translator) else { return nil }
+                guard let runs = try await translated(part, with: translator, carefully: carefully) else { return .leave }
                 out = Self.joined(out, runs, spaced: spacesSentences)
             }
             out = PageText.movingEdgeSpaces(out)
             failures = 0
-            return PageText.fits(out, unit) ? out : nil
+            return PageText.fits(out, unit) ? .done(out) : .leave
         } catch is CancellationError {
-            return nil
+            return .leave
+        } catch is PiecesMissed {
+            return .later
         } catch {
             // Another language than the page's that isn't on the device:
             // its units stay as they are. The page's own counts as a failure.
             if from.languageCode != source.languageCode { dropTranslator(for: from) } else { failures += 1 }
-            return nil
+            return .leave
         }
     }
 
     /// One part, whole; if that runs away or loses a piece, sentence by
     /// sentence; nil if that doesn't work either.
-    private func translated(_ part: [PageText.Run], with translator: any RunTranslating) async throws -> [PageText.Run]? {
-        if let runs = try await attempt(part, with: translator) { return runs }
+    /// Quickly, a part whose pieces can't be placed throws `PiecesMissed`,
+    /// whole or sentence by sentence, so the unit waits for the careful way.
+    private func translated(_ part: [PageText.Run], with translator: any RunTranslating, carefully: Bool) async throws -> [PageText.Run]? {
+        var missed = false
+        do {
+            if let runs = try await attempt(part, with: translator, carefully: carefully) { return runs }
+        } catch is PiecesMissed {
+            missed = true
+        }
         let sentences = PageText.parts(of: PageText.Unit(id: 0, top: 0, runs: part), limit: 1)
-        guard sentences.count > 1 else { return nil }
+        guard sentences.count > 1 else {
+            if missed { throw PiecesMissed() }
+            return nil
+        }
         var out: [PageText.Run] = []
         for sentence in sentences {
-            guard let runs = try await attempt(sentence, with: translator) else { return nil }
+            guard let runs = try await attempt(sentence, with: translator, carefully: carefully) else { return nil }
             out = Self.joined(out, runs, spaced: spacesSentences)
         }
         return out
     }
 
-    private func attempt(_ part: [PageText.Run], with translator: any RunTranslating) async throws -> [PageText.Run]? {
+    private func attempt(_ part: [PageText.Run], with translator: any RunTranslating, carefully: Bool) async throws -> [PageText.Run]? {
         // Nothing to translate in a part of only kept pieces and spaces.
         guard part.contains(where: { !$0.isFixed && $0.text.contains(where: \.isLetter) }) else { return part }
-        let raw = try await translator.translate(part)
+        let raw = try await carefully ? translator.translateCarefully(part) : translator.translate(part)
         try Task.checkCancellation()
         let runs = PageText.movingEdgeSpaces(Self.settled(raw, from: part))
         let input = part.map(\.text).joined(), output = runs.map(\.text).joined()
@@ -384,7 +432,7 @@ public final class PageTranslation {
         let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.contains(where: \.isLetter), text.count <= 1000 else { return nil }
         let unit = PageText.Unit(id: 0, top: 0, runs: [PageText.Run(text: text)])
-        guard let runs = await translation(of: unit) else { return nil }
+        guard case .done(let runs) = await translation(of: unit, carefully: false) else { return nil }
         let out = runs.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
         return out.isEmpty || out.count > 1000 ? nil : out
     }
@@ -427,10 +475,25 @@ public enum PageTranslationSupport {
 
     /// Whether `source` to `target` is already on the device, so it can
     /// start at once; otherwise the app asks the system to download it.
+    /// The fast model counts (it has its own download), unless it has no
+    /// such pair.
     public static func isInstalled(from source: Locale.Language, to target: Locale.Language) async -> Bool {
         #if canImport(Translation)
         if #available(macOS 26.4, iOS 26.4, *) {
+            let fast = await LanguageAvailability(preferredStrategy: .lowLatency).status(from: source, to: target)
+            if fast != .unsupported { return fast == .installed }
             return await LanguageAvailability().status(from: source, to: target) == .installed
+        }
+        #endif
+        return false
+    }
+
+    /// Whether to ask the system for the fast model when downloading:
+    /// yes, unless it has no such pair (then the careful one).
+    public static func downloadsFastModel(from source: Locale.Language, to target: Locale.Language) async -> Bool {
+        #if canImport(Translation)
+        if #available(macOS 26.4, iOS 26.4, *) {
+            return await LanguageAvailability(preferredStrategy: .lowLatency).status(from: source, to: target) != .unsupported
         }
         #endif
         return false
@@ -438,29 +501,62 @@ public enum PageTranslationSupport {
 }
 
 #if canImport(Translation)
-/// Apple's Translation framework, one source and target language. A unit's
-/// pieces go in as runs marked with their number (as a `link`), kept pieces
-/// also marked to skip, and come back around the right words, even when
-/// the sentence's order moves (step 1's findings).
+/// Apple's Translation framework, one source and target language.
+///
+/// Fast first (2026-11-28): Apple's fast model with the pieces marked by
+/// tags in the text (`TaggedRuns`), about 13 times quicker than the careful
+/// model, which took about 2s a paragraph however it was asked. A part
+/// whose tags don't come back exactly goes to the careful model, with the
+/// pieces marked as runs (marked with their number as a `link`, kept
+/// pieces also marked to skip), which come back around the right words,
+/// even when the sentence's order moves (step 1's findings). Where the
+/// fast model isn't on the device or has no such pair, it's careful only.
 @available(macOS 26.4, iOS 26.4, *)
 @MainActor
 public final class SystemRunTranslator: RunTranslating {
-    // The framework's session isn't marked Sendable, though its calls run
-    // off the main thread. Firn uses each from one translation, one call
-    // at a time (the translator's loop awaits each), so it's never shared.
-    nonisolated(unsafe) private let session: TranslationSession
+    // The framework's sessions aren't marked Sendable, though their calls
+    // run off the main thread. Firn uses each from one translation, one
+    // call at a time (the translator's loop awaits each), so neither is
+    // ever shared.
+    nonisolated(unsafe) private var fast: TranslationSession?
+    nonisolated(unsafe) private var carefulSession: TranslationSession?
+    private let makeCareful: () -> TranslationSession
 
-    /// A session from SwiftUI's `translationTask`, say.
+    /// A session from SwiftUI's `translationTask`, say: careful only.
     public init(session: TranslationSession) {
-        self.session = session
+        self.makeCareful = { session }
     }
 
     /// For languages already downloaded; translating throws otherwise.
-    public convenience init(installedSource source: Locale.Language, target: Locale.Language) {
-        self.init(session: TranslationSession(installedSource: source, target: target))
+    public init(installedSource source: Locale.Language, target: Locale.Language) {
+        self.fast = TranslationSession(installedSource: source, target: target, preferredStrategy: .lowLatency)
+        self.makeCareful = { TranslationSession(installedSource: source, target: target) }
     }
 
     public func translate(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        if let fast, let tagged = TaggedRuns.encode(runs) {
+            do {
+                nonisolated(unsafe) let session = fast
+                let response = try await session.translate(tagged)
+                if !TaggedRuns.looksCut(input: tagged, output: response.targetText),
+                   let out = TaggedRuns.decode(response.targetText, from: runs) { return out }
+                throw PiecesMissed()
+            } catch let error where TranslationError.notInstalled ~= error
+                || TranslationError.unsupportedLanguagePairing ~= error {
+                self.fast = nil
+            }
+            try Task.checkCancellation()
+        }
+        return try await careful(runs)
+    }
+
+    public func translateCarefully(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        try await careful(runs)
+    }
+
+    private func careful(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        nonisolated(unsafe) let session = carefulSession ?? makeCareful()
+        carefulSession = session
         let response = try await session.translate(Self.attributed(runs))
         if let text = response.attributedTargetText { return Self.runs(from: text) }
         // Without its marks the pieces are lost: only plain text will do.
@@ -469,7 +565,8 @@ public final class SystemRunTranslator: RunTranslating {
     }
 
     public func cancel() {
-        session.cancel()
+        fast?.cancel()
+        carefulSession?.cancel()
     }
 
     struct Lost: Error {}

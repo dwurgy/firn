@@ -786,13 +786,40 @@ struct GridCards: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, contextMenuConfiguration configuration: UIContextMenuConfiguration,
                             highlightPreviewForItemAt path: IndexPath) -> UITargetedPreview? {
+            if let whole = wholeGroup(view, path) { return whole }
             guard let cell = view.cellForItem(at: path), let parameters = picture(view, path) else { return nil }
             return UITargetedPreview(view: cell, parameters: parameters)
         }
 
         func collectionView(_ view: UICollectionView, contextMenuConfiguration configuration: UIContextMenuConfiguration,
                             dismissalPreviewForItemAt path: IndexPath) -> UITargetedPreview? {
-            self.collectionView(view, contextMenuConfiguration: configuration, highlightPreviewForItemAt: path)
+            if let lifted = liftedGroup, dataSource?.itemIdentifier(for: path) == lifted.id { return lifted.preview }
+            return self.collectionView(view, contextMenuConfiguration: configuration, highlightPreviewForItemAt: path)
+        }
+
+        /// An open group held by its name line lifts whole for its menu, glass
+        /// and tabs, as a tab or a folded group lifts whole; before, only the
+        /// name line rose (David's recording, 2026-11-28). A picture of the
+        /// card as it is on screen, laid exactly over it; its drag still
+        /// carries the folder card (`carryFolder`).
+        private var liftedGroup: (id: UUID, preview: UITargetedPreview)?
+
+        private func wholeGroup(_ view: UICollectionView, _ path: IndexPath) -> UITargetedPreview? {
+            guard let id = dataSource?.itemIdentifier(for: path), parent?.kind(id) == .line,
+                  let card = view.collectionViewLayout.layoutAttributesForSupplementaryView(
+                      ofKind: GridPlanLayout.cardKind, at: IndexPath(item: 0, section: path.section))?.frame,
+                  !card.isEmpty,
+                  let picture = view.resizableSnapshotView(from: card, afterScreenUpdates: false,
+                                                           withCapInsets: .zero) else { return nil }
+            let parameters = UIPreviewParameters()
+            parameters.visiblePath = UIBezierPath(roundedRect: CGRect(origin: .zero, size: card.size),
+                                                  cornerRadius: GroupCard.cornerRadius)
+            parameters.backgroundColor = .clear
+            let preview = UITargetedPreview(view: picture, parameters: parameters,
+                                            target: UIPreviewTarget(container: view,
+                                                                    center: CGPoint(x: card.midX, y: card.midY)))
+            liftedGroup = (id, preview)
+            return preview
         }
 
         func collectionView(_ view: UICollectionView, willDisplayContextMenu configuration: UIContextMenuConfiguration,
@@ -809,6 +836,7 @@ struct GridCards: UIViewRepresentable {
             let back = { [weak self, weak view] in
                 // Carried on by the drag: its X stays hidden until it's down.
                 self?.carryFolderAgain()
+                if self?.liftedGroup?.id == id { self?.liftedGroup = nil }
                 guard let self, carried != id, view?.hasActiveDrag != true else { return }
                 if lifting == id { lifting = nil }
                 parent?.held(id, false)

@@ -247,6 +247,40 @@ struct PageTranslationTests {
         #expect(SystemRunTranslator.runs(from: attributed).map(\.piece) == runs.map(\.piece))
     }
 
+    @Test func tagsPiecesForTheFastModelAndReadsThemBack() throws {
+        let runs = [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: " para leer "),
+                    Run(piece: 1, text: "git log", isFixed: true), Run(text: ".")]
+        #expect(TaggedRuns.encode(runs) == "Haz clic <a0>aquí</a0> para leer <x1/>.")
+        // The sentence's order may move; a kept piece keeps its own words.
+        let out = try #require(TaggedRuns.decode("Read <x1/> by clicking <a0>here</a0>.", from: runs))
+        #expect(out == [Run(text: "Read "), Run(piece: 1, text: "git log", isFixed: true),
+                        Run(text: " by clicking "), Run(piece: 0, text: "here"), Run(text: ".")])
+        // No pieces: plain text both ways.
+        #expect(TaggedRuns.decode("Hello.", from: [Run(text: "Hola.")]) == [Run(text: "Hello.")])
+    }
+
+    @Test func refusesTagsThatDontComeBackExactly() {
+        let runs = [Run(text: "Haz clic "), Run(piece: 0, text: "aquí"), Run(text: " o "), Run(piece: 1, text: "allí")]
+        for bad in ["Click <a0>here</a0> or there",                 // lost
+                    "Click <a0>here</a0> or <a1>there</a1> <a1>x</a1>", // repeated
+                    "Click <a0>here <a1>or</a1></a0> there",        // nested
+                    "Click <a0>here</a0> or <a1>there",             // unclosed
+                    "Click <a0>here</a0> or <a7>there</a7>",        // unknown
+                    "Click <a0>here</a0> or <x1/>",                 // kept, but it isn't
+                    "Click <a0>here</a0> or < a1 >there</a1>"] {    // mangled
+            #expect(TaggedRuns.decode(bad, from: runs) == nil, "\(bad)")
+        }
+        // A piece with no words (an empty anchor) may go missing.
+        let empty = [Run(piece: 0, text: ""), Run(text: "Hola")]
+        #expect(TaggedRuns.decode("Hello", from: empty) == [Run(text: "Hello")])
+    }
+
+    @Test func doesntTagTextThatLooksLikeATag() {
+        #expect(TaggedRuns.encode([Run(text: "Escribe <a1> aquí")]) == nil)
+        #expect(TaggedRuns.encode([Run(text: "x "), Run(piece: 0, text: "</ A2>")]) == nil)
+        #expect(TaggedRuns.encode([Run(text: "5 < 3 y a > 2")]) == "5 < 3 y a > 2")
+    }
+
     /// Only where Spanish to English is already on this Mac.
     @Test func translatesWithTheRealFramework() async throws {
         guard #available(macOS 26.4, iOS 26.4, *),
@@ -256,6 +290,8 @@ struct PageTranslationTests {
         let out = PageText.movingEdgeSpaces(try await translator.translate(runs))
         #expect(out.compactMap(\.piece) == [0])
         #expect(out.map(\.text).joined().lowercased().contains("click"))
+        let kept = [Run(text: "Ejecuta "), Run(piece: 0, text: "git log", isFixed: true), Run(text: " en la terminal.")]
+        #expect(try await translator.translate(kept).contains(kept[1]))
     }
 }
 

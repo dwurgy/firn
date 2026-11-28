@@ -427,10 +427,25 @@ public enum PageTranslationSupport {
 
     /// Whether `source` to `target` is already on the device, so it can
     /// start at once; otherwise the app asks the system to download it.
+    /// The fast model counts (it has its own download), unless it has no
+    /// such pair.
     public static func isInstalled(from source: Locale.Language, to target: Locale.Language) async -> Bool {
         #if canImport(Translation)
         if #available(macOS 26.4, iOS 26.4, *) {
+            let fast = await LanguageAvailability(preferredStrategy: .lowLatency).status(from: source, to: target)
+            if fast != .unsupported { return fast == .installed }
             return await LanguageAvailability().status(from: source, to: target) == .installed
+        }
+        #endif
+        return false
+    }
+
+    /// Whether to ask the system for the fast model when downloading:
+    /// yes, unless it has no such pair (then the careful one).
+    public static func downloadsFastModel(from source: Locale.Language, to target: Locale.Language) async -> Bool {
+        #if canImport(Translation)
+        if #available(macOS 26.4, iOS 26.4, *) {
+            return await LanguageAvailability(preferredStrategy: .lowLatency).status(from: source, to: target) != .unsupported
         }
         #endif
         return false
@@ -438,29 +453,56 @@ public enum PageTranslationSupport {
 }
 
 #if canImport(Translation)
-/// Apple's Translation framework, one source and target language. A unit's
-/// pieces go in as runs marked with their number (as a `link`), kept pieces
-/// also marked to skip, and come back around the right words, even when
-/// the sentence's order moves (step 1's findings).
+/// Apple's Translation framework, one source and target language.
+///
+/// Fast first (2026-11-28): Apple's fast model with the pieces marked by
+/// tags in the text (`TaggedRuns`), about 13 times quicker than the careful
+/// model, which took about 2s a paragraph however it was asked. A part
+/// whose tags don't come back exactly goes to the careful model, with the
+/// pieces marked as runs (marked with their number as a `link`, kept
+/// pieces also marked to skip), which come back around the right words,
+/// even when the sentence's order moves (step 1's findings). Where the
+/// fast model isn't on the device or has no such pair, it's careful only.
 @available(macOS 26.4, iOS 26.4, *)
 @MainActor
 public final class SystemRunTranslator: RunTranslating {
-    // The framework's session isn't marked Sendable, though its calls run
-    // off the main thread. Firn uses each from one translation, one call
-    // at a time (the translator's loop awaits each), so it's never shared.
-    nonisolated(unsafe) private let session: TranslationSession
+    // The framework's sessions aren't marked Sendable, though their calls
+    // run off the main thread. Firn uses each from one translation, one
+    // call at a time (the translator's loop awaits each), so neither is
+    // ever shared.
+    nonisolated(unsafe) private var fast: TranslationSession?
+    nonisolated(unsafe) private var carefulSession: TranslationSession?
+    private let makeCareful: () -> TranslationSession
 
-    /// A session from SwiftUI's `translationTask`, say.
+    /// A session from SwiftUI's `translationTask`, say: careful only.
     public init(session: TranslationSession) {
-        self.session = session
+        self.makeCareful = { session }
     }
 
     /// For languages already downloaded; translating throws otherwise.
-    public convenience init(installedSource source: Locale.Language, target: Locale.Language) {
-        self.init(session: TranslationSession(installedSource: source, target: target))
+    public init(installedSource source: Locale.Language, target: Locale.Language) {
+        self.fast = TranslationSession(installedSource: source, target: target, preferredStrategy: .lowLatency)
+        self.makeCareful = { TranslationSession(installedSource: source, target: target) }
     }
 
     public func translate(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        if let fast, let tagged = TaggedRuns.encode(runs) {
+            do {
+                nonisolated(unsafe) let session = fast
+                let response = try await session.translate(tagged)
+                if let out = TaggedRuns.decode(response.targetText, from: runs) { return out }
+            } catch let error where TranslationError.notInstalled ~= error
+                || TranslationError.unsupportedLanguagePairing ~= error {
+                self.fast = nil
+            }
+            try Task.checkCancellation()
+        }
+        return try await careful(runs)
+    }
+
+    private func careful(_ runs: [PageText.Run]) async throws -> [PageText.Run] {
+        nonisolated(unsafe) let session = carefulSession ?? makeCareful()
+        carefulSession = session
         let response = try await session.translate(Self.attributed(runs))
         if let text = response.attributedTargetText { return Self.runs(from: text) }
         // Without its marks the pieces are lost: only plain text will do.
@@ -469,7 +511,8 @@ public final class SystemRunTranslator: RunTranslating {
     }
 
     public func cancel() {
-        session.cancel()
+        fast?.cancel()
+        carefulSession?.cancel()
     }
 
     struct Lost: Error {}

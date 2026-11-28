@@ -129,7 +129,8 @@ struct BlockListTests {
         let output = BlockListConverter.convert(text)
         let converted = Date.now.timeIntervalSince(started)
         print("\(list.rawValue): \(output.ruleCount) rules, \(output.skipped) skipped, converted in \(converted)s")
-        #expect(output.ruleCount > 1_000)
+        #expect(output.ruleCount > (list == .firn ? 0 : 1_000))
+        if list == .firn { #expect(output.skipped == 0) }
         #expect(output.ruleCount <= BlockListConverter.maxRules)
 
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FirnBlockListTests-\(UUID())")
@@ -147,6 +148,8 @@ struct BlockListTests {
     func shippedSelectorsAreValid(_ list: BlockList) async throws {
         let text = try #require(list.text())
         let selectors = try rules(text).compactMap { action($0)["selector"] as? String }
+        // Firn's own list only blocks addresses so far.
+        if list == .firn, selectors.isEmpty { return }
         #expect(!selectors.isEmpty)
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -164,6 +167,23 @@ struct BlockListTests {
         }
         let invalid = try #require(bad)
         #expect(invalid.isEmpty, "\(list.rawValue): \(invalid.count) hiding rules WebKit would drop, e.g. \(invalid.prefix(3))")
+    }
+
+    /// Firn's own list catches Raptive's backup ad addresses, and only those.
+    @Test func firnListBlocksRaptiveBackups() throws {
+        let filters = try rules(try #require(BlockList.firn.text())).compactMap { trigger($0)["url-filter"] as? String }
+        let patterns = try filters.map { try NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+        func blocked(_ address: String) -> Bool {
+            patterns.contains { $0.firstMatch(in: address, range: NSRange(address.startIndex..., in: address)) != nil }
+        }
+        #expect(blocked("https://ads.rapt-c-0.net/sites/5445c7188f7e976723da6f31/ads.min.js?cb=17"))
+        #expect(blocked("https://ads.rapt-c-1.net/sites/5445c7188f7e976723da6f31/ads.min.js"))
+        #expect(blocked("https://ads.rapt-i-i-1.net/builds/core/8a7db10/html/i.html"))
+        #expect(blocked("https://ads.rapt-i-rnf-1.net/rnf/8a7db10/rnf.html"))
+        #expect(blocked("https://ads.raptivecdn.net/api/v2/liveramp/envelope"))
+        #expect(!blocked("https://www.chelseasmessyapron.com/broth-bowls/"))
+        #expect(!blocked("https://example.com/notes/rapt-c-0.net"))
+        #expect(!blocked("https://bd.raptivecdn.net/cf/bd.json"))
     }
 
     @Test func identifiersChangeWithTheList() {
